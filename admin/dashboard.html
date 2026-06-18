@@ -1,1 +1,411 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMMONOVA Admin Dashboard</title>
 
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+}
+
+html,body{
+width:100%;
+height:100%;
+}
+
+body{
+background:#f4ecdf;
+font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+color:#7f6430;
+}
+
+/* BACKGROUND */
+
+body::before{
+content:"";
+position:fixed;
+inset:0;
+z-index:-2;
+
+background:
+radial-gradient(circle at center,
+rgba(255,255,255,.72) 0%,
+rgba(255,255,255,.34) 38%,
+rgba(244,236,223,.06) 72%),
+#f4ecdf;
+}
+
+body::after{
+content:"";
+position:fixed;
+inset:0;
+z-index:-1;
+
+background:
+repeating-linear-gradient(
+60deg,
+transparent 0 86px,
+rgba(188,149,78,.23) 87px,
+transparent 90px
+),
+repeating-linear-gradient(
+-60deg,
+transparent 0 86px,
+rgba(188,149,78,.22) 87px,
+transparent 90px
+),
+repeating-linear-gradient(
+0deg,
+transparent 0 148px,
+rgba(188,149,78,.13) 149px,
+transparent 152px
+);
+
+background-size:230px 199px;
+opacity:.30;
+}
+
+/* HEADER */
+
+.header{
+padding:30px 40px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+border-bottom:1px solid rgba(166,127,52,.12);
+}
+
+.logo{
+font-size:24px;
+font-weight:300;
+letter-spacing:.35em;
+color:#a67f34;
+}
+
+.logout{
+padding:10px 20px;
+border:1px solid rgba(166,127,52,.25);
+background:rgba(255,255,255,.25);
+cursor:pointer;
+color:#a67f34;
+}
+
+/* CONTENT */
+
+.container{
+max-width:1400px;
+margin:auto;
+padding:40px;
+}
+
+.title{
+font-size:42px;
+font-weight:200;
+letter-spacing:.05em;
+color:#a67f34;
+margin-bottom:40px;
+}
+
+/* STATS */
+
+.stats{
+display:grid;
+grid-template-columns:repeat(4,1fr);
+gap:20px;
+margin-bottom:40px;
+}
+
+.card{
+background:rgba(255,255,255,.18);
+backdrop-filter:blur(8px);
+padding:25px;
+border:1px solid rgba(166,127,52,.15);
+}
+
+.card-label{
+font-size:11px;
+letter-spacing:.22em;
+text-transform:uppercase;
+margin-bottom:10px;
+}
+
+.card-value{
+font-size:40px;
+font-weight:200;
+color:#a67f34;
+}
+
+/* ACTIONS */
+
+.actions{
+display:flex;
+gap:15px;
+margin-bottom:40px;
+}
+
+.btn{
+padding:14px 22px;
+background:#a67f34;
+color:white;
+text-decoration:none;
+letter-spacing:.18em;
+text-transform:uppercase;
+font-size:11px;
+border:none;
+cursor:pointer;
+}
+
+/* TABLE */
+
+.table-wrapper{
+background:rgba(255,255,255,.18);
+backdrop-filter:blur(8px);
+border:1px solid rgba(166,127,52,.15);
+overflow:hidden;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+th{
+text-align:left;
+padding:18px;
+font-size:11px;
+letter-spacing:.18em;
+text-transform:uppercase;
+border-bottom:1px solid rgba(166,127,52,.15);
+}
+
+td{
+padding:18px;
+border-bottom:1px solid rgba(166,127,52,.08);
+}
+
+.empty{
+padding:40px;
+text-align:center;
+opacity:.7;
+}
+
+@media(max-width:900px){
+
+.stats{
+grid-template-columns:1fr 1fr;
+}
+
+}
+
+@media(max-width:600px){
+
+.container{
+padding:20px;
+}
+
+.stats{
+grid-template-columns:1fr;
+}
+
+.actions{
+flex-direction:column;
+}
+
+}
+
+</style>
+</head>
+
+<body>
+
+<header class="header">
+
+<div class="logo">
+IMMONOVA
+</div>
+
+<button class="logout" id="logoutBtn">
+Logout
+</button>
+
+</header>
+
+<div class="container">
+
+<h1 class="title">
+Dashboard
+</h1>
+
+<div class="stats">
+
+<div class="card">
+<div class="card-label">Opportunità Totali</div>
+<div class="card-value" id="totalCount">0</div>
+</div>
+
+<div class="card">
+<div class="card-label">Pubblicate</div>
+<div class="card-value" id="publishedCount">0</div>
+</div>
+
+<div class="card">
+<div class="card-label">Bozze</div>
+<div class="card-value" id="draftCount">0</div>
+</div>
+
+<div class="card">
+<div class="card-label">Richieste</div>
+<div class="card-value" id="inquiriesCount">0</div>
+</div>
+
+</div>
+
+<div class="actions">
+
+<a href="opportunity-form.html" class="btn">
+Nuova Opportunità
+</a>
+
+<a href="opportunities.html" class="btn">
+Gestisci Opportunità
+</a>
+
+</div>
+
+<div class="table-wrapper">
+
+<table>
+
+<thead>
+<tr>
+<th>Titolo</th>
+<th>Categoria</th>
+<th>Location</th>
+<th>Pubblicata</th>
+</tr>
+</thead>
+
+<tbody id="opportunitiesTable">
+<tr>
+<td colspan="4" class="empty">
+Caricamento...
+</td>
+</tr>
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+
+const supabase = window.supabase.createClient(
+SUPABASE_URL,
+SUPABASE_ANON_KEY
+);
+
+async function checkAuth(){
+
+const {
+data:{session}
+} = await supabase.auth.getSession();
+
+if(!session){
+
+window.location.href="login.html";
+return;
+}
+
+}
+
+async function loadDashboard(){
+
+const { data: opportunities } =
+await supabase
+.from("opportunities")
+.select("*");
+
+const { data: inquiries } =
+await supabase
+.from("inquiries")
+.select("*");
+
+const total =
+opportunities?.length || 0;
+
+const published =
+opportunities?.filter(
+o => o.published
+).length || 0;
+
+const drafts =
+total - published;
+
+document.getElementById("totalCount").textContent =
+total;
+
+document.getElementById("publishedCount").textContent =
+published;
+
+document.getElementById("draftCount").textContent =
+drafts;
+
+document.getElementById("inquiriesCount").textContent =
+inquiries?.length || 0;
+
+const table =
+document.getElementById("opportunitiesTable");
+
+if(!opportunities || opportunities.length===0){
+
+table.innerHTML = `
+<tr>
+<td colspan="4" class="empty">
+Nessuna opportunità presente
+</td>
+</tr>
+`;
+
+return;
+}
+
+table.innerHTML =
+opportunities.map(o=>`
+<tr>
+<td>${o.title || ""}</td>
+<td>${o.category || ""}</td>
+<td>${o.location || ""}</td>
+<td>${o.published ? "Si" : "No"}</td>
+</tr>
+`).join("");
+
+}
+
+document
+.getElementById("logoutBtn")
+.addEventListener("click", async ()=>{
+
+await supabase.auth.signOut();
+
+window.location.href =
+"login.html";
+
+});
+
+checkAuth();
+loadDashboard();
+
+</script>
+
+</body>
+</html>
