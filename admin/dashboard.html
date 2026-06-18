@@ -308,103 +308,81 @@ Caricamento...
 <script src="../js/config.js"></script>
 
 <script>
-
-const supabase = window.supabase.createClient(
-SUPABASE_URL,
-SUPABASE_ANON_KEY
+const client = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
 );
 
 async function checkAuth(){
+  const { data:{ session } } = await client.auth.getSession();
 
-const {
-data:{session}
-} = await supabase.auth.getSession();
+  if(!session){
+    window.location.href = "login.html";
+    return false;
+  }
 
-if(!session){
-
-window.location.href="login.html";
-return;
-}
-
+  return true;
 }
 
 async function loadDashboard(){
 
-const { data: opportunities } =
-await supabase
-.from("opportunities")
-.select("*");
+  const { data: opportunities, error: oppError } = await client
+    .from("opportunities")
+    .select("*")
+    .order("created_at", { ascending:false });
 
-const { data: inquiries } =
-await supabase
-.from("inquiries")
-.select("*");
+  const { data: inquiries } = await client
+    .from("inquiries")
+    .select("*");
 
-const total =
-opportunities?.length || 0;
+  if(oppError){
+    console.error(oppError);
+    return;
+  }
 
-const published =
-opportunities?.filter(
-o => o.published
-).length || 0;
+  const total = opportunities.length;
+  const published = opportunities.filter(o => o.published === true).length;
+  const drafts = total - published;
+  const inquiriesTotal = inquiries ? inquiries.length : 0;
 
-const drafts =
-total - published;
+  document.getElementById("totalCount").textContent = total;
+  document.getElementById("publishedCount").textContent = published;
+  document.getElementById("draftCount").textContent = drafts;
+  document.getElementById("inquiriesCount").textContent = inquiriesTotal;
 
-document.getElementById("totalCount").textContent =
-total;
+  const table = document.getElementById("opportunitiesTable");
 
-document.getElementById("publishedCount").textContent =
-published;
+  if(total === 0){
+    table.innerHTML = `
+      <tr>
+        <td colspan="4" class="empty">Nessuna opportunità presente</td>
+      </tr>
+    `;
+    return;
+  }
 
-document.getElementById("draftCount").textContent =
-drafts;
-
-document.getElementById("inquiriesCount").textContent =
-inquiries?.length || 0;
-
-const table =
-document.getElementById("opportunitiesTable");
-
-if(!opportunities || opportunities.length===0){
-
-table.innerHTML = `
-<tr>
-<td colspan="4" class="empty">
-Nessuna opportunità presente
-</td>
-</tr>
-`;
-
-return;
+  table.innerHTML = opportunities.map(o => `
+    <tr>
+      <td>${o.title || ""}</td>
+      <td>${o.category || ""}</td>
+      <td>${o.location || ""}</td>
+      <td>${o.published ? "Sì" : "No"}</td>
+    </tr>
+  `).join("");
 }
 
-table.innerHTML =
-opportunities.map(o=>`
-<tr>
-<td>${o.title || ""}</td>
-<td>${o.category || ""}</td>
-<td>${o.location || ""}</td>
-<td>${o.published ? "Si" : "No"}</td>
-</tr>
-`).join("");
-
-}
-
-document
-.getElementById("logoutBtn")
-.addEventListener("click", async ()=>{
-
-await supabase.auth.signOut();
-
-window.location.href =
-"login.html";
-
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "login.html";
 });
 
-checkAuth();
-loadDashboard();
+(async function init(){
+  const isLogged = await checkAuth();
 
+  if(isLogged){
+    await loadDashboard();
+  }
+})();
 </script>
 
 </body>
