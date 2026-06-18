@@ -1,1 +1,375 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestisci Opportunità | IMMONOVA Admin</title>
 
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%}
+
+body{
+background:#f4ecdf;
+font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+color:#7f6430;
+}
+
+body::before{
+content:"";
+position:fixed;
+inset:0;
+z-index:-2;
+background:
+radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+#f4ecdf;
+}
+
+body::after{
+content:"";
+position:fixed;
+inset:0;
+z-index:-1;
+background:
+repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+background-size:230px 199px;
+opacity:.30;
+}
+
+.header{
+padding:30px 40px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+border-bottom:1px solid rgba(166,127,52,.12);
+}
+
+.logo{
+font-size:24px;
+font-weight:300;
+letter-spacing:.35em;
+color:#a67f34;
+}
+
+.header-actions{
+display:flex;
+gap:12px;
+align-items:center;
+}
+
+.header-actions a,
+.logout{
+padding:10px 20px;
+border:1px solid rgba(166,127,52,.25);
+background:rgba(255,255,255,.25);
+cursor:pointer;
+color:#a67f34;
+text-decoration:none;
+font-size:12px;
+letter-spacing:.14em;
+text-transform:uppercase;
+}
+
+.container{
+max-width:1400px;
+margin:auto;
+padding:40px;
+}
+
+.title{
+font-size:42px;
+font-weight:200;
+letter-spacing:.05em;
+color:#a67f34;
+margin-bottom:18px;
+}
+
+.subtitle{
+font-size:15px;
+line-height:1.8;
+color:#8f7643;
+max-width:760px;
+margin-bottom:40px;
+}
+
+.table-wrapper{
+background:rgba(255,255,255,.18);
+backdrop-filter:blur(8px);
+border:1px solid rgba(166,127,52,.15);
+overflow:auto;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+min-width:1050px;
+}
+
+th{
+text-align:left;
+padding:18px;
+font-size:11px;
+letter-spacing:.18em;
+text-transform:uppercase;
+border-bottom:1px solid rgba(166,127,52,.15);
+white-space:nowrap;
+}
+
+td{
+padding:18px;
+border-bottom:1px solid rgba(166,127,52,.08);
+vertical-align:middle;
+font-size:14px;
+line-height:1.6;
+}
+
+.badge{
+display:inline-block;
+padding:7px 10px;
+border:1px solid rgba(166,127,52,.25);
+font-size:10px;
+letter-spacing:.14em;
+text-transform:uppercase;
+color:#a67f34;
+background:rgba(255,255,255,.22);
+}
+
+.actions{
+display:flex;
+gap:8px;
+flex-wrap:wrap;
+}
+
+.actions a,
+.actions button{
+padding:9px 14px;
+border:1px solid rgba(166,127,52,.25);
+background:rgba(255,255,255,.25);
+cursor:pointer;
+color:#a67f34;
+text-decoration:none;
+font-size:10px;
+letter-spacing:.14em;
+text-transform:uppercase;
+}
+
+.empty{
+padding:40px;
+text-align:center;
+opacity:.7;
+}
+
+.status{
+margin-bottom:22px;
+min-height:20px;
+font-size:13px;
+}
+
+.success{color:#4f7f45}
+.error{color:#9c2f2f}
+
+@media(max-width:900px){
+.header{
+flex-direction:column;
+gap:18px;
+}
+
+.header-actions{
+flex-wrap:wrap;
+justify-content:center;
+}
+}
+
+@media(max-width:600px){
+.container{
+padding:20px;
+}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+
+<div class="logo">IMMONOVA</div>
+
+<div class="header-actions">
+<a href="dashboard.html">Dashboard</a>
+<a href="opportunity-form.html">Nuova Opportunità</a>
+<a href="inquiries.html">Richieste</a>
+<button class="logout" id="logoutBtn">Logout</button>
+</div>
+
+</header>
+
+<div class="container">
+
+<h1 class="title">Opportunità</h1>
+
+<p class="subtitle">
+Gestisci tutte le opportunità di investimento presenti nel database.
+Puoi pubblicare, sospendere o eliminare ogni progetto.
+</p>
+
+<div id="status" class="status"></div>
+
+<div class="table-wrapper">
+
+<table>
+<thead>
+<tr>
+<th>Titolo</th>
+<th>Categoria</th>
+<th>Location</th>
+<th>Prezzo</th>
+<th>Stato</th>
+<th>Azioni</th>
+</tr>
+</thead>
+
+<tbody id="opportunitiesTable">
+<tr>
+<td colspan="6" class="empty">Caricamento...</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+const table = document.getElementById("opportunitiesTable");
+const statusBox = document.getElementById("status");
+
+async function checkAuth(){
+  const { data:{ session } } = await client.auth.getSession();
+
+  if(!session){
+    window.location.href = "login.html";
+    return false;
+  }
+
+  return true;
+}
+
+function setStatus(message, type){
+  statusBox.className = "status " + (type || "");
+  statusBox.textContent = message || "";
+}
+
+async function loadOpportunities(){
+  const { data, error } = await client
+    .from("opportunities")
+    .select("*")
+    .order("created_at", { ascending:false });
+
+  if(error){
+    table.innerHTML = `
+      <tr>
+        <td colspan="6" class="empty">Errore nel caricamento.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  if(!data || data.length === 0){
+    table.innerHTML = `
+      <tr>
+        <td colspan="6" class="empty">Nessuna opportunità presente.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  table.innerHTML = data.map(item => `
+    <tr>
+      <td>${item.title || ""}</td>
+      <td><span class="badge">${item.category || ""}</span></td>
+      <td>${item.location || ""}</td>
+      <td>${item.price || "Valore riservato"}</td>
+      <td>${item.published ? "Pubblicata" : "Bozza"}</td>
+      <td>
+        <div class="actions">
+          <a href="../opportunity.html?id=${item.id}" target="_blank">Vedi</a>
+
+          <button onclick="togglePublished(${item.id}, ${item.published})">
+            ${item.published ? "Sospendi" : "Pubblica"}
+          </button>
+
+          <button onclick="deleteOpportunity(${item.id})">
+            Elimina
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function togglePublished(id, currentStatus){
+  setStatus("Aggiornamento in corso...", "");
+
+  const { error } = await client
+    .from("opportunities")
+    .update({ published: !currentStatus })
+    .eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setStatus("Stato aggiornato correttamente.", "success");
+  await loadOpportunities();
+}
+
+async function deleteOpportunity(id){
+  const confirmDelete = confirm("Vuoi eliminare definitivamente questa opportunità?");
+
+  if(!confirmDelete){
+    return;
+  }
+
+  setStatus("Eliminazione in corso...", "");
+
+  const { error } = await client
+    .from("opportunities")
+    .delete()
+    .eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setStatus("Opportunità eliminata correttamente.", "success");
+  await loadOpportunities();
+}
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "login.html";
+});
+
+(async function init(){
+  const isLogged = await checkAuth();
+
+  if(isLogged){
+    await loadOpportunities();
+  }
+})();
+</script>
+
+</body>
+</html>
