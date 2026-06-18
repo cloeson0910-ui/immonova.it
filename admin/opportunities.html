@@ -155,6 +155,11 @@ letter-spacing:.14em;
 text-transform:uppercase;
 }
 
+.actions .danger{
+color:#9c2f2f;
+border-color:rgba(156,47,47,.35);
+}
+
 .empty{
 padding:40px;
 text-align:center;
@@ -211,7 +216,7 @@ padding:20px;
 
 <p class="subtitle">
 Gestisci tutte le opportunità di investimento presenti nel database.
-Puoi pubblicare, sospendere o eliminare ogni progetto.
+Puoi pubblicare, sospendere, modificare o eliminare ogni progetto.
 </p>
 
 <div id="status" class="status"></div>
@@ -302,15 +307,23 @@ async function loadOpportunities(){
       <td>${item.published ? "Pubblicata" : "Bozza"}</td>
       <td>
         <div class="actions">
-          <a href="../opportunity.html?id=${item.id}" target="_blank">Vedi</a>
+
+          <a href="../opportunity.html?id=${item.id}" target="_blank">
+            Vedi
+          </a>
+
+          <a href="opportunity-edit.html?id=${item.id}">
+            Modifica
+          </a>
 
           <button onclick="togglePublished(${item.id}, ${item.published})">
             ${item.published ? "Sospendi" : "Pubblica"}
           </button>
 
-          <button onclick="deleteOpportunity(${item.id})">
+          <button class="danger" onclick="deleteOpportunity(${item.id})">
             Elimina
           </button>
+
         </div>
       </td>
     </tr>
@@ -322,7 +335,10 @@ async function togglePublished(id, currentStatus){
 
   const { error } = await client
     .from("opportunities")
-    .update({ published: !currentStatus })
+    .update({
+      published: !currentStatus,
+      updated_at: new Date().toISOString()
+    })
     .eq("id", id);
 
   if(error){
