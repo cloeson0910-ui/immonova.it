@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utenti | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+
+.logo{
+  text-decoration:none;
+  color:#a67f34;
+}
+
+.logo-main{
+  font-size:24px;
+  font-weight:600;
+  letter-spacing:.35em;
+}
+
+.logo-sub{
+  margin-top:6px;
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.18em;
+  color:#a58139;
+}
+
+.header-actions{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.header-actions a,
+.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+
+.header-actions a:hover,
+.logout:hover{
+  background:#a67f34;
+  color:#fff;
+}
+
+.container{
+  max-width:1250px;
+  margin:auto;
+  padding:40px;
+}
+
+.kicker{
+  font-size:11px;
+  letter-spacing:.32em;
+  text-transform:uppercase;
+  color:#9a793c;
+  margin-bottom:12px;
+}
+
+.title{
+  font-size:42px;
+  font-weight:200;
+  letter-spacing:.05em;
+  color:#a67f34;
+  margin-bottom:18px;
+}
+
+.subtitle{
+  font-size:15px;
+  line-height:1.8;
+  color:#8f7643;
+  max-width:800px;
+  margin-bottom:34px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:420px 1fr;
+  gap:28px;
+}
+
+.panel{
+  background:rgba(255,255,255,.20);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+  padding:30px;
+}
+
+.panel-title{
+  font-size:13px;
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  color:#9a793c;
+  margin-bottom:22px;
+}
+
+.form{
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+label{
+  font-size:10px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:#a58139;
+}
+
+input,
+select{
+  width:100%;
+  padding:15px 16px;
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,252,244,.35);
+  color:#7f6430;
+  font-size:14px;
+  outline:none;
+  font-family:inherit;
+}
+
+button.primary{
+  margin-top:8px;
+  padding:14px 24px;
+  border:1px solid rgba(165,129,57,.42);
+  background:#a67f34;
+  color:white;
+  text-transform:uppercase;
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:.22em;
+  cursor:pointer;
+}
+
+button.primary:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+.status{
+  margin-top:18px;
+  min-height:20px;
+  font-size:13px;
+  line-height:1.6;
+}
+
+.success{color:#4f7f45}
+.error{color:#9c2f2f}
+
+.table-wrapper{
+  overflow:auto;
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:720px;
+}
+
+th{
+  text-align:left;
+  padding:16px;
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  border-bottom:1px solid rgba(166,127,52,.15);
+  white-space:nowrap;
+}
+
+td{
+  padding:16px;
+  border-bottom:1px solid rgba(166,127,52,.08);
+  vertical-align:middle;
+  font-size:14px;
+}
+
+.badge{
+  display:inline-block;
+  padding:7px 10px;
+  border:1px solid rgba(166,127,52,.25);
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#a67f34;
+  background:rgba(255,255,255,.22);
+}
+
+.role-select{
+  padding:10px 12px;
+  font-size:12px;
+}
+
+.empty{
+  padding:34px;
+  text-align:center;
+  opacity:.7;
+}
+
+@media(max-width:980px){
+  .grid{
+    grid-template-columns:1fr;
+  }
+
+  .header{
+    flex-direction:column;
+    gap:18px;
+  }
+
+  .header-actions{
+    justify-content:center;
+  }
+}
+
+@media(max-width:600px){
+  .container{
+    padding:28px 22px;
+  }
+
+  .title{
+    font-size:34px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+
+<a href="../index.html" class="logo">
+  <div class="logo-main">IMMONOVA</div>
+  <div class="logo-sub">OFF MARKET • CONSULTING</div>
+</a>
+
+<div class="header-actions">
+  <a href="dashboard.html">Dashboard</a>
+  <a href="opportunities.html">Proposte</a>
+  <a href="opportunity-form.html">Nuova Proposta</a>
+  <button class="logout" id="logoutBtn">Logout</button>
+</div>
+
+</header>
+
+<main class="container">
+
+  <div class="kicker">Area Admin</div>
+  <h1 class="title">Utenti</h1>
+
+  <p class="subtitle">
+    Crea nuovi accessi per consulenti e admin. I consulenti vedranno solo le proprie proposte.
+    Gli admin possono vedere e gestire tutto.
+  </p>
+
+  <div class="grid">
+
+    <section class="panel">
+      <div class="panel-title">Nuovo Utente</div>
+
+      <form class="form" id="userForm">
+
+        <div class="field">
+          <label for="full_name">Nome completo</label>
+          <input type="text" id="full_name" required>
+        </div>
+
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" required>
+        </div>
+
+        <div class="field">
+          <label for="password">Password temporanea</label>
+          <input type="password" id="password" minlength="6" required>
+        </div>
+
+        <div class="field">
+          <label for="role">Ruolo</label>
+          <select id="role" required>
+            <option value="user">Consulente</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <button type="submit" class="primary" id="createBtn">
+          Crea Utente
+        </button>
+
+        <div id="status" class="status"></div>
+
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">Utenti Esistenti</div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Ruolo</th>
+              <th>Creato</th>
+            </tr>
+          </thead>
+
+          <tbody id="usersTable">
+            <tr>
+              <td colspan="4" class="empty">Caricamento...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+const userForm = document.getElementById("userForm");
+const statusBox = document.getElementById("status");
+const createBtn = document.getElementById("createBtn");
+const usersTable = document.getElementById("usersTable");
+
+let currentUser = null;
+let currentProfile = null;
+
+function escapeHTML(value){
+  return String(value ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setStatus(message, type){
+  statusBox.className = "status " + (type || "");
+  statusBox.textContent = message || "";
+}
+
+function roleLabel(role){
+  if(role === "admin"){
+    return "Admin";
+  }
+
+  return "Consulente";
+}
+
+function formatDate(value){
+  if(!value){
+    return "";
+  }
+
+  return new Date(value).toLocaleDateString("it-IT", {
+    day:"2-digit",
+    month:"2-digit",
+    year:"numeric"
+  });
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+
+  if(error || !session){
+    window.location.href = "login.html";
+    return false;
+  }
+
+  currentUser = session.user;
+  return true;
+}
+
+async function checkAdmin(){
+  const { data, error } = await client
+    .from("profiles")
+    .select("id,email,full_name,role")
+    .eq("id", currentUser.id)
+    .single();
+
+  if(error || !data || data.role !== "admin"){
+    window.location.href = "dashboard.html";
+    return false;
+  }
+
+  currentProfile = data;
+  return true;
+}
+
+async function loadUsers(){
+  const { data, error } = await client
+    .from("profiles")
+    .select("id,email,full_name,role,created_at")
+    .order("created_at", { ascending:false });
+
+  if(error){
+    usersTable.innerHTML = `
+      <tr>
+        <td colspan="4" class="empty">Errore nel caricamento utenti.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  if(!data || data.length === 0){
+    usersTable.innerHTML = `
+      <tr>
+        <td colspan="4" class="empty">Nessun utente presente.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  usersTable.innerHTML = data.map(user => `
+    <tr>
+      <td>${escapeHTML(user.full_name || "")}</td>
+      <td>${escapeHTML(user.email || "")}</td>
+      <td>
+        <select class="role-select" onchange="updateRole('${user.id}', this.value)" ${user.id === currentUser.id ? "disabled" : ""}>
+          <option value="user" ${user.role === "user" ? "selected" : ""}>Consulente</option>
+          <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+        </select>
+      </td>
+      <td>${formatDate(user.created_at)}</td>
+    </tr>
+  `).join("");
+}
+
+async function updateRole(userId, newRole){
+  setStatus("Aggiornamento ruolo...", "");
+
+  const { error } = await client
+    .from("profiles")
+    .update({ role:newRole })
+    .eq("id", userId);
+
+  if(error){
+    setStatus(error.message, "error");
+    await loadUsers();
+    return;
+  }
+
+  setStatus("Ruolo aggiornato correttamente.", "success");
+  await loadUsers();
+}
+
+userForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  setStatus("Creazione utente in corso...", "");
+  createBtn.disabled = true;
+  createBtn.textContent = "Creazione...";
+
+  const full_name = document.getElementById("full_name").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const role = document.getElementById("role").value;
+
+  const { data, error } = await client.functions.invoke("create-user", {
+    body:{
+      full_name,
+      email,
+      password,
+      role
+    }
+  });
+
+  if(error || !data?.success){
+    setStatus(data?.message || error?.message || "Errore durante la creazione utente.", "error");
+    createBtn.disabled = false;
+    createBtn.textContent = "Crea Utente";
+    return;
+  }
+
+  setStatus("Utente creato correttamente.", "success");
+
+  userForm.reset();
+  createBtn.disabled = false;
+  createBtn.textContent = "Crea Utente";
+
+  await loadUsers();
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  const logged = await checkAuth();
+
+  if(logged){
+    const admin = await checkAdmin();
+
+    if(admin){
+      await loadUsers();
+    }
+  }
+})();
+</script>
+
+</body>
+</html>
