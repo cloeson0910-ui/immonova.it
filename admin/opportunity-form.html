@@ -148,9 +148,19 @@ textarea{
   font-family:inherit;
 }
 
+input[type="file"]{
+  cursor:pointer;
+}
+
 textarea{
   min-height:130px;
   resize:vertical;
+}
+
+.file-note{
+  font-size:12px;
+  color:#8f7643;
+  line-height:1.6;
 }
 
 .checks{
@@ -243,8 +253,8 @@ a.secondary{
   <section class="panel">
     <h1>Nuova Opportunità</h1>
     <p class="intro">
-      Inserisci una nuova opportunità di investimento. Potrai salvarla come bozza
-      oppure pubblicarla direttamente sul sito.
+      Inserisci una nuova opportunità di investimento. Ora puoi caricare direttamente
+      la copertina e la gallery immagini dal tuo computer.
     </p>
 
     <form id="opportunityForm">
@@ -279,9 +289,16 @@ a.secondary{
           <input type="text" id="price" placeholder="Es. Riservato / € 2.500.000">
         </div>
 
-        <div class="field">
-          <label for="cover_image">Immagine copertina URL</label>
-          <input type="text" id="cover_image" placeholder="https://...">
+        <div class="field full">
+          <label for="coverFile">Immagine Copertina</label>
+          <input type="file" id="coverFile" accept="image/*">
+          <div class="file-note">Carica una singola immagine principale del progetto.</div>
+        </div>
+
+        <div class="field full">
+          <label for="galleryFiles">Gallery Immagini</label>
+          <input type="file" id="galleryFiles" accept="image/*" multiple>
+          <div class="file-note">Puoi selezionare più immagini insieme.</div>
         </div>
 
         <div class="field full">
@@ -330,6 +347,7 @@ const client = window.supabase.createClient(
 );
 
 const statusBox = document.getElementById("status");
+const saveBtn = document.getElementById("saveBtn");
 
 function slugify(text){
   return text
@@ -342,12 +360,43 @@ function slugify(text){
     .replace(/^-+|-+$/g, "");
 }
 
+function cleanFileName(name){
+  const parts = name.split(".");
+  const ext = parts.length > 1 ? parts.pop().toLowerCase() : "jpg";
+
+  return slugify(parts.join("-")) + "." + ext;
+}
+
 async function checkAuth(){
   const { data:{ session } } = await client.auth.getSession();
 
   if(!session){
     window.location.href = "login.html";
+    return false;
   }
+
+  return true;
+}
+
+async function uploadImage(file, path){
+  const { error } = await client
+    .storage
+    .from("opportunities")
+    .upload(path, file, {
+      cacheControl: "3600",
+      upsert: false
+    });
+
+  if(error){
+    throw error;
+  }
+
+  const { data } = client
+    .storage
+    .from("opportunities")
+    .getPublicUrl(path);
+
+  return data.publicUrl;
 }
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
@@ -360,38 +409,75 @@ document.getElementById("opportunityForm").addEventListener("submit", async (e) 
 
   statusBox.className = "status";
   statusBox.textContent = "Salvataggio in corso...";
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Salvataggio...";
 
-  const title = document.getElementById("title").value.trim();
+  try{
+    const title = document.getElementById("title").value.trim();
+    const baseSlug = slugify(title);
+    const timestamp = Date.now();
+    const folder = `${baseSlug}-${timestamp}`;
 
-  const payload = {
-    title,
-    slug: slugify(title) + "-" + Date.now(),
-    category: document.getElementById("category").value,
-    location: document.getElementById("location").value.trim(),
-    price: document.getElementById("price").value.trim(),
-    cover_image: document.getElementById("cover_image").value.trim(),
-    short_description: document.getElementById("short_description").value.trim(),
-    full_description: document.getElementById("full_description").value.trim(),
-    featured: document.getElementById("featured").checked,
-    published: document.getElementById("published").checked
-  };
+    const coverFile = document.getElementById("coverFile").files[0];
+    const galleryFiles = Array.from(document.getElementById("galleryFiles").files);
 
-  const { error } = await client
-    .from("opportunities")
-    .insert([payload]);
+    let coverUrl = "";
+    let galleryUrls = [];
 
-  if(error){
+    if(coverFile){
+      statusBox.textContent = "Caricamento copertina...";
+      const coverPath = `cover/${folder}/${cleanFileName(coverFile.name)}`;
+      coverUrl = await uploadImage(coverFile, coverPath);
+    }
+
+    if(galleryFiles.length > 0){
+      statusBox.textContent = "Caricamento gallery...";
+
+      for(let i = 0; i < galleryFiles.length; i++){
+        const file = galleryFiles[i];
+        const galleryPath = `gallery/${folder}/${i + 1}-${cleanFileName(file.name)}`;
+        const url = await uploadImage(file, galleryPath);
+        galleryUrls.push(url);
+      }
+    }
+
+    statusBox.textContent = "Salvataggio dati opportunità...";
+
+    const payload = {
+      title,
+      slug: baseSlug + "-" + timestamp,
+      category: document.getElementById("category").value,
+      location: document.getElementById("location").value.trim(),
+      price: document.getElementById("price").value.trim(),
+      cover_image: coverUrl,
+      gallery_images: galleryUrls,
+      short_description: document.getElementById("short_description").value.trim(),
+      full_description: document.getElementById("full_description").value.trim(),
+      featured: document.getElementById("featured").checked,
+      published: document.getElementById("published").checked
+    };
+
+    const { error } = await client
+      .from("opportunities")
+      .insert([payload]);
+
+    if(error){
+      throw error;
+    }
+
+    statusBox.className = "status success";
+    statusBox.textContent = "Opportunità salvata correttamente.";
+
+    setTimeout(() => {
+      window.location.href = "dashboard.html";
+    }, 900);
+
+  }catch(error){
     statusBox.className = "status error";
-    statusBox.textContent = error.message;
-    return;
+    statusBox.textContent = error.message || "Errore durante il salvataggio.";
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Salva Opportunità";
   }
-
-  statusBox.className = "status success";
-  statusBox.textContent = "Opportunità salvata correttamente.";
-
-  setTimeout(() => {
-    window.location.href = "dashboard.html";
-  }, 900);
 });
 
 checkAuth();
