@@ -141,6 +141,55 @@ textarea{
   resize:vertical;
 }
 
+.preview-cover{
+  width:100%;
+  max-height:360px;
+  object-fit:cover;
+  border:1px solid rgba(165,129,57,.20);
+  margin-bottom:14px;
+  display:none;
+}
+
+.gallery-preview{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:14px;
+  margin-top:10px;
+}
+
+.gallery-item{
+  position:relative;
+  border:1px solid rgba(165,129,57,.20);
+  background:rgba(255,255,255,.12);
+  padding:8px;
+}
+
+.gallery-item img{
+  width:100%;
+  height:120px;
+  object-fit:cover;
+  display:block;
+}
+
+.gallery-item button{
+  width:100%;
+  margin-top:8px;
+  padding:9px 10px;
+  border:1px solid rgba(156,47,47,.35);
+  background:rgba(255,252,244,.22);
+  color:#9c2f2f;
+  text-transform:uppercase;
+  font-size:9px;
+  letter-spacing:.14em;
+  cursor:pointer;
+}
+
+.file-note{
+  font-size:12px;
+  line-height:1.6;
+  color:#8f7643;
+}
+
 .checks{
   grid-column:1 / -1;
   display:flex;
@@ -169,6 +218,7 @@ textarea{
 
 button.primary,
 button.danger,
+button.soft,
 a.secondary{
   padding:14px 28px;
   border:1px solid rgba(165,129,57,.42);
@@ -243,7 +293,8 @@ button.danger{
   <section class="panel">
     <h1>Modifica Opportunità</h1>
     <p class="intro">
-      Aggiorna i dati dell’opportunità, modifica lo stato di pubblicazione o elimina definitivamente il progetto.
+      Aggiorna i dati dell’opportunità, sostituisci la copertina, aggiungi nuove immagini alla gallery
+      oppure elimina le immagini non più necessarie.
     </p>
 
     <div id="loading" class="loading">Caricamento...</div>
@@ -285,9 +336,29 @@ button.danger{
           <input type="text" id="price" placeholder="Es. Riservato / € 2.500.000">
         </div>
 
-        <div class="field">
-          <label for="cover_image">Immagine copertina URL</label>
-          <input type="text" id="cover_image" placeholder="https://...">
+        <div class="field full">
+          <label>Copertina attuale</label>
+          <img id="coverPreview" class="preview-cover" alt="Copertina attuale">
+          <div id="noCoverText" class="file-note">Nessuna copertina caricata.</div>
+          <button type="button" class="soft" id="removeCoverBtn">Rimuovi Copertina</button>
+        </div>
+
+        <div class="field full">
+          <label for="coverFile">Sostituisci / Aggiungi Copertina</label>
+          <input type="file" id="coverFile" accept="image/*">
+          <div class="file-note">Se selezioni una nuova immagine, sostituirà la copertina attuale.</div>
+        </div>
+
+        <div class="field full">
+          <label>Gallery attuale</label>
+          <div id="galleryPreview" class="gallery-preview"></div>
+          <div id="noGalleryText" class="file-note">Nessuna immagine gallery caricata.</div>
+        </div>
+
+        <div class="field full">
+          <label for="galleryFiles">Aggiungi immagini alla gallery</label>
+          <input type="file" id="galleryFiles" accept="image/*" multiple>
+          <div class="file-note">Puoi selezionare una o più immagini. Le nuove immagini verranno aggiunte a quelle esistenti.</div>
         </div>
 
         <div class="field">
@@ -372,10 +443,111 @@ const id = params.get("id");
 const form = document.getElementById("opportunityForm");
 const loading = document.getElementById("loading");
 const statusBox = document.getElementById("status");
+const saveBtn = document.getElementById("saveBtn");
+
+let currentCoverUrl = "";
+let galleryImages = [];
+let coverRemoved = false;
 
 function setStatus(message, type){
   statusBox.className = "status " + (type || "");
   statusBox.textContent = message || "";
+}
+
+function slugify(text){
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function cleanFileName(name){
+  const parts = name.split(".");
+  const ext = parts.length > 1 ? parts.pop().toLowerCase() : "jpg";
+  return slugify(parts.join("-")) + "." + ext;
+}
+
+function normalizeGallery(value){
+  if(!value) return [];
+
+  if(Array.isArray(value)){
+    return value.filter(Boolean);
+  }
+
+  try{
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  }catch(e){
+    return [];
+  }
+}
+
+function renderCover(){
+  const coverPreview = document.getElementById("coverPreview");
+  const noCoverText = document.getElementById("noCoverText");
+  const removeCoverBtn = document.getElementById("removeCoverBtn");
+
+  if(currentCoverUrl && !coverRemoved){
+    coverPreview.src = currentCoverUrl;
+    coverPreview.style.display = "block";
+    noCoverText.style.display = "none";
+    removeCoverBtn.style.display = "inline-block";
+  }else{
+    coverPreview.removeAttribute("src");
+    coverPreview.style.display = "none";
+    noCoverText.style.display = "block";
+    removeCoverBtn.style.display = "none";
+  }
+}
+
+function renderGallery(){
+  const galleryPreview = document.getElementById("galleryPreview");
+  const noGalleryText = document.getElementById("noGalleryText");
+
+  if(!galleryImages || galleryImages.length === 0){
+    galleryPreview.innerHTML = "";
+    noGalleryText.style.display = "block";
+    return;
+  }
+
+  noGalleryText.style.display = "none";
+
+  galleryPreview.innerHTML = galleryImages.map((url, index) => `
+    <div class="gallery-item">
+      <img src="${url}" alt="Gallery image ${index + 1}">
+      <button type="button" onclick="removeGalleryImage(${index})">Rimuovi</button>
+    </div>
+  `).join("");
+}
+
+function removeGalleryImage(index){
+  galleryImages.splice(index, 1);
+  renderGallery();
+}
+
+async function uploadImage(file, path){
+  const { error } = await client
+    .storage
+    .from("opportunities")
+    .upload(path, file, {
+      cacheControl: "3600",
+      upsert: false
+    });
+
+  if(error){
+    throw error;
+  }
+
+  const { data } = client
+    .storage
+    .from("opportunities")
+    .getPublicUrl(path);
+
+  return data.publicUrl;
 }
 
 async function checkAuth(){
@@ -411,7 +583,6 @@ async function loadOpportunity(){
   document.getElementById("investment_type").value = data.investment_type || "";
   document.getElementById("location").value = data.location || "";
   document.getElementById("price").value = data.price || "";
-  document.getElementById("cover_image").value = data.cover_image || "";
   document.getElementById("bedrooms").value = data.bedrooms || "";
   document.getElementById("bathrooms").value = data.bathrooms || "";
   document.getElementById("internal_size").value = data.internal_size || "";
@@ -423,50 +594,101 @@ async function loadOpportunity(){
   document.getElementById("featured").checked = data.featured === true;
   document.getElementById("published").checked = data.published === true;
 
+  currentCoverUrl = data.cover_image || "";
+  galleryImages = normalizeGallery(data.gallery_images);
+
+  renderCover();
+  renderGallery();
+
   loading.style.display = "none";
   form.style.display = "block";
 }
+
+document.getElementById("removeCoverBtn").addEventListener("click", () => {
+  coverRemoved = true;
+  currentCoverUrl = "";
+  document.getElementById("coverFile").value = "";
+  renderCover();
+});
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   setStatus("Salvataggio in corso...", "");
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Salvataggio...";
 
-  const payload = {
-    title: document.getElementById("title").value.trim(),
-    category: document.getElementById("category").value,
-    investment_type: document.getElementById("investment_type").value.trim(),
-    location: document.getElementById("location").value.trim(),
-    price: document.getElementById("price").value.trim(),
-    cover_image: document.getElementById("cover_image").value.trim(),
-    bedrooms: document.getElementById("bedrooms").value ? Number(document.getElementById("bedrooms").value) : null,
-    bathrooms: document.getElementById("bathrooms").value ? Number(document.getElementById("bathrooms").value) : null,
-    internal_size: document.getElementById("internal_size").value ? Number(document.getElementById("internal_size").value) : null,
-    land_size: document.getElementById("land_size").value ? Number(document.getElementById("land_size").value) : null,
-    latitude: document.getElementById("latitude").value ? Number(document.getElementById("latitude").value) : null,
-    longitude: document.getElementById("longitude").value ? Number(document.getElementById("longitude").value) : null,
-    short_description: document.getElementById("short_description").value.trim(),
-    full_description: document.getElementById("full_description").value.trim(),
-    featured: document.getElementById("featured").checked,
-    published: document.getElementById("published").checked,
-    updated_at: new Date().toISOString()
-  };
+  try{
+    const title = document.getElementById("title").value.trim();
+    const baseSlug = slugify(title);
+    const timestamp = Date.now();
+    const folder = `${baseSlug || "opportunity"}-${id}-${timestamp}`;
 
-  const { error } = await client
-    .from("opportunities")
-    .update(payload)
-    .eq("id", id);
+    let finalCoverUrl = currentCoverUrl;
+    const coverFile = document.getElementById("coverFile").files[0];
 
-  if(error){
-    setStatus(error.message, "error");
-    return;
+    if(coverFile){
+      setStatus("Caricamento nuova copertina...", "");
+      const coverPath = `cover/${folder}/${cleanFileName(coverFile.name)}`;
+      finalCoverUrl = await uploadImage(coverFile, coverPath);
+    }
+
+    const galleryFiles = Array.from(document.getElementById("galleryFiles").files);
+
+    if(galleryFiles.length > 0){
+      setStatus("Caricamento nuove immagini gallery...", "");
+
+      for(let i = 0; i < galleryFiles.length; i++){
+        const file = galleryFiles[i];
+        const galleryPath = `gallery/${folder}/${i + 1}-${cleanFileName(file.name)}`;
+        const url = await uploadImage(file, galleryPath);
+        galleryImages.push(url);
+      }
+    }
+
+    setStatus("Aggiornamento dati opportunità...", "");
+
+    const payload = {
+      title,
+      category: document.getElementById("category").value,
+      investment_type: document.getElementById("investment_type").value.trim(),
+      location: document.getElementById("location").value.trim(),
+      price: document.getElementById("price").value.trim(),
+      cover_image: finalCoverUrl,
+      gallery_images: galleryImages,
+      bedrooms: document.getElementById("bedrooms").value ? Number(document.getElementById("bedrooms").value) : null,
+      bathrooms: document.getElementById("bathrooms").value ? Number(document.getElementById("bathrooms").value) : null,
+      internal_size: document.getElementById("internal_size").value ? Number(document.getElementById("internal_size").value) : null,
+      land_size: document.getElementById("land_size").value ? Number(document.getElementById("land_size").value) : null,
+      latitude: document.getElementById("latitude").value ? Number(document.getElementById("latitude").value) : null,
+      longitude: document.getElementById("longitude").value ? Number(document.getElementById("longitude").value) : null,
+      short_description: document.getElementById("short_description").value.trim(),
+      full_description: document.getElementById("full_description").value.trim(),
+      featured: document.getElementById("featured").checked,
+      published: document.getElementById("published").checked,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await client
+      .from("opportunities")
+      .update(payload)
+      .eq("id", id);
+
+    if(error){
+      throw error;
+    }
+
+    setStatus("Modifiche salvate correttamente.", "success");
+
+    setTimeout(() => {
+      window.location.href = "opportunities.html";
+    }, 900);
+
+  }catch(error){
+    setStatus(error.message || "Errore durante il salvataggio.", "error");
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Salva Modifiche";
   }
-
-  setStatus("Modifiche salvate correttamente.", "success");
-
-  setTimeout(() => {
-    window.location.href = "opportunities.html";
-  }, 900);
 });
 
 document.getElementById("deleteBtn").addEventListener("click", async () => {
