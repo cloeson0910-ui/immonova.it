@@ -8,10 +8,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 
-html,body{
-width:100%;
-min-height:100%;
-}
+html,body{width:100%;min-height:100%}
 
 body{
 background:#f4ecdf;
@@ -112,7 +109,6 @@ border:1px solid rgba(175,140,75,.18);
 padding:45px;
 transition:.35s ease;
 min-height:270px;
-position:relative;
 }
 
 .card:hover{
@@ -183,22 +179,10 @@ color:#a67f34;
 }
 
 @media(max-width:768px){
-.header{
-padding:35px 25px;
-}
-
-.hero{
-padding:0 25px;
-margin:40px auto 80px;
-}
-
-.categories{
-padding:0 25px 80px;
-}
-
-.card{
-padding:35px;
-}
+.header{padding:35px 25px}
+.hero{padding:0 25px;margin:40px auto 80px}
+.categories{padding:0 25px 80px}
+.card{padding:35px}
 }
 </style>
 </head>
@@ -227,61 +211,43 @@ Loading opportunities...
 
 <section class="categories">
 
-<div class="card" data-category="Ville">
-<div class="card-top">
-<h2>Ville</h2>
-<div class="count" id="count-Ville">0</div>
-</div>
+<div class="card">
+<div class="card-top"><h2>Ville</h2><div class="count" id="count-Ville">0</div></div>
 <div class="count-label">Published Opportunities</div>
 <p>Luxury villas and trophy assets located in prime destinations.</p>
 <a href="category.html?category=Ville">Explore</a>
 </div>
 
-<div class="card" data-category="Hotel">
-<div class="card-top">
-<h2>Hotel</h2>
-<div class="count" id="count-Hotel">0</div>
-</div>
+<div class="card">
+<div class="card-top"><h2>Hotel</h2><div class="count" id="count-Hotel">0</div></div>
 <div class="count-label">Published Opportunities</div>
 <p>Boutique hotels and hospitality investments with strong potential.</p>
 <a href="category.html?category=Hotel">Explore</a>
 </div>
 
-<div class="card" data-category="Resort">
-<div class="card-top">
-<h2>Resort</h2>
-<div class="count" id="count-Resort">0</div>
-</div>
+<div class="card">
+<div class="card-top"><h2>Resort</h2><div class="count" id="count-Resort">0</div></div>
 <div class="count-label">Published Opportunities</div>
 <p>Premium hospitality projects and destination developments.</p>
 <a href="category.html?category=Resort">Explore</a>
 </div>
 
-<div class="card" data-category="Villaggi">
-<div class="card-top">
-<h2>Villaggi</h2>
-<div class="count" id="count-Villaggi">0</div>
-</div>
+<div class="card">
+<div class="card-top"><h2>Villaggi</h2><div class="count" id="count-Villaggi">0</div></div>
 <div class="count-label">Published Opportunities</div>
 <p>Large-scale tourism and leisure investment opportunities.</p>
 <a href="category.html?category=Villaggi">Explore</a>
 </div>
 
-<div class="card" data-category="Nuove Edificazioni">
-<div class="card-top">
-<h2>Nuove Edificazioni</h2>
-<div class="count" id="count-Nuove-Edificazioni">0</div>
-</div>
+<div class="card">
+<div class="card-top"><h2>Nuove Edificazioni</h2><div class="count" id="count-Nuove-Edificazioni">0</div></div>
 <div class="count-label">Published Opportunities</div>
 <p>Ground-up developments designed for long-term value creation.</p>
 <a href="category.html?category=Nuove%20Edificazioni">Explore</a>
 </div>
 
-<div class="card" data-category="Off Market">
-<div class="card-top">
-<h2>Off Market</h2>
-<div class="count" id="count-Off-Market">0</div>
-</div>
+<div class="card">
+<div class="card-top"><h2>Off Market</h2><div class="count" id="count-Off-Market">0</div></div>
 <div class="count-label">Published Opportunities</div>
 <p>Private opportunities reserved for selected investors and partners.</p>
 <a href="category.html?category=Off%20Market">Explore</a>
@@ -297,12 +263,12 @@ IMMONOVA · OFF MARKET CONSULTING
 <script src="js/config.js"></script>
 
 <script>
-const client = window.supabase.createClient(
+var client = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
 );
 
-const categories = [
+var categories = [
   "Ville",
   "Hotel",
   "Resort",
@@ -312,47 +278,59 @@ const categories = [
 ];
 
 function countId(category){
-  return "count-" + category.replaceAll(" ", "-");
+  return "count-" + category.split(" ").join("-");
+}
+
+function setText(id, value){
+  var el = document.getElementById(id);
+  if(el){
+    el.textContent = value;
+  }
 }
 
 async function loadPublishedCounts(){
-  const { data, error } = await client
+  var result = await client
     .from("opportunities")
     .select("category")
     .eq("published", true);
 
-  if(error){
-    console.error(error);
-    document.getElementById("totalCounter").textContent =
-      "Opportunities currently unavailable";
+  if(result.error){
+    console.error(result.error);
+    setText("totalCounter", "Opportunities currently unavailable");
     return;
   }
 
-  const counts = {};
-  categories.forEach(category => counts[category] = 0);
+  var counts = {};
+  for(var i = 0; i < categories.length; i++){
+    counts[categories[i]] = 0;
+  }
 
-  (data || []).forEach(item => {
-    if(counts[item.category] !== undefined){
-      counts[item.category]++;
+  var data = result.data || [];
+
+  for(var j = 0; j < data.length; j++){
+    var category = data[j].category;
+    if(counts[category] !== undefined){
+      counts[category]++;
     }
-  });
+  }
 
-  categories.forEach(category => {
-    const el = document.getElementById(countId(category));
-    if(el){
-      el.textContent = counts[category];
-    }
-  });
+  for(var k = 0; k < categories.length; k++){
+    var cat = categories[k];
+    setText(countId(cat), counts[cat]);
+  }
 
-  const total = (data || []).length;
+  var total = data.length;
 
-  document.getElementById("totalCounter").textContent =
-    total === 1
-      ? "1 Published Opportunity"
-      : total + " Published Opportunities";
+  if(total === 1){
+    setText("totalCounter", "1 Published Opportunity");
+  }else{
+    setText("totalCounter", total + " Published Opportunities");
+  }
 }
 
-loadPublishedCounts();
+document.addEventListener("DOMContentLoaded", function(){
+  loadPublishedCounts();
+});
 </script>
 
 </body>
