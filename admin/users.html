@@ -119,7 +119,7 @@ body::after{
 }
 
 .container{
-  max-width:1250px;
+  max-width:1380px;
   margin:auto;
   padding:40px;
 }
@@ -144,7 +144,7 @@ body::after{
   font-size:15px;
   line-height:1.8;
   color:#8f7643;
-  max-width:800px;
+  max-width:900px;
   margin-bottom:34px;
 }
 
@@ -236,7 +236,7 @@ button.primary:disabled{
 table{
   width:100%;
   border-collapse:collapse;
-  min-width:860px;
+  min-width:1180px;
 }
 
 th{
@@ -254,17 +254,18 @@ td{
   border-bottom:1px solid rgba(166,127,52,.08);
   vertical-align:middle;
   font-size:14px;
+  line-height:1.6;
 }
 
-.role-select{
+.small-select{
   padding:10px 12px;
   font-size:12px;
 }
 
-.row-actions{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
+.small-input{
+  padding:10px 12px;
+  font-size:12px;
+  min-width:150px;
 }
 
 .small-btn{
@@ -276,6 +277,22 @@ td{
   font-size:10px;
   letter-spacing:.12em;
   text-transform:uppercase;
+}
+
+.badge{
+  display:inline-block;
+  padding:7px 10px;
+  border:1px solid rgba(166,127,52,.25);
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#a67f34;
+  background:rgba(255,255,255,.22);
+}
+
+.badge.off{
+  color:#9c2f2f;
+  border-color:rgba(156,47,47,.35);
 }
 
 .empty{
@@ -363,8 +380,8 @@ td{
   <h1 class="title">Utenti</h1>
 
   <p class="subtitle">
-    Crea nuovi accessi per consulenti e admin. I consulenti vedranno solo le proprie proposte.
-    Gli admin possono vedere e gestire tutto. Le password non sono leggibili: puoi reimpostarle con una nuova password temporanea.
+    Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori.
+    Il ruolo accesso regola i permessi; l’incarico operativo identifica la funzione professionale.
   </p>
 
   <div class="grid">
@@ -385,15 +402,31 @@ td{
         </div>
 
         <div class="field">
+          <label for="phone">Telefono</label>
+          <input type="text" id="phone">
+        </div>
+
+        <div class="field">
           <label for="password">Password temporanea</label>
           <input type="text" id="password" minlength="6" required>
         </div>
 
         <div class="field">
-          <label for="role">Ruolo</label>
+          <label for="role">Ruolo accesso</label>
           <select id="role" required>
-            <option value="user">Consulente</option>
+            <option value="user">User</option>
             <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="professional_role">Incarico operativo</label>
+          <select id="professional_role" required>
+            <option value="collaboratore">Collaboratore</option>
+            <option value="segnalatore">Segnalatore</option>
+            <option value="affiliato">Affiliato</option>
+            <option value="tecnico">Tecnico</option>
+            <option value="legale">Legale</option>
           </select>
         </div>
 
@@ -415,7 +448,10 @@ td{
             <tr>
               <th>Nome</th>
               <th>Email</th>
-              <th>Ruolo</th>
+              <th>Telefono</th>
+              <th>Accesso</th>
+              <th>Incarico</th>
+              <th>Stato</th>
               <th>Password</th>
               <th>Creato</th>
             </tr>
@@ -423,7 +459,7 @@ td{
 
           <tbody id="usersTable">
             <tr>
-              <td colspan="5" class="empty">Caricamento...</td>
+              <td colspan="8" class="empty">Caricamento...</td>
             </tr>
           </tbody>
         </table>
@@ -438,25 +474,25 @@ td{
 <script src="../js/config.js"></script>
 
 <script>
-const client = window.supabase.createClient(
+var client = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
 );
 
-const userForm = document.getElementById("userForm");
-const statusBox = document.getElementById("status");
-const createBtn = document.getElementById("createBtn");
-const usersTable = document.getElementById("usersTable");
+var userForm = document.getElementById("userForm");
+var statusBox = document.getElementById("status");
+var createBtn = document.getElementById("createBtn");
+var usersTable = document.getElementById("usersTable");
 
-let currentUser = null;
+var currentUser = null;
 
 function escapeHTML(value){
-  return String(value ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
 }
 
 function setStatus(message, type){
@@ -477,25 +513,25 @@ function formatDate(value){
 }
 
 async function checkAuth(){
-  const { data:{ session }, error } = await client.auth.getSession();
+  var result = await client.auth.getSession();
 
-  if(error || !session){
+  if(result.error || !result.data.session){
     window.location.href = "login.html";
     return false;
   }
 
-  currentUser = session.user;
+  currentUser = result.data.session.user;
   return true;
 }
 
 async function checkAdmin(){
-  const { data, error } = await client
+  var result = await client
     .from("profiles")
     .select("id,role")
     .eq("id", currentUser.id)
     .single();
 
-  if(error || !data || data.role !== "admin"){
+  if(result.error || !result.data || result.data.role !== "admin"){
     window.location.href = "dashboard.html";
     return false;
   }
@@ -504,69 +540,102 @@ async function checkAdmin(){
 }
 
 async function loadUsers(){
-  const { data, error } = await client
+  var result = await client
     .from("profiles")
-    .select("id,email,full_name,role,created_at")
+    .select("id,email,full_name,phone,role,professional_role,active,created_at")
     .order("created_at", { ascending:false });
 
-  if(error){
-    usersTable.innerHTML = `
-      <tr>
-        <td colspan="5" class="empty">Errore nel caricamento utenti.</td>
-      </tr>
-    `;
+  if(result.error){
+    usersTable.innerHTML = '<tr><td colspan="8" class="empty">Errore nel caricamento utenti.</td></tr>';
     return;
   }
 
-  if(!data || data.length === 0){
-    usersTable.innerHTML = `
-      <tr>
-        <td colspan="5" class="empty">Nessun utente presente.</td>
-      </tr>
-    `;
+  var data = result.data || [];
+
+  if(data.length === 0){
+    usersTable.innerHTML = '<tr><td colspan="8" class="empty">Nessun utente presente.</td></tr>';
     return;
   }
 
-  usersTable.innerHTML = data.map(user => `
-    <tr>
-      <td>${escapeHTML(user.full_name || "")}</td>
-      <td>${escapeHTML(user.email || "")}</td>
-      <td>
-        <select class="role-select" onchange="updateRole('${user.id}', this.value)" ${user.id === currentUser.id ? "disabled" : ""}>
-          <option value="user" ${user.role === "user" ? "selected" : ""}>Consulente</option>
-          <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
-        </select>
-      </td>
-      <td>
-        <button class="small-btn" onclick="resetPassword('${user.id}', '${escapeHTML(user.email || "")}')">
-          Reset
-        </button>
-      </td>
-      <td>${formatDate(user.created_at)}</td>
-    </tr>
-  `).join("");
+  var html = "";
+
+  for(var i = 0; i < data.length; i++){
+    var user = data[i];
+
+    html += `
+      <tr>
+        <td>${escapeHTML(user.full_name || "")}</td>
+        <td>${escapeHTML(user.email || "")}</td>
+
+        <td>
+          <input
+            class="small-input"
+            type="text"
+            value="${escapeHTML(user.phone || "")}"
+            onchange="updateUserField('${user.id}', 'phone', this.value)"
+          >
+        </td>
+
+        <td>
+          <select class="small-select" onchange="updateUserField('${user.id}', 'role', this.value)" ${user.id === currentUser.id ? "disabled" : ""}>
+            <option value="user" ${user.role === "user" ? "selected" : ""}>User</option>
+            <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+          </select>
+        </td>
+
+        <td>
+          <select class="small-select" onchange="updateUserField('${user.id}', 'professional_role', this.value)">
+            <option value="collaboratore" ${user.professional_role === "collaboratore" ? "selected" : ""}>Collaboratore</option>
+            <option value="segnalatore" ${user.professional_role === "segnalatore" ? "selected" : ""}>Segnalatore</option>
+            <option value="affiliato" ${user.professional_role === "affiliato" ? "selected" : ""}>Affiliato</option>
+            <option value="tecnico" ${user.professional_role === "tecnico" ? "selected" : ""}>Tecnico</option>
+            <option value="legale" ${user.professional_role === "legale" ? "selected" : ""}>Legale</option>
+          </select>
+        </td>
+
+        <td>
+          <select class="small-select" onchange="updateUserField('${user.id}', 'active', this.value === 'true')" ${user.id === currentUser.id ? "disabled" : ""}>
+            <option value="true" ${user.active !== false ? "selected" : ""}>Attivo</option>
+            <option value="false" ${user.active === false ? "selected" : ""}>Non attivo</option>
+          </select>
+        </td>
+
+        <td>
+          <button class="small-btn" onclick="resetPassword('${user.id}', '${escapeHTML(user.email || "")}')">
+            Reset
+          </button>
+        </td>
+
+        <td>${formatDate(user.created_at)}</td>
+      </tr>
+    `;
+  }
+
+  usersTable.innerHTML = html;
 }
 
-async function updateRole(userId, newRole){
-  setStatus("Aggiornamento ruolo...", "");
+async function updateUserField(userId, field, value){
+  setStatus("Aggiornamento utente...", "");
 
-  const { error } = await client
+  var updateData = {};
+  updateData[field] = value;
+
+  var result = await client
     .from("profiles")
-    .update({ role:newRole })
+    .update(updateData)
     .eq("id", userId);
 
-  if(error){
-    setStatus(error.message, "error");
+  if(result.error){
+    setStatus(result.error.message, "error");
     await loadUsers();
     return;
   }
 
-  setStatus("Ruolo aggiornato correttamente.", "success");
-  await loadUsers();
+  setStatus("Utente aggiornato correttamente.", "success");
 }
 
 async function resetPassword(userId, email){
-  const newPassword = prompt("Inserisci nuova password temporanea per " + email);
+  var newPassword = prompt("Inserisci nuova password temporanea per " + email);
 
   if(!newPassword){
     return;
@@ -579,44 +648,48 @@ async function resetPassword(userId, email){
 
   setStatus("Reset password in corso...", "");
 
-  const { data, error } = await client.functions.invoke("reset-user-password", {
+  var result = await client.functions.invoke("reset-user-password", {
     body:{
       user_id:userId,
       password:newPassword
     }
   });
 
-  if(error || !data?.success){
-    setStatus(data?.message || error?.message || "Errore durante il reset password.", "error");
+  if(result.error || !result.data || !result.data.success){
+    setStatus((result.data && result.data.message) || (result.error && result.error.message) || "Errore durante il reset password.", "error");
     return;
   }
 
   setStatus("Password aggiornata correttamente.", "success");
 }
 
-userForm.addEventListener("submit", async (e) => {
+userForm.addEventListener("submit", async function(e){
   e.preventDefault();
 
   setStatus("Creazione utente in corso...", "");
   createBtn.disabled = true;
   createBtn.textContent = "Creazione...";
 
-  const full_name = document.getElementById("full_name").value.trim();
-  const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value;
-  const role = document.getElementById("role").value;
+  var full_name = document.getElementById("full_name").value.trim();
+  var email = document.getElementById("email").value.trim();
+  var phone = document.getElementById("phone").value.trim();
+  var password = document.getElementById("password").value;
+  var role = document.getElementById("role").value;
+  var professional_role = document.getElementById("professional_role").value;
 
-  const { data, error } = await client.functions.invoke("create-user", {
+  var result = await client.functions.invoke("create-user", {
     body:{
-      full_name,
-      email,
-      password,
-      role
+      full_name:full_name,
+      email:email,
+      phone:phone,
+      password:password,
+      role:role,
+      professional_role:professional_role
     }
   });
 
-  if(error || !data?.success){
-    setStatus(data?.message || error?.message || "Errore durante la creazione utente.", "error");
+  if(result.error || !result.data || !result.data.success){
+    setStatus((result.data && result.data.message) || (result.error && result.error.message) || "Errore durante la creazione utente.", "error");
     createBtn.disabled = false;
     createBtn.textContent = "Crea Utente";
     return;
@@ -631,16 +704,16 @@ userForm.addEventListener("submit", async (e) => {
   await loadUsers();
 });
 
-document.getElementById("logoutBtn").addEventListener("click", async () => {
+document.getElementById("logoutBtn").addEventListener("click", async function(){
   await client.auth.signOut();
   window.location.href = "../index.html";
 });
 
 (async function init(){
-  const logged = await checkAuth();
+  var logged = await checkAuth();
 
   if(logged){
-    const admin = await checkAdmin();
+    var admin = await checkAdmin();
 
     if(admin){
       await loadUsers();
