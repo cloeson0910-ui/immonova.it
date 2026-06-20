@@ -51,7 +51,7 @@ body{
 .page{
   position:relative;
   z-index:2;
-  max-width:980px;
+  max-width:1080px;
   margin:0 auto;
   padding:42px 24px 80px;
 }
@@ -155,6 +155,17 @@ h1{
   color:#8f7643;
   font-size:13px;
   line-height:1.7;
+}
+
+.section-title{
+  grid-column:1 / -1;
+  margin-top:18px;
+  padding-top:24px;
+  border-top:1px solid rgba(165,129,57,.16);
+  font-size:12px;
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  color:#a58139;
 }
 
 .form-grid{
@@ -333,6 +344,8 @@ button.primary:disabled{
 
       <div class="form-grid">
 
+        <div class="section-title">Informazioni principali</div>
+
         <div class="field full">
           <label for="title">Titolo</label>
           <input type="text" id="title" required>
@@ -357,9 +370,31 @@ button.primary:disabled{
         </div>
 
         <div class="field">
+          <label for="municipality">Comune</label>
+          <input type="text" id="municipality">
+        </div>
+
+        <div class="field">
+          <label for="province">Provincia</label>
+          <input type="text" id="province">
+        </div>
+
+        <div class="field">
+          <label for="region">Regione</label>
+          <input type="text" id="region">
+        </div>
+
+        <div class="field">
           <label for="price">Prezzo / Valore investimento</label>
           <input type="text" id="price" placeholder="Es. Riservato / € 2.500.000">
         </div>
+
+        <div class="field">
+          <label for="investment_type">Tipo investimento</label>
+          <input type="text" id="investment_type" placeholder="Es. Hospitality / Residential / Development">
+        </div>
+
+        <div class="section-title">Dati tecnici immobile</div>
 
         <div class="field">
           <label for="bedrooms">Camere</label>
@@ -382,9 +417,42 @@ button.primary:disabled{
         </div>
 
         <div class="field">
-          <label for="investment_type">Tipo investimento</label>
-          <input type="text" id="investment_type" placeholder="Es. Hospitality / Residential / Development">
+          <label for="construction_year">Anno costruzione</label>
+          <input type="number" id="construction_year" min="1500" max="2100">
         </div>
+
+        <div class="field">
+          <label for="energy_class">Classe energetica</label>
+          <select id="energy_class">
+            <option value="">Seleziona</option>
+            <option value="A4">A4</option>
+            <option value="A3">A3</option>
+            <option value="A2">A2</option>
+            <option value="A1">A1</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+            <option value="E">E</option>
+            <option value="F">F</option>
+            <option value="G">G</option>
+            <option value="Non disponibile">Non disponibile</option>
+          </select>
+        </div>
+
+        <div class="field full">
+          <label for="property_condition">Stato immobile</label>
+          <select id="property_condition">
+            <option value="">Seleziona</option>
+            <option value="Nuovo">Nuovo</option>
+            <option value="Ottimo stato">Ottimo stato</option>
+            <option value="Buono stato">Buono stato</option>
+            <option value="Da ristrutturare">Da ristrutturare</option>
+            <option value="In costruzione">In costruzione</option>
+            <option value="Progetto da sviluppare">Progetto da sviluppare</option>
+          </select>
+        </div>
+
+        <div class="section-title">Localizzazione e accessibilità</div>
 
         <div class="field">
           <label for="latitude">Latitudine</label>
@@ -395,6 +463,23 @@ button.primary:disabled{
           <label for="longitude">Longitudine</label>
           <input type="number" step="any" id="longitude">
         </div>
+
+        <div class="field">
+          <label for="distance_to_sea_km">Distanza mare km</label>
+          <input type="number" step="0.1" id="distance_to_sea_km" min="0">
+        </div>
+
+        <div class="field">
+          <label for="nearest_airport">Aeroporto più vicino</label>
+          <input type="text" id="nearest_airport" placeholder="Es. Brindisi / Bari / Napoli">
+        </div>
+
+        <div class="field full">
+          <label for="distance_to_airport_km">Distanza aeroporto km</label>
+          <input type="number" step="0.1" id="distance_to_airport_km" min="0">
+        </div>
+
+        <div class="section-title">Media</div>
 
         <div class="field full">
           <label for="coverFile">Immagine Copertina</label>
@@ -407,6 +492,8 @@ button.primary:disabled{
           <input type="file" id="galleryFiles" accept="image/*" multiple>
           <div class="file-note">Puoi selezionare più immagini insieme.</div>
         </div>
+
+        <div class="section-title">Descrizioni</div>
 
         <div class="field full">
           <label for="short_description">Descrizione breve</label>
@@ -452,7 +539,7 @@ function slugify(text){
     .toLowerCase()
     .trim()
     .normalize("NFD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
@@ -461,6 +548,11 @@ function cleanFileName(name){
   const parts = name.split(".");
   const ext = parts.length > 1 ? parts.pop().toLowerCase() : "jpg";
   return slugify(parts.join("-")) + "." + ext;
+}
+
+function textOrNull(id){
+  const value = document.getElementById(id).value.trim();
+  return value || null;
 }
 
 function numberOrNull(id){
@@ -561,22 +653,32 @@ document.getElementById("opportunityForm").addEventListener("submit", async (e) 
       title:title,
       slug:baseSlug + "-" + timestamp,
       category:document.getElementById("category").value,
-      location:document.getElementById("location").value.trim(),
-      price:document.getElementById("price").value.trim(),
+      location:textOrNull("location"),
+      municipality:textOrNull("municipality"),
+      province:textOrNull("province"),
+      region:textOrNull("region"),
+      price:textOrNull("price"),
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
       internal_size:numberOrNull("internal_size"),
       land_size:numberOrNull("land_size"),
-      investment_type:document.getElementById("investment_type").value.trim(),
+      investment_type:textOrNull("investment_type"),
+      construction_year:numberOrNull("construction_year"),
+      energy_class:textOrNull("energy_class"),
+      property_condition:textOrNull("property_condition"),
+
       latitude:numberOrNull("latitude"),
       longitude:numberOrNull("longitude"),
+      distance_to_sea_km:numberOrNull("distance_to_sea_km"),
+      nearest_airport:textOrNull("nearest_airport"),
+      distance_to_airport_km:numberOrNull("distance_to_airport_km"),
 
       cover_image:coverUrl,
       gallery_images:galleryUrls,
 
-      short_description:document.getElementById("short_description").value.trim(),
-      full_description:document.getElementById("full_description").value.trim(),
+      short_description:textOrNull("short_description"),
+      full_description:textOrNull("full_description"),
 
       user_id:currentSession.user.id,
       review_status:"da_verificare",
