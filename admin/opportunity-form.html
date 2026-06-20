@@ -157,6 +157,44 @@ h1{
   line-height:1.7;
 }
 
+.ai-box{
+  margin-bottom:28px;
+  padding:22px;
+  border:1px solid rgba(165,129,57,.28);
+  background:rgba(255,255,255,.15);
+}
+
+.ai-title{
+  font-size:12px;
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  color:#a58139;
+  margin-bottom:10px;
+}
+
+.ai-text{
+  font-size:13px;
+  line-height:1.7;
+  color:#8f7643;
+  margin-bottom:16px;
+}
+
+.ai-button{
+  padding:13px 24px;
+  border:1px solid rgba(165,129,57,.42);
+  background:#a58139;
+  color:white;
+  text-transform:uppercase;
+  font-size:10px;
+  letter-spacing:.22em;
+  cursor:pointer;
+}
+
+.ai-button:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
 .section-title{
   grid-column:1 / -1;
   margin-top:18px;
@@ -340,6 +378,18 @@ button.primary:disabled{
       La pubblicazione e la messa in evidenza sono riservate esclusivamente agli admin IMMONOVA.
     </div>
 
+    <div class="ai-box">
+      <div class="ai-title">AI Assistant</div>
+      <div class="ai-text">
+        Inserisci almeno titolo, comune o location, categoria e qualche dato tecnico.
+        Poi usa l’IA per generare descrizioni, riepiloghi territoriali, mercato, turismo,
+        affitti brevi, coordinate e distanze principali.
+      </div>
+      <button type="button" class="ai-button" id="aiBtn">
+        Analizza con IA
+      </button>
+    </div>
+
     <form id="opportunityForm">
 
       <div class="form-grid">
@@ -354,13 +404,7 @@ button.primary:disabled{
         <div class="field">
           <label for="category">Categoria</label>
           <select id="category" required>
-            <option value="">Seleziona categoria</option>
-            <option value="Ville">Ville</option>
-            <option value="Hotel">Hotel</option>
-            <option value="Resort">Resort</option>
-            <option value="Villaggi">Villaggi</option>
-            <option value="Nuove Edificazioni">Nuove Edificazioni</option>
-            <option value="Off Market">Off Market</option>
+            <option value="">Caricamento categorie...</option>
           </select>
         </div>
 
@@ -505,6 +549,33 @@ button.primary:disabled{
           <textarea id="full_description"></textarea>
         </div>
 
+        <div class="section-title">Analisi IA</div>
+
+        <div class="field full">
+          <label for="location_summary">Attrattività della zona</label>
+          <textarea id="location_summary"></textarea>
+        </div>
+
+        <div class="field full">
+          <label for="tourism_summary">Analisi turistica</label>
+          <textarea id="tourism_summary"></textarea>
+        </div>
+
+        <div class="field full">
+          <label for="market_summary">Analisi mercato immobiliare</label>
+          <textarea id="market_summary"></textarea>
+        </div>
+
+        <div class="field full">
+          <label for="ai_short_rental_summary">Analisi affitto breve</label>
+          <textarea id="ai_short_rental_summary"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="preliminary_investment_score">Investment Score preliminare</label>
+          <input type="number" id="preliminary_investment_score" min="0" max="100" step="1">
+        </div>
+
       </div>
 
       <div class="actions">
@@ -523,15 +594,18 @@ button.primary:disabled{
 <script src="../js/config.js"></script>
 
 <script>
-const client = window.supabase.createClient(
+var client = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
 );
 
-const statusBox = document.getElementById("status");
-const saveBtn = document.getElementById("saveBtn");
+var statusBox = document.getElementById("status");
+var saveBtn = document.getElementById("saveBtn");
+var aiBtn = document.getElementById("aiBtn");
+var categorySelect = document.getElementById("category");
 
-let currentSession = null;
+var currentSession = null;
+var aiGenerated = false;
 
 function slugify(text){
   return text
@@ -545,28 +619,41 @@ function slugify(text){
 }
 
 function cleanFileName(name){
-  const parts = name.split(".");
-  const ext = parts.length > 1 ? parts.pop().toLowerCase() : "jpg";
+  var parts = name.split(".");
+  var ext = parts.length > 1 ? parts.pop().toLowerCase() : "jpg";
   return slugify(parts.join("-")) + "." + ext;
 }
 
 function textOrNull(id){
-  const value = document.getElementById(id).value.trim();
+  var value = document.getElementById(id).value.trim();
   return value || null;
 }
 
 function numberOrNull(id){
-  const value = document.getElementById(id).value;
+  var value = document.getElementById(id).value;
   if(value === "" || value === null || value === undefined){
     return null;
   }
   return Number(value);
 }
 
-async function checkAuth(){
-  const { data:{ session }, error } = await client.auth.getSession();
+function setValue(id, value){
+  var el = document.getElementById(id);
+  if(el && value !== null && value !== undefined){
+    el.value = value;
+  }
+}
 
-  if(error || !session){
+function setStatus(message, type){
+  statusBox.className = "status " + (type || "");
+  statusBox.innerHTML = message || "";
+}
+
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  var session = result.data.session;
+
+  if(result.error || !session){
     window.location.href = "login.html";
     return false;
   }
@@ -575,8 +662,36 @@ async function checkAuth(){
   return true;
 }
 
+async function loadCategories(){
+  var result = await client
+    .from("categories")
+    .select("name")
+    .eq("active", true)
+    .order("name", { ascending:true });
+
+  if(result.error){
+    categorySelect.innerHTML = '<option value="">Errore caricamento categorie</option>';
+    return;
+  }
+
+  var data = result.data || [];
+
+  if(data.length === 0){
+    categorySelect.innerHTML = '<option value="">Nessuna categoria disponibile</option>';
+    return;
+  }
+
+  var html = '<option value="">Seleziona categoria</option>';
+
+  for(var i = 0; i < data.length; i++){
+    html += '<option value="' + data[i].name + '">' + data[i].name + '</option>';
+  }
+
+  categorySelect.innerHTML = html;
+}
+
 async function uploadImage(file, path){
-  const { error } = await client
+  var result = await client
     .storage
     .from("opportunities")
     .upload(path, file, {
@@ -584,24 +699,109 @@ async function uploadImage(file, path){
       upsert:false
     });
 
-  if(error){
-    throw error;
+  if(result.error){
+    throw result.error;
   }
 
-  const { data } = client
+  var publicUrlResult = client
     .storage
     .from("opportunities")
     .getPublicUrl(path);
 
-  return data.publicUrl;
+  return publicUrlResult.data.publicUrl;
 }
 
-document.getElementById("logoutBtn").addEventListener("click", async () => {
+aiBtn.addEventListener("click", async function(){
+  setStatus("Analisi IA in preparazione...", "");
+  aiBtn.disabled = true;
+  aiBtn.textContent = "Analisi...";
+
+  try{
+    if(!currentSession || !currentSession.user){
+      throw new Error("Sessione non valida.");
+    }
+
+    var title = textOrNull("title");
+    var category = textOrNull("category");
+    var location = textOrNull("location");
+    var municipality = textOrNull("municipality");
+    var province = textOrNull("province");
+    var region = textOrNull("region");
+
+    if(!title || !category || (!location && !municipality)){
+      throw new Error("Inserisci almeno titolo, categoria e location o comune prima di usare l'IA.");
+    }
+
+    var body = {
+      title:title,
+      category:category,
+      location:location,
+      municipality:municipality,
+      province:province,
+      region:region,
+      price:textOrNull("price"),
+      bedrooms:numberOrNull("bedrooms"),
+      bathrooms:numberOrNull("bathrooms"),
+      internal_size:numberOrNull("internal_size"),
+      land_size:numberOrNull("land_size"),
+      investment_type:textOrNull("investment_type"),
+      construction_year:numberOrNull("construction_year"),
+      energy_class:textOrNull("energy_class"),
+      property_condition:textOrNull("property_condition"),
+      latitude:numberOrNull("latitude"),
+      longitude:numberOrNull("longitude"),
+      distance_to_sea_km:numberOrNull("distance_to_sea_km"),
+      nearest_airport:textOrNull("nearest_airport"),
+      distance_to_airport_km:numberOrNull("distance_to_airport_km"),
+      short_description:textOrNull("short_description"),
+      full_description:textOrNull("full_description")
+    };
+
+    var result = await client.functions.invoke("analyze-opportunity", {
+      body:body
+    });
+
+    if(result.error || !result.data || !result.data.success){
+      throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore analisi IA.");
+    }
+
+    var ai = result.data.analysis || {};
+
+    setValue("municipality", ai.municipality);
+    setValue("province", ai.province);
+    setValue("region", ai.region);
+    setValue("latitude", ai.latitude);
+    setValue("longitude", ai.longitude);
+    setValue("distance_to_sea_km", ai.distance_to_sea_km);
+    setValue("nearest_airport", ai.nearest_airport);
+    setValue("distance_to_airport_km", ai.distance_to_airport_km);
+
+    setValue("short_description", ai.short_description);
+    setValue("full_description", ai.full_description);
+    setValue("location_summary", ai.location_summary);
+    setValue("tourism_summary", ai.tourism_summary);
+    setValue("market_summary", ai.market_summary);
+    setValue("ai_short_rental_summary", ai.ai_short_rental_summary);
+    setValue("preliminary_investment_score", ai.preliminary_investment_score);
+
+    aiGenerated = true;
+
+    setStatus("Analisi IA completata. Controlla e modifica i testi prima di inviare la proposta.", "success");
+
+  }catch(error){
+    setStatus(error.message || "Errore durante l'analisi IA.", "error");
+  }
+
+  aiBtn.disabled = false;
+  aiBtn.textContent = "Analizza con IA";
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async function(){
   await client.auth.signOut();
   window.location.href = "../index.html";
 });
 
-document.getElementById("opportunityForm").addEventListener("submit", async (e) => {
+document.getElementById("opportunityForm").addEventListener("submit", async function(e){
   e.preventDefault();
 
   statusBox.className = "status";
@@ -610,46 +810,46 @@ document.getElementById("opportunityForm").addEventListener("submit", async (e) 
   saveBtn.textContent = "Invio...";
 
   try{
-    if(!currentSession?.user?.id){
+    if(!currentSession || !currentSession.user || !currentSession.user.id){
       throw new Error("Sessione non valida. Effettua nuovamente il login.");
     }
 
-    const title = document.getElementById("title").value.trim();
+    var title = document.getElementById("title").value.trim();
 
     if(!title){
       throw new Error("Inserisci un titolo.");
     }
 
-    const baseSlug = slugify(title);
-    const timestamp = Date.now();
-    const folder = `${baseSlug}-${timestamp}`;
+    var baseSlug = slugify(title);
+    var timestamp = Date.now();
+    var folder = baseSlug + "-" + timestamp;
 
-    const coverFile = document.getElementById("coverFile").files[0];
-    const galleryFiles = Array.from(document.getElementById("galleryFiles").files);
+    var coverFile = document.getElementById("coverFile").files[0];
+    var galleryFiles = Array.prototype.slice.call(document.getElementById("galleryFiles").files);
 
-    let coverUrl = "";
-    let galleryUrls = [];
+    var coverUrl = "";
+    var galleryUrls = [];
 
     if(coverFile){
       statusBox.textContent = "Caricamento copertina...";
-      const coverPath = `cover/${folder}/${cleanFileName(coverFile.name)}`;
+      var coverPath = "cover/" + folder + "/" + cleanFileName(coverFile.name);
       coverUrl = await uploadImage(coverFile, coverPath);
     }
 
     if(galleryFiles.length > 0){
       statusBox.textContent = "Caricamento gallery...";
 
-      for(let i = 0; i < galleryFiles.length; i++){
-        const file = galleryFiles[i];
-        const galleryPath = `gallery/${folder}/${i + 1}-${cleanFileName(file.name)}`;
-        const url = await uploadImage(file, galleryPath);
+      for(var i = 0; i < galleryFiles.length; i++){
+        var file = galleryFiles[i];
+        var galleryPath = "gallery/" + folder + "/" + (i + 1) + "-" + cleanFileName(file.name);
+        var url = await uploadImage(file, galleryPath);
         galleryUrls.push(url);
       }
     }
 
     statusBox.textContent = "Salvataggio dati proposta...";
 
-    const payload = {
+    var payload = {
       title:title,
       slug:baseSlug + "-" + timestamp,
       category:document.getElementById("category").value,
@@ -679,6 +879,13 @@ document.getElementById("opportunityForm").addEventListener("submit", async (e) 
 
       short_description:textOrNull("short_description"),
       full_description:textOrNull("full_description"),
+      location_summary:textOrNull("location_summary"),
+      tourism_summary:textOrNull("tourism_summary"),
+      market_summary:textOrNull("market_summary"),
+      ai_short_rental_summary:textOrNull("ai_short_rental_summary"),
+      preliminary_investment_score:numberOrNull("preliminary_investment_score"),
+      ai_generated_description:aiGenerated,
+      ai_generated_at:aiGenerated ? new Date().toISOString() : null,
 
       user_id:currentSession.user.id,
       review_status:"da_verificare",
@@ -687,12 +894,12 @@ document.getElementById("opportunityForm").addEventListener("submit", async (e) 
       updated_at:new Date().toISOString()
     };
 
-    const { error } = await client
+    var result = await client
       .from("opportunities")
       .insert([payload]);
 
-    if(error){
-      throw error;
+    if(result.error){
+      throw result.error;
     }
 
     statusBox.className = "status success";
@@ -702,7 +909,7 @@ document.getElementById("opportunityForm").addEventListener("submit", async (e) 
       Un consulente IMMONOVA analizzerà la documentazione e aggiornerà lo stato della proposta.
     `;
 
-    setTimeout(() => {
+    setTimeout(function(){
       window.location.href = "dashboard.html";
     }, 1400);
 
@@ -714,7 +921,13 @@ document.getElementById("opportunityForm").addEventListener("submit", async (e) 
   }
 });
 
-checkAuth();
+(async function init(){
+  var logged = await checkAuth();
+
+  if(logged){
+    await loadCategories();
+  }
+})();
 </script>
 
 </body>
