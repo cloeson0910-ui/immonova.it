@@ -303,13 +303,76 @@ button.danger{
   color:#8f7643;
 }
 
+
+.renovation-box{
+  grid-column:1 / -1;
+  display:none;
+  padding:24px;
+  border:1px solid rgba(165,129,57,.24);
+  background:rgba(255,252,244,.18);
+}
+
+.renovation-box.active{
+  display:block;
+}
+
+.renovation-intro{
+  font-size:13px;
+  line-height:1.8;
+  color:#8f7643;
+  margin-bottom:22px;
+}
+
+.renovation-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:18px;
+}
+
+.renovation-toolbar{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+  margin-top:14px;
+}
+
+.render-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:14px;
+  margin-top:12px;
+}
+
+.render-card{
+  border:1px solid rgba(165,129,57,.20);
+  background:rgba(255,255,255,.12);
+  padding:8px;
+}
+
+.render-card img{
+  width:100%;
+  height:135px;
+  object-fit:cover;
+  display:block;
+}
+
+.render-meta{
+  margin-top:8px;
+  font-size:10px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#8f7643;
+  line-height:1.5;
+}
+
 @media(max-width:760px){
   .header{
     flex-direction:column;
     gap:22px;
   }
 
-  .form-grid{
+  .form-grid,
+  .renovation-grid{
     grid-template-columns:1fr;
   }
 
@@ -493,6 +556,108 @@ button.danger{
         </select>
       </div>
 
+
+      <div id="renovationBox" class="renovation-box">
+        <div class="ai-title">Ristrutturazione e Render IA</div>
+        <div class="renovation-intro">
+          Gestisci anche dopo la creazione le foto ambiente per la generazione dei render IA.
+          I costi stimati entrano nel dossier e vengono sommati all'investimento totale.
+        </div>
+
+        <div class="renovation-grid">
+          <div class="field">
+            <label for="renovation_required">Immobile da ristrutturare</label>
+            <select id="renovation_required">
+              <option value="false">No</option>
+              <option value="true">Si</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="renovation_level">Livello degrado</label>
+            <select id="renovation_level">
+              <option value="">Seleziona</option>
+              <option value="leggero">Leggero</option>
+              <option value="medio">Medio</option>
+              <option value="pesante">Pesante</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="renovation_style">Stile valorizzazione</label>
+            <select id="renovation_style">
+              <option value="">Seleziona</option>
+              <option value="conservativo">Conservativo</option>
+              <option value="normale">Normale</option>
+              <option value="lusso">Lusso</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="renovation_area_sqm">Mq da ristrutturare</label>
+            <input type="number" id="renovation_area_sqm" min="0" step="1">
+          </div>
+
+          <div class="field">
+            <label for="renovation_cost_min">Costo minimo stimato €</label>
+            <input type="number" id="renovation_cost_min" readonly>
+          </div>
+
+          <div class="field">
+            <label for="renovation_cost_max">Costo massimo stimato €</label>
+            <input type="number" id="renovation_cost_max" readonly>
+          </div>
+
+          <div class="field">
+            <label for="renovation_cost_avg">Costo medio stimato €</label>
+            <input type="number" id="renovation_cost_avg" readonly>
+          </div>
+
+          <div class="field full">
+            <label for="renovation_notes">Note ristrutturazione</label>
+            <textarea id="renovation_notes" placeholder="Es. preservare volte storiche, rifare bagni, mantenere pietra originale, creare suite, piscina, outdoor living..."></textarea>
+          </div>
+
+          <div class="field">
+            <label for="renovation_room_type">Ambiente foto</label>
+            <select id="renovation_room_type">
+              <option value="kitchen">Cucina</option>
+              <option value="living_room">Soggiorno</option>
+              <option value="bedroom">Camera</option>
+              <option value="bathroom">Bagno</option>
+              <option value="facade">Facciata / Esterni</option>
+              <option value="garden">Giardino</option>
+              <option value="pool">Piscina</option>
+              <option value="other">Altro</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="renovationFiles">Aggiungi foto ambiente</label>
+            <input type="file" id="renovationFiles" accept="image/*" multiple>
+          </div>
+
+          <div class="field full">
+            <label>Foto ambienti caricate</label>
+            <div id="renovationGallery" class="gallery-preview"></div>
+            <div id="noRenovationText" class="file-note">Nessuna foto ambiente caricata.</div>
+          </div>
+
+          <div class="field full">
+            <button type="button" class="primary" id="generateRenderBtn">Genera Render IA</button>
+            <div class="file-note">
+              Genera render conservativo, normale/standard e lusso usando le foto ambiente caricate.
+            </div>
+          </div>
+
+          <div class="field full">
+            <label>Render generati</label>
+            <div id="renderGallery" class="render-grid"></div>
+            <div id="noRenderText" class="file-note">Nessun render generato.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="section-title">Localizzazione e accessibilità</div>
 
       <div class="field">
@@ -607,6 +772,8 @@ var aiBtn = document.getElementById("aiBtn");
 
 var currentCoverUrl = "";
 var galleryImages = [];
+var renovationImages = [];
+var renderImages = [];
 var coverRemoved = false;
 var aiGenerated = false;
 var loadedOpportunity = null;
@@ -712,6 +879,246 @@ function renderGallery(){
   galleryPreview.innerHTML = html;
 }
 
+
+function isRenovationRequired(){
+  var condition = document.getElementById("property_condition").value;
+  var selected = document.getElementById("renovation_required").value;
+  return selected === "true" || condition === "Da ristrutturare";
+}
+
+function syncRenovationRequired(){
+  var box = document.getElementById("renovationBox");
+  var requiredSelect = document.getElementById("renovation_required");
+
+  if(document.getElementById("property_condition").value === "Da ristrutturare"){
+    requiredSelect.value = "true";
+  }
+
+  if(isRenovationRequired()){
+    box.classList.add("active");
+
+    if(!numberOrNull("renovation_area_sqm")){
+      var internal = numberOrNull("internal_size");
+      if(internal) setValue("renovation_area_sqm", internal);
+    }
+
+    calculateRenovationBudget();
+  }else{
+    box.classList.remove("active");
+  }
+}
+
+function renovationRates(style, level){
+  var rates = {
+    conservativo:{ min:400, max:700 },
+    normale:{ min:800, max:1400 },
+    standard:{ min:800, max:1400 },
+    lusso:{ min:1500, max:3000 }
+  };
+
+  var multiplier = 1;
+
+  if(level === "leggero") multiplier = 0.90;
+  if(level === "medio") multiplier = 1.00;
+  if(level === "pesante") multiplier = 1.18;
+
+  var selected = rates[style] || rates.normale;
+
+  return {
+    min:selected.min * multiplier,
+    max:selected.max * multiplier
+  };
+}
+
+function calculateRenovationBudget(){
+  if(!isRenovationRequired()){
+    setValue("renovation_cost_min", "");
+    setValue("renovation_cost_max", "");
+    setValue("renovation_cost_avg", "");
+    return;
+  }
+
+  var sqm = numberOrNull("renovation_area_sqm") || numberOrNull("internal_size") || 0;
+  var style = textOrNull("renovation_style") || "normale";
+  var level = textOrNull("renovation_level") || "medio";
+  var rates = renovationRates(style, level);
+
+  var min = Math.round(sqm * rates.min);
+  var max = Math.round(sqm * rates.max);
+  var avg = Math.round((min + max) / 2);
+
+  setValue("renovation_cost_min", min || "");
+  setValue("renovation_cost_max", max || "");
+  setValue("renovation_cost_avg", avg || "");
+}
+
+function roomLabel(roomType){
+  var map = {
+    kitchen:"Cucina",
+    living_room:"Soggiorno",
+    bedroom:"Camera",
+    bathroom:"Bagno",
+    facade:"Facciata / Esterni",
+    garden:"Giardino",
+    pool:"Piscina",
+    other:"Altro"
+  };
+
+  return map[roomType] || roomType || "Ambiente";
+}
+
+function renderRenovationGallery(){
+  var box = document.getElementById("renovationGallery");
+  var empty = document.getElementById("noRenovationText");
+
+  if(!renovationImages || renovationImages.length === 0){
+    box.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+
+  empty.style.display = "none";
+
+  var html = "";
+
+  for(var i = 0; i < renovationImages.length; i++){
+    var item = renovationImages[i];
+    html += `
+      <div class="gallery-item">
+        <img src="${item.original_image}" alt="${roomLabel(item.room_type)}">
+        <div class="file-note">${roomLabel(item.room_type)}</div>
+        <button type="button" onclick="deleteRenovationImage(${item.id})">Elimina</button>
+      </div>
+    `;
+  }
+
+  box.innerHTML = html;
+}
+
+function renderRenderGallery(){
+  var box = document.getElementById("renderGallery");
+  var empty = document.getElementById("noRenderText");
+
+  if(!renderImages || renderImages.length === 0){
+    box.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+
+  empty.style.display = "none";
+
+  var html = "";
+
+  for(var i = 0; i < renderImages.length; i++){
+    var item = renderImages[i];
+    html += `
+      <div class="render-card">
+        <img src="${item.generated_image_url}" alt="${roomLabel(item.room_type)} ${item.style}">
+        <div class="render-meta">
+          ${roomLabel(item.room_type)}<br>
+          ${item.style || ""}
+        </div>
+      </div>
+    `;
+  }
+
+  box.innerHTML = html;
+}
+
+async function loadRenovationImages(){
+  if(!id) return;
+
+  var result = await client
+    .from("renovation_images")
+    .select("*")
+    .eq("opportunity_id", id)
+    .order("created_at", { ascending:false });
+
+  if(result.error){
+    renovationImages = [];
+    renderRenovationGallery();
+    return;
+  }
+
+  renovationImages = result.data || [];
+  renderRenovationGallery();
+}
+
+async function loadRenovationRenders(){
+  if(!id) return;
+
+  var result = await client
+    .from("renovation_renders")
+    .select("*")
+    .eq("opportunity_id", id)
+    .order("created_at", { ascending:false });
+
+  if(result.error){
+    renderImages = [];
+    renderRenderGallery();
+    return;
+  }
+
+  renderImages = result.data || [];
+  renderRenderGallery();
+}
+
+async function deleteRenovationImage(imageId){
+  var ok = confirm("Vuoi eliminare questa foto ambiente?");
+  if(!ok) return;
+
+  setStatus("Eliminazione foto ambiente...", "");
+
+  var result = await client
+    .from("renovation_images")
+    .delete()
+    .eq("id", imageId);
+
+  if(result.error){
+    setStatus(result.error.message, "error");
+    return;
+  }
+
+  await loadRenovationImages();
+  setStatus("Foto ambiente eliminata.", "success");
+}
+
+async function uploadAndInsertRenovationImages(folder){
+  var input = document.getElementById("renovationFiles");
+  var files = Array.prototype.slice.call(input.files || []);
+
+  if(files.length === 0) return;
+
+  var roomType = document.getElementById("renovation_room_type").value || "other";
+  var rows = [];
+
+  for(var i = 0; i < files.length; i++){
+    var file = files[i];
+    setStatus("Caricamento foto ambiente " + roomLabel(roomType) + " (" + (i + 1) + "/" + files.length + ")...", "");
+
+    var path = "renovation/" + folder + "/" + roomType + "/" + (i + 1) + "-" + cleanFileName(file.name);
+    var url = await uploadImage(file, path);
+
+    rows.push({
+      opportunity_id:Number(id),
+      room_type:roomType,
+      original_image:url
+    });
+  }
+
+  var result = await client
+    .from("renovation_images")
+    .insert(rows);
+
+  if(result.error){
+    throw result.error;
+  }
+
+  input.value = "";
+  await loadRenovationImages();
+}
+
+
 function removeGalleryImage(index){
   galleryImages.splice(index, 1);
   renderGallery();
@@ -812,6 +1219,16 @@ async function loadOpportunity(){
   setValue("energy_class", data.energy_class || "");
   setValue("property_condition", data.property_condition || "");
 
+  setValue("renovation_required", data.renovation_required === true ? "true" : "false");
+  setValue("renovation_level", data.renovation_level || "");
+  setValue("renovation_style", data.renovation_style || "");
+  setValue("renovation_area_sqm", data.renovation_area_sqm);
+  setValue("renovation_cost_min", data.renovation_cost_min);
+  setValue("renovation_cost_max", data.renovation_cost_max);
+  setValue("renovation_cost_avg", data.renovation_cost_avg);
+  setValue("renovation_notes", data.renovation_notes || "");
+
+
   setValue("latitude", data.latitude);
   setValue("longitude", data.longitude);
   setValue("distance_to_sea_km", data.distance_to_sea_km);
@@ -836,10 +1253,67 @@ async function loadOpportunity(){
 
   renderCover();
   renderGallery();
+  syncRenovationRequired();
+  calculateRenovationBudget();
+  await loadRenovationImages();
+  await loadRenovationRenders();
 
   loading.style.display = "none";
   form.style.display = "block";
 }
+
+
+["property_condition","renovation_required","renovation_level","renovation_style","renovation_area_sqm","internal_size"].forEach(function(fieldId){
+  var el = document.getElementById(fieldId);
+
+  if(el){
+    el.addEventListener("input", function(){
+      syncRenovationRequired();
+      calculateRenovationBudget();
+    });
+
+    el.addEventListener("change", function(){
+      syncRenovationRequired();
+      calculateRenovationBudget();
+    });
+  }
+});
+
+document.getElementById("generateRenderBtn").addEventListener("click", async function(){
+  var btn = document.getElementById("generateRenderBtn");
+
+  try{
+    if(!isRenovationRequired()){
+      throw new Error("Immobile non marcato come da ristrutturare.");
+    }
+
+    if(!renovationImages || renovationImages.length === 0){
+      throw new Error("Carica almeno una foto ambiente prima di generare i render.");
+    }
+
+    setStatus("Generazione render IA in corso. Può richiedere tempo...", "");
+    btn.disabled = true;
+    btn.textContent = "Generazione...";
+
+    var result = await client.functions.invoke("generate-renovation-renders", {
+      body:{ opportunity_id:Number(id) }
+    });
+
+    if(result.error || !result.data || !result.data.success){
+      throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore generazione render IA.");
+    }
+
+    await loadRenovationRenders();
+    setStatus("Render IA generati correttamente.", "success");
+
+  }catch(error){
+    setStatus(error.message || "Errore generazione render IA.", "error");
+  }
+
+  btn.disabled = false;
+  btn.textContent = "Genera Render IA";
+});
+
 
 aiBtn.addEventListener("click", async function(){
   setStatus("Analisi IA in corso...", "");
@@ -872,6 +1346,13 @@ aiBtn.addEventListener("click", async function(){
       construction_year:numberOrNull("construction_year"),
       energy_class:textOrNull("energy_class"),
       property_condition:textOrNull("property_condition"),
+      renovation_required:isRenovationRequired(),
+      renovation_style:textOrNull("renovation_style"),
+      renovation_level:textOrNull("renovation_level"),
+      renovation_area_sqm:numberOrNull("renovation_area_sqm"),
+      renovation_cost_min:numberOrNull("renovation_cost_min"),
+      renovation_cost_max:numberOrNull("renovation_cost_max"),
+      renovation_cost_avg:numberOrNull("renovation_cost_avg"),
       latitude:numberOrNull("latitude"),
       longitude:numberOrNull("longitude"),
       distance_to_sea_km:numberOrNull("distance_to_sea_km"),
@@ -961,6 +1442,11 @@ form.addEventListener("submit", async function(e){
       }
     }
 
+    if(isRenovationRequired()){
+      await uploadAndInsertRenovationImages(folder);
+      calculateRenovationBudget();
+    }
+
     setStatus("Aggiornamento dati opportunità...", "");
 
     var payload = {
@@ -983,6 +1469,15 @@ form.addEventListener("submit", async function(e){
       construction_year:numberOrNull("construction_year"),
       energy_class:textOrNull("energy_class"),
       property_condition:textOrNull("property_condition"),
+
+      renovation_required:isRenovationRequired(),
+      renovation_level:isRenovationRequired() ? textOrNull("renovation_level") : null,
+      renovation_style:isRenovationRequired() ? textOrNull("renovation_style") : null,
+      renovation_area_sqm:isRenovationRequired() ? numberOrNull("renovation_area_sqm") : null,
+      renovation_cost_min:isRenovationRequired() ? numberOrNull("renovation_cost_min") : null,
+      renovation_cost_max:isRenovationRequired() ? numberOrNull("renovation_cost_max") : null,
+      renovation_cost_avg:isRenovationRequired() ? numberOrNull("renovation_cost_avg") : null,
+      renovation_notes:isRenovationRequired() ? textOrNull("renovation_notes") : null,
 
       latitude:numberOrNull("latitude"),
       longitude:numberOrNull("longitude"),
