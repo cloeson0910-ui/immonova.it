@@ -162,6 +162,13 @@ body::after{
   display:grid;
   grid-template-columns:repeat(5,1fr);
   gap:22px;
+  margin-bottom:32px;
+}
+
+.value-stats{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:22px;
   margin-bottom:42px;
 }
 
@@ -184,6 +191,18 @@ body::after{
   font-size:38px;
   font-weight:200;
   color:#a67f34;
+}
+
+.value-card .card-value{
+  font-size:26px;
+  line-height:1.18;
+}
+
+.card-note{
+  margin-top:10px;
+  font-size:11px;
+  line-height:1.5;
+  color:#8f7643;
 }
 
 .actions{
@@ -316,6 +335,69 @@ td{
   opacity:.8;
 }
 
+.chart-panel{
+  margin-top:28px;
+  padding:28px;
+}
+
+.chart-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:26px;
+}
+
+.chart-card{
+  border:1px solid rgba(166,127,52,.14);
+  background:rgba(255,255,255,.14);
+  padding:20px;
+}
+
+.chart-title{
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin-bottom:12px;
+}
+
+.chart-svg{
+  width:100%;
+  height:260px;
+  display:block;
+}
+
+.axis{
+  stroke:rgba(127,100,48,.58);
+  stroke-width:1;
+}
+
+.grid-line{
+  stroke:rgba(127,100,48,.16);
+  stroke-width:1;
+}
+
+.chart-bar{
+  fill:rgba(166,127,52,.50);
+}
+
+.chart-line{
+  fill:none;
+  stroke:#a67f34;
+  stroke-width:3;
+}
+
+.chart-dot{
+  fill:#a67f34;
+  stroke:#f4ecdf;
+  stroke-width:2;
+}
+
+.chart-text{
+  fill:#7f6430;
+  font-size:11px;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+}
+
 .empty,
 .error{
   padding:38px;
@@ -324,8 +406,10 @@ td{
 }
 
 @media(max-width:1150px){
-  .stats{grid-template-columns:1fr 1fr}
+  .stats,
+  .value-stats{grid-template-columns:1fr 1fr}
   .dashboard-grid{grid-template-columns:1fr}
+  .chart-grid{grid-template-columns:1fr}
 }
 
 @media(max-width:760px){
@@ -352,11 +436,12 @@ td{
   }
 
   .title{font-size:34px}
-  .stats{grid-template-columns:1fr}
+  .stats,
+  .value-stats{grid-template-columns:1fr}
   .actions{flex-direction:column}
   .btn{text-align:center}
   .table-wrapper{overflow-x:auto}
-  table{min-width:900px}
+  table{min-width:1020px}
 }
 </style>
 </head>
@@ -431,6 +516,38 @@ td{
     </div>
   </section>
 
+  <section class="value-stats">
+    <div class="card value-card">
+      <div class="card-label">Valore Pipeline</div>
+      <div class="card-value" id="totalValue">€ 0</div>
+      <div class="card-note">Somma valori opportunità</div>
+    </div>
+
+    <div class="card value-card">
+      <div class="card-label">Valore Pubblicate</div>
+      <div class="card-value" id="publishedValue">€ 0</div>
+      <div class="card-note" id="publishedValueNote">0 opportunità</div>
+    </div>
+
+    <div class="card value-card">
+      <div class="card-label">Valore In Valutazione</div>
+      <div class="card-value" id="evaluationValue">€ 0</div>
+      <div class="card-note" id="evaluationValueNote">0 opportunità</div>
+    </div>
+
+    <div class="card value-card">
+      <div class="card-label">Valore Rifiutate</div>
+      <div class="card-value" id="rejectedValue">€ 0</div>
+      <div class="card-note" id="rejectedValueNote">0 opportunità</div>
+    </div>
+
+    <div class="card value-card">
+      <div class="card-label">Valore Post-Ristr.</div>
+      <div class="card-value" id="postRenovationValue">€ 0</div>
+      <div class="card-note">Totale investimenti con lavori</div>
+    </div>
+  </section>
+
   <div class="actions">
     <a href="opportunity-form.html" class="btn">Nuova Proposta</a>
     <a href="opportunities.html" class="btn secondary">Gestisci Proposte</a>
@@ -452,6 +569,7 @@ td{
               <th>Titolo</th>
               <th>Categoria</th>
               <th>Location</th>
+              <th>Valore</th>
               <th>Stato</th>
               <th>Pubblicata</th>
               <th>Azione</th>
@@ -460,10 +578,25 @@ td{
 
           <tbody id="opportunitiesTable">
             <tr>
-              <td colspan="6" class="empty">Caricamento...</td>
+              <td colspan="7" class="empty">Caricamento...</td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="panel chart-panel">
+        <div class="section-title">Analisi Portfolio</div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title">Numero opportunità per stato</div>
+            <div id="statusCountChart"></div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-title">Valore opportunità per stato</div>
+            <div id="statusValueChart"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -494,6 +627,7 @@ let currentUser = null;
 let currentProfile = null;
 let isAdmin = false;
 let allOpportunities = [];
+let latestReports = [];
 
 const table = document.getElementById("opportunitiesTable");
 const searchInput = document.getElementById("searchInput");
@@ -522,6 +656,198 @@ function statusLabel(status){
   return labels[status] || "Da verificare";
 }
 
+function euro(value){
+  const n = Number(value);
+  if(!Number.isFinite(n) || n <= 0) return "€ 0";
+  return new Intl.NumberFormat("it-IT", {
+    style:"currency",
+    currency:"EUR",
+    maximumFractionDigits:0
+  }).format(n);
+}
+
+function compactEuro(value){
+  const n = Number(value);
+  if(!Number.isFinite(n) || n <= 0) return "€ 0";
+
+  if(n >= 1000000000){
+    return "€ " + (n / 1000000000).toFixed(2).replace(".", ",") + " Mld";
+  }
+
+  if(n >= 1000000){
+    return "€ " + (n / 1000000).toFixed(2).replace(".", ",") + " M";
+  }
+
+  if(n >= 1000){
+    return "€ " + (n / 1000).toFixed(0).replace(".", ",") + " K";
+  }
+
+  return euro(n);
+}
+
+function parsePrice(value){
+  const raw = String(value || "").trim();
+
+  if(!raw || raw.toLowerCase().includes("riservato") || raw.toLowerCase().includes("trattativa")){
+    return 0;
+  }
+
+  const cleaned = raw
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  const n = Number(cleaned);
+
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function reportForOpportunity(opportunityId){
+  const matches = latestReports
+    .filter(r => Number(r.opportunity_id) === Number(opportunityId))
+    .sort((a,b) => new Date(b.generated_at || b.created_at || 0) - new Date(a.generated_at || a.created_at || 0));
+
+  return matches[0] || null;
+}
+
+function opportunityValue(o){
+  const report = reportForOpportunity(o.id);
+
+  if(report && Number(report.total_investment_avg) > 0){
+    return Number(report.total_investment_avg);
+  }
+
+  if(report && report.report_json && report.report_json.asset && Number(report.report_json.asset.total_investment_avg) > 0){
+    return Number(report.report_json.asset.total_investment_avg);
+  }
+
+  if(report && report.report_json && report.report_json.asset && Number(report.report_json.asset.price_estimate) > 0){
+    return Number(report.report_json.asset.price_estimate);
+  }
+
+  return parsePrice(o.price);
+}
+
+function postRenovationOpportunityValue(o){
+  const report = reportForOpportunity(o.id);
+
+  if(report && Number(report.projected_value_5y) > 0){
+    return Number(report.projected_value_5y);
+  }
+
+  if(report && report.report_json && report.report_json.kpi && Number(report.report_json.kpi.projected_value_5y) > 0){
+    return Number(report.report_json.kpi.projected_value_5y);
+  }
+
+  return opportunityValue(o);
+}
+
+function countBy(items, predicate){
+  return items.filter(predicate).length;
+}
+
+function sumBy(items, mapper){
+  return items.reduce((sum,item) => sum + (Number(mapper(item)) || 0), 0);
+}
+
+function groupValues(items){
+  const published = items.filter(o => o.published === true);
+  const evaluation = items.filter(o => ["da_verificare","da_revisionare"].includes(o.review_status || "da_verificare"));
+  const rejected = items.filter(o => o.review_status === "rifiutato");
+  const approved = items.filter(o => o.review_status === "approvato");
+
+  return {
+    total:sumBy(items, opportunityValue),
+    published:sumBy(published, opportunityValue),
+    evaluation:sumBy(evaluation, opportunityValue),
+    rejected:sumBy(rejected, opportunityValue),
+    approved:sumBy(approved, opportunityValue),
+    postRenovation:sumBy(items, postRenovationOpportunityValue),
+
+    publishedCount:published.length,
+    evaluationCount:evaluation.length,
+    rejectedCount:rejected.length,
+    approvedCount:approved.length
+  };
+}
+
+function statusGroups(items){
+  return [
+    {
+      key:"da_verificare",
+      label:"Da verificare",
+      count:countBy(items, o => (o.review_status || "da_verificare") === "da_verificare"),
+      value:sumBy(items.filter(o => (o.review_status || "da_verificare") === "da_verificare"), opportunityValue)
+    },
+    {
+      key:"da_revisionare",
+      label:"Da revisionare",
+      count:countBy(items, o => o.review_status === "da_revisionare"),
+      value:sumBy(items.filter(o => o.review_status === "da_revisionare"), opportunityValue)
+    },
+    {
+      key:"approvato",
+      label:"Approvate",
+      count:countBy(items, o => o.review_status === "approvato"),
+      value:sumBy(items.filter(o => o.review_status === "approvato"), opportunityValue)
+    },
+    {
+      key:"rifiutato",
+      label:"Rifiutate",
+      count:countBy(items, o => o.review_status === "rifiutato"),
+      value:sumBy(items.filter(o => o.review_status === "rifiutato"), opportunityValue)
+    }
+  ];
+}
+
+function renderBarChart(targetId, groups, valueKey, formatFn){
+  const target = document.getElementById(targetId);
+  const width = 560;
+  const height = 260;
+  const padL = 54;
+  const padR = 24;
+  const padT = 24;
+  const padB = 54;
+  const chartW = width - padL - padR;
+  const chartH = height - padT - padB;
+
+  const values = groups.map(g => Number(g[valueKey]) || 0);
+  const max = Math.max.apply(null, values.concat([1]));
+  const barW = chartW / groups.length * 0.56;
+  const gap = chartW / groups.length;
+
+  let grid = "";
+
+  for(let i = 0; i <= 4; i++){
+    const y = padT + chartH - (chartH / 4) * i;
+    const val = max / 4 * i;
+    grid += `<line class="grid-line" x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}"></line>`;
+    grid += `<text class="chart-text" x="6" y="${y + 4}">${escapeHTML(formatFn ? formatFn(val) : Math.round(val))}</text>`;
+  }
+
+  const bars = groups.map((g,i) => {
+    const val = Number(g[valueKey]) || 0;
+    const h = max > 0 ? (val / max) * chartH : 0;
+    const x = padL + gap * i + (gap - barW) / 2;
+    const y = padT + chartH - h;
+
+    return `
+      <rect class="chart-bar" x="${x}" y="${y}" width="${barW}" height="${h}"></rect>
+      <text class="chart-text" x="${x - 4}" y="${height - 28}">${escapeHTML(g.label.split(" ")[0])}</text>
+      <text class="chart-text" x="${x}" y="${y - 8}">${escapeHTML(formatFn ? formatFn(val) : val)}</text>
+    `;
+  }).join("");
+
+  target.innerHTML = `
+    <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+      ${grid}
+      <line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${height-padB}"></line>
+      <line class="axis" x1="${padL}" y1="${height-padB}" x2="${width-padR}" y2="${height-padB}"></line>
+      ${bars}
+    </svg>
+  `;
+}
+
 async function checkAuth(){
   const { data:{ session }, error } = await client.auth.getSession();
 
@@ -547,13 +873,28 @@ async function loadProfile(){
   }
 
   currentProfile = data;
-  isAdmin = currentProfile?.role === "admin";
+  isAdmin = currentProfile?.role === "admin" || currentProfile?.role === "ceo";
 
   roleLabel.textContent = isAdmin ? "Area Admin" : "Area Utente";
 
   document.querySelectorAll(".admin-only").forEach(el => {
     el.style.display = isAdmin ? "inline-block" : "none";
   });
+}
+
+async function loadReports(){
+  const { data, error } = await client
+    .from("opportunity_reports")
+    .select("id,opportunity_id,total_investment_avg,projected_value_5y,estimated_roi,report_json,generated_at,created_at")
+    .order("generated_at", { ascending:false });
+
+  if(error){
+    console.warn("Report non caricati:", error.message);
+    latestReports = [];
+    return;
+  }
+
+  latestReports = data || [];
 }
 
 async function loadDashboard(){
@@ -567,7 +908,7 @@ async function loadDashboard(){
 
     table.innerHTML = `
       <tr>
-        <td colspan="6" class="error">Errore nel caricamento delle proposte.</td>
+        <td colspan="7" class="error">Errore nel caricamento delle proposte.</td>
       </tr>
     `;
 
@@ -576,24 +917,38 @@ async function loadDashboard(){
 
   allOpportunities = data || [];
 
+  await loadReports();
+
   updateStats(allOpportunities);
   renderAdminAlert(allOpportunities);
   renderOpportunities(allOpportunities);
   renderSidePanel(allOpportunities);
+  renderCharts(allOpportunities);
 }
 
 function updateStats(items){
   const total = items.length;
-  const daVerificare = items.filter(o => o.review_status === "da_verificare").length;
+  const daVerificare = items.filter(o => (o.review_status || "da_verificare") === "da_verificare").length;
   const daRevisionare = items.filter(o => o.review_status === "da_revisionare").length;
   const approvate = items.filter(o => o.review_status === "approvato").length;
   const rifiutate = items.filter(o => o.review_status === "rifiutato").length;
+  const values = groupValues(items);
 
   document.getElementById("totalCount").textContent = total;
   document.getElementById("verifyCount").textContent = daVerificare;
   document.getElementById("reviewCount").textContent = daRevisionare;
   document.getElementById("approvedCount").textContent = approvate;
   document.getElementById("rejectedCount").textContent = rifiutate;
+
+  document.getElementById("totalValue").textContent = compactEuro(values.total);
+  document.getElementById("publishedValue").textContent = compactEuro(values.published);
+  document.getElementById("evaluationValue").textContent = compactEuro(values.evaluation);
+  document.getElementById("rejectedValue").textContent = compactEuro(values.rejected);
+  document.getElementById("postRenovationValue").textContent = compactEuro(values.postRenovation);
+
+  document.getElementById("publishedValueNote").textContent = values.publishedCount + " opportunità pubblicate";
+  document.getElementById("evaluationValueNote").textContent = values.evaluationCount + " opportunità in valutazione";
+  document.getElementById("rejectedValueNote").textContent = values.rejectedCount + " opportunità rifiutate";
 }
 
 function renderAdminAlert(items){
@@ -602,7 +957,8 @@ function renderAdminAlert(items){
     return;
   }
 
-  const pending = items.filter(o => o.review_status === "da_verificare").length;
+  const pending = items.filter(o => (o.review_status || "da_verificare") === "da_verificare").length;
+  const pendingValue = sumBy(items.filter(o => (o.review_status || "da_verificare") === "da_verificare"), opportunityValue);
 
   if(pending === 0){
     adminAlert.style.display = "none";
@@ -611,7 +967,7 @@ function renderAdminAlert(items){
 
   adminAlert.style.display = "block";
   adminAlert.innerHTML = `
-    <strong>${pending}</strong> nuove proposte da verificare.
+    <strong>${pending}</strong> nuove proposte da verificare per un valore stimato di <strong>${compactEuro(pendingValue)}</strong>.
     <a class="action-link" href="opportunities.html?status=da_verificare">Controlla ora</a>
   `;
 }
@@ -620,7 +976,7 @@ function renderOpportunities(items){
   if(items.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="6" class="empty">Nessuna proposta presente</td>
+        <td colspan="7" class="empty">Nessuna proposta presente</td>
       </tr>
     `;
     return;
@@ -631,6 +987,7 @@ function renderOpportunities(items){
       <td>${escapeHTML(o.title)}</td>
       <td>${escapeHTML(o.category)}</td>
       <td>${escapeHTML(o.location)}</td>
+      <td>${compactEuro(opportunityValue(o))}</td>
       <td>
         <span class="badge ${escapeHTML(o.review_status || "da_verificare")}">
           ${statusLabel(o.review_status)}
@@ -648,7 +1005,7 @@ function renderOpportunities(items){
 
 function renderSidePanel(items){
   const source = isAdmin
-    ? items.filter(o => o.review_status === "da_verificare")
+    ? items.filter(o => (o.review_status || "da_verificare") === "da_verificare")
     : items.slice(0,5);
 
   sideTitle.textContent = isAdmin ? "Da Verificare" : "Le Tue Ultime Proposte";
@@ -667,6 +1024,7 @@ function renderSidePanel(items){
       <div class="side-title">${escapeHTML(o.title || "Proposta")}</div>
       <div class="side-meta">
         ${escapeHTML(o.location || "")}<br>
+        Valore: <strong>${compactEuro(opportunityValue(o))}</strong><br>
         <span class="badge ${escapeHTML(o.review_status || "da_verificare")}">
           ${statusLabel(o.review_status)}
         </span><br>
@@ -678,6 +1036,12 @@ function renderSidePanel(items){
   `).join("");
 }
 
+function renderCharts(items){
+  const groups = statusGroups(items);
+  renderBarChart("statusCountChart", groups, "count", value => Math.round(value));
+  renderBarChart("statusValueChart", groups, "value", compactEuro);
+}
+
 searchInput.addEventListener("input", () => {
   const query = searchInput.value.trim().toLowerCase();
 
@@ -686,12 +1050,17 @@ searchInput.addEventListener("input", () => {
       o.title,
       o.category,
       o.location,
+      o.price,
+      compactEuro(opportunityValue(o)),
       statusLabel(o.review_status),
       o.review_status
     ].some(value => String(value || "").toLowerCase().includes(query));
   });
 
+  updateStats(filtered);
   renderOpportunities(filtered);
+  renderSidePanel(filtered);
+  renderCharts(filtered);
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
