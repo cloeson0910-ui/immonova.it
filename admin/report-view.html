@@ -961,6 +961,84 @@ tr{
   .page-footer{left:14mm;right:14mm;bottom:7mm;font-size:5.8pt;padding-top:2.5mm}
 }
 
+
+/* ===== IMMONOVA RENOVATION POTENTIAL ===== */
+.renovation-scenario-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+  margin-top:18px;
+}
+.renovation-scenario-card{
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(255,255,255,.52);
+  padding:18px;
+}
+.renovation-scenario-card.selected{
+  border-color:rgba(166,127,52,.55);
+  background:rgba(166,127,52,.08);
+}
+.renovation-scenario-title{
+  font-size:12px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin-bottom:12px;
+}
+.renovation-scenario-value{
+  font-size:22px;
+  font-weight:200;
+  color:#a67f34;
+  margin-bottom:8px;
+}
+.renovation-scenario-text{
+  font-size:12px;
+  line-height:1.55;
+  color:#735f36;
+}
+.renovation-room-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+  margin-top:18px;
+}
+.renovation-room-card{
+  border:1px solid rgba(166,127,52,.14);
+  background:rgba(255,255,255,.36);
+  padding:10px;
+}
+.renovation-room-card img{
+  width:100%;
+  height:120px;
+  object-fit:cover;
+  display:block;
+  margin-bottom:8px;
+}
+.renovation-room-title{
+  font-size:9px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin-bottom:5px;
+}
+.renovation-room-note{
+  font-size:11px;
+  line-height:1.35;
+  color:#735f36;
+}
+@media print{
+  .renovation-scenario-grid{gap:4mm;margin-top:4mm}
+  .renovation-scenario-card{padding:4mm}
+  .renovation-scenario-title{font-size:6.4pt;margin-bottom:2mm}
+  .renovation-scenario-value{font-size:14pt;margin-bottom:2mm}
+  .renovation-scenario-text{font-size:7.4pt;line-height:1.28}
+  .renovation-room-grid{grid-template-columns:repeat(5,1fr);gap:3mm;margin-top:4mm}
+  .renovation-room-card{padding:2mm}
+  .renovation-room-card img{height:24mm;margin-bottom:1.5mm}
+  .renovation-room-title{font-size:5.7pt;margin-bottom:1mm}
+  .renovation-room-note{font-size:6.4pt;line-height:1.2}
+}
+
 </style>
 </head>
 
@@ -1024,7 +1102,7 @@ tr{
 
     <div class="override-grid">
       <div class="field">
-        <label for="ov_price">Valore acquisto €</label>
+        <label for="ov_price">Investimento totale €</label>
         <input type="number" id="ov_price" step="1">
       </div>
 
@@ -1529,7 +1607,7 @@ function fillOverrideForm(){
 
   overridePanel.style.display = "block";
 
-  var price = Number((report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
+  var price = Number(report.total_investment_avg || (report.report_json && report.report_json.asset && report.report_json.asset.total_investment_avg) || (report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
   var units = Number((report.short_rental_data && report.short_rental_data.rentable_units) || 0);
 
   setInput("ov_price", price);
@@ -1635,6 +1713,125 @@ function renderSummaryPage(){
 }
 
 
+
+function getAssetPurchasePrice(){
+  return Number((report && report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
+}
+
+function hasRenovationData(){
+  return !!(report && (report.renovation_required || (report.report_json && report.report_json.asset && report.report_json.asset.renovation_required)));
+}
+
+function getRenovationScenarios(){
+  if(report && report.renovation_scenarios && typeof report.renovation_scenarios === "object") return report.renovation_scenarios;
+  if(report && report.report_json && report.report_json.renovation_scenarios) return report.report_json.renovation_scenarios;
+  return {};
+}
+
+function getSelectedRenovationStyle(){
+  return (report && (report.renovation_selected_style || (report.report_json && report.report_json.asset && report.report_json.asset.renovation_selected_style))) || "normale";
+}
+
+function getRenovationRooms(){
+  var raw = opportunity && opportunity.renovation_images;
+  if(!raw) return [];
+  if(Array.isArray(raw)) return raw;
+  try{
+    var parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(e){
+    return [];
+  }
+}
+
+function renderRenovationRoomPhotos(){
+  var rooms = getRenovationRooms();
+  var cards = [];
+
+  for(var i = 0; i < rooms.length; i++){
+    var room = rooms[i] || {};
+    var images = Array.isArray(room.images) ? room.images : [];
+    if(images.length === 0) continue;
+    var first = images[0];
+    var url = typeof first === "string" ? first : first.url;
+    if(!url) continue;
+    cards.push(`
+      <div class="renovation-room-card">
+        <img src="${escapeHTML(url)}" alt="${escapeHTML(room.room_label || room.room || "Ambiente")}">
+        <div class="renovation-room-title">${escapeHTML(room.room_label || room.room || "Ambiente")}</div>
+        <div class="renovation-room-note">${escapeHTML(room.note || "Foto ambiente per elaborazione IA")}</div>
+      </div>
+    `);
+  }
+
+  if(cards.length === 0) return "";
+  return `<div class="renovation-room-grid">${cards.slice(0,10).join("")}</div>`;
+}
+
+function renderRenovationPotentialPage(){
+  if(!hasRenovationData()) return "";
+
+  var scenarios = getRenovationScenarios();
+  var selected = getSelectedRenovationStyle();
+  var order = ["conservativo", "normale", "lusso"];
+
+  var scenarioCards = order.map(function(key){
+    var s = scenarios[key] || {};
+    var label = s.label || (key === "conservativo" ? "Conservativo" : key === "lusso" ? "Lusso" : "Normale");
+    var min = Number(s.cost_min || 0);
+    var max = Number(s.cost_max || 0);
+    var total = Number(s.total_investment || 0);
+    var roi = s.roi_percent;
+    var be = s.break_even_years;
+    var cls = key === selected ? "renovation-scenario-card selected" : "renovation-scenario-card";
+
+    return `
+      <div class="${cls}">
+        <div class="renovation-scenario-title">${escapeHTML(label)}</div>
+        <div class="renovation-scenario-value">${euro(min)} - ${euro(max)}</div>
+        <div class="renovation-scenario-text">
+          Investimento totale stimato: <strong>${euro(total)}</strong><br>
+          ROI scenario: <strong>${percent(roi)}</strong><br>
+          Break-even scenario: <strong>${number(be)} anni</strong><br>
+          ${escapeHTML(s.positioning || "Scenario di ristrutturazione stimato su base €/mq.")}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  var analysis = report.renovation_visual_analysis || "L’immobile è classificato come asset da ristrutturare. I costi di intervento sono integrati nell’investimento totale e incidono direttamente su ROI, break-even, redditività e sostenibilità economica.";
+  var selectedScenario = scenarios[selected] || {};
+  var selectedMin = Number(report.renovation_cost_min || selectedScenario.cost_min || 0);
+  var selectedMax = Number(report.renovation_cost_max || selectedScenario.cost_max || 0);
+  var selectedAvg = Number(report.renovation_cost_avg || selectedScenario.cost_avg || 0);
+  var totalAvg = Number(report.total_investment_avg || selectedScenario.total_investment || getPurchasePrice());
+
+  return `
+    <div class="report-page">
+      <div class="report-page-inner compact-table">
+        <h2>Renovation Potential</h2>
+        <div class="lux-rule"></div>
+        <div class="page-grid-2" style="grid-template-columns:.72fr 1.28fr;gap:8mm;">
+          <div>
+            <div class="lux-small-title">Scenario selezionato</div>
+            <p>${escapeHTML(analysis)}</p>
+            <div class="break-even-callout">
+              <strong>Scenario principale:</strong> ${escapeHTML(selected)}<br>
+              Budget selezionato: ${euro(selectedMin)} - ${euro(selectedMax)}<br>
+              Costo medio stimato: ${euro(selectedAvg)}<br>
+              Investimento totale medio: ${euro(totalAvg)}
+            </div>
+          </div>
+          <div>
+            <div class="renovation-scenario-grid">${scenarioCards}</div>
+          </div>
+        </div>
+        ${renderRenovationRoomPhotos()}
+      </div>
+    </div>
+  `;
+}
+
 function renderGalleryPremium(){
   var photos = [];
   if(opportunity.cover_image) photos.push(opportunity.cover_image);
@@ -1670,7 +1867,7 @@ function renderPremiumSummaryPage(){
           <div class="lux-metric-box"><div class="lux-small-title">Rivalutazione 5Y</div><div class="lux-metric-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
         </div>
         <div class="lux-data-grid">
-          <div class="lux-data-item"><div class="lux-data-label">Valore acquisto</div><div class="lux-data-value">${euro(getPurchasePrice())}</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Investimento totale</div><div class="lux-data-value">${euro(getPurchasePrice())}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Unità / camere</div><div class="lux-data-value">${number(getRentableUnits())}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">ADR</div><div class="lux-data-value">${euro(report.adr_estimate)}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Occupazione</div><div class="lux-data-value">${percent(report.occupancy_rate_estimate)}</div></div>
@@ -1867,6 +2064,7 @@ function renderReport(){
     </div>
     ${renderPremiumSummaryPage()}
     ${renderGalleryPremium()}
+    ${renderRenovationPotentialPage()}
     ${renderEconomicsPage()}
     ${renderRevaluationPage()}
     ${renderMarketPages()}
