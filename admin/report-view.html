@@ -410,16 +410,6 @@ textarea{
   white-space:pre-line;
 }
 
-.updated-kpi-note{
-  margin-top:18px;
-  padding:18px;
-  border:1px solid rgba(166,127,52,.18);
-  background:rgba(255,255,255,.20);
-  font-size:13px;
-  line-height:1.75;
-  color:#735f36;
-}
-
 .table{
   width:100%;
   border-collapse:collapse;
@@ -539,6 +529,12 @@ tr{
   color:#8f7643;
 }
 
+.break-even-row{
+  background:rgba(166,127,52,.10);
+  font-weight:700;
+  color:#a67f34;
+}
+
 @media(max-width:1000px){
   .kpi-grid{grid-template-columns:1fr 1fr}
   .override-grid{grid-template-columns:1fr 1fr}
@@ -563,21 +559,39 @@ tr{
 
 @media print{
   @page{
-    size:A4;
+    size:A4 landscape;
     margin:0;
   }
 
   html,body{
+    width:297mm;
+    min-height:210mm;
     background:#f4ecdf !important;
     -webkit-print-color-adjust:exact;
     print-color-adjust:exact;
   }
 
-  body::before,
+  body::before{
+    display:block !important;
+    position:fixed;
+    inset:0;
+    z-index:-2;
+    background:
+      radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+      #f4ecdf !important;
+  }
+
   body::after{
     display:block !important;
     position:fixed;
     inset:0;
+    z-index:-1;
+    background:
+      repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+      repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+      repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px) !important;
+    background-size:230px 199px !important;
+    opacity:.30 !important;
   }
 
   .header,
@@ -591,6 +605,7 @@ tr{
   }
 
   .container{
+    width:297mm;
     max-width:none;
     padding:0;
     margin:0;
@@ -606,25 +621,27 @@ tr{
     box-shadow:none;
     border:none;
     background:transparent;
+    width:297mm;
   }
 
   .cover{
-    min-height:297mm;
-    height:297mm;
-    padding:24mm;
+    width:297mm;
+    height:210mm;
+    min-height:210mm;
+    padding:22mm;
     page-break-after:always;
     break-after:page;
     border-bottom:none;
   }
 
   .cover-title{
-    font-size:38pt;
-    line-height:1.12;
-    max-width:160mm;
+    font-size:34pt;
+    line-height:1.08;
+    max-width:170mm;
   }
 
   .cover-logo{
-    width:82mm;
+    width:78mm;
   }
 
   .cover-label{
@@ -636,11 +653,12 @@ tr{
   }
 
   .summary-page{
-    min-height:297mm;
-    padding:18mm;
+    width:297mm;
+    min-height:210mm;
+    padding:14mm 18mm;
     page-break-after:always;
     break-after:page;
-    background:rgba(255,255,255,.72);
+    background:rgba(255,255,255,.68);
     border-bottom:none;
   }
 
@@ -650,7 +668,7 @@ tr{
     border:1px solid rgba(166,127,52,.28);
     background:rgba(255,255,255,.42);
     margin:0;
-    padding:12mm;
+    padding:8mm;
   }
 
   .summary-page .override-panel p,
@@ -661,8 +679,8 @@ tr{
   }
 
   .summary-page .override-grid{
-    grid-template-columns:repeat(2,1fr);
-    gap:7mm;
+    grid-template-columns:repeat(4,1fr);
+    gap:5mm;
   }
 
   .summary-page input,
@@ -670,19 +688,19 @@ tr{
     border:none;
     border-bottom:1px solid rgba(166,127,52,.38);
     background:transparent;
-    padding:2mm 0;
-    font-size:10pt;
+    padding:1.4mm 0;
+    font-size:8pt;
   }
 
   .summary-page textarea{
-    min-height:18mm;
+    min-height:13mm;
   }
 
   .kpi-grid{
     grid-template-columns:repeat(4,1fr);
     gap:4mm;
     padding:0;
-    margin-bottom:10mm;
+    margin-bottom:8mm;
     border-bottom:none;
   }
 
@@ -711,31 +729,44 @@ tr{
   }
 
   .section{
-    padding:14mm 16mm;
-    background:rgba(255,255,255,.70);
+    width:297mm;
+    padding:11mm 16mm;
+    background:rgba(255,255,255,.68);
   }
 
   .section h2{
-    font-size:15pt;
+    font-size:14pt;
   }
 
   .section p{
-    font-size:10pt;
-    line-height:1.55;
+    font-size:9pt;
+    line-height:1.48;
   }
 
   .table th,
   .table td{
-    font-size:8.5pt;
-    padding:3mm;
+    font-size:7.7pt;
+    padding:2.2mm;
   }
 
   .chart-card{
     background:rgba(255,255,255,.55);
   }
 
+  .chart-svg{
+    height:185px;
+  }
+
+  .photo-grid img{
+    height:130px;
+  }
+
+  .photo-grid img:first-child{
+    height:276px;
+  }
+
   .disclaimer{
-    background:rgba(255,255,255,.70);
+    display:none !important;
   }
 }
 </style>
@@ -997,7 +1028,8 @@ function renderTable(rows, columns){
   if(!rows || rows.length === 0) return "";
   var head = columns.map(function(c){return "<th>"+escapeHTML(c.label)+"</th>";}).join("");
   var body = rows.map(function(row){
-    return "<tr>" + columns.map(function(c){
+    var cls = row.is_break_even ? ' class="break-even-row"' : "";
+    return "<tr" + cls + ">" + columns.map(function(c){
       var raw = row[c.key];
       var value = c.format ? c.format(raw) : raw;
       return "<td>"+escapeHTML(value)+"</td>";
@@ -1009,10 +1041,7 @@ function renderTable(rows, columns){
 function renderChart(rows, key, label, formatFn){
   if(!rows || rows.length < 2) return "";
 
-  var values = rows.map(function(r){
-    return Number(r[key]) || 0;
-  });
-
+  var values = rows.map(function(r){ return Number(r[key]) || 0; });
   var min = Math.min.apply(null, values);
   var max = Math.max.apply(null, values);
 
@@ -1207,6 +1236,67 @@ function buildForecastFromOverride(value5y){
   return rows;
 }
 
+function buildRent15Rows(){
+  var c = calculateOverride();
+  var rows = [];
+  var cumulative = 0;
+  var price = c.price || 0;
+  var baseRevenue = c.revenue || 0;
+  var costRate = c.costRate || 32;
+  var breakFound = false;
+
+  for(var i = 1; i <= 15; i++){
+    var growth = Math.pow(1.025, i - 1);
+    var revenue = Math.round(baseRevenue * growth);
+    var cost = Math.round(revenue * (costRate / 100));
+    var profit = revenue - cost;
+    cumulative += profit;
+
+    var isBreak = false;
+    if(!breakFound && price > 0 && cumulative >= price){
+      isBreak = true;
+      breakFound = true;
+    }
+
+    rows.push({
+      year:i,
+      revenue:revenue,
+      cost:cost,
+      profit:profit,
+      cumulative:cumulative,
+      is_break_even:isBreak
+    });
+  }
+
+  return rows;
+}
+
+function buildRevaluation15Rows(){
+  var c = calculateOverride();
+  var rows = [];
+  var price = c.price || 0;
+  var targetValue = c.value5y || price;
+  var annualRate = 0.04;
+
+  if(price > 0 && targetValue > 0 && targetValue !== price){
+    annualRate = Math.pow(targetValue / price, 1 / 5) - 1;
+  }
+
+  var value = price;
+
+  for(var i = 1; i <= 15; i++){
+    value = value * (1 + annualRate);
+    rows.push({
+      year:i,
+      growth:round(annualRate * 100, 2),
+      value:Math.round(value),
+      gain:Math.round(value - price)
+    });
+  }
+
+  return rows;
+}
+
 function updateReportJsonFromCalculated(c){
   var json = report.report_json || {};
   json.asset = json.asset || {};
@@ -1294,7 +1384,17 @@ L’operazione ${title} presenta, sulla base dei valori aggiornati del dossier, 
 
 La simulazione economica aggiornata considera un ADR pari a ${euro(report.adr_estimate)}, un’occupazione media pari a ${percent(report.occupancy_rate_estimate)}, ricavi annui stimati pari a ${euro(report.annual_revenue_estimate)} e reddito netto annuo stimato pari a ${euro(report.net_annual_income_estimate)}.
 
-La rivalutazione prospettica a 5 anni è stimata pari a ${percent(report.projected_revaluation_5y_percent)}, con valore previsto dell’asset pari a ${euro(report.projected_value_5y)}. I dati restano stime modellistiche preliminari e devono essere verificati tramite due diligence tecnica, fiscale, urbanistica, legale e commerciale.
+La rivalutazione prospettica a 5 anni è stimata pari a ${percent(report.projected_revaluation_5y_percent)}, con valore previsto dell’asset pari a ${euro(report.projected_value_5y)}.
+  `;
+}
+
+function renderShortRentalText(){
+  return `
+La simulazione aggiornata di affitto breve stima un ADR pari a ${euro(report.adr_estimate)}, occupazione media pari a ${percent(report.occupancy_rate_estimate)} e RevPAR pari a ${euro(report.revpar_estimate)}.
+
+I ricavi annui stimati sono pari a ${euro(report.annual_revenue_estimate)}, con costi annui stimati pari a ${euro(report.annual_cost_estimate)} e reddito netto annuo stimato pari a ${euro(report.net_annual_income_estimate)}.
+
+Il break-even aggiornato è pari a ${number(report.break_even_years)} anni.
   `;
 }
 
@@ -1411,6 +1511,30 @@ function renderReport(){
     ` : ""}
 
     <div class="section">
+      <h2>Affitto breve</h2>
+      <p>${escapeHTML(renderShortRentalText())}</p>
+
+      <h2 style="margin-top:26px;">Rent Projection 15 anni</h2>
+      ${renderTable(buildRent15Rows(),[
+        {key:"year",label:"Anno"},
+        {key:"revenue",label:"Fatturato",format:euro},
+        {key:"cost",label:"Costi",format:euro},
+        {key:"profit",label:"Utile",format:euro},
+        {key:"cumulative",label:"Sommatoria utile",format:euro}
+      ])}
+    </div>
+
+    <div class="section">
+      <h2>Rivalutazione 15 anni</h2>
+      ${renderTable(buildRevaluation15Rows(),[
+        {key:"year",label:"Anno"},
+        {key:"growth",label:"Crescita annua",format:percent},
+        {key:"value",label:"Valore stimato",format:euro},
+        {key:"gain",label:"Plusvalenza",format:euro}
+      ])}
+    </div>
+
+    <div class="section">
       <h2>Attrattività Territoriale</h2>
       <p>${escapeHTML(report.location_attractiveness)}</p>
     </div>
@@ -1450,21 +1574,6 @@ function renderReport(){
     </div>
 
     <div class="section">
-      <h2>Rivalutazione</h2>
-      <p>${escapeHTML(report.revaluation_forecast_5y)}</p>
-    </div>
-
-    <div class="section">
-      <h2>Affitto breve</h2>
-      <p>${escapeHTML(report.short_rental_analysis)}</p>
-    </div>
-
-    <div class="section">
-      <h2>Break-even</h2>
-      <p>${escapeHTML(report.break_even_analysis)}</p>
-    </div>
-
-    <div class="section">
       <h2>Analisi Rischio</h2>
       <p>${escapeHTML(report.risk_analysis)}</p>
       ${renderTable([
@@ -1483,12 +1592,6 @@ function renderReport(){
     <div class="section">
       <h2>SWOT Analysis</h2>
       <p>${escapeHTML(report.swot_analysis)}</p>
-    </div>
-
-    <div class="disclaimer">
-      Documento riservato IMMONOVA. Analisi generata con supporto IA su base modellistica preliminare.
-      I dati non costituiscono offerta, consulenza finanziaria, legale o fiscale. Ogni decisione di investimento
-      richiede due diligence autonoma e verifica documentale, tecnica, urbanistica, fiscale e commerciale.
     </div>
   `;
 }
