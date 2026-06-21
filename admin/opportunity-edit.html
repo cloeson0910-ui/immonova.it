@@ -1363,21 +1363,22 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
     btn.textContent = "Generazione...";
 
     var result = await client.functions.invoke("generate-renovation-renders", {
-      body:{ opportunity_id:Number(id) }
+      body:{
+        opportunity_id:Number(id),
+        max_images:50
+      }
     });
 
     if(result.error || !result.data || !result.data.success){
       throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore generazione render IA.");
     }
 
-    if(result.data && Array.isArray(result.data.renders) && result.data.renders.length > 0){
-      renderImages = result.data.renders.concat(renderImages || []);
-      renderRenderGallery();
-      setRenovationStatus("Render IA generati correttamente. Anteprima aggiornata.", "success");
-    }else{
-      await loadRenovationRenders();
-      setRenovationStatus("Render IA generati correttamente. Anteprima aggiornata.", "success");
-    }
+    await loadRenovationRenders();
+
+    setRenovationStatus(
+      "Render IA generati correttamente. Anteprima aggiornata.",
+      "success"
+    );
 
   }catch(error){
     setRenovationStatus(error.message || "Errore generazione render IA.", "error");
