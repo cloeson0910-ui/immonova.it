@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dossier IA | IMMONOVA</title>
+<title>Dossier | IMMONOVA</title>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -253,7 +253,7 @@ textarea{
 }
 
 .cover{
-  min-height:520px;
+  min-height:620px;
   padding:70px;
   display:flex;
   flex-direction:column;
@@ -262,6 +262,34 @@ textarea{
   background:
     linear-gradient(135deg,rgba(255,255,255,.36),rgba(255,255,255,.06)),
     rgba(166,127,52,.06);
+  position:relative;
+  overflow:hidden;
+}
+
+.cover.with-image{
+  color:white;
+}
+
+.cover.with-image::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,rgba(28,20,8,.78),rgba(28,20,8,.42),rgba(28,20,8,.12));
+  z-index:1;
+}
+
+.cover-bg{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  z-index:0;
+}
+
+.cover > div{
+  position:relative;
+  z-index:2;
 }
 
 .cover-logo{
@@ -275,6 +303,12 @@ textarea{
   letter-spacing:.34em;
   text-transform:uppercase;
   color:#a67f34;
+}
+
+.cover.with-image .cover-label,
+.cover.with-image .cover-title,
+.cover.with-image .cover-meta{
+  color:#f1d27a;
 }
 
 .cover-title{
@@ -380,6 +414,65 @@ textarea{
   gap:30px;
 }
 
+.photo-grid{
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr;
+  gap:16px;
+  margin-top:18px;
+}
+
+.photo-grid img{
+  width:100%;
+  height:220px;
+  object-fit:cover;
+  border:1px solid rgba(166,127,52,.16);
+}
+
+.photo-grid img:first-child{
+  height:456px;
+  grid-row:span 2;
+}
+
+.chart{
+  margin-top:22px;
+  height:260px;
+  display:flex;
+  align-items:flex-end;
+  gap:12px;
+  padding:24px;
+  border:1px solid rgba(166,127,52,.14);
+  background:rgba(255,255,255,.16);
+}
+
+.chart-bar-wrap{
+  flex:1;
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  align-items:center;
+  gap:8px;
+}
+
+.chart-bar{
+  width:100%;
+  min-height:4px;
+  background:linear-gradient(to top,rgba(166,127,52,.86),rgba(241,210,122,.72));
+}
+
+.chart-label{
+  font-size:10px;
+  color:#8f7643;
+}
+
+.chart-value{
+  font-size:10px;
+  color:#a67f34;
+  writing-mode:vertical-rl;
+  transform:rotate(180deg);
+  margin-bottom:6px;
+}
+
 .disclaimer{
   padding:36px 42px;
   font-size:12px;
@@ -397,17 +490,21 @@ textarea{
   .kpi-grid{grid-template-columns:1fr 1fr}
   .two-cols{grid-template-columns:1fr}
   .override-grid{grid-template-columns:1fr 1fr}
+  .photo-grid{grid-template-columns:1fr 1fr}
+  .photo-grid img:first-child{grid-column:1 / -1;height:360px}
 }
 
 @media(max-width:700px){
   .header{flex-direction:column;gap:18px;padding:24px 22px}
   .container{padding:34px 22px}
-  .cover{padding:42px 28px;min-height:420px}
+  .cover{padding:42px 28px;min-height:460px}
   .cover-title{font-size:36px}
   .kpi-grid{grid-template-columns:1fr;padding:24px}
   .section{padding:30px 24px}
   .override-grid{grid-template-columns:1fr}
   .cover-logo{width:260px}
+  .photo-grid{grid-template-columns:1fr}
+  .photo-grid img,.photo-grid img:first-child{height:260px}
 }
 
 @media print{
@@ -456,7 +553,7 @@ textarea{
 <main class="container">
 
   <div class="kicker">Investment Book</div>
-  <h1 class="title">Dossier IA</h1>
+  <h1 class="title" id="pageTitle">Dossier</h1>
 
   <p class="subtitle">
     Analisi economica preliminare con KPI, andamento turistico, mercato immobiliare,
@@ -472,13 +569,23 @@ textarea{
   <div id="status" class="status"></div>
 
   <section class="override-panel" id="overridePanel">
-    <h2>Correzioni Analyst Override</h2>
+    <h2>Aggiorna Dossier</h2>
     <p>
-      Usa questi campi per correggere i KPI quando conosci dati più precisi del modello IA.
-      Le correzioni aggiornano il report visualizzato e verranno stampate nel PDF.
+      Modifica ADR, occupazione, costi o valore. Il sistema ricalcola automaticamente
+      RevPAR, ricavi, reddito netto, ROI, break-even, rivalutazione e score.
     </p>
 
     <div class="override-grid">
+      <div class="field">
+        <label for="ov_price">Valore acquisto €</label>
+        <input type="number" id="ov_price" step="1">
+      </div>
+
+      <div class="field">
+        <label for="ov_units">Unità vendibili / camere</label>
+        <input type="number" id="ov_units" step="1">
+      </div>
+
       <div class="field">
         <label for="ov_adr">ADR stimato €</label>
         <input type="number" id="ov_adr" step="1">
@@ -500,6 +607,11 @@ textarea{
       </div>
 
       <div class="field">
+        <label for="ov_cost_rate">Costi operativi %</label>
+        <input type="number" id="ov_cost_rate" step="0.1">
+      </div>
+
+      <div class="field">
         <label for="ov_cost">Costi annui €</label>
         <input type="number" id="ov_cost" step="1">
       </div>
@@ -507,6 +619,11 @@ textarea{
       <div class="field">
         <label for="ov_net">Reddito netto annuo €</label>
         <input type="number" id="ov_net" step="1">
+      </div>
+
+      <div class="field">
+        <label for="ov_roi">ROI %</label>
+        <input type="number" id="ov_roi" step="0.1">
       </div>
 
       <div class="field">
@@ -536,7 +653,8 @@ textarea{
     </div>
 
     <div class="override-actions">
-      <button class="btn" id="saveOverrideBtn">Salva Correzioni</button>
+      <button class="btn" id="recalculateBtn">Aggiorna Calcoli</button>
+      <button class="btn" id="saveOverrideBtn">Salva Dossier Aggiornato</button>
       <button class="btn secondary" id="resetOverrideBtn">Ripristina Campi Report</button>
     </div>
   </section>
@@ -551,10 +669,7 @@ textarea{
 <script src="../js/config.js"></script>
 
 <script>
-var client = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 var params = new URLSearchParams(window.location.search);
 var opportunityId = params.get("id");
@@ -564,6 +679,7 @@ var book = document.getElementById("book");
 var generateBtn = document.getElementById("generateBtn");
 var editLink = document.getElementById("editLink");
 var overridePanel = document.getElementById("overridePanel");
+var pageTitle = document.getElementById("pageTitle");
 
 var currentUser = null;
 var opportunity = null;
@@ -581,11 +697,7 @@ function escapeHTML(value){
 function euro(value){
   var n = Number(value);
   if(!Number.isFinite(n)) return "-";
-  return new Intl.NumberFormat("it-IT", {
-    style:"currency",
-    currency:"EUR",
-    maximumFractionDigits:0
-  }).format(n);
+  return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
 }
 
 function percent(value){
@@ -602,11 +714,15 @@ function number(value){
 
 function numberOrNull(id){
   var value = document.getElementById(id).value;
-  if(value === "" || value === null || value === undefined){
-    return null;
-  }
+  if(value === "" || value === null || value === undefined) return null;
   var n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function setInput(id,value){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.value = value === null || value === undefined ? "" : value;
 }
 
 function setStatus(message,type){
@@ -614,10 +730,20 @@ function setStatus(message,type){
   statusBox.textContent = message || "";
 }
 
-function setInput(id,value){
-  var el = document.getElementById(id);
-  if(!el) return;
-  el.value = value === null || value === undefined ? "" : value;
+function round(value,decimals){
+  var p = Math.pow(10, decimals || 1);
+  return Math.round(value * p) / p;
+}
+
+function normalizeGallery(value){
+  if(!value) return [];
+  if(Array.isArray(value)) return value.filter(Boolean);
+  try{
+    var parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  }catch(e){
+    return [];
+  }
 }
 
 function immonovaSvg(idSuffix, className){
@@ -643,87 +769,202 @@ function immonovaSvg(idSuffix, className){
   `;
 }
 
-async function checkAuth(){
-  var result = await client.auth.getSession();
-
-  if(result.error || !result.data.session){
-    window.location.href = "login.html";
-    return false;
-  }
-
-  currentUser = result.data.session.user;
-  return true;
-}
-
-async function checkAdmin(){
-  var result = await client
-    .from("profiles")
-    .select("role")
-    .eq("id", currentUser.id)
-    .single();
-
-  if(result.error || !result.data || result.data.role !== "admin"){
-    window.location.href = "dashboard.html";
-    return false;
-  }
-
-  return true;
-}
-
-async function loadOpportunity(){
-  var result = await client
-    .from("opportunities")
-    .select("*")
-    .eq("id", opportunityId)
-    .single();
-
-  if(result.error || !result.data){
-    throw new Error("Opportunità non trovata.");
-  }
-
-  opportunity = result.data;
-  editLink.href = "opportunity-edit.html?id=" + encodeURIComponent(opportunityId);
-}
-
-async function loadReport(){
-  var result = await client
-    .from("opportunity_reports")
-    .select("*")
-    .eq("opportunity_id", opportunityId)
-    .order("generated_at", { ascending:false })
-    .limit(1)
-    .maybeSingle();
-
-  if(result.error){
-    throw result.error;
-  }
-
-  report = result.data;
-  fillOverrideForm();
-  renderReport();
-}
-
 function renderTable(rows, columns){
   if(!rows || rows.length === 0) return "";
-
-  var head = columns.map(function(c){
-    return "<th>" + escapeHTML(c.label) + "</th>";
-  }).join("");
-
+  var head = columns.map(function(c){return "<th>"+escapeHTML(c.label)+"</th>";}).join("");
   var body = rows.map(function(row){
     return "<tr>" + columns.map(function(c){
       var raw = row[c.key];
       var value = c.format ? c.format(raw) : raw;
-      return "<td>" + escapeHTML(value) + "</td>";
+      return "<td>"+escapeHTML(value)+"</td>";
     }).join("") + "</tr>";
   }).join("");
+  return `<table class="table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderChart(rows, key, label, formatFn){
+  if(!rows || rows.length === 0) return "";
+  var max = 0;
+  rows.forEach(function(r){
+    var v = Number(r[key]);
+    if(Number.isFinite(v) && v > max) max = v;
+  });
+  if(max <= 0) return "";
 
   return `
-    <table class="table">
-      <thead><tr>${head}</tr></thead>
-      <tbody>${body}</tbody>
-    </table>
+    <div class="chart">
+      ${rows.map(function(r){
+        var value = Number(r[key]) || 0;
+        var h = Math.max(4, Math.round((value / max) * 100));
+        return `
+          <div class="chart-bar-wrap">
+            <div class="chart-value">${escapeHTML(formatFn ? formatFn(value) : value)}</div>
+            <div class="chart-bar" style="height:${h}%"></div>
+            <div class="chart-label">${escapeHTML(r.year || "")}</div>
+          </div>
+        `;
+      }).join("")}
+    </div>
   `;
+}
+
+function getPurchasePrice(){
+  var fromInput = numberOrNull("ov_price");
+  if(fromInput !== null) return fromInput;
+  return Number((report && report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
+}
+
+function getRentableUnits(){
+  var fromInput = numberOrNull("ov_units");
+  if(fromInput !== null && fromInput > 0) return fromInput;
+
+  var fromReport = report && report.short_rental_data && report.short_rental_data.rentable_units;
+  if(Number(fromReport) > 0) return Number(fromReport);
+
+  var bedrooms = Number(opportunity && opportunity.bedrooms);
+  if(Number.isFinite(bedrooms) && bedrooms > 0) return Math.max(1, Math.ceil(bedrooms / 2));
+
+  return 1;
+}
+
+function calculateOverride(){
+  var price = getPurchasePrice();
+  var units = getRentableUnits();
+
+  var adr = numberOrNull("ov_adr");
+  var occupancy = numberOrNull("ov_occupancy");
+  var costRate = numberOrNull("ov_cost_rate");
+
+  if(costRate === null) costRate = 32;
+
+  var revpar = numberOrNull("ov_revpar");
+  var revenue = numberOrNull("ov_revenue");
+  var cost = numberOrNull("ov_cost");
+  var net = numberOrNull("ov_net");
+  var value5y = numberOrNull("ov_value_5y");
+  var revaluation = numberOrNull("ov_revaluation");
+
+  if(adr !== null && occupancy !== null){
+    revpar = round(adr * (occupancy / 100), 0);
+    revenue = round(adr * units * 365 * (occupancy / 100), 0);
+  }
+
+  if(revenue !== null){
+    cost = round(revenue * (costRate / 100), 0);
+    net = revenue - cost;
+  }
+
+  var roi = null;
+  var breakEven = null;
+
+  if(price > 0 && net !== null){
+    roi = round((net / price) * 100, 2);
+    breakEven = net > 0 ? round(price / net, 1) : null;
+  }
+
+  if(price > 0 && value5y !== null){
+    revaluation = round(((value5y / price) - 1) * 100, 1);
+  }
+
+  if(price > 0 && revaluation !== null && value5y === null){
+    value5y = round(price * (1 + revaluation / 100), 0);
+  }
+
+  var score = numberOrNull("ov_score");
+
+  if(score === null){
+    var base = Number(report && report.investment_score) || 65;
+    score = Math.max(0, Math.min(100, Math.round(base + (roi || 0) * 1.4 + (revaluation || 0) * 0.2)));
+  }
+
+  return {
+    price:price,
+    units:units,
+    adr:adr,
+    occupancy:occupancy,
+    revpar:revpar,
+    revenue:revenue,
+    costRate:costRate,
+    cost:cost,
+    net:net,
+    roi:roi,
+    breakEven:breakEven,
+    score:score,
+    revaluation:revaluation,
+    value5y:value5y
+  };
+}
+
+function applyCalculatedInputs(){
+  var c = calculateOverride();
+  setInput("ov_price", c.price);
+  setInput("ov_units", c.units);
+  setInput("ov_revpar", c.revpar);
+  setInput("ov_revenue", c.revenue);
+  setInput("ov_cost_rate", c.costRate);
+  setInput("ov_cost", c.cost);
+  setInput("ov_net", c.net);
+  setInput("ov_roi", c.roi);
+  setInput("ov_break_even", c.breakEven);
+  setInput("ov_score", c.score);
+  setInput("ov_revaluation", c.revaluation);
+  setInput("ov_value_5y", c.value5y);
+}
+
+function buildForecastFromOverride(value5y){
+  var currentYear = new Date().getFullYear();
+  var price = getPurchasePrice();
+  var rows = [];
+
+  if(!price || !value5y || value5y <= 0){
+    return report.forecast_data || [];
+  }
+
+  var annualRate = Math.pow(value5y / price, 1 / 5) - 1;
+  var value = price;
+
+  for(var i = 1; i <= 5; i++){
+    value = value * (1 + annualRate);
+    rows.push({
+      year:currentYear + i,
+      projected_market_growth_percent:round(annualRate * 100, 1),
+      projected_asset_value:Math.round(value)
+    });
+  }
+
+  return rows;
+}
+
+function updateReportJsonFromCalculated(c){
+  var json = report.report_json || {};
+  json.asset = json.asset || {};
+  json.kpi = json.kpi || {};
+  json.short_rental_data = json.short_rental_data || {};
+
+  json.asset.price_estimate = c.price;
+
+  json.kpi.investment_score = c.score;
+  json.kpi.estimated_roi_percent = c.roi;
+  json.kpi.adr_estimate = c.adr;
+  json.kpi.occupancy_rate_percent = c.occupancy;
+  json.kpi.revpar_estimate = c.revpar;
+  json.kpi.annual_revenue_estimate = c.revenue;
+  json.kpi.annual_cost_estimate = c.cost;
+  json.kpi.net_annual_income_estimate = c.net;
+  json.kpi.break_even_years = c.breakEven;
+  json.kpi.projected_value_5y = c.value5y;
+  json.kpi.projected_revaluation_5y_percent = c.revaluation;
+
+  json.short_rental_data.adr_estimate = c.adr;
+  json.short_rental_data.occupancy_rate_percent = c.occupancy;
+  json.short_rental_data.rentable_units = c.units;
+  json.short_rental_data.revpar_estimate = c.revpar;
+  json.short_rental_data.annual_revenue_estimate = c.revenue;
+  json.short_rental_data.annual_cost_estimate = c.cost;
+  json.short_rental_data.net_annual_income_estimate = c.net;
+  json.short_rental_data.estimated_roi_percent = c.roi;
+
+  return json;
 }
 
 function fillOverrideForm(){
@@ -734,17 +975,43 @@ function fillOverrideForm(){
 
   overridePanel.style.display = "block";
 
+  var price = Number((report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
+  var units = Number((report.short_rental_data && report.short_rental_data.rentable_units) || 0);
+
+  setInput("ov_price", price);
+  setInput("ov_units", units || getRentableUnits());
   setInput("ov_adr", report.adr_estimate);
   setInput("ov_occupancy", report.occupancy_rate_estimate);
   setInput("ov_revpar", report.revpar_estimate);
   setInput("ov_revenue", report.annual_revenue_estimate);
+  setInput("ov_cost_rate", 32);
   setInput("ov_cost", report.annual_cost_estimate);
   setInput("ov_net", report.net_annual_income_estimate);
+  setInput("ov_roi", report.estimated_roi);
   setInput("ov_break_even", report.break_even_years);
   setInput("ov_score", report.investment_score);
   setInput("ov_revaluation", report.projected_revaluation_5y_percent);
   setInput("ov_value_5y", report.projected_value_5y);
   setInput("ov_note", report.analyst_note || "");
+}
+
+function renderPhotos(){
+  var photos = [];
+  if(opportunity.cover_image) photos.push(opportunity.cover_image);
+  photos = photos.concat(normalizeGallery(opportunity.gallery_images));
+
+  if(photos.length === 0) return "";
+
+  return `
+    <div class="section">
+      <h2>Media Gallery</h2>
+      <div class="photo-grid">
+        ${photos.slice(0,5).map(function(url){
+          return '<img src="' + escapeHTML(url) + '" alt="IMMONOVA asset image">';
+        }).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function renderReport(){
@@ -753,27 +1020,33 @@ function renderReport(){
     book.innerHTML = `
       <div class="section">
         <h2>Dossier non ancora generato</h2>
-        <p>Premi “Genera / Rigenera Dossier” per creare il primo investment book IA di questa proprietà.</p>
+        <p>Premi “Genera / Rigenera Dossier” per creare il primo investment book di questa proprietà.</p>
       </div>
     `;
     return;
   }
+
+  var title = opportunity.title || "Investment Opportunity";
+  document.title = "Dossier | " + title + " | IMMONOVA";
+  pageTitle.textContent = "Dossier | " + title;
 
   var tourism = report.tourism_data || [];
   var market = report.real_estate_data || [];
   var forecast = report.forecast_data || [];
   var risk = report.risk_data || {};
   var overrideBadge = report.analyst_overridden ? '<div class="override-badge">Analyst Override applicato</div>' : "";
+  var hasCover = !!opportunity.cover_image;
 
   book.innerHTML = `
-    <div class="cover">
+    <div class="cover ${hasCover ? "with-image" : ""}">
+      ${hasCover ? '<img class="cover-bg" src="' + escapeHTML(opportunity.cover_image) + '" alt="Cover">' : ""}
       <div>
         ${immonovaSvg("Cover", "cover-logo")}
         <div class="cover-label">Confidential Investment Dossier</div>
       </div>
 
       <div>
-        <div class="cover-title">${escapeHTML(opportunity.title || "Investment Opportunity")}</div>
+        <div class="cover-title">${escapeHTML(title)}</div>
       </div>
 
       <div class="cover-meta">
@@ -789,22 +1062,21 @@ function renderReport(){
         <div class="kpi-label">Investment Score</div>
         <div class="kpi-value">${number(report.investment_score)}/100</div>
       </div>
-
       <div class="kpi">
         <div class="kpi-label">ROI stimato</div>
         <div class="kpi-value">${percent(report.estimated_roi)}</div>
       </div>
-
       <div class="kpi">
         <div class="kpi-label">Break-even</div>
         <div class="kpi-value">${number(report.break_even_years)} anni</div>
       </div>
-
       <div class="kpi">
         <div class="kpi-label">Rivalutazione 5Y</div>
         <div class="kpi-value">${percent(report.projected_revaluation_5y_percent)}</div>
       </div>
     </div>
+
+    ${renderPhotos()}
 
     <div class="section">
       <h2>Executive Summary</h2>
@@ -819,6 +1091,7 @@ function renderReport(){
     <div class="section">
       <h2>KPI Economici</h2>
       ${renderTable([
+        {label:"Valore acquisto",value:euro(getPurchasePrice())},
         {label:"ADR stimato",value:euro(report.adr_estimate)},
         {label:"Occupazione stimata",value:percent(report.occupancy_rate_estimate)},
         {label:"RevPAR stimato",value:euro(report.revpar_estimate)},
@@ -848,6 +1121,7 @@ function renderReport(){
       <div>
         <h2>Turismo ultimi 5 anni</h2>
         <p>${escapeHTML(report.tourism_last_5y)}</p>
+        ${renderChart(tourism,"presences","Presenze",number)}
         ${renderTable(tourism,[
           {key:"year",label:"Anno"},
           {key:"arrivals",label:"Arrivi",format:number},
@@ -859,6 +1133,7 @@ function renderReport(){
       <div>
         <h2>Mercato immobiliare</h2>
         <p>${escapeHTML(report.real_estate_market_past)}</p>
+        ${renderChart(market,"average_price_sqm","€/mq",euro)}
         ${renderTable(market,[
           {key:"year",label:"Anno"},
           {key:"average_price_sqm",label:"€/mq",format:euro},
@@ -870,6 +1145,7 @@ function renderReport(){
     <div class="section">
       <h2>Forecast 5 anni</h2>
       <p>${escapeHTML(report.real_estate_market_forecast)}</p>
+      ${renderChart(forecast,"projected_asset_value","Valore",euro)}
       ${renderTable(forecast,[
         {key:"year",label:"Anno"},
         {key:"projected_market_growth_percent",label:"Crescita prevista",format:percent},
@@ -921,6 +1197,51 @@ function renderReport(){
   `;
 }
 
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  if(result.error || !result.data.session){
+    window.location.href = "login.html";
+    return false;
+  }
+  currentUser = result.data.session.user;
+  return true;
+}
+
+async function checkAdmin(){
+  var result = await client.from("profiles").select("role").eq("id", currentUser.id).single();
+  if(result.error || !result.data || result.data.role !== "admin"){
+    window.location.href = "dashboard.html";
+    return false;
+  }
+  return true;
+}
+
+async function loadOpportunity(){
+  var result = await client.from("opportunities").select("*").eq("id", opportunityId).single();
+  if(result.error || !result.data) throw new Error("Opportunità non trovata.");
+  opportunity = result.data;
+  editLink.href = "opportunity-edit.html?id=" + encodeURIComponent(opportunityId);
+  var title = opportunity.title || "Investment Opportunity";
+  document.title = "Dossier | " + title + " | IMMONOVA";
+  pageTitle.textContent = "Dossier | " + title;
+}
+
+async function loadReport(){
+  var result = await client
+    .from("opportunity_reports")
+    .select("*")
+    .eq("opportunity_id", opportunityId)
+    .order("generated_at", { ascending:false })
+    .limit(1)
+    .maybeSingle();
+
+  if(result.error) throw result.error;
+
+  report = result.data;
+  fillOverrideForm();
+  renderReport();
+}
+
 generateBtn.addEventListener("click", async function(){
   setStatus("Generazione dossier in corso...", "");
   generateBtn.disabled = true;
@@ -948,61 +1269,63 @@ generateBtn.addEventListener("click", async function(){
   generateBtn.textContent = "Genera / Rigenera Dossier";
 });
 
+document.getElementById("recalculateBtn").addEventListener("click", function(){
+  applyCalculatedInputs();
+  setStatus("Calcoli aggiornati. Premi “Salva Dossier Aggiornato” per salvarli.", "success");
+});
+
+["ov_price","ov_units","ov_adr","ov_occupancy","ov_cost_rate","ov_value_5y","ov_revaluation"].forEach(function(id){
+  document.getElementById(id).addEventListener("input", function(){
+    applyCalculatedInputs();
+  });
+});
+
 document.getElementById("saveOverrideBtn").addEventListener("click", async function(){
   if(!report || !report.id){
     setStatus("Prima genera il dossier.", "error");
     return;
   }
 
-  setStatus("Salvataggio correzioni...", "");
+  applyCalculatedInputs();
 
-  var adr = numberOrNull("ov_adr");
-  var occupancy = numberOrNull("ov_occupancy");
-  var revpar = numberOrNull("ov_revpar");
-  var revenue = numberOrNull("ov_revenue");
-  var cost = numberOrNull("ov_cost");
-  var net = numberOrNull("ov_net");
-  var breakEven = numberOrNull("ov_break_even");
-  var score = numberOrNull("ov_score");
-  var revaluation = numberOrNull("ov_revaluation");
-  var value5y = numberOrNull("ov_value_5y");
+  var c = calculateOverride();
   var note = document.getElementById("ov_note").value.trim();
+  var forecastData = buildForecastFromOverride(c.value5y);
+  var reportJson = updateReportJsonFromCalculated(c);
 
-  if(adr !== null && occupancy !== null && revpar === null){
-    revpar = Math.round(adr * (occupancy / 100));
-  }
+  var shortRentalData = report.short_rental_data || {};
+  shortRentalData.adr_estimate = c.adr;
+  shortRentalData.occupancy_rate_percent = c.occupancy;
+  shortRentalData.rentable_units = c.units;
+  shortRentalData.revpar_estimate = c.revpar;
+  shortRentalData.annual_revenue_estimate = c.revenue;
+  shortRentalData.annual_cost_estimate = c.cost;
+  shortRentalData.net_annual_income_estimate = c.net;
+  shortRentalData.estimated_roi_percent = c.roi;
 
-  if(revenue !== null && cost !== null && net === null){
-    net = revenue - cost;
-  }
-
-  var estimatedRoi = report.estimated_roi;
-  var price = Number((report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
-
-  if(price > 0 && net !== null){
-    estimatedRoi = Math.round((net / price) * 10000) / 100;
-  }
-
-  if(price > 0 && value5y !== null){
-    revaluation = Math.round(((value5y / price) - 1) * 1000) / 10;
-  }
+  setStatus("Salvataggio dossier aggiornato...", "");
 
   var updateData = {
-    adr_estimate: adr,
-    occupancy_rate_estimate: occupancy,
-    revpar_estimate: revpar,
-    annual_revenue_estimate: revenue,
-    annual_cost_estimate: cost,
-    net_annual_income_estimate: net,
-    break_even_years: breakEven,
-    investment_score: score,
-    estimated_roi: estimatedRoi,
-    projected_revaluation_5y_percent: revaluation,
-    projected_value_5y: value5y,
-    analyst_note: note || null,
-    analyst_overridden: true,
-    analyst_updated_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    report_json:reportJson,
+    short_rental_data:shortRentalData,
+    forecast_data:forecastData,
+
+    adr_estimate:c.adr,
+    occupancy_rate_estimate:c.occupancy,
+    revpar_estimate:c.revpar,
+    annual_revenue_estimate:c.revenue,
+    annual_cost_estimate:c.cost,
+    net_annual_income_estimate:c.net,
+    break_even_years:c.breakEven,
+    investment_score:c.score,
+    estimated_roi:c.roi,
+    projected_revaluation_5y_percent:c.revaluation,
+    projected_value_5y:c.value5y,
+
+    analyst_note:note || null,
+    analyst_overridden:true,
+    analyst_updated_at:new Date().toISOString(),
+    updated_at:new Date().toISOString()
   };
 
   var result = await client
@@ -1020,7 +1343,7 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
   report = result.data;
   fillOverrideForm();
   renderReport();
-  setStatus("Correzioni salvate correttamente.", "success");
+  setStatus("Dossier aggiornato correttamente.", "success");
 });
 
 document.getElementById("resetOverrideBtn").addEventListener("click", function(){
@@ -1035,9 +1358,7 @@ document.getElementById("logoutBtn").addEventListener("click", async function(){
 
 (async function init(){
   try{
-    if(!opportunityId){
-      throw new Error("ID opportunità mancante.");
-    }
+    if(!opportunityId) throw new Error("ID opportunità mancante.");
 
     var logged = await checkAuth();
 
