@@ -1424,7 +1424,112 @@ function renderChart(rows, key, label, formatFn){
 function getPurchasePrice(){
   var fromInput = numberOrNull("ov_price");
   if(fromInput !== null) return fromInput;
-  return Number((report && report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
+
+  var asset = report && report.report_json && report.report_json.asset ? report.report_json.asset : {};
+
+  return Number(
+    report.total_investment_avg ||
+    asset.total_investment_avg ||
+    asset.price_estimate ||
+    asset.purchase_price ||
+    0
+  );
+}
+
+function getAcquisitionValue(){
+  var asset = report && report.report_json && report.report_json.asset ? report.report_json.asset : {};
+
+  return Number(
+    asset.purchase_price ||
+    asset.price_raw_numeric ||
+    0
+  ) || parseReportPrice(asset.price_raw || (opportunity && opportunity.price));
+}
+
+function parseReportPrice(value){
+  var raw = String(value || "").trim();
+
+  if(!raw || raw.toLowerCase().includes("riservato") || raw.toLowerCase().includes("trattativa")){
+    return 0;
+  }
+
+  var cleaned = raw
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  var n = Number(cleaned);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function getRenovationScenario(){
+  var scenarios =
+    (report && report.renovation_scenarios) ||
+    (report && report.report_json && report.report_json.renovation_scenarios) ||
+    {};
+
+  var selected =
+    (report && report.renovation_selected_style) ||
+    (report && report.report_json && report.report_json.asset && (report.report_json.asset.renovation_style || report.report_json.asset.renovation_selected_style)) ||
+    "normale";
+
+  if(selected === "standard") selected = "normale";
+
+  return scenarios[selected] || scenarios.standard || scenarios.normale || null;
+}
+
+function getRenovationStyleLabel(){
+  var scenario = getRenovationScenario();
+
+  if(scenario && scenario.label) return scenario.label;
+
+  var selected =
+    (report && report.renovation_selected_style) ||
+    (report && report.report_json && report.report_json.asset && (report.report_json.asset.renovation_style || report.report_json.asset.renovation_selected_style)) ||
+    "";
+
+  if(selected === "standard") return "Normale";
+  if(selected === "normale") return "Normale";
+  if(selected === "conservativo") return "Conservativo";
+  if(selected === "lusso") return "Lusso";
+
+  return "-";
+}
+
+function getRenovationCostMin(){
+  var asset = report && report.report_json && report.report_json.asset ? report.report_json.asset : {};
+  var scenario = getRenovationScenario();
+
+  return Number(
+    report.renovation_cost_min ||
+    asset.renovation_cost_min ||
+    (scenario && scenario.cost_min) ||
+    0
+  );
+}
+
+function getRenovationCostMax(){
+  var asset = report && report.report_json && report.report_json.asset ? report.report_json.asset : {};
+  var scenario = getRenovationScenario();
+
+  return Number(
+    report.renovation_cost_max ||
+    asset.renovation_cost_max ||
+    (scenario && scenario.cost_max) ||
+    0
+  );
+}
+
+function getRenovationCostAvg(){
+  var asset = report && report.report_json && report.report_json.asset ? report.report_json.asset : {};
+  var scenario = getRenovationScenario();
+
+  return Number(
+    report.renovation_cost_avg ||
+    asset.renovation_cost_avg ||
+    (scenario && scenario.cost_avg) ||
+    0
+  );
 }
 
 function getRentableUnits(){
@@ -1735,7 +1840,12 @@ function renderSummaryPage(){
       </div>
 
       <div class="data-summary-grid">
-        <div class="data-summary-item"><div class="data-summary-label">Valore acquisto</div><div class="data-summary-value">${euro(getPurchasePrice())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Valore acquisto</div><div class="data-summary-value">${euro(getAcquisitionValue())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Intervento selezionato</div><div class="data-summary-value">${escapeHTML(getRenovationStyleLabel())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Costo ristr. min</div><div class="data-summary-value">${euro(getRenovationCostMin())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Costo ristr. max</div><div class="data-summary-value">${euro(getRenovationCostMax())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Costo ristr. medio</div><div class="data-summary-value">${euro(getRenovationCostAvg())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Investimento totale</div><div class="data-summary-value">${euro(getPurchasePrice())}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Unità / camere</div><div class="data-summary-value">${number(getRentableUnits())}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">ADR</div><div class="data-summary-value">${euro(report.adr_estimate)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Occupazione</div><div class="data-summary-value">${percent(report.occupancy_rate_estimate)}</div></div>
@@ -1757,7 +1867,7 @@ function renderSummaryPage(){
 
 
 function getAssetPurchasePrice(){
-  return Number((report && report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || 0);
+  return getAcquisitionValue();
 }
 
 function hasRenovationData(){
@@ -2014,6 +2124,11 @@ function renderPremiumSummaryPage(){
           <div class="lux-metric-box"><div class="lux-small-title">Rivalutazione 5Y</div><div class="lux-metric-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
         </div>
         <div class="lux-data-grid">
+          <div class="lux-data-item"><div class="lux-data-label">Valore acquisto</div><div class="lux-data-value">${euro(getAcquisitionValue())}</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Intervento selezionato</div><div class="lux-data-value">${escapeHTML(getRenovationStyleLabel())}</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Costo ristr. min</div><div class="lux-data-value">${euro(getRenovationCostMin())}</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Costo ristr. max</div><div class="lux-data-value">${euro(getRenovationCostMax())}</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Costo ristr. medio</div><div class="lux-data-value">${euro(getRenovationCostAvg())}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Investimento totale</div><div class="lux-data-value">${euro(getPurchasePrice())}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Unità / camere</div><div class="lux-data-value">${number(getRentableUnits())}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">ADR</div><div class="lux-data-value">${euro(report.adr_estimate)}</div></div>
