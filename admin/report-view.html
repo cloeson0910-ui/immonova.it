@@ -1039,6 +1039,45 @@ tr{
   .renovation-room-note{font-size:6.4pt;line-height:1.2}
 }
 
+/* ===== IMMONOVA RENOVATION RENDER COMPARISON ===== */
+.renovation-render-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+  margin-top:18px;
+}
+.renovation-render-card{
+  border:1px solid rgba(166,127,52,.16);
+  background:rgba(255,255,255,.48);
+  padding:10px;
+}
+.renovation-render-card img{
+  width:100%;
+  height:178px;
+  object-fit:cover;
+  display:block;
+  margin-bottom:8px;
+}
+.renovation-render-label{
+  font-size:9px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin-bottom:4px;
+}
+.renovation-render-room{
+  font-size:11px;
+  line-height:1.35;
+  color:#735f36;
+}
+@media print{
+  .renovation-render-grid{grid-template-columns:repeat(4,1fr);gap:3mm;margin-top:4mm}
+  .renovation-render-card{padding:2mm}
+  .renovation-render-card img{height:46mm;margin-bottom:1.5mm}
+  .renovation-render-label{font-size:5.8pt;margin-bottom:1mm}
+  .renovation-render-room{font-size:6.5pt;line-height:1.2}
+}
+
 </style>
 </head>
 
@@ -1087,6 +1126,7 @@ tr{
 
   <div class="actions">
     <button class="btn" id="generateBtn">Genera / Rigenera Dossier</button>
+    <button class="btn secondary" id="renderBtn">Genera Render Ristrutturazione</button>
     <button class="btn secondary" onclick="window.print()">Stampa / Salva PDF</button>
     <a class="btn secondary" id="editLink" href="#">Torna alla Proposta</a>
   </div>
@@ -1202,6 +1242,7 @@ var opportunityId = params.get("id");
 var statusBox = document.getElementById("status");
 var book = document.getElementById("book");
 var generateBtn = document.getElementById("generateBtn");
+var renderBtn = document.getElementById("renderBtn");
 var editLink = document.getElementById("editLink");
 var overridePanel = document.getElementById("overridePanel");
 var pageTitle = document.getElementById("pageTitle");
@@ -1209,6 +1250,7 @@ var pageTitle = document.getElementById("pageTitle");
 var currentUser = null;
 var opportunity = null;
 var report = null;
+var renovationRenders = [];
 
 function escapeHTML(value){
   return String(value === null || value === undefined ? "" : value)
@@ -1832,6 +1874,111 @@ function renderRenovationPotentialPage(){
   `;
 }
 
+
+function normalizeRenderStyle(style){
+  style = String(style || "").toLowerCase();
+  if(style === "standard") return "normale";
+  if(style === "normal") return "normale";
+  return style || "originale";
+}
+
+function roomTypeLabel(roomType){
+  var map = {
+    kitchen:"Cucina",
+    living_room:"Soggiorno",
+    bedroom:"Camera",
+    bathroom:"Bagno",
+    facade:"Facciata / Esterni",
+    garden:"Giardino",
+    pool:"Piscina",
+    other:"Altro ambiente"
+  };
+  return map[roomType] || roomType || "Ambiente";
+}
+
+function groupRenovationRenders(){
+  var rows = renovationRenders && renovationRenders.length ? renovationRenders : [];
+  var grouped = {};
+
+  for(var i = 0; i < rows.length; i++){
+    var r = rows[i] || {};
+    var key = r.source_image_url || ("render-" + i);
+    if(!grouped[key]){
+      grouped[key] = {
+        room_type:r.room_type || "other",
+        original:r.source_image_url,
+        conservativo:null,
+        normale:null,
+        lusso:null
+      };
+    }
+
+    var style = normalizeRenderStyle(r.style);
+    if(style === "conservativo") grouped[key].conservativo = r.generated_image_url;
+    if(style === "normale") grouped[key].normale = r.generated_image_url;
+    if(style === "lusso") grouped[key].lusso = r.generated_image_url;
+  }
+
+  return Object.keys(grouped).map(function(key){ return grouped[key]; });
+}
+
+function renderRenovationRenderPages(){
+  var groups = groupRenovationRenders();
+
+  if(!groups || groups.length === 0){
+    return "";
+  }
+
+  var pages = [];
+
+  for(var i = 0; i < groups.length; i += 2){
+    var chunk = groups.slice(i, i + 2);
+
+    var blocks = chunk.map(function(g){
+      return `
+        <div style="margin-bottom:8mm;">
+          <div class="lux-small-title">${escapeHTML(roomTypeLabel(g.room_type))}</div>
+          <div class="renovation-render-grid">
+            <div class="renovation-render-card">
+              <img src="${escapeHTML(g.original || "")}" alt="Originale">
+              <div class="renovation-render-label">Originale</div>
+              <div class="renovation-render-room">Stato attuale</div>
+            </div>
+            <div class="renovation-render-card">
+              ${g.conservativo ? '<img src="' + escapeHTML(g.conservativo) + '" alt="Conservativo">' : ""}
+              <div class="renovation-render-label">Conservativo</div>
+              <div class="renovation-render-room">Restauro sobrio e recupero materico</div>
+            </div>
+            <div class="renovation-render-card">
+              ${g.normale ? '<img src="' + escapeHTML(g.normale) + '" alt="Normale">' : ""}
+              <div class="renovation-render-label">Normale</div>
+              <div class="renovation-render-room">Ristrutturazione completa premium</div>
+            </div>
+            <div class="renovation-render-card">
+              ${g.lusso ? '<img src="' + escapeHTML(g.lusso) + '" alt="Lusso">' : ""}
+              <div class="renovation-render-label">Lusso</div>
+              <div class="renovation-render-room">Riposizionamento luxury</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    pages.push(`
+      <div class="report-page">
+        <div class="report-page-inner">
+          <h2>Valorizzazione Immobiliare</h2>
+          <div class="lux-rule"></div>
+          ${blocks}
+        </div>
+      </div>
+    `);
+  }
+
+  return pages.join("");
+}
+
+
 function renderGalleryPremium(){
   var photos = [];
   if(opportunity.cover_image) photos.push(opportunity.cover_image);
@@ -2065,6 +2212,7 @@ function renderReport(){
     ${renderPremiumSummaryPage()}
     ${renderGalleryPremium()}
     ${renderRenovationPotentialPage()}
+    ${renderRenovationRenderPages()}
     ${renderEconomicsPage()}
     ${renderRevaluationPage()}
     ${renderMarketPages()}
@@ -2084,7 +2232,7 @@ async function checkAuth(){
 
 async function checkAdmin(){
   var result = await client.from("profiles").select("role").eq("id", currentUser.id).single();
-  if(result.error || !result.data || result.data.role !== "admin"){
+  if(result.error || !result.data || !["admin","ceo"].includes(result.data.role)){
     window.location.href = "dashboard.html";
     return false;
   }
@@ -2101,6 +2249,22 @@ async function loadOpportunity(){
   pageTitle.textContent = "Dossier | " + title;
 }
 
+
+async function loadRenovationRenders(){
+  var result = await client
+    .from("renovation_renders")
+    .select("*")
+    .eq("opportunity_id", opportunityId)
+    .order("created_at", { ascending:true });
+
+  if(result.error){
+    renovationRenders = [];
+    return;
+  }
+
+  renovationRenders = result.data || [];
+}
+
 async function loadReport(){
   var result = await client
     .from("opportunity_reports")
@@ -2113,6 +2277,7 @@ async function loadReport(){
   if(result.error) throw result.error;
 
   report = result.data;
+  await loadRenovationRenders();
   fillOverrideForm();
   renderReport();
 }
@@ -2132,6 +2297,7 @@ generateBtn.addEventListener("click", async function(){
     }
 
     report = result.data.report;
+    await loadRenovationRenders();
     fillOverrideForm();
     renderReport();
     setStatus("Dossier generato correttamente.", "success");
@@ -2142,6 +2308,42 @@ generateBtn.addEventListener("click", async function(){
 
   generateBtn.disabled = false;
   generateBtn.textContent = "Genera / Rigenera Dossier";
+});
+
+
+renderBtn.addEventListener("click", async function(){
+  setStatus("Generazione render ristrutturazione in corso. Può richiedere qualche minuto...", "");
+  renderBtn.disabled = true;
+  renderBtn.textContent = "Generazione Render...";
+
+  try{
+    if(!opportunityId){
+      throw new Error("ID opportunità mancante.");
+    }
+
+    var result = await client.functions.invoke("generate-renovation-renders", {
+      body:{
+        opportunity_id:Number(opportunityId),
+        max_images:1
+      }
+    });
+
+    if(result.error || !result.data || !result.data.success){
+      throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore generazione render.");
+    }
+
+    await loadRenovationRenders();
+    await loadReport();
+
+    var count = result.data.created_count || 0;
+    setStatus("Render generati correttamente: " + count + ". Se hai altre foto ambiente, puoi rilanciare la generazione.", "success");
+
+  }catch(error){
+    setStatus(error.message || "Errore generazione render ristrutturazione.", "error");
+  }
+
+  renderBtn.disabled = false;
+  renderBtn.textContent = "Genera Render Ristrutturazione";
 });
 
 document.getElementById("recalculateBtn").addEventListener("click", function(){
@@ -2216,6 +2418,7 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
   }
 
   report = result.data;
+  await loadRenovationRenders();
   fillOverrideForm();
   renderReport();
   setStatus("Dossier aggiornato correttamente.", "success");
