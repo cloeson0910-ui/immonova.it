@@ -1545,6 +1545,58 @@ function getRentableUnits(){
   return 1;
 }
 
+function calculateRealisticInvestmentScore(price, roi, breakEven, net, revaluation){
+  var score = 0;
+
+  roi = Number(roi);
+  breakEven = Number(breakEven);
+  net = Number(net);
+  price = Number(price);
+  revaluation = Number(revaluation);
+
+  if(!Number.isFinite(roi)) roi = 0;
+  if(!Number.isFinite(breakEven)) breakEven = 0;
+  if(!Number.isFinite(net)) net = 0;
+  if(!Number.isFinite(price)) price = 0;
+  if(!Number.isFinite(revaluation)) revaluation = 0;
+
+  if(roi >= 14) score += 30;
+  else if(roi >= 11) score += 26;
+  else if(roi >= 8) score += 21;
+  else if(roi >= 5.5) score += 15;
+  else if(roi > 0) score += 8;
+
+  if(breakEven > 0 && breakEven <= 5) score += 25;
+  else if(breakEven > 0 && breakEven <= 7) score += 22;
+  else if(breakEven > 0 && breakEven <= 9) score += 18;
+  else if(breakEven > 0 && breakEven <= 12) score += 11;
+  else if(breakEven > 0) score += 4;
+
+  var netIncomeRatio = price > 0 ? (net / price) * 100 : 0;
+
+  if(netIncomeRatio >= 12) score += 15;
+  else if(netIncomeRatio >= 9) score += 13;
+  else if(netIncomeRatio >= 6.5) score += 10;
+  else if(netIncomeRatio >= 4) score += 6;
+  else if(netIncomeRatio > 0) score += 3;
+
+  if(revaluation >= 35) score += 15;
+  else if(revaluation >= 25) score += 12;
+  else if(revaluation >= 15) score += 9;
+  else if(revaluation >= 7) score += 5;
+  else if(revaluation > 0) score += 2;
+
+  var riskPenalty = 8;
+
+  if(breakEven > 12) riskPenalty += 4;
+  if(roi < 6) riskPenalty += 3;
+  if(revaluation < 7) riskPenalty += 2;
+
+  score -= Math.min(15, riskPenalty);
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 function calculateOverride(){
   var price = getPurchasePrice();
   var units = getRentableUnits();
@@ -1588,12 +1640,7 @@ function calculateOverride(){
     value5y = round(price * (1 + revaluation / 100), 0);
   }
 
-  var score = numberOrNull("ov_score");
-
-  if(score === null){
-    var base = Number(report && report.investment_score) || 65;
-    score = Math.max(0, Math.min(100, Math.round(base + (roi || 0) * 1.4 + (revaluation || 0) * 0.2)));
-  }
+  var score = calculateRealisticInvestmentScore(price, roi, breakEven, net, revaluation);
 
   return {
     price:price,
@@ -2394,6 +2441,21 @@ async function loadReport(){
   report = result.data;
   await loadRenovationRenders();
   fillOverrideForm();
+  applyCalculatedInputs();
+
+  var calculated = calculateOverride();
+  report.investment_score = calculated.score;
+  report.estimated_roi = calculated.roi;
+  report.break_even_years = calculated.breakEven;
+  report.projected_revaluation_5y_percent = calculated.revaluation;
+  report.projected_value_5y = calculated.value5y;
+  report.annual_revenue_estimate = calculated.revenue;
+  report.annual_cost_estimate = calculated.cost;
+  report.net_annual_income_estimate = calculated.net;
+  report.adr_estimate = calculated.adr;
+  report.occupancy_rate_estimate = calculated.occupancy;
+  report.revpar_estimate = calculated.revpar;
+
   renderReport();
 }
 
@@ -2414,6 +2476,21 @@ generateBtn.addEventListener("click", async function(){
     report = result.data.report;
     await loadRenovationRenders();
     fillOverrideForm();
+    applyCalculatedInputs();
+
+    var calculated = calculateOverride();
+    report.investment_score = calculated.score;
+    report.estimated_roi = calculated.roi;
+    report.break_even_years = calculated.breakEven;
+    report.projected_revaluation_5y_percent = calculated.revaluation;
+    report.projected_value_5y = calculated.value5y;
+    report.annual_revenue_estimate = calculated.revenue;
+    report.annual_cost_estimate = calculated.cost;
+    report.net_annual_income_estimate = calculated.net;
+    report.adr_estimate = calculated.adr;
+    report.occupancy_rate_estimate = calculated.occupancy;
+    report.revpar_estimate = calculated.revpar;
+
     renderReport();
     setStatus("Dossier generato correttamente.", "success");
 
