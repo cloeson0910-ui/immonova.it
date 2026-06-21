@@ -535,6 +535,42 @@ tr{
   color:#a67f34;
 }
 
+.print-summary-box{
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(255,255,255,.20);
+  padding:28px;
+}
+
+.print-summary-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:18px;
+}
+
+.print-summary-item{
+  border-bottom:1px solid rgba(166,127,52,.25);
+  padding-bottom:10px;
+}
+
+.print-summary-label{
+  display:block;
+  font-size:10px;
+  letter-spacing:.20em;
+  text-transform:uppercase;
+  color:#a58139;
+  margin-bottom:8px;
+}
+
+.print-summary-value{
+  display:block;
+  font-size:14px;
+  color:#7f6430;
+}
+
+.print-summary-note{
+  grid-column:1 / -1;
+}
+
 @media(max-width:1000px){
   .kpi-grid{grid-template-columns:1fr 1fr}
   .override-grid{grid-template-columns:1fr 1fr}
@@ -566,34 +602,13 @@ tr{
   html,body{
     width:297mm;
     min-height:210mm;
-    background:#f4ecdf !important;
+    background:white !important;
     -webkit-print-color-adjust:exact;
     print-color-adjust:exact;
   }
 
-  body::before{
-    display:block !important;
-    position:fixed;
-    inset:0;
-    z-index:-2;
-    background:
-      radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
-      #f4ecdf !important;
-  }
-
-  body::after{
-    display:block !important;
-    position:fixed;
-    inset:0;
-    z-index:-1;
-    background:
-      repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
-      repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
-      repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px) !important;
-    background-size:230px 199px !important;
-    opacity:.30 !important;
-  }
-
+  body::before,
+  body::after,
   .header,
   .actions,
   .status,
@@ -609,6 +624,7 @@ tr{
     max-width:none;
     padding:0;
     margin:0;
+    background:white !important;
   }
 
   .kicker,
@@ -620,7 +636,7 @@ tr{
   .book{
     box-shadow:none;
     border:none;
-    background:transparent;
+    background:white !important;
     width:297mm;
   }
 
@@ -632,6 +648,11 @@ tr{
     page-break-after:always;
     break-after:page;
     border-bottom:none;
+    background:white !important;
+  }
+
+  .cover.with-image{
+    background:white !important;
   }
 
   .cover-title{
@@ -658,42 +679,50 @@ tr{
     padding:14mm 18mm;
     page-break-after:always;
     break-after:page;
-    background:rgba(255,255,255,.68);
+    background:white !important;
     border-bottom:none;
   }
 
   .summary-page .override-panel{
-    display:block !important;
-    box-shadow:none;
-    border:1px solid rgba(166,127,52,.28);
-    background:rgba(255,255,255,.42);
-    margin:0;
-    padding:8mm;
-  }
-
-  .summary-page .override-panel p,
-  .summary-page .override-actions,
-  .summary-page button,
-  .summary-page .btn{
     display:none !important;
   }
 
-  .summary-page .override-grid{
+  .print-summary-box{
+    display:block !important;
+    border:1px solid rgba(166,127,52,.28);
+    background:white !important;
+    padding:8mm;
+    margin-top:8mm;
+  }
+
+  .print-summary-grid{
+    display:grid;
     grid-template-columns:repeat(4,1fr);
     gap:5mm;
   }
 
-  .summary-page input,
-  .summary-page textarea{
-    border:none;
-    border-bottom:1px solid rgba(166,127,52,.38);
-    background:transparent;
-    padding:1.4mm 0;
-    font-size:8pt;
+  .print-summary-item{
+    border-bottom:1px solid rgba(166,127,52,.35);
+    padding-bottom:2mm;
   }
 
-  .summary-page textarea{
-    min-height:13mm;
+  .print-summary-label{
+    display:block;
+    font-size:6.5pt;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:#a58139;
+    margin-bottom:1.5mm;
+  }
+
+  .print-summary-value{
+    display:block;
+    font-size:10pt;
+    color:#7f6430;
+  }
+
+  .print-summary-note{
+    grid-column:1 / -1;
   }
 
   .kpi-grid{
@@ -708,6 +737,7 @@ tr{
     padding:5mm;
     break-inside:avoid;
     page-break-inside:avoid;
+    background:white !important;
   }
 
   .kpi-label{
@@ -722,8 +752,7 @@ tr{
   .table,
   tr,
   .chart-card,
-  .photo-grid,
-  .disclaimer{
+  .photo-grid{
     break-inside:avoid;
     page-break-inside:avoid;
   }
@@ -731,7 +760,7 @@ tr{
   .section{
     width:297mm;
     padding:11mm 16mm;
-    background:rgba(255,255,255,.68);
+    background:white !important;
   }
 
   .section h2{
@@ -750,7 +779,7 @@ tr{
   }
 
   .chart-card{
-    background:rgba(255,255,255,.55);
+    background:white !important;
   }
 
   .chart-svg{
@@ -1398,6 +1427,95 @@ Il break-even aggiornato è pari a ${number(report.break_even_years)} anni.
   `;
 }
 
+function renderPrintSummaryBox(){
+  var c = report ? {
+    price: Number((report.report_json && report.report_json.asset && report.report_json.asset.price_estimate) || getPurchasePrice()),
+    units: Number((report.short_rental_data && report.short_rental_data.rentable_units) || getRentableUnits()),
+    adr: report.adr_estimate,
+    occupancy: report.occupancy_rate_estimate,
+    revpar: report.revpar_estimate,
+    revenue: report.annual_revenue_estimate,
+    costRate: numberOrNull("ov_cost_rate") || 32,
+    cost: report.annual_cost_estimate,
+    net: report.net_annual_income_estimate,
+    roi: report.estimated_roi,
+    breakEven: report.break_even_years,
+    score: report.investment_score,
+    revaluation: report.projected_revaluation_5y_percent,
+    value5y: report.projected_value_5y,
+    note: report.analyst_note || ""
+  } : calculateOverride();
+
+  return `
+    <div class="print-summary-box">
+      <div class="print-summary-grid">
+        <div class="print-summary-item">
+          <span class="print-summary-label">Valore acquisto</span>
+          <span class="print-summary-value">${escapeHTML(euro(c.price))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Unità / camere</span>
+          <span class="print-summary-value">${escapeHTML(number(c.units))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">ADR</span>
+          <span class="print-summary-value">${escapeHTML(euro(c.adr))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Occupazione</span>
+          <span class="print-summary-value">${escapeHTML(percent(c.occupancy))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">RevPAR</span>
+          <span class="print-summary-value">${escapeHTML(euro(c.revpar))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Ricavi annui</span>
+          <span class="print-summary-value">${escapeHTML(euro(c.revenue))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Costi annui</span>
+          <span class="print-summary-value">${escapeHTML(euro(c.cost))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Reddito netto</span>
+          <span class="print-summary-value">${escapeHTML(euro(c.net))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">ROI</span>
+          <span class="print-summary-value">${escapeHTML(percent(c.roi))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Break-even</span>
+          <span class="print-summary-value">${escapeHTML(number(c.breakEven))} anni</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Investment Score</span>
+          <span class="print-summary-value">${escapeHTML(number(c.score))}/100</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Rivalutazione 5Y</span>
+          <span class="print-summary-value">${escapeHTML(percent(c.revaluation))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Valore previsto 5Y</span>
+          <span class="print-summary-value">${escapeHTML(euro(c.value5y))}</span>
+        </div>
+        <div class="print-summary-item">
+          <span class="print-summary-label">Costi operativi</span>
+          <span class="print-summary-value">${escapeHTML(percent(c.costRate))}</span>
+        </div>
+        ${c.note ? `
+          <div class="print-summary-item print-summary-note">
+            <span class="print-summary-label">Nota Analyst</span>
+            <span class="print-summary-value">${escapeHTML(c.note)}</span>
+          </div>
+        ` : ""}
+      </div>
+    </div>
+  `;
+}
+
 function renderSummaryPage(){
   return `
     <div class="summary-page">
@@ -1422,12 +1540,52 @@ function renderSummaryPage(){
         </div>
       </div>
 
-      <section class="override-panel" style="display:block;">
-        ${overridePanel.innerHTML}
-      </section>
+      ${renderPrintSummaryBox()}
     </div>
   `;
 }
+
+function applyCurrentInputsToReportMemory(){
+  if(!report || !report.id){
+    return;
+  }
+
+  applyCalculatedInputs();
+
+  var c = calculateOverride();
+  var note = document.getElementById("ov_note").value.trim();
+  var forecastData = buildForecastFromOverride(c.value5y);
+  var reportJson = updateReportJsonFromCalculated(c);
+
+  var shortRentalData = report.short_rental_data || {};
+  shortRentalData.adr_estimate = c.adr;
+  shortRentalData.occupancy_rate_percent = c.occupancy;
+  shortRentalData.rentable_units = c.units;
+  shortRentalData.revpar_estimate = c.revpar;
+  shortRentalData.annual_revenue_estimate = c.revenue;
+  shortRentalData.annual_cost_estimate = c.cost;
+  shortRentalData.net_annual_income_estimate = c.net;
+  shortRentalData.estimated_roi_percent = c.roi;
+
+  report.report_json = reportJson;
+  report.short_rental_data = shortRentalData;
+  report.forecast_data = forecastData;
+
+  report.adr_estimate = c.adr;
+  report.occupancy_rate_estimate = c.occupancy;
+  report.revpar_estimate = c.revpar;
+  report.annual_revenue_estimate = c.revenue;
+  report.annual_cost_estimate = c.cost;
+  report.net_annual_income_estimate = c.net;
+  report.break_even_years = c.breakEven;
+  report.investment_score = c.score;
+  report.estimated_roi = c.roi;
+  report.projected_revaluation_5y_percent = c.revaluation;
+  report.projected_value_5y = c.value5y;
+  report.analyst_note = note || null;
+  report.analyst_overridden = true;
+}
+
 
 function renderReport(){
   if(!report){
@@ -1748,6 +1906,13 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
 document.getElementById("resetOverrideBtn").addEventListener("click", function(){
   fillOverrideForm();
   setStatus("Campi ripristinati ai valori attuali del report.", "success");
+});
+
+window.addEventListener("beforeprint", function(){
+  if(report){
+    applyCurrentInputsToReportMemory();
+    renderReport();
+  }
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async function(){
