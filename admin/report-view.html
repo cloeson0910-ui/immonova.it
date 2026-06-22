@@ -1236,6 +1236,26 @@ tr{
   .destination-breakdown-value{font-size:8.4pt}
 }
 
+
+.lux-bullets{
+  margin:3mm 0 0 4mm;
+  padding:0;
+  color:#6f653f;
+  line-height:1.65;
+  font-size:13px;
+}
+.lux-bullets li{
+  margin-bottom:2mm;
+}
+.compact-mini{
+  grid-template-columns:repeat(2,1fr);
+  margin-top:4mm;
+}
+.compact-mini .lux-data-item{
+  min-height:auto;
+  padding:3mm 0;
+}
+
 </style>
 </head>
 
@@ -1489,29 +1509,51 @@ function setLoaderProgress(percent, step){
   if(loaderStep && step) loaderStep.textContent = step;
 }
 
-function startReportLoader(){
+function startReportLoader(mode){
   if(loaderLogo && !loaderLogo.innerHTML){
     loaderLogo.innerHTML = immonovaSvg("Loader", "loader-logo-svg");
+  }
+
+  var titleNode = document.querySelector(".loader-title");
+  var noteNode = document.querySelector(".loader-note");
+  if(titleNode){
+    titleNode.textContent = mode === "renders" ? "Generazione Render Ristrutturazione IMMONOVA AI" : "Generazione Dossier IMMONOVA AI";
+  }
+  if(noteNode){
+    noteNode.textContent = mode === "renders"
+      ? "Analisi foto, scenari conservativo/normale/lusso, salvataggio render e aggiornamento dossier."
+      : "Ricerca dati immobiliari, turismo, hospitality benchmark, accessibilità, KPI e investment committee.";
   }
 
   if(reportLoader){
     reportLoader.style.display = "flex";
   }
 
-  var steps = [
-    {p:7, t:"Preparazione asset e sessione admin..."},
-    {p:16, t:"Ricerca dati immobiliari e OMI..."},
-    {p:28, t:"Verifica trend Idealista / Immobiliare / Borsino..."},
-    {p:40, t:"Ricerca dati turistici comunali e territoriali..."},
-    {p:52, t:"Fallback Valle d’Itria / Provincia / Puglia se necessario..."},
-    {p:64, t:"Analisi aeroporti, attrazioni, spiagge e luxury ecosystem..."},
-    {p:76, t:"Calcolo ROI, break-even, RevPAR e Tourist Appeal Score..."},
-    {p:88, t:"Composizione dossier IMMONOVA..."},
-    {p:94, t:"Finalizzazione investment book..."}
-  ];
+  var steps = mode === "renders"
+    ? [
+      {p:8, t:"Preparazione immagini originali..."},
+      {p:18, t:"Analisi ambienti e condizioni attuali..."},
+      {p:30, t:"Costruzione scenari conservativo, normale e lusso..."},
+      {p:45, t:"Generazione render IA ambiente per ambiente..."},
+      {p:62, t:"Ottimizzazione immagini per dossier..."},
+      {p:78, t:"Salvataggio render ristrutturazione..."},
+      {p:90, t:"Aggiornamento investment book..."},
+      {p:96, t:"Finalizzazione visual analysis..."}
+    ]
+    : [
+      {p:7, t:"Preparazione asset e sessione admin..."},
+      {p:16, t:"Ricerca dati immobiliari e benchmark territoriali..."},
+      {p:28, t:"Analisi Real Estate Intelligence..."},
+      {p:40, t:"Analisi Tourism Intelligence e mercati origine..."},
+      {p:52, t:"Hospitality benchmark e competitive set..."},
+      {p:64, t:"Destination Intelligence: aeroporti, attrazioni, luxury ecosystem..."},
+      {p:76, t:"Investment thesis e financial model..."},
+      {p:88, t:"Investment Committee IMMONOVA..."},
+      {p:94, t:"Finalizzazione investment book..."}
+    ];
 
   var i = 0;
-  setLoaderProgress(3, "Avvio generazione dossier...");
+  setLoaderProgress(3, mode === "renders" ? "Avvio generazione render ristrutturazione..." : "Avvio generazione dossier...");
 
   if(loaderTimer){
     clearInterval(loaderTimer);
@@ -1986,7 +2028,7 @@ function calculateOverride(){
     value5y = round(price * (1 + revaluation / 100), 0);
   }
 
-  var score = calculateRealisticInvestmentScore(price, roi, breakEven, net, revaluation);
+  var score = getDisplayScore() || calculateRealisticInvestmentScore(price, roi, breakEven, net, revaluation);
 
   return {
     price:price,
@@ -2190,7 +2232,7 @@ function renderExecutiveSummary(){
   var title = opportunity.title || "Investment Opportunity";
 
   return `
-L’operazione ${title} presenta, sulla base dei valori aggiornati del dossier, un Investment Score pari a ${number(report.investment_score)}/100, un ROI stimato pari a ${percent(report.estimated_roi)} e un break-even aggiornato pari a ${number(report.break_even_years)} anni.
+L’operazione ${title} presenta, sulla base dei valori aggiornati del dossier, un Investment Score pari a ${number(getDisplayScore())}/100, un ROI stimato pari a ${percent(report.estimated_roi)} e un break-even aggiornato pari a ${number(report.break_even_years)} anni.
 
 La simulazione economica aggiornata considera un ADR pari a ${euro(report.adr_estimate)}, un’occupazione media pari a ${percent(report.occupancy_rate_estimate)}, ricavi annui stimati pari a ${euro(report.annual_revenue_estimate)} e reddito netto annuo stimato pari a ${euro(report.net_annual_income_estimate)}.
 
@@ -2216,7 +2258,7 @@ function renderSummaryPage(){
       <div class="kpi-grid">
         <div class="kpi">
           <div class="kpi-label">Investment Score</div>
-          <div class="kpi-value">${number(report.investment_score)}/100</div>
+          <div class="kpi-value">${number(getDisplayScore())}/100</div>
         </div>
         <div class="kpi">
           <div class="kpi-label">ROI stimato</div>
@@ -2248,7 +2290,7 @@ function renderSummaryPage(){
         <div class="data-summary-item"><div class="data-summary-label">Reddito netto</div><div class="data-summary-value">${euro(report.net_annual_income_estimate)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">ROI</div><div class="data-summary-value">${percent(report.estimated_roi)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Break-even</div><div class="data-summary-value">${number(report.break_even_years)} anni</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Score</div><div class="data-summary-value">${number(report.investment_score)}/100</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Score</div><div class="data-summary-value">${number(getDisplayScore())}/100</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Rivalutazione 5Y</div><div class="data-summary-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Valore previsto 5Y</div><div class="data-summary-value">${euro(report.projected_value_5y)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Costi operativi</div><div class="data-summary-value">${percent(numberOrNull("ov_cost_rate") || 32)}</div></div>
@@ -2609,6 +2651,278 @@ function renderDestinationAnalysisPage(){
 }
 
 
+
+function getReportJson(){
+  return (report && report.report_json) || {};
+}
+
+function getCommittee(){
+  var json = getReportJson();
+  return json.investment_committee || {};
+}
+
+function getInvestmentThesis(){
+  var json = getReportJson();
+  return json.investment_thesis || null;
+}
+
+function getRealEstateIntel(){
+  var json = getReportJson();
+  return json.real_estate_intelligence || null;
+}
+
+function getTourismIntel(){
+  var json = getReportJson();
+  return json.tourism_intelligence || null;
+}
+
+function getTourismScenarioRows(){
+  var json = getReportJson();
+  var scenarios = json.tourism_forecast_scenarios || [];
+  if(!Array.isArray(scenarios)) return [];
+  return scenarios.map(function(s){
+    return {
+      scenario:s.scenario,
+      annual_growth_percent:s.annual_growth_percent,
+      year_10_presences:s.year_10_presences
+    };
+  });
+}
+
+function getHospitalityBenchmark(){
+  var json = getReportJson();
+  return json.hospitality_benchmark || null;
+}
+
+function getDisplayScore(){
+  var c = getCommittee();
+  var json = getReportJson();
+  if(c && c.score !== undefined && c.score !== null) return Number(c.score);
+  if(json.kpi && json.kpi.investment_score !== undefined) return Number(json.kpi.investment_score);
+  return Number(report.investment_score || 0);
+}
+
+function getDisplayRating(){
+  var c = getCommittee();
+  var json = getReportJson();
+  if(c && c.rating) return c.rating;
+  if(json.kpi && json.kpi.investment_rating) return json.kpi.investment_rating;
+  return report.investment_rating || "";
+}
+
+function getCommitteeComponents(){
+  var c = getCommittee();
+  return c.components || {};
+}
+
+function renderBulletList(items){
+  if(!Array.isArray(items) || !items.length) return "<p>-</p>";
+  return "<ul class='lux-bullets'>" + items.map(function(item){
+    return "<li>" + escapeHTML(item) + "</li>";
+  }).join("") + "</ul>";
+}
+
+function renderMiniData(items){
+  return "<div class='lux-data-grid compact-mini'>" + items.map(function(item){
+    return "<div class='lux-data-item'><div class='lux-data-label'>" + escapeHTML(item.label) + "</div><div class='lux-data-value'>" + escapeHTML(item.value) + "</div></div>";
+  }).join("") + "</div>";
+}
+
+function renderInvestmentThesisPage(){
+  var thesis = getInvestmentThesis();
+  var committee = getCommittee();
+
+  if(!thesis && !committee.rating){
+    return "";
+  }
+
+  return `
+    <div class="report-page">
+      <div class="report-page-inner">
+        <h2>Investment Thesis & Committee View</h2>
+        <div class="lux-rule"></div>
+
+        <div class="page-grid-2" style="grid-template-columns:.95fr 1.05fr;gap:8mm;">
+          <div>
+            <div class="lux-small-title">Classificazione IMMONOVA</div>
+            <div class="lux-metric-box" style="margin-bottom:5mm;">
+              <div class="lux-small-title">Investment Rating</div>
+              <div class="lux-metric-value" style="font-size:26px;">${escapeHTML(getDisplayRating() || "Selective Opportunity")}</div>
+              <div style="margin-top:3mm;font-size:13px;">Score: ${number(getDisplayScore())}/100</div>
+            </div>
+
+            <p>${escapeHTML((committee && committee.committee_view) || "L’opportunità è valutata in base a fondamentali immobiliari, attrattività turistica, benchmark hospitality, sostenibilità finanziaria e profilo di rischio.")}</p>
+
+            ${renderMiniData([
+              {label:"Real Estate", value:number((getCommitteeComponents()||{}).real_estate || 0) + "/25"},
+              {label:"Tourism", value:number((getCommitteeComponents()||{}).tourism || 0) + "/20"},
+              {label:"Hospitality", value:number((getCommitteeComponents()||{}).hospitality || 0) + "/20"},
+              {label:"Financial", value:number((getCommitteeComponents()||{}).financial || 0) + "/25"},
+              {label:"Risk", value:number((getCommitteeComponents()||{}).risk || 0) + "/10"}
+            ])}
+          </div>
+
+          <div>
+            <div class="lux-small-title">Tesi d’investimento</div>
+            <p>${escapeHTML((thesis && thesis.summary) || "Asset con potenziale di riposizionamento, sostenuto da destinazione, accessibilità e domanda premium.")}</p>
+
+            <div class="lux-small-title" style="margin-top:6mm;">Perché l’operazione è interessante</div>
+            ${renderBulletList(thesis && thesis.why_invest)}
+
+            <div class="lux-small-title" style="margin-top:6mm;">Exit strategy</div>
+            ${renderBulletList(thesis && thesis.exit_strategies)}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderIntelligencePages(){
+  var re = getRealEstateIntel();
+  var tourism = getTourismIntel();
+  var hospitality = getHospitalityBenchmark();
+
+  if(!re && !tourism && !hospitality){
+    return "";
+  }
+
+  var ranking = re && Array.isArray(re.market_ranking) ? re.market_ranking : [];
+  var origin = tourism && Array.isArray(tourism.origin_markets) ? tourism.origin_markets : [];
+  var hotels = hospitality && Array.isArray(hospitality.benchmark_hotels) ? hospitality.benchmark_hotels : [];
+  var scenarios = getTourismScenarioRows();
+
+  return `
+    <div class="report-page">
+      <div class="report-page-inner compact-table">
+        <h2>Real Estate & Tourism Intelligence</h2>
+        <div class="lux-rule"></div>
+
+        <div class="page-grid-2" style="grid-template-columns:1fr 1fr;gap:8mm;">
+          <div>
+            <div class="lux-small-title">Market Position</div>
+            <p>${escapeHTML((re && re.source_summary) || report.real_estate_market_past || "")}</p>
+            ${renderMiniData([
+              {label:"Comune €/mq", value: re && re.municipality_price_sqm ? euro(re.municipality_price_sqm) : "-"},
+              {label:"Provincia ref.", value: re && re.province_reference_price_sqm ? euro(re.province_reference_price_sqm) : "-"},
+              {label:"Regione ref.", value: re && re.region_reference_price_sqm ? euro(re.region_reference_price_sqm) : "-"},
+              {label:"Premium area ref.", value: re && re.premium_area_reference_price_sqm ? euro(re.premium_area_reference_price_sqm) : "-"},
+              {label:"Vs Regione", value: re && re.vs_region_percent !== null && re.vs_region_percent !== undefined ? percent(re.vs_region_percent) : "-"},
+              {label:"Posizionamento", value: re && re.market_position ? re.market_position : "-"}
+            ])}
+            ${ranking.length ? renderTable(ranking,[
+              {key:"label",label:"Benchmark"},
+              {key:"value",label:"€/mq",format:euro},
+              {key:"role",label:"Ruolo"}
+            ]) : ""}
+          </div>
+
+          <div>
+            <div class="lux-small-title">Tourism Intelligence</div>
+            <p>${escapeHTML((tourism && tourism.tourism_positioning) || report.tourism_last_5y || "")}</p>
+            ${renderMiniData([
+              {label:"Presenze attuali", value: tourism && tourism.presences_current ? number(tourism.presences_current) : "-"},
+              {label:"Arrivi attuali", value: tourism && tourism.arrivals_current ? number(tourism.arrivals_current) : "-"},
+              {label:"Permanenza media", value: tourism && tourism.average_stay_nights ? number(tourism.average_stay_nights) + " notti" : "-"},
+              {label:"Domanda internazionale", value: tourism && tourism.international_share_percent ? percent(tourism.international_share_percent) : "-"}
+            ])}
+            ${origin.length ? renderTable(origin,[
+              {key:"country",label:"Mercato"},
+              {key:"share_percent",label:"Quota",format:percent},
+              {key:"segment",label:"Segmento"}
+            ]) : ""}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="report-page">
+      <div class="report-page-inner compact-table">
+        <h2>Hospitality Benchmark & Forecast Scenarios</h2>
+        <div class="lux-rule"></div>
+
+        <div class="page-grid-2" style="grid-template-columns:1fr 1fr;gap:8mm;">
+          <div>
+            <div class="lux-small-title">Competitive Luxury Set</div>
+            <p>${escapeHTML((hospitality && hospitality.positioning_note) || "Benchmark hospitality da validare contro il competitive set locale.")}</p>
+            ${renderMiniData([
+              {label:"ADR modello", value: hospitality && hospitality.adr_model_eur ? euro(hospitality.adr_model_eur) : euro(report.adr_estimate)},
+              {label:"Occupazione modello", value: hospitality && hospitality.occupancy_model_percent ? percent(hospitality.occupancy_model_percent) : percent(report.occupancy_rate_estimate)},
+              {label:"RevPAR modello", value: hospitality && hospitality.revpar_model_eur ? euro(hospitality.revpar_model_eur) : euro(report.revpar_estimate)},
+              {label:"Benchmark ADR", value: hospitality && hospitality.implied_benchmark_adr_range_eur ? hospitality.implied_benchmark_adr_range_eur + " €" : "-"}
+            ])}
+            ${hotels.length ? renderTable(hotels,[
+              {key:"name",label:"Asset"},
+              {key:"segment",label:"Segmento"},
+              {key:"adr_range_eur",label:"ADR"}
+            ]) : ""}
+          </div>
+
+          <div>
+            <div class="lux-small-title">Tourism Forecast Scenarios</div>
+            <p>La previsione turistica viene letta per scenari, così l’investitore vede chiaramente ipotesi prudente, base e upside.</p>
+            ${scenarios.length ? renderTable(scenarios,[
+              {key:"scenario",label:"Scenario"},
+              {key:"annual_growth_percent",label:"Crescita annua",format:percent},
+              {key:"year_10_presences",label:"Presenze anno 10",format:number}
+            ]) : ""}
+            <div class="lux-rule"></div>
+            <div class="lux-small-title">Lettura investimento</div>
+            <p>La bontà dell’investimento dipende dal controllo CAPEX, dal posizionamento luxury e dalla capacità di convertire l’attrattività territoriale in ADR e occupazione sostenibili.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCommitteeClosingPage(){
+  var committee = getCommittee();
+  var thesis = getInvestmentThesis();
+
+  if(!committee || !committee.rating){
+    return "";
+  }
+
+  return `
+    <div class="report-page">
+      <div class="report-page-inner">
+        <h2>IMMONOVA Investment Committee</h2>
+        <div class="lux-rule"></div>
+
+        <div class="page-grid-2" style="grid-template-columns:.8fr 1.2fr;gap:10mm;">
+          <div>
+            <div class="lux-metric-box">
+              <div class="lux-small-title">Final Classification</div>
+              <div class="lux-metric-value" style="font-size:30px;">${escapeHTML(committee.rating)}</div>
+              <div style="font-size:13px;margin-top:4mm;">Score ${number(committee.score || getDisplayScore())}/100</div>
+            </div>
+
+            ${renderMiniData([
+              {label:"Recommendation", value: committee.recommendation || committee.label || "-"},
+              {label:"Risk posture", value: (report.risk_data && report.risk_data.global_risk_score) ? number(report.risk_data.global_risk_score) + "/10" : "-"},
+              {label:"Break-even", value: number(report.break_even_years) + " anni"},
+              {label:"ROI", value: percent(report.estimated_roi)}
+            ])}
+          </div>
+
+          <div>
+            <div class="lux-small-title">Committee View</div>
+            <p>${escapeHTML(committee.committee_view || "Opportunità selettiva da valutare con due diligence tecnica, legale, commerciale e controllo CAPEX.")}</p>
+
+            <div class="lux-small-title" style="margin-top:6mm;">Principali rischi da presidiare</div>
+            ${renderBulletList(thesis && thesis.key_risks)}
+
+            <div class="lux-small-title" style="margin-top:6mm;">Conclusione</div>
+            <p>L’operazione non viene presentata come promessa di rendimento, ma come opportunità immobiliare/hospitality con potenziale di valorizzazione, subordinata alla verifica del costo lavori, della strategia gestionale e dell’exit value.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
 function renderPremiumSummaryPage(){
   return `
     <div class="report-page">
@@ -2616,7 +2930,7 @@ function renderPremiumSummaryPage(){
         <h2>Investment Data Summary</h2>
         <div class="lux-rule"></div>
         <div class="page-grid-3" style="grid-template-columns:repeat(4,1fr);margin-bottom:8mm;">
-          <div class="lux-metric-box"><div class="lux-small-title">Investment Score</div><div class="lux-metric-value">${number(report.investment_score)}/100</div></div>
+          <div class="lux-metric-box"><div class="lux-small-title">Investment Score</div><div class="lux-metric-value">${number(getDisplayScore())}/100</div></div>
           <div class="lux-metric-box"><div class="lux-small-title">ROI stimato</div><div class="lux-metric-value">${percent(report.estimated_roi)}</div></div>
           <div class="lux-metric-box"><div class="lux-small-title">Break-even</div><div class="lux-metric-value">${number(report.break_even_years)} anni</div></div>
           <div class="lux-metric-box"><div class="lux-small-title">Rivalutazione 5Y</div><div class="lux-metric-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
@@ -2637,7 +2951,8 @@ function renderPremiumSummaryPage(){
           <div class="lux-data-item"><div class="lux-data-label">Reddito netto</div><div class="lux-data-value">${euro(report.net_annual_income_estimate)}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">ROI</div><div class="lux-data-value">${percent(report.estimated_roi)}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Break-even</div><div class="lux-data-value">${number(report.break_even_years)} anni</div></div>
-          <div class="lux-data-item"><div class="lux-data-label">Score</div><div class="lux-data-value">${number(report.investment_score)}/100</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Score</div><div class="lux-data-value">${number(getDisplayScore())}/100</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Classificazione</div><div class="lux-data-value">${escapeHTML(getDisplayRating() || "-")}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Rivalutazione 5Y</div><div class="lux-data-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Valore previsto 5Y</div><div class="lux-data-value">${euro(report.projected_value_5y)}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Costi operativi</div><div class="lux-data-value">${percent(numberOrNull("ov_cost_rate") || 32)}</div></div>
@@ -2836,13 +3151,16 @@ function renderReport(){
       <div class="cover-meta">${escapeHTML(opportunity.location || "")}<br>${escapeHTML(opportunity.category || "")}<br>${t("generated")} ${escapeHTML(new Date(report.generated_at).toLocaleDateString("it-IT"))} ${overrideBadge}</div>
     </div>
     ${renderPremiumSummaryPage()}
+    ${renderInvestmentThesisPage()}
     ${renderDestinationAnalysisPage()}
+    ${renderIntelligencePages()}
     ${renderGalleryPremium()}
     ${renderRenovationPotentialPage()}
     ${renderRenovationRenderPages()}
     ${renderEconomicsPage()}
     ${renderRevaluationPage()}
     ${renderMarketPages()}
+    ${renderCommitteeClosingPage()}
     ${renderDisclaimerPage()}
   `;
 }
@@ -2909,7 +3227,7 @@ async function loadReport(){
   applyCalculatedInputs();
 
   var calculated = calculateOverride();
-  report.investment_score = calculated.score;
+  report.investment_score = getDisplayScore() || calculated.score;
   report.estimated_roi = calculated.roi;
   report.break_even_years = calculated.breakEven;
   report.projected_revaluation_5y_percent = calculated.revaluation;
@@ -2928,7 +3246,7 @@ generateBtn.addEventListener("click", async function(){
   setStatus("Generazione dossier in corso...", "");
   generateBtn.disabled = true;
   generateBtn.textContent = "Generazione...";
-  startReportLoader();
+  startReportLoader("dossier");
 
   try{
     var result = await client.functions.invoke("generate-investment-report", {
@@ -2945,7 +3263,7 @@ generateBtn.addEventListener("click", async function(){
     applyCalculatedInputs();
 
     var calculated = calculateOverride();
-    report.investment_score = calculated.score;
+    report.investment_score = getDisplayScore() || calculated.score;
     report.estimated_roi = calculated.roi;
     report.break_even_years = calculated.breakEven;
     report.projected_revaluation_5y_percent = calculated.revaluation;
@@ -2974,6 +3292,7 @@ renderBtn.addEventListener("click", async function(){
   setStatus("Generazione render ristrutturazione in corso. Può richiedere qualche minuto...", "");
   renderBtn.disabled = true;
   renderBtn.textContent = "Generazione Render...";
+  startReportLoader("renders");
 
   try{
     if(!opportunityId){
@@ -2995,9 +3314,11 @@ renderBtn.addEventListener("click", async function(){
     await loadReport();
 
     var count = result.data.created_count || 0;
+    finishReportLoader(true);
     setStatus("Render generati correttamente: " + count + ". Anteprima dossier aggiornata.", "success");
 
   }catch(error){
+    finishReportLoader(false);
     setStatus(error.message || "Errore generazione render ristrutturazione.", "error");
   }
 
@@ -3053,7 +3374,7 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
     annual_cost_estimate:c.cost,
     net_annual_income_estimate:c.net,
     break_even_years:c.breakEven,
-    investment_score:c.score,
+    investment_score:getDisplayScore() || c.score,
     estimated_roi:c.roi,
     projected_revaluation_5y_percent:c.revaluation,
     projected_value_5y:c.value5y,
