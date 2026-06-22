@@ -458,6 +458,26 @@ async function loadOpportunity(){
               <input type="tel" id="phone" placeholder="Phone *" required>
             </div>
 
+            <div class="field">
+              <input type="text" id="country" placeholder="Country *" required>
+            </div>
+
+            <div class="field">
+              <input type="text" id="company" placeholder="Company / Entity">
+            </div>
+
+            <div class="field full">
+              <select id="budget_range">
+                <option value="">Budget range</option>
+                <option value="under_1m">Under €1M</option>
+                <option value="1m_3m">€1M - €3M</option>
+                <option value="3m_5m">€3M - €5M</option>
+                <option value="5m_10m">€5M - €10M</option>
+                <option value="over_10m">Over €10M</option>
+                <option value="reserved">Prefer not to disclose</option>
+              </select>
+            </div>
+
             <div class="field full">
               <select id="preferred_language" required>
                 <option value="">Preferred language *</option>
@@ -542,13 +562,16 @@ async function submitInquiry(e){
     const lastName = document.getElementById("last_name").value.trim();
     const email = document.getElementById("email").value.trim();
     const phone = document.getElementById("phone").value.trim();
+    const country = document.getElementById("country").value.trim();
+    const company = document.getElementById("company").value.trim();
+    const budgetRange = document.getElementById("budget_range").value.trim();
     const preferredLanguage = normalizeLanguage(document.getElementById("preferred_language").value);
     const investorType = document.getElementById("investor_type").value.trim();
     const message = document.getElementById("message").value.trim();
     const ndaAccepted = document.getElementById("nda_accepted").checked;
     const privacyAccepted = document.getElementById("privacy_accepted").checked;
 
-    if(!firstName || !lastName || !email || !phone || !preferredLanguage || !investorType || !message){
+    if(!firstName || !lastName || !email || !phone || !country || !preferredLanguage || !investorType || !message){
       throw new Error("Compila tutti i campi obbligatori.");
     }
 
@@ -562,28 +585,52 @@ async function submitInquiry(e){
 
     const payload = {
       opportunity_id: currentOpportunity.id,
-      opportunity_title: currentOpportunity.title,
+      opportunity_title: currentOpportunity.title || null,
+
       first_name:firstName,
       last_name:lastName,
       full_name:firstName + " " + lastName,
       email:email,
       phone:phone,
+      country:country,
+      company:company || null,
+      budget_range:budgetRange || null,
+
       preferred_language:preferredLanguage,
       investor_type:investorType,
+
       message:
-        "Opportunity: " + currentOpportunity.title +
-        " | Category: " + currentOpportunity.category +
+        "Opportunity: " + (currentOpportunity.title || "") +
+        " | Category: " + (currentOpportunity.category || "") +
         " | Location: " + (currentOpportunity.location || "") +
         " | Preferred language: " + preferredLanguage +
         " | Investor type: " + investorType +
+        " | Country: " + country +
+        " | Budget range: " + (budgetRange || "-") +
+        " | Company: " + (company || "-") +
         " | Message: " + message,
-      nda_accepted:ndaAccepted,
+
+      nda_accepted:true,
       nda_accepted_at:new Date().toISOString(),
-      privacy_accepted:privacyAccepted,
+      nda_text_version:"IMMONOVA_NDA_PUBLIC_V1",
+
+      privacy_accepted:true,
       privacy_accepted_at:new Date().toISOString(),
+
+      request_completed:true,
+      completion_status:"pending_review",
+
+      approved:false,
+      dossier_sent:false,
+
       status:"pending",
       request_status:"pending",
-      created_at:new Date().toISOString()
+
+      user_agent:navigator.userAgent || null,
+      source_page:window.location.href,
+
+      created_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
     };
 
     const { error } = await client
