@@ -1078,6 +1078,164 @@ tr{
   .renovation-render-room{font-size:6.5pt;line-height:1.2}
 }
 
+
+/* ===== IMMONOVA AI GENERATION PROGRESS ===== */
+.loader-overlay{
+  position:fixed;
+  inset:0;
+  z-index:99999;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(30,22,10,.76);
+  backdrop-filter:blur(14px);
+}
+.loader-card{
+  width:560px;
+  max-width:90vw;
+  padding:42px;
+  border:1px solid rgba(241,210,122,.34);
+  background:linear-gradient(135deg,rgba(255,253,248,.16),rgba(255,253,248,.05));
+  box-shadow:0 34px 120px rgba(0,0,0,.28);
+  text-align:center;
+}
+.loader-logo{
+  width:250px;
+  margin:0 auto 22px;
+}
+.loader-title{
+  color:#f1d27a;
+  font-size:15px;
+  letter-spacing:.28em;
+  text-transform:uppercase;
+  margin-bottom:12px;
+}
+.loader-step{
+  color:#fff7df;
+  font-size:14px;
+  line-height:1.6;
+  margin-bottom:20px;
+}
+.loader-progress{
+  height:12px;
+  border:1px solid rgba(241,210,122,.25);
+  background:rgba(255,255,255,.12);
+  overflow:hidden;
+}
+.loader-progress-fill{
+  width:0%;
+  height:100%;
+  background:linear-gradient(90deg,#8f6f2c,#c79c43,#f1d27a,#a77d31);
+  transition:width .55s ease;
+}
+.loader-percent{
+  margin-top:12px;
+  color:#f1d27a;
+  font-size:12px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+}
+.loader-note{
+  margin-top:18px;
+  color:rgba(255,247,223,.72);
+  font-size:12px;
+  line-height:1.6;
+}
+
+/* ===== IMMONOVA DESTINATION ANALYSIS ===== */
+.destination-score{
+  display:flex;
+  align-items:flex-end;
+  gap:12px;
+  margin:8px 0 14px;
+}
+.destination-score-number{
+  font-size:54px;
+  font-weight:200;
+  color:#a67f34;
+  line-height:1;
+}
+.destination-score-label{
+  font-size:11px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:#8f7643;
+  padding-bottom:8px;
+}
+.destination-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:18px;
+  margin-top:16px;
+}
+.destination-card{
+  border:1px solid rgba(166,127,52,.16);
+  background:rgba(255,255,255,.46);
+  padding:16px;
+  break-inside:avoid;
+  page-break-inside:avoid;
+}
+.destination-card-title{
+  font-size:10px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin-bottom:10px;
+}
+.destination-poi{
+  padding:8px 0;
+  border-bottom:1px solid rgba(166,127,52,.10);
+}
+.destination-poi:last-child{
+  border-bottom:none;
+}
+.destination-poi-name{
+  font-size:13px;
+  color:#6f603f;
+  font-weight:600;
+}
+.destination-poi-meta{
+  margin-top:3px;
+  font-size:11px;
+  color:#8f7643;
+  line-height:1.45;
+}
+.destination-breakdown{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+  margin-top:14px;
+}
+.destination-breakdown-item{
+  border-top:1px solid rgba(166,127,52,.20);
+  padding-top:8px;
+}
+.destination-breakdown-label{
+  font-size:8px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:#a67f34;
+}
+.destination-breakdown-value{
+  margin-top:4px;
+  font-size:16px;
+  color:#735f36;
+}
+@media print{
+  .loader-overlay{display:none!important}
+  .destination-score-number{font-size:28pt}
+  .destination-score-label{font-size:6.4pt}
+  .destination-grid{gap:4mm;margin-top:3mm}
+  .destination-card{padding:3mm}
+  .destination-card-title{font-size:6.1pt;margin-bottom:2mm}
+  .destination-poi{padding:1.3mm 0}
+  .destination-poi-name{font-size:7pt}
+  .destination-poi-meta{font-size:6.2pt;line-height:1.18}
+  .destination-breakdown{gap:2mm;margin-top:3mm}
+  .destination-breakdown-label{font-size:5.2pt}
+  .destination-breakdown-value{font-size:8.4pt}
+}
+
 </style>
 </head>
 
@@ -1132,6 +1290,22 @@ tr{
   </div>
 
   <div id="status" class="status"></div>
+
+  <div id="reportLoader" class="loader-overlay">
+    <div class="loader-card">
+      <div class="loader-logo" id="loaderLogo"></div>
+      <div class="loader-title">Generazione Dossier IMMONOVA AI</div>
+      <div class="loader-step" id="loaderStep">Preparazione analisi...</div>
+      <div class="loader-progress">
+        <div class="loader-progress-fill" id="loaderProgressFill"></div>
+      </div>
+      <div class="loader-percent" id="loaderPercent">0%</div>
+      <div class="loader-note">
+        Ricerca dati immobiliari, turismo, accessibilità, destinazione, KPI e forecast.
+      </div>
+    </div>
+  </div>
+
 
   <section class="override-panel" id="overridePanel">
     <h2>Aggiorna Dossier</h2>
@@ -1249,6 +1423,12 @@ var renderBtn = document.getElementById("renderBtn");
 var editLink = document.getElementById("editLink");
 var overridePanel = document.getElementById("overridePanel");
 var pageTitle = document.getElementById("pageTitle");
+var reportLoader = document.getElementById("reportLoader");
+var loaderStep = document.getElementById("loaderStep");
+var loaderProgressFill = document.getElementById("loaderProgressFill");
+var loaderPercent = document.getElementById("loaderPercent");
+var loaderLogo = document.getElementById("loaderLogo");
+var loaderTimer = null;
 
 var currentUser = null;
 var opportunity = null;
@@ -1299,6 +1479,75 @@ function setStatus(message,type){
   statusBox.className = "status " + (type || "");
   statusBox.textContent = message || "";
 }
+
+
+function setLoaderProgress(percent, step){
+  var p = Math.max(0, Math.min(100, Number(percent) || 0));
+
+  if(loaderProgressFill) loaderProgressFill.style.width = p + "%";
+  if(loaderPercent) loaderPercent.textContent = Math.round(p) + "%";
+  if(loaderStep && step) loaderStep.textContent = step;
+}
+
+function startReportLoader(){
+  if(loaderLogo && !loaderLogo.innerHTML){
+    loaderLogo.innerHTML = immonovaSvg("Loader", "loader-logo-svg");
+  }
+
+  if(reportLoader){
+    reportLoader.style.display = "flex";
+  }
+
+  var steps = [
+    {p:7, t:"Preparazione asset e sessione admin..."},
+    {p:16, t:"Ricerca dati immobiliari e OMI..."},
+    {p:28, t:"Verifica trend Idealista / Immobiliare / Borsino..."},
+    {p:40, t:"Ricerca dati turistici comunali e territoriali..."},
+    {p:52, t:"Fallback Valle d’Itria / Provincia / Puglia se necessario..."},
+    {p:64, t:"Analisi aeroporti, attrazioni, spiagge e luxury ecosystem..."},
+    {p:76, t:"Calcolo ROI, break-even, RevPAR e Tourist Appeal Score..."},
+    {p:88, t:"Composizione dossier IMMONOVA..."},
+    {p:94, t:"Finalizzazione investment book..."}
+  ];
+
+  var i = 0;
+  setLoaderProgress(3, "Avvio generazione dossier...");
+
+  if(loaderTimer){
+    clearInterval(loaderTimer);
+  }
+
+  loaderTimer = setInterval(function(){
+    if(i >= steps.length){
+      return;
+    }
+
+    setLoaderProgress(steps[i].p, steps[i].t);
+    i++;
+  }, 2200);
+
+  return loaderTimer;
+}
+
+function finishReportLoader(success){
+  if(loaderTimer){
+    clearInterval(loaderTimer);
+    loaderTimer = null;
+  }
+
+  setLoaderProgress(success ? 100 : 100, success ? "Dossier completato." : "Generazione interrotta.");
+
+  setTimeout(function(){
+    if(reportLoader){
+      reportLoader.style.display = "none";
+    }
+
+    if(!success){
+      setLoaderProgress(0, "Preparazione analisi...");
+    }
+  }, success ? 900 : 1200);
+}
+
 
 function round(value,decimals){
   var p = Math.pow(10, decimals || 1);
@@ -2255,6 +2504,111 @@ function renderGalleryPremium(){
   `;
 }
 
+
+function getDestinationAnalysis(){
+  return (
+    (report && report.destination_analysis) ||
+    (report && report.report_json && report.report_json.destination_analysis) ||
+    null
+  );
+}
+
+function renderPoiList(items, limit){
+  items = Array.isArray(items) ? items : [];
+  if(items.length === 0){
+    return '<div class="destination-poi"><div class="destination-poi-meta">Dato non disponibile nel dossier generato.</div></div>';
+  }
+
+  return items.slice(0, limit || 5).map(function(item){
+    var distance = item.distance_km !== null && item.distance_km !== undefined ? number(item.distance_km) + " km" : "-";
+    var time = item.driving_time_min !== null && item.driving_time_min !== undefined ? number(item.driving_time_min) + " min" : "-";
+    var relevance = item.relevance || item.note || "";
+    return `
+      <div class="destination-poi">
+        <div class="destination-poi-name">${escapeHTML(item.name || "-")}</div>
+        <div class="destination-poi-meta">${escapeHTML(distance)} · ${escapeHTML(time)} in auto<br>${escapeHTML(relevance)}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderDestinationCard(title, items, limit){
+  return `
+    <div class="destination-card">
+      <div class="destination-card-title">${escapeHTML(title)}</div>
+      ${renderPoiList(items, limit || 5)}
+    </div>
+  `;
+}
+
+function renderDestinationAnalysisPage(){
+  var destination = getDestinationAnalysis();
+
+  if(!destination){
+    return "";
+  }
+
+  var breakdown = destination.score_breakdown || {};
+  var score = Number(destination.tourist_appeal_score || 0);
+  var rating = destination.tourist_appeal_rating || "-";
+
+  return `
+    <div class="report-page">
+      <div class="report-page-inner">
+        <h2>Destination & Accessibility Analysis</h2>
+        <div class="lux-rule"></div>
+        <div class="page-grid-2" style="grid-template-columns:.78fr 1.22fr;gap:8mm;">
+          <div>
+            <div class="lux-small-title">Tourist Appeal Score</div>
+            <div class="destination-score">
+              <div class="destination-score-number">${number(score)}</div>
+              <div class="destination-score-label">/100 · ${escapeHTML(rating)}</div>
+            </div>
+            <p>${escapeHTML(destination.source_summary || "Analisi territoriale su accessibilità, attrazioni, mare e luxury ecosystem.")}</p>
+            <div class="destination-breakdown">
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Aeroporti</div><div class="destination-breakdown-value">${number(breakdown.airports || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Mare</div><div class="destination-breakdown-value">${number(breakdown.sea_beaches || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Borghi</div><div class="destination-breakdown-value">${number(breakdown.villages_attractions || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Cultura</div><div class="destination-breakdown-value">${number(breakdown.unesco_culture || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Luxury</div><div class="destination-breakdown-value">${number(breakdown.luxury_hospitality || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Accesso</div><div class="destination-breakdown-value">${number(breakdown.accessibility || 0)}</div></div>
+            </div>
+          </div>
+          <div class="destination-grid">
+            ${renderDestinationCard("Aeroporti più vicini", destination.nearest_airports, 4)}
+            ${renderDestinationCard("Stazioni principali", destination.nearest_train_stations, 4)}
+            ${renderDestinationCard("Attrazioni entro 30 minuti", destination.attractions_30min, 5)}
+            ${renderDestinationCard("Attrazioni entro 60 minuti", destination.attractions_60min, 5)}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="report-page">
+      <div class="report-page-inner">
+        <h2>Coast, Luxury Ecosystem & Experiences</h2>
+        <div class="lux-rule"></div>
+        <div class="destination-grid">
+          ${renderDestinationCard("Spiagge, costa e beach club", destination.beaches, 6)}
+          ${renderDestinationCard("Luxury hospitality benchmark", destination.luxury_points_of_interest, 6)}
+          ${renderDestinationCard("Porti turistici / Marina", destination.marinas, 4)}
+          ${renderDestinationCard("Golf club", destination.golf_clubs, 4)}
+          ${renderDestinationCard("Ristoranti ed esperienze", destination.restaurants_and_experiences, 6)}
+          <div class="destination-card">
+            <div class="destination-card-title">Lettura investment</div>
+            <p>
+              Questa sezione misura cosa può attrarre domanda turistica intorno alla proprietà:
+              accessibilità aeroportuale, borghi, costa, cultura, luxury hospitality e servizi premium.
+              Il valore non sostituisce i KPI finanziari, ma aiuta a spiegare potenziale ADR, occupancy e appeal internazionale.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
 function renderPremiumSummaryPage(){
   return `
     <div class="report-page">
@@ -2482,6 +2836,7 @@ function renderReport(){
       <div class="cover-meta">${escapeHTML(opportunity.location || "")}<br>${escapeHTML(opportunity.category || "")}<br>${t("generated")} ${escapeHTML(new Date(report.generated_at).toLocaleDateString("it-IT"))} ${overrideBadge}</div>
     </div>
     ${renderPremiumSummaryPage()}
+    ${renderDestinationAnalysisPage()}
     ${renderGalleryPremium()}
     ${renderRenovationPotentialPage()}
     ${renderRenovationRenderPages()}
@@ -2573,6 +2928,7 @@ generateBtn.addEventListener("click", async function(){
   setStatus("Generazione dossier in corso...", "");
   generateBtn.disabled = true;
   generateBtn.textContent = "Generazione...";
+  startReportLoader();
 
   try{
     var result = await client.functions.invoke("generate-investment-report", {
@@ -2602,6 +2958,7 @@ generateBtn.addEventListener("click", async function(){
     report.revpar_estimate = calculated.revpar;
 
     await renderReportTranslated();
+    finishReportLoader(true);
     setStatus("Dossier generato correttamente.", "success");
 
   }catch(error){
