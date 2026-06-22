@@ -1238,6 +1238,9 @@ var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 var params = new URLSearchParams(window.location.search);
 var opportunityId = params.get("id");
+var requestId = params.get("request_id");
+var requestedLanguage = (params.get("lang") || "it").toLowerCase();
+var clientName = params.get("client") || "";
 
 var statusBox = document.getElementById("status");
 var book = document.getElementById("book");
@@ -1251,6 +1254,7 @@ var currentUser = null;
 var opportunity = null;
 var report = null;
 var renovationRenders = [];
+var translatedReport = null;
 
 function escapeHTML(value){
   return String(value === null || value === undefined ? "" : value)
@@ -1312,6 +1316,56 @@ function normalizeGallery(value){
     return [];
   }
 }
+
+
+const UI_TRANSLATIONS = {
+  it:{dossier:"Dossier", confidential:"Confidential Investment Dossier", summary:"Investment Data Summary", score:"Investment Score", roi:"ROI stimato", breakeven:"Break-even", revaluation:"Rivalutazione 5Y", acquisition:"Valore acquisto", selectedIntervention:"Intervento selezionato", renovationMin:"Costo ristr. min", renovationMax:"Costo ristr. max", renovationAvg:"Costo ristr. medio", totalInvestment:"Investimento totale", units:"Unità / camere", adr:"ADR", occupancy:"Occupazione", revpar:"RevPAR", annualRevenue:"Ricavi annui", annualCosts:"Costi annui", netIncome:"Reddito netto", projectedValue:"Valore previsto 5Y", operatingCosts:"Costi operativi", generated:"Generato"},
+  en:{dossier:"Dossier", confidential:"Confidential Investment Dossier", summary:"Investment Data Summary", score:"Investment Score", roi:"Estimated ROI", breakeven:"Break-even", revaluation:"5Y Revaluation", acquisition:"Acquisition value", selectedIntervention:"Selected intervention", renovationMin:"Renovation min cost", renovationMax:"Renovation max cost", renovationAvg:"Renovation avg cost", totalInvestment:"Total investment", units:"Units / rooms", adr:"ADR", occupancy:"Occupancy", revpar:"RevPAR", annualRevenue:"Annual revenue", annualCosts:"Annual costs", netIncome:"Net annual income", projectedValue:"Projected 5Y value", operatingCosts:"Operating costs", generated:"Generated"},
+  fr:{dossier:"Dossier", confidential:"Dossier d’investissement confidentiel", summary:"Synthèse des données d’investissement", score:"Score d’investissement", roi:"ROI estimé", breakeven:"Point mort", revaluation:"Revalorisation 5 ans", acquisition:"Valeur d’acquisition", selectedIntervention:"Intervention sélectionnée", renovationMin:"Coût min. rénovation", renovationMax:"Coût max. rénovation", renovationAvg:"Coût moyen rénovation", totalInvestment:"Investissement total", units:"Unités / chambres", adr:"ADR", occupancy:"Occupation", revpar:"RevPAR", annualRevenue:"Revenus annuels", annualCosts:"Coûts annuels", netIncome:"Résultat net annuel", projectedValue:"Valeur projetée 5 ans", operatingCosts:"Coûts opérationnels", generated:"Généré"},
+  de:{dossier:"Dossier", confidential:"Vertrauliches Investment-Dossier", summary:"Zusammenfassung der Investitionsdaten", score:"Investment Score", roi:"Geschätzter ROI", breakeven:"Break-even", revaluation:"Wertsteigerung 5J", acquisition:"Kaufwert", selectedIntervention:"Gewählter Eingriff", renovationMin:"Min. Renovierungskosten", renovationMax:"Max. Renovierungskosten", renovationAvg:"Durchschn. Renovierungskosten", totalInvestment:"Gesamtinvestition", units:"Einheiten / Zimmer", adr:"ADR", occupancy:"Auslastung", revpar:"RevPAR", annualRevenue:"Jahresumsatz", annualCosts:"Jahreskosten", netIncome:"Jährlicher Nettoertrag", projectedValue:"Prognostizierter Wert 5J", operatingCosts:"Betriebskosten", generated:"Erstellt"},
+  es:{dossier:"Dossier", confidential:"Dossier de inversión confidencial", summary:"Resumen de datos de inversión", score:"Investment Score", roi:"ROI estimado", breakeven:"Punto de equilibrio", revaluation:"Revalorización 5 años", acquisition:"Valor de adquisición", selectedIntervention:"Intervención seleccionada", renovationMin:"Coste mín. reforma", renovationMax:"Coste máx. reforma", renovationAvg:"Coste medio reforma", totalInvestment:"Inversión total", units:"Unidades / habitaciones", adr:"ADR", occupancy:"Ocupación", revpar:"RevPAR", annualRevenue:"Ingresos anuales", annualCosts:"Costes anuales", netIncome:"Ingreso neto anual", projectedValue:"Valor previsto 5 años", operatingCosts:"Costes operativos", generated:"Generado"},
+  ar:{dossier:"ملف الاستثمار", confidential:"ملف استثماري سري", summary:"ملخص بيانات الاستثمار", score:"درجة الاستثمار", roi:"العائد المتوقع", breakeven:"نقطة التعادل", revaluation:"إعادة التقييم خلال 5 سنوات", acquisition:"قيمة الشراء", selectedIntervention:"التدخل المختار", renovationMin:"أدنى تكلفة ترميم", renovationMax:"أعلى تكلفة ترميم", renovationAvg:"متوسط تكلفة الترميم", totalInvestment:"إجمالي الاستثمار", units:"الوحدات / الغرف", adr:"ADR", occupancy:"الإشغال", revpar:"RevPAR", annualRevenue:"الإيرادات السنوية", annualCosts:"التكاليف السنوية", netIncome:"صافي الدخل السنوي", projectedValue:"القيمة المتوقعة خلال 5 سنوات", operatingCosts:"التكاليف التشغيلية", generated:"تم الإنشاء"}
+};
+
+function t(key){
+  var dict = UI_TRANSLATIONS[requestedLanguage] || UI_TRANSLATIONS.it;
+  return dict[key] || UI_TRANSLATIONS.it[key] || key;
+}
+
+function trField(key, fallback){
+  if(translatedReport && translatedReport[key]){
+    return translatedReport[key];
+  }
+
+  return fallback || "";
+}
+
+async function loadTranslatedReport(){
+  translatedReport = null;
+
+  if(!report || !report.id || requestedLanguage === "it"){
+    return;
+  }
+
+  setStatus("Traduzione dossier in corso (" + requestedLanguage.toUpperCase() + ")...", "");
+
+  var result = await client.functions.invoke("translate-investment-report", {
+    body:{
+      report_id:report.id,
+      opportunity_id:Number(opportunityId),
+      language:requestedLanguage,
+      request_id:requestId ? Number(requestId) : null
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success){
+    throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore traduzione dossier.");
+  }
+
+  translatedReport = result.data.translation || null;
+  setStatus("Dossier tradotto in " + requestedLanguage.toUpperCase() + ".", "success");
+}
+
 
 function immonovaSvg(idSuffix, className){
   return `
@@ -1842,70 +1896,73 @@ function renderPhotos(){
 
 function renderExecutiveSummary(){
   var title = opportunity.title || "Investment Opportunity";
-
-  return `
+  var fallback = `
 L’operazione ${title} presenta, sulla base dei valori aggiornati del dossier, un Investment Score pari a ${number(report.investment_score)}/100, un ROI stimato pari a ${percent(report.estimated_roi)} e un break-even aggiornato pari a ${number(report.break_even_years)} anni.
 
 La simulazione economica aggiornata considera un ADR pari a ${euro(report.adr_estimate)}, un’occupazione media pari a ${percent(report.occupancy_rate_estimate)}, ricavi annui stimati pari a ${euro(report.annual_revenue_estimate)} e reddito netto annuo stimato pari a ${euro(report.net_annual_income_estimate)}.
 
 La rivalutazione prospettica a 5 anni è stimata pari a ${percent(report.projected_revaluation_5y_percent)}, con valore previsto dell’asset pari a ${euro(report.projected_value_5y)}.
   `;
+
+  return trField("executive_summary", fallback);
 }
 
 function renderShortRentalText(){
-  return `
+  var fallback = `
 La simulazione aggiornata di affitto breve stima un ADR pari a ${euro(report.adr_estimate)}, occupazione media pari a ${percent(report.occupancy_rate_estimate)} e RevPAR pari a ${euro(report.revpar_estimate)}.
 
 I ricavi annui stimati sono pari a ${euro(report.annual_revenue_estimate)}, con costi annui stimati pari a ${euro(report.annual_cost_estimate)} e reddito netto annuo stimato pari a ${euro(report.net_annual_income_estimate)}.
 
 Il break-even aggiornato è pari a ${number(report.break_even_years)} anni.
   `;
+
+  return trField("short_rental_analysis", fallback);
 }
 
 function renderSummaryPage(){
   return `
     <div class="summary-page">
-      <h2 class="summary-title">Investment Data Summary</h2>
+      <h2 class="summary-title">${t("summary")}</h2>
 
       <div class="kpi-grid">
         <div class="kpi">
-          <div class="kpi-label">Investment Score</div>
+          <div class="kpi-label">${t("score")}</div>
           <div class="kpi-value">${number(report.investment_score)}/100</div>
         </div>
         <div class="kpi">
-          <div class="kpi-label">ROI stimato</div>
+          <div class="kpi-label">${t("roi")}</div>
           <div class="kpi-value">${percent(report.estimated_roi)}</div>
         </div>
         <div class="kpi">
-          <div class="kpi-label">Break-even</div>
+          <div class="kpi-label">${t("breakeven")}</div>
           <div class="kpi-value">${number(report.break_even_years)} anni</div>
         </div>
         <div class="kpi">
-          <div class="kpi-label">Rivalutazione 5Y</div>
+          <div class="kpi-label">${t("revaluation")}</div>
           <div class="kpi-value">${percent(report.projected_revaluation_5y_percent)}</div>
         </div>
       </div>
 
       <div class="data-summary-grid">
-        <div class="data-summary-item"><div class="data-summary-label">Valore acquisto</div><div class="data-summary-value">${euro(getAcquisitionValue())}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Intervento selezionato</div><div class="data-summary-value">${escapeHTML(getRenovationStyleLabel())}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Costo ristr. min</div><div class="data-summary-value">${euro(getRenovationCostMin())}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Costo ristr. max</div><div class="data-summary-value">${euro(getRenovationCostMax())}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Costo ristr. medio</div><div class="data-summary-value">${euro(getRenovationCostAvg())}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Investimento totale</div><div class="data-summary-value">${euro(getPurchasePrice())}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Unità / camere</div><div class="data-summary-value">${number(getRentableUnits())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("acquisition")}</div><div class="data-summary-value">${euro(getAcquisitionValue())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("selectedIntervention")}</div><div class="data-summary-value">${escapeHTML(getRenovationStyleLabel())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("renovationMin")}</div><div class="data-summary-value">${euro(getRenovationCostMin())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("renovationMax")}</div><div class="data-summary-value">${euro(getRenovationCostMax())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("renovationAvg")}</div><div class="data-summary-value">${euro(getRenovationCostAvg())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("totalInvestment")}</div><div class="data-summary-value">${euro(getPurchasePrice())}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("units")}</div><div class="data-summary-value">${number(getRentableUnits())}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">ADR</div><div class="data-summary-value">${euro(report.adr_estimate)}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Occupazione</div><div class="data-summary-value">${percent(report.occupancy_rate_estimate)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("occupancy")}</div><div class="data-summary-value">${percent(report.occupancy_rate_estimate)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">RevPAR</div><div class="data-summary-value">${euro(report.revpar_estimate)}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Ricavi annui</div><div class="data-summary-value">${euro(report.annual_revenue_estimate)}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Costi annui</div><div class="data-summary-value">${euro(report.annual_cost_estimate)}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Reddito netto</div><div class="data-summary-value">${euro(report.net_annual_income_estimate)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("annualRevenue")}</div><div class="data-summary-value">${euro(report.annual_revenue_estimate)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("annualCosts")}</div><div class="data-summary-value">${euro(report.annual_cost_estimate)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("netIncome")}</div><div class="data-summary-value">${euro(report.net_annual_income_estimate)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">ROI</div><div class="data-summary-value">${percent(report.estimated_roi)}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Break-even</div><div class="data-summary-value">${number(report.break_even_years)} anni</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("breakeven")}</div><div class="data-summary-value">${number(report.break_even_years)} anni</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Score</div><div class="data-summary-value">${number(report.investment_score)}/100</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Rivalutazione 5Y</div><div class="data-summary-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Valore previsto 5Y</div><div class="data-summary-value">${euro(report.projected_value_5y)}</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Costi operativi</div><div class="data-summary-value">${percent(numberOrNull("ov_cost_rate") || 32)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("revaluation")}</div><div class="data-summary-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("projectedValue")}</div><div class="data-summary-value">${euro(report.projected_value_5y)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">${t("operatingCosts")}</div><div class="data-summary-value">${percent(numberOrNull("ov_cost_rate") || 32)}</div></div>
       </div>
     </div>
   `;
@@ -2361,15 +2418,15 @@ function renderReport(){
   }
   var title = opportunity.title || "Investment Opportunity";
   document.title = "Dossier | " + title + " | IMMONOVA";
-  pageTitle.textContent = "Dossier | " + title;
+  pageTitle.textContent = t("dossier") + " | " + title + (clientName ? " | " + clientName : "");
   var overrideBadge = report.analyst_overridden ? '<div class="override-badge">Analyst Override applicato</div>' : "";
   var hasCover = !!opportunity.cover_image;
   book.innerHTML = `
     <div class="cover ${hasCover ? "with-image" : ""}">
       ${hasCover ? '<img class="cover-bg" src="' + escapeHTML(opportunity.cover_image) + '" alt="Cover">' : ""}
-      <div>${immonovaSvg("Cover", "cover-logo")}<div class="cover-label">Confidential Investment Dossier</div></div>
+      <div>${immonovaSvg("Cover", "cover-logo")}<div class="cover-label">${t("confidential")}</div></div>
       <div><div class="cover-title">${escapeHTML(title)}</div></div>
-      <div class="cover-meta">${escapeHTML(opportunity.location || "")}<br>${escapeHTML(opportunity.category || "")}<br>Generated ${escapeHTML(new Date(report.generated_at).toLocaleDateString("it-IT"))} ${overrideBadge}</div>
+      <div class="cover-meta">${escapeHTML(opportunity.location || "")}<br>${escapeHTML(opportunity.category || "")}<br>${t("generated")} ${escapeHTML(new Date(report.generated_at).toLocaleDateString("it-IT"))} ${overrideBadge}</div>
     </div>
     ${renderPremiumSummaryPage()}
     ${renderGalleryPremium()}
@@ -2408,7 +2465,7 @@ async function loadOpportunity(){
   editLink.href = "opportunity-edit.html?id=" + encodeURIComponent(opportunityId);
   var title = opportunity.title || "Investment Opportunity";
   document.title = "Dossier | " + title + " | IMMONOVA";
-  pageTitle.textContent = "Dossier | " + title;
+  pageTitle.textContent = t("dossier") + " | " + title + (clientName ? " | " + clientName : "");
 }
 
 
@@ -2440,6 +2497,7 @@ async function loadReport(){
 
   report = result.data;
   await loadRenovationRenders();
+  await loadTranslatedReport();
   fillOverrideForm();
   applyCalculatedInputs();
 
@@ -2475,6 +2533,7 @@ generateBtn.addEventListener("click", async function(){
 
     report = result.data.report;
     await loadRenovationRenders();
+    await loadTranslatedReport();
     fillOverrideForm();
     applyCalculatedInputs();
 
@@ -2611,6 +2670,7 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
 
   report = result.data;
   await loadRenovationRenders();
+  await loadTranslatedReport();
   fillOverrideForm();
   renderReport();
   setStatus("Dossier aggiornato correttamente.", "success");
