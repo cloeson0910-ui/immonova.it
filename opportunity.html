@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -165,10 +164,36 @@ h1{
   font-size:14px;
   line-height:1.8;
   color:#80683a;
-  margin-bottom:28px;
+  margin-bottom:24px;
 }
 
-input,textarea{
+.form-section{
+  margin-top:24px;
+  padding-top:22px;
+  border-top:1px solid rgba(165,129,57,.16);
+}
+
+.form-section-title{
+  font-size:11px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:#a58139;
+  margin-bottom:16px;
+}
+
+.form-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+
+.field.full{
+  grid-column:1 / -1;
+}
+
+input,
+textarea,
+select{
   width:100%;
   padding:15px 16px;
   margin-bottom:15px;
@@ -181,8 +206,47 @@ input,textarea{
 }
 
 textarea{
-  min-height:130px;
+  min-height:120px;
   resize:vertical;
+}
+
+select{
+  appearance:none;
+  cursor:pointer;
+}
+
+.consent-box{
+  margin-bottom:14px;
+  padding:16px;
+  border:1px solid rgba(165,129,57,.18);
+  background:rgba(255,252,244,.22);
+}
+
+.consent-label{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  font-size:12px;
+  line-height:1.55;
+  color:#80683a;
+}
+
+.consent-label input{
+  width:auto;
+  min-width:16px;
+  margin:2px 0 0;
+}
+
+.nda-text{
+  margin:10px 0 14px;
+  padding:14px;
+  max-height:150px;
+  overflow:auto;
+  border:1px solid rgba(165,129,57,.18);
+  background:rgba(255,255,255,.20);
+  font-size:11px;
+  line-height:1.65;
+  color:#7f6430;
 }
 
 button{
@@ -198,10 +262,21 @@ button{
   cursor:pointer;
 }
 
+button:hover{
+  background:#a58139;
+  color:#fff;
+}
+
+button:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+
 .status{
   margin-top:16px;
   min-height:20px;
   font-size:13px;
+  line-height:1.6;
 }
 
 .success{color:#4f7f45}
@@ -215,9 +290,21 @@ button{
   color:#8f7643;
 }
 
+.confidential-note{
+  margin-top:18px;
+  padding:16px;
+  border:1px solid rgba(165,129,57,.18);
+  background:rgba(166,127,52,.07);
+  font-size:12px;
+  line-height:1.7;
+  color:#80683a;
+}
+
 @media(max-width:850px){
   .content{grid-template-columns:1fr}
   .header{flex-direction:column;gap:22px}
+  .form-grid{grid-template-columns:1fr}
+  .field.full{grid-column:auto}
 }
 </style>
 </head>
@@ -252,6 +339,19 @@ const pageContent = document.getElementById("pageContent");
 
 let currentOpportunity = null;
 
+function escapeHTML(value){
+  return String(value ?? "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+
+function normalizeLanguage(value){
+  return String(value || "it").trim().toLowerCase();
+}
+
 async function loadOpportunity(){
   if(!id){
     pageContent.innerHTML = "Opportunità non selezionata.";
@@ -272,15 +372,15 @@ async function loadOpportunity(){
 
   currentOpportunity = data;
 
-  const isOffMarket = data.category === "Off Market";
+  const isOffMarket = String(data.category || "").toLowerCase() === "off market";
 
   pageContent.className = "";
 
   pageContent.innerHTML = `
     <section class="hero">
-      <div class="kicker">${data.category || "Investment Opportunity"}</div>
-      <h1>${data.title || ""}</h1>
-      <div class="meta">${data.location || ""} ${data.price ? " · " + data.price : ""}</div>
+      <div class="kicker">${escapeHTML(data.category || "Investment Opportunity")}</div>
+      <h1>${escapeHTML(data.title || "")}</h1>
+      <div class="meta">${escapeHTML(data.location || "")} ${data.price ? " · " + escapeHTML(data.price) : ""}</div>
     </section>
 
     <section class="content">
@@ -288,15 +388,15 @@ async function loadOpportunity(){
       <div class="panel">
         ${
           data.cover_image && !isOffMarket
-          ? `<img class="cover" src="${data.cover_image}" alt="${data.title || ""}">`
+          ? `<img class="cover" src="${escapeHTML(data.cover_image)}" alt="${escapeHTML(data.title || "")}">`
           : ""
         }
 
         <div class="description">
           ${
             isOffMarket
-            ? "This is a private off-market opportunity. Detailed information is available only after a direct request and internal qualification."
-            : (data.full_description || data.short_description || "")
+            ? "This is a private off-market opportunity. Detailed information and the investment dossier are available only after qualification, NDA acceptance and manual approval by IMMONOVA."
+            : escapeHTML(data.full_description || data.short_description || "")
           }
         </div>
 
@@ -306,38 +406,115 @@ async function loadOpportunity(){
           <div class="data-grid">
             <div class="data-item">
               <div class="data-label">Category</div>
-              <div class="data-value">${data.category || "-"}</div>
+              <div class="data-value">${escapeHTML(data.category || "-")}</div>
             </div>
             <div class="data-item">
               <div class="data-label">Investment Value</div>
-              <div class="data-value">${data.price || "Reserved"}</div>
+              <div class="data-value">${escapeHTML(data.price || "Reserved")}</div>
             </div>
             <div class="data-item">
               <div class="data-label">Location</div>
-              <div class="data-value">${data.location || "-"}</div>
+              <div class="data-value">${escapeHTML(data.location || "-")}</div>
             </div>
             <div class="data-item">
               <div class="data-label">Type</div>
-              <div class="data-value">${data.investment_type || "-"}</div>
+              <div class="data-value">${escapeHTML(data.investment_type || "-")}</div>
             </div>
           </div>
           `
           : ""
         }
+
+        <div class="confidential-note">
+          The full dossier is not available for immediate download.
+          Requests are reviewed manually by IMMONOVA before any confidential material is shared.
+        </div>
       </div>
 
       <aside class="panel">
-        <div class="form-title">Request Information</div>
+        <div class="form-title">Request Dossier</div>
         <p class="form-intro">
-          Complete the form below to request confidential information about this opportunity.
+          Complete the qualification form below. The dossier will be sent only after manual approval and in the language selected by you.
         </p>
 
         <form id="inquiryForm">
-          <input type="text" id="name" placeholder="Name" required>
-          <input type="email" id="email" placeholder="Email" required>
-          <input type="text" id="phone" placeholder="Phone">
-          <textarea id="message" placeholder="Message">I would like to receive more information about: ${data.title || ""}</textarea>
-          <button type="submit">Send Request</button>
+
+          <div class="form-section-title">Applicant Data</div>
+
+          <div class="form-grid">
+            <div class="field">
+              <input type="text" id="first_name" placeholder="First name *" required>
+            </div>
+
+            <div class="field">
+              <input type="text" id="last_name" placeholder="Last name *" required>
+            </div>
+
+            <div class="field">
+              <input type="email" id="email" placeholder="Email *" required>
+            </div>
+
+            <div class="field">
+              <input type="tel" id="phone" placeholder="Phone *" required>
+            </div>
+
+            <div class="field full">
+              <select id="preferred_language" required>
+                <option value="">Preferred language *</option>
+                <option value="it">Italiano</option>
+                <option value="en">English</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="es">Español</option>
+                <option value="ar">العربية</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <select id="investor_type" required>
+                <option value="">Investor profile *</option>
+                <option value="private_investor">Private Investor</option>
+                <option value="family_office">Family Office</option>
+                <option value="real_estate_operator">Real Estate Operator</option>
+                <option value="hospitality_group">Hospitality Group</option>
+                <option value="fund">Investment Fund</option>
+                <option value="advisor">Advisor / Consultant</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <textarea id="message" placeholder="Message / Investment intent *" required>I would like to request the confidential dossier for: ${escapeHTML(data.title || "")}</textarea>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-title">NDA & Privacy</div>
+
+            <div class="nda-text">
+              By submitting this request, the applicant acknowledges that the information, documents, images,
+              business assumptions, financial projections and investment dossier related to this opportunity
+              are confidential. The applicant agrees not to disclose, reproduce, forward, publish or use such
+              information for purposes other than evaluating the potential investment opportunity, unless expressly
+              authorized in writing by IMMONOVA Off Market Consulting.
+            </div>
+
+            <div class="consent-box">
+              <label class="consent-label">
+                <input type="checkbox" id="nda_accepted" required>
+                <span>I accept the confidentiality terms and NDA obligations related to this opportunity. *</span>
+              </label>
+            </div>
+
+            <div class="consent-box">
+              <label class="consent-label">
+                <input type="checkbox" id="privacy_accepted" required>
+                <span>I authorize IMMONOVA to process my data for the purpose of evaluating and managing this dossier request. *</span>
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" id="submitBtn">Submit Dossier Request</button>
         </form>
 
         <div id="status" class="status"></div>
@@ -353,34 +530,81 @@ async function submitInquiry(e){
   e.preventDefault();
 
   const status = document.getElementById("status");
+  const submitBtn = document.getElementById("submitBtn");
+
   status.className = "status";
-  status.textContent = "Invio richiesta...";
+  status.textContent = "Invio richiesta dossier...";
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Invio...";
 
-  const payload = {
-    opportunity_id: currentOpportunity.id,
-    name: document.getElementById("name").value.trim(),
-    email: document.getElementById("email").value.trim(),
-    phone: document.getElementById("phone").value.trim(),
-    message:
-      "Opportunity: " + currentOpportunity.title +
-      " | Category: " + currentOpportunity.category +
-      " | Location: " + (currentOpportunity.location || "") +
-      " | Message: " + document.getElementById("message").value.trim()
-  };
+  try{
+    const firstName = document.getElementById("first_name").value.trim();
+    const lastName = document.getElementById("last_name").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const phone = document.getElementById("phone").value.trim();
+    const preferredLanguage = normalizeLanguage(document.getElementById("preferred_language").value);
+    const investorType = document.getElementById("investor_type").value.trim();
+    const message = document.getElementById("message").value.trim();
+    const ndaAccepted = document.getElementById("nda_accepted").checked;
+    const privacyAccepted = document.getElementById("privacy_accepted").checked;
 
-  const { error } = await client
-    .from("inquiries")
-    .insert([payload]);
+    if(!firstName || !lastName || !email || !phone || !preferredLanguage || !investorType || !message){
+      throw new Error("Compila tutti i campi obbligatori.");
+    }
 
-  if(error){
+    if(!ndaAccepted){
+      throw new Error("Devi accettare l'NDA per richiedere il dossier.");
+    }
+
+    if(!privacyAccepted){
+      throw new Error("Devi accettare il trattamento dei dati.");
+    }
+
+    const payload = {
+      opportunity_id: currentOpportunity.id,
+      opportunity_title: currentOpportunity.title,
+      first_name:firstName,
+      last_name:lastName,
+      full_name:firstName + " " + lastName,
+      email:email,
+      phone:phone,
+      preferred_language:preferredLanguage,
+      investor_type:investorType,
+      message:
+        "Opportunity: " + currentOpportunity.title +
+        " | Category: " + currentOpportunity.category +
+        " | Location: " + (currentOpportunity.location || "") +
+        " | Preferred language: " + preferredLanguage +
+        " | Investor type: " + investorType +
+        " | Message: " + message,
+      nda_accepted:ndaAccepted,
+      nda_accepted_at:new Date().toISOString(),
+      privacy_accepted:privacyAccepted,
+      privacy_accepted_at:new Date().toISOString(),
+      status:"pending",
+      request_status:"pending",
+      created_at:new Date().toISOString()
+    };
+
+    const { error } = await client
+      .from("investor_requests")
+      .insert([payload]);
+
+    if(error){
+      throw error;
+    }
+
+    status.className = "status success";
+    status.textContent = "Richiesta inviata correttamente. IMMONOVA verificherà il profilo e invierà il dossier dopo approvazione manuale.";
+    e.target.reset();
+
+  }catch(error){
     status.className = "status error";
-    status.textContent = error.message;
-    return;
+    status.textContent = error.message || "Errore durante l'invio della richiesta.";
   }
 
-  status.className = "status success";
-  status.textContent = "Richiesta inviata correttamente.";
-  e.target.reset();
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Submit Dossier Request";
 }
 
 loadOpportunity();
