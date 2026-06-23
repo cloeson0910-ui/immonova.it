@@ -2956,7 +2956,7 @@ function renderDestinationAnalysisPage(){
               <div class="destination-score-number">${number(score)}</div>
               <div class="destination-score-label">/100 · ${escapeHTML(rating)}</div>
             </div>
-            <p>${escapeHTML(destination.source_summary || "Analisi territoriale su accessibilità, attrazioni, mare e luxury ecosystem.")}</p>
+            <p>${escapeHTML(getTerritorialNarrative())}</p>
             <div class="destination-breakdown">
               <div class="destination-breakdown-item"><div class="destination-breakdown-label">Aeroporti</div><div class="destination-breakdown-value">${number(breakdown.airports || 0)}</div></div>
               <div class="destination-breakdown-item"><div class="destination-breakdown-label">Mare</div><div class="destination-breakdown-value">${number(breakdown.sea_beaches || 0)}</div></div>
@@ -3004,6 +3004,73 @@ function renderDestinationAnalysisPage(){
 
 function getReportJson(){
   return (report && report.report_json) || {};
+}
+
+
+
+function getTerritorialNarrative(){
+  var json = getReportJson();
+  var destination = getDestinationAnalysis ? getDestinationAnalysis() : null;
+  var city = detectReportMunicipality ? detectReportMunicipality() : "";
+
+  if(json.territorial_narrative) return cleanReportText(json.territorial_narrative);
+  if(report && report.location_attractiveness && String(report.location_attractiveness).trim()) return cleanReportText(report.location_attractiveness);
+  if(destination && destination.source_summary && !/non interpretabile|non disponibile/i.test(destination.source_summary)) return cleanReportText(destination.source_summary);
+
+  if(city === "ostuni"){
+    return "Ostuni, conosciuta come la Città Bianca, è una destinazione iconica della Puglia: centro storico panoramico, vicinanza alla costa adriatica, ulivi monumentali, masserie, beach club e connessione con Valle d’Itria, Fasano e Savelletri. Per un investitore hospitality, la location sostiene ADR e occupazione grazie a domanda internazionale, lifestyle mediterraneo e forte riconoscibilità del brand territoriale.";
+  }
+  if(city === "massafra"){
+    return "Massafra offre un posizionamento ionico legato a gravine, patrimonio rupestre, centro storico, Taranto e costa di Chiatona/Castellaneta Marina. La chiave di investimento è trasformare l’asset in base esperienziale per turismo culturale, natura, enogastronomia e Puglia centrale.";
+  }
+  if(city === "tuglie"){
+    return "Tuglie è un borgo salentino vicino a Gallipoli e alla costa ionica. L’attrattività nasce dal mix tra autenticità, accesso rapido al mare, borghi del Salento, food experience e costi d’ingresso più contenuti rispetto alle località balneari pure.";
+  }
+  if(city === "gallipoli"){
+    return "Gallipoli è una delle destinazioni balneari più forti del Salento ionico: centro storico sul mare, porto, spiagge, nightlife e domanda stagionale intensa. Il valore investment dipende dalla capacità di intercettare ADR elevati nei periodi di picco e gestire la stagionalità.";
+  }
+
+  return "La location viene valutata per accessibilità, storia locale, attrattori culturali, costa, servizi premium e capacità di sostenere ADR, occupazione e valore di rivendita.";
+}
+
+function getAverageNightlyPrice(){
+  var json = getReportJson();
+  var hospitality = json.hospitality_benchmark || {};
+  var avg = json.average_nightly_price || hospitality.average_nightly_price || null;
+  if(avg) return avg;
+
+  var calc = calculateOverride ? calculateOverride() : {};
+  var adr = Number(calc.adr || report.adr_estimate || 0);
+  var city = detectReportMunicipality ? detectReportMunicipality() : "";
+  var low = Math.round(adr * 0.75);
+  var high = Math.round(adr * 1.35);
+  var note = "Benchmark stimato da ADR modello e competitive set locale; da validare con portali OTA prima dell’invio finale.";
+
+  if(city === "ostuni"){ low = 220; high = 520; note = "Ostuni: benchmark notte per ville/trulli e masserie boutique; alta variabilità per stagione, piscina, design e servizi."; }
+  if(city === "massafra"){ low = 120; high = 280; note = "Massafra/Taranto ionico: benchmark notte prudente rispetto a Valle d’Itria e costa premium; upside legato a qualità prodotto."; }
+  if(city === "tuglie"){ low = 110; high = 260; note = "Tuglie/Gallipoli hinterland: benchmark guidato dalla prossimità alla costa ionica e dal differenziale prezzo."; }
+  if(city === "gallipoli"){ low = 180; high = 480; note = "Gallipoli: benchmark sostenuto da domanda balneare, picchi stagionali e posizionamento vicino mare/centro."; }
+
+  return {
+    label:"Prezzo medio per notte · " + (city ? city.charAt(0).toUpperCase()+city.slice(1) : "Location"),
+    average_nightly_price_model_eur: adr,
+    market_range_low_eur: low,
+    market_range_high_eur: high,
+    positioning: adr < low ? "below_market" : (adr > high ? "above_market" : "within_market"),
+    note: note
+  };
+}
+
+function renderAverageNightlyPriceBox(){
+  var avg = getAverageNightlyPrice();
+  if(!avg) return "";
+  return `
+    <div class="break-even-callout">
+      <strong>${escapeHTML(avg.label || "Prezzo medio per notte")}</strong><br>
+      ADR modello: ${euro(avg.average_nightly_price_model_eur || 0)} · Range mercato stimato: ${euro(avg.market_range_low_eur || 0)} - ${euro(avg.market_range_high_eur || 0)}<br>
+      ${escapeHTML(avg.note || "")}
+    </div>
+  `;
 }
 
 
@@ -3322,6 +3389,7 @@ function renderIntelligencePages(){
               {label:"ADR modello", value: euro(calculateOverride().adr)},
               {label:"Occupazione modello", value: percent(calculateOverride().occupancy)},
               {label:"RevPAR modello", value: euro(calculateOverride().revpar)},
+              {label:"Prezzo medio notte location", value: euro((getAverageNightlyPrice()||{}).average_nightly_price_model_eur || calculateOverride().adr)},
               {label:"Benchmark ADR", value: hospitality && hospitality.implied_benchmark_adr_range_eur ? hospitality.implied_benchmark_adr_range_eur + " €" : "-"}
             ])}
             ${hotels.length ? renderTable(hotels,[
@@ -3490,7 +3558,8 @@ function renderRevaluationPage(){
           </div>
           <div>
             <div class="lux-small-title">Attrattività territoriale</div>
-            <p>${escapeHTML(report.location_attractiveness || "")}</p>
+            <p>${escapeHTML(getTerritorialNarrative())}</p>
+            ${renderAverageNightlyPriceBox()}
             ${report.analyst_note ? `<div class="break-even-callout"><strong>Nota Analyst</strong><br>${escapeHTML(report.analyst_note)}</div>` : ""}
           </div>
         </div>
