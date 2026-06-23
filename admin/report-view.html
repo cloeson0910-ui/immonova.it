@@ -1933,57 +1933,64 @@ function getRentableUnits(){
   return 1;
 }
 
-function calculateRealisticInvestmentScore(price, roi, breakEven, net, revaluation){
-  var score = 0;
+function calculateRealisticInvestmentScore(price, roi, breakEven, netIncome, revaluation){
+  roi = Number(roi) || 0;
+  breakEven = Number(breakEven) || 999;
+  revaluation = Number(revaluation) || 0;
 
-  roi = Number(roi);
-  breakEven = Number(breakEven);
-  net = Number(net);
-  price = Number(price);
-  revaluation = Number(revaluation);
+  let financialScore = 0;
 
-  if(!Number.isFinite(roi)) roi = 0;
-  if(!Number.isFinite(breakEven)) breakEven = 0;
-  if(!Number.isFinite(net)) net = 0;
-  if(!Number.isFinite(price)) price = 0;
-  if(!Number.isFinite(revaluation)) revaluation = 0;
+  if(roi >= 15) financialScore += 15;
+  else if(roi >= 10) financialScore += 12;
+  else if(roi >= 7) financialScore += 9;
+  else if(roi >= 5) financialScore += 6;
+  else if(roi >= 3) financialScore += 3;
 
-  if(roi >= 14) score += 30;
-  else if(roi >= 11) score += 26;
-  else if(roi >= 8) score += 21;
-  else if(roi >= 5.5) score += 15;
-  else if(roi > 0) score += 8;
+  if(breakEven <= 8) financialScore += 10;
+  else if(breakEven <= 12) financialScore += 8;
+  else if(breakEven <= 18) financialScore += 6;
+  else if(breakEven <= 25) financialScore += 3;
 
-  if(breakEven > 0 && breakEven <= 5) score += 25;
-  else if(breakEven > 0 && breakEven <= 7) score += 22;
-  else if(breakEven > 0 && breakEven <= 9) score += 18;
-  else if(breakEven > 0 && breakEven <= 12) score += 11;
-  else if(breakEven > 0) score += 4;
+  let realEstateScore = 17;
+  let tourismScore = 8;
+  let hospitalityScore = 10;
+  let riskScore = 5;
 
-  var netIncomeRatio = price > 0 ? (net / price) * 100 : 0;
+  const committee = getCommittee();
+  const components = committee && committee.components ? committee.components : {};
 
-  if(netIncomeRatio >= 12) score += 15;
-  else if(netIncomeRatio >= 9) score += 13;
-  else if(netIncomeRatio >= 6.5) score += 10;
-  else if(netIncomeRatio >= 4) score += 6;
-  else if(netIncomeRatio > 0) score += 3;
+  if(components.real_estate !== undefined) realEstateScore = Number(components.real_estate) || realEstateScore;
+  if(components.tourism !== undefined) tourismScore = Number(components.tourism) || tourismScore;
+  if(components.hospitality !== undefined) hospitalityScore = Number(components.hospitality) || hospitalityScore;
+  if(components.risk !== undefined) riskScore = Number(components.risk) || riskScore;
 
-  if(revaluation >= 35) score += 15;
-  else if(revaluation >= 25) score += 12;
-  else if(revaluation >= 15) score += 9;
-  else if(revaluation >= 7) score += 5;
-  else if(revaluation > 0) score += 2;
+  let score = realEstateScore + tourismScore + hospitalityScore + financialScore + riskScore;
 
-  var riskPenalty = 8;
+  if(revaluation >= 20 && financialScore >= 12) score += 3;
+  else if(revaluation >= 12 && financialScore >= 10) score += 1;
 
-  if(breakEven > 12) riskPenalty += 4;
-  if(roi < 6) riskPenalty += 3;
-  if(revaluation < 7) riskPenalty += 2;
-
-  score -= Math.min(15, riskPenalty);
+  if(roi < 3) score = Math.min(score, 44);
+  if(breakEven > 30) score = Math.min(score, 44);
+  if(roi < 5 && breakEven > 20) score = Math.min(score, 39);
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
+
+function getRatingFromScoreAndFinancials(score, roi, breakEven){
+  roi = Number(roi) || 0;
+  breakEven = Number(breakEven) || 999;
+
+  if(roi < 3 || breakEven > 30) return "E · Not Investable Under Current Assumptions";
+  if(roi < 5 && breakEven > 20) return "D · High Risk Opportunity";
+
+  if(score >= 88) return "A+ · Exceptional Opportunity";
+  if(score >= 78) return "A · Strong Opportunity";
+  if(score >= 66) return "B · Attractive Opportunity";
+  if(score >= 52) return "C · Selective Opportunity";
+  if(score >= 40) return "D · High Risk Opportunity";
+  return "E · Not Investable Under Current Assumptions";
+}
+
 
 function calculateOverride(){
   var price = getPurchasePrice();
@@ -2849,6 +2856,11 @@ function getHospitalityBenchmark(){
 }
 
 function getDisplayScore(){
+  if(report && report.analyst_overridden){
+    var calc = calculateOverride();
+    return calculateRealisticInvestmentScore(calc.price, calc.roi, calc.breakEven, calc.net, calc.revaluation);
+  }
+
   var c = getCommittee();
   var json = getReportJson();
   if(c && c.score !== undefined && c.score !== null) return Number(c.score);
@@ -2857,6 +2869,12 @@ function getDisplayScore(){
 }
 
 function getDisplayRating(){
+  if(report && report.analyst_overridden){
+    var calc = calculateOverride();
+    var score = calculateRealisticInvestmentScore(calc.price, calc.roi, calc.breakEven, calc.net, calc.revaluation);
+    return getRatingFromScoreAndFinancials(score, calc.roi, calc.breakEven);
+  }
+
   var c = getCommittee();
   var json = getReportJson();
   if(c && c.rating) return c.rating;
@@ -2866,7 +2884,29 @@ function getDisplayRating(){
 
 function getCommitteeComponents(){
   var c = getCommittee();
-  return c.components || {};
+  var components = Object.assign({}, (c && c.components) ? c.components : {});
+
+  if(report && report.analyst_overridden){
+    var calc = calculateOverride();
+    var roi = Number(calc.roi) || 0;
+    var be = Number(calc.breakEven) || 999;
+
+    var financial = 0;
+    if(roi >= 15) financial += 15;
+    else if(roi >= 10) financial += 12;
+    else if(roi >= 7) financial += 9;
+    else if(roi >= 5) financial += 6;
+    else if(roi >= 3) financial += 3;
+
+    if(be <= 8) financial += 10;
+    else if(be <= 12) financial += 8;
+    else if(be <= 18) financial += 6;
+    else if(be <= 25) financial += 3;
+
+    components.financial = financial;
+  }
+
+  return components;
 }
 
 function renderBulletList(items){
@@ -3000,9 +3040,9 @@ function renderIntelligencePages(){
             <div class="lux-small-title">Competitive Luxury Set</div>
             <p>${escapeHTML(cleanReportText((hospitality && hospitality.positioning_note) || "Benchmark hospitality da validare contro il competitive set locale."))}</p>
             ${renderMiniData([
-              {label:"ADR modello", value: hospitality && hospitality.adr_model_eur ? euro(hospitality.adr_model_eur) : euro(report.adr_estimate)},
-              {label:"Occupazione modello", value: hospitality && hospitality.occupancy_model_percent ? percent(hospitality.occupancy_model_percent) : percent(report.occupancy_rate_estimate)},
-              {label:"RevPAR modello", value: hospitality && hospitality.revpar_model_eur ? euro(hospitality.revpar_model_eur) : euro(report.revpar_estimate)},
+              {label:"ADR modello", value: euro(calculateOverride().adr)},
+              {label:"Occupazione modello", value: percent(calculateOverride().occupancy)},
+              {label:"RevPAR modello", value: euro(calculateOverride().revpar)},
               {label:"Benchmark ADR", value: hospitality && hospitality.implied_benchmark_adr_range_eur ? hospitality.implied_benchmark_adr_range_eur + " €" : "-"}
             ])}
             ${hotels.length ? renderTable(hotels,[
@@ -3017,7 +3057,7 @@ function renderIntelligencePages(){
             <p>La previsione turistica viene letta per scenari, così l’investitore vede chiaramente ipotesi prudente, base e upside.</p>
             ${scenarios.length ? renderTable(scenarios,[
               {key:"scenario",label:"Scenario"},
-              {key:"annual_growth_percent",label:"Crescita annua",format:percent},
+              {key:"annual_growth_percent",label:"Crescita annua",format:function(v,row){return v !== null && v !== undefined && Number(v)>0 && row.available !== false ? percent(v) : "N/D";}},
               {key:"year_10_presences",label:"Presenze anno 10",format:function(v){return v && Number(v)>0 ? number(v) : "Da integrare";}}
             ]) : ""}
             <div class="lux-rule"></div>
@@ -3049,7 +3089,7 @@ function renderCommitteeClosingPage(){
             <div class="lux-metric-box">
               <div class="lux-small-title">Final Classification</div>
               <div class="lux-metric-value" style="font-size:30px;">${escapeHTML(committee.rating)}</div>
-              <div style="font-size:13px;margin-top:4mm;">Score ${number(committee.score || getDisplayScore())}/100</div>
+              <div style="font-size:13px;margin-top:4mm;">Score ${number(getDisplayScore())}/100</div>
             </div>
 
             ${renderMiniData([
@@ -3062,7 +3102,7 @@ function renderCommitteeClosingPage(){
 
           <div>
             <div class="lux-small-title">Committee View</div>
-            <p>${escapeHTML(committee.committee_view || "Opportunità selettiva da valutare con due diligence tecnica, legale, commerciale e controllo CAPEX.")}</p>
+            <p>${escapeHTML((report && report.analyst_overridden && calculateOverride().breakEven > 30) ? "Not investable under current underwriting assumptions. The operation requires a revised ADR/occupancy strategy, capex review or acquisition-price renegotiation before presentation as an attractive opportunity." : (committee.committee_view || "Opportunità selettiva da valutare con due diligence tecnica, legale, commerciale e controllo CAPEX."))}</p>
 
             <div class="lux-small-title" style="margin-top:6mm;">Principali rischi da presidiare</div>
             ${renderBulletList(thesis && thesis.key_risks)}
@@ -3528,7 +3568,7 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
     annual_cost_estimate:c.cost,
     net_annual_income_estimate:c.net,
     break_even_years:c.breakEven,
-    investment_score:getDisplayScore() || c.score,
+    investment_score:calculateRealisticInvestmentScore(c.price, c.roi, c.breakEven, c.net, c.revaluation),
     estimated_roi:c.roi,
     projected_revaluation_5y_percent:c.revaluation,
     projected_value_5y:c.value5y,
