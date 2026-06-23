@@ -1449,6 +1449,7 @@ var loaderProgressFill = document.getElementById("loaderProgressFill");
 var loaderPercent = document.getElementById("loaderPercent");
 var loaderLogo = document.getElementById("loaderLogo");
 var loaderTimer = null;
+var loaderWatchdog = null;
 
 var currentUser = null;
 var opportunity = null;
@@ -1495,6 +1496,19 @@ function setInput(id,value){
   el.value = value === null || value === undefined ? "" : value;
 }
 
+
+function invokeWithTimeout(functionName, payload, timeoutMs){
+  return Promise.race([
+    client.functions.invoke(functionName, payload),
+    new Promise(function(_, reject){
+      setTimeout(function(){
+        reject(new Error("Timeout generazione: la Edge Function non ha risposto entro " + Math.round(timeoutMs / 1000) + " secondi."));
+      }, timeoutMs);
+    })
+  ]);
+}
+
+
 function setStatus(message,type){
   statusBox.className = "status " + (type || "");
   statusBox.textContent = message || "";
@@ -1528,6 +1542,27 @@ function startReportLoader(mode){
   if(reportLoader){
     reportLoader.style.display = "flex";
   }
+
+  if(loaderWatchdog){
+    clearTimeout(loaderWatchdog);
+    loaderWatchdog = null;
+  }
+
+  loaderWatchdog = setTimeout(function(){
+    if(reportLoader && reportLoader.style.display === "flex"){
+      setLoaderProgress(100, "Timeout generazione. La Edge non ha risposto: controlla log Supabase e riprova.");
+      setTimeout(function(){
+        if(reportLoader){
+          reportLoader.style.display = "none";
+        }
+        setStatus("Timeout generazione: la Edge Function non ha risposto. Controlla i log Supabase della funzione generate-investment-report.", "error");
+        if(generateBtn){
+          generateBtn.disabled = false;
+          generateBtn.textContent = "Genera / Rigenera Dossier";
+        }
+      }, 900);
+    }
+  }, 180000);
 
   var steps = mode === "renders"
     ? [
@@ -1575,6 +1610,11 @@ function finishReportLoader(success){
   if(loaderTimer){
     clearInterval(loaderTimer);
     loaderTimer = null;
+  }
+
+  if(loaderWatchdog){
+    clearTimeout(loaderWatchdog);
+    loaderWatchdog = null;
   }
 
   setLoaderProgress(success ? 100 : 100, success ? "Dossier completato." : "Generazione interrotta.");
@@ -2894,6 +2934,57 @@ function getDisplayRating(){
   return report.investment_rating || "";
 }
 
+function getDisplayRecommendation(){
+  var rating = getDisplayRating() || "";
+  var calc = calculateOverride();
+
+  if(rating.indexOf("E ·") === 0 || calc.roi < 3 || calc.breakEven > 30){
+    return "Not Investable Under Current Assumptions";
+  }
+  if(rating.indexOf("D ·") === 0){
+    return "High Risk Opportunity";
+  }
+  if(rating.indexOf("C ·") === 0){
+    return "Selective Opportunity";
+  }
+  if(rating.indexOf("B ·") === 0){
+    return "Attractive Opportunity";
+  }
+  if(rating.indexOf("A ·") === 0){
+    return "Strong Opportunity";
+  }
+  if(rating.indexOf("A+ ·") === 0){
+    return "Exceptional Opportunity";
+  }
+
+  return rating || "-";
+}
+
+function getDisplayCommitteeView(){
+  var calc = calculateOverride();
+
+  if(calc.roi < 3 || calc.breakEven > 30){
+    return "Not investable under current underwriting assumptions. The operation requires a revised ADR/occupancy strategy, capex review or acquisition-price renegotiation before presentation as an attractive opportunity.";
+  }
+
+  var committee = getCommittee();
+  return (committee && committee.committee_view) || "Opportunità selettiva da valutare con due diligence tecnica, legale, commerciale e controllo CAPEX.";
+}
+
+function getDisplayConclusion(){
+  var calc = calculateOverride();
+
+  if(calc.roi < 3 || calc.breakEven > 30){
+    return "Alle condizioni attuali di underwriting, l’operazione non è presentabile come opportunità attrattiva: ROI e break-even non sono compatibili con un investimento hospitality sostenibile. Prima di procedere servono revisione ADR/occupazione, controllo CAPEX o rinegoziazione del prezzo di acquisizione.";
+  }
+
+  if(calc.roi < 5 && calc.breakEven > 20){
+    return "L’operazione resta ad alto rischio e richiede una revisione del modello economico prima della presentazione a investitori professionali.";
+  }
+
+  return "L’operazione viene presentata come opportunità immobiliare/hospitality con potenziale di valorizzazione, subordinata alla verifica del costo lavori, della strategia gestionale e dell’exit value.";
+}
+
 function getFinancialComponentFromValues(roi, breakEven){
   roi = Number(roi) || 0;
   breakEven = Number(breakEven) || 999;
@@ -3106,27 +3197,27 @@ function renderCommitteeClosingPage(){
           <div>
             <div class="lux-metric-box">
               <div class="lux-small-title">Final Classification</div>
-              <div class="lux-metric-value" style="font-size:30px;">${escapeHTML(committee.rating)}</div>
+              <div class="lux-metric-value" style="font-size:30px;">${escapeHTML(getDisplayRating())}</div>
               <div style="font-size:13px;margin-top:4mm;">Score ${number(getDisplayScore())}/100</div>
             </div>
 
             ${renderMiniData([
-              {label:"Recommendation", value: committee.recommendation || committee.label || "-"},
+              {label:"Recommendation", value: getDisplayRecommendation()},
               {label:"Risk posture", value: (report.risk_data && report.risk_data.global_risk_score) ? number(report.risk_data.global_risk_score) + "/10" : "-"},
-              {label:"Break-even", value: number(report.break_even_years) + " anni"},
-              {label:"ROI", value: percent(report.estimated_roi)}
+              {label:"Break-even", value: number(calculateOverride().breakEven) + " anni"},
+              {label:"ROI", value: percent(calculateOverride().roi)}
             ])}
           </div>
 
           <div>
             <div class="lux-small-title">Committee View</div>
-            <p>${escapeHTML((report && report.analyst_overridden && calculateOverride().breakEven > 30) ? "Not investable under current underwriting assumptions. The operation requires a revised ADR/occupancy strategy, capex review or acquisition-price renegotiation before presentation as an attractive opportunity." : (committee.committee_view || "Opportunità selettiva da valutare con due diligence tecnica, legale, commerciale e controllo CAPEX."))}</p>
+            <p>${escapeHTML(getDisplayCommitteeView())}</p>
 
             <div class="lux-small-title" style="margin-top:6mm;">Principali rischi da presidiare</div>
             ${renderBulletList(thesis && thesis.key_risks)}
 
             <div class="lux-small-title" style="margin-top:6mm;">Conclusione</div>
-            <p>L’operazione non viene presentata come promessa di rendimento, ma come opportunità immobiliare/hospitality con potenziale di valorizzazione, subordinata alla verifica del costo lavori, della strategia gestionale e dell’exit value.</p>
+            <p>${escapeHTML(getDisplayConclusion())}</p>
           </div>
         </div>
       </div>
@@ -3317,7 +3408,7 @@ function renderMarketPages(){
               {key:"value",label:"Valutazione"}
             ])}
             <div class="lux-rule"></div>
-            <p>${escapeHTML(report.swot_analysis || "")}</p>
+            <p>${escapeHTML((report.swot_analysis || "").replace(/Classificazione IMMONOVA:[^.]*/g, "Classificazione IMMONOVA: " + getDisplayRating()))}</p>
           </div>
         </div>
       </div>
@@ -3466,9 +3557,9 @@ generateBtn.addEventListener("click", async function(){
   startReportLoader("dossier");
 
   try{
-    var result = await client.functions.invoke("generate-investment-report", {
+    var result = await invokeWithTimeout("generate-investment-report", {
       body:{ opportunity_id:Number(opportunityId) }
-    });
+    }, 180000);
 
     if(result.error || !result.data || !result.data.success){
       throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore generazione dossier.");
@@ -3480,8 +3571,17 @@ generateBtn.addEventListener("click", async function(){
     applyCalculatedInputs();
 
     var calculated = calculateOverride();
-    report.investment_score = getDisplayScore() || calculated.score;
     report.estimated_roi = calculated.roi;
+    report.break_even_years = calculated.breakEven;
+    report.investment_score = calculateRealisticInvestmentScore(calculated.price, calculated.roi, calculated.breakEven, calculated.net, calculated.revaluation);
+    report.investment_rating = getRatingFromScoreAndFinancials(report.investment_score, calculated.roi, calculated.breakEven);
+    if(report.report_json){
+      report.report_json.investment_committee = report.report_json.investment_committee || {};
+      report.report_json.investment_committee.score = report.investment_score;
+      report.report_json.investment_committee.rating = report.investment_rating;
+      report.report_json.investment_committee.recommendation = getDisplayRecommendation();
+      report.report_json.investment_committee.committee_view = getDisplayCommitteeView();
+    }
     report.break_even_years = calculated.breakEven;
     report.projected_revaluation_5y_percent = calculated.revaluation;
     report.projected_value_5y = calculated.value5y;
@@ -3497,6 +3597,7 @@ generateBtn.addEventListener("click", async function(){
     setStatus("Dossier generato correttamente.", "success");
 
   }catch(error){
+    finishReportLoader(false);
     setStatus(error.message || "Errore generazione dossier.", "error");
   }
 
@@ -3516,12 +3617,12 @@ renderBtn.addEventListener("click", async function(){
       throw new Error("ID opportunità mancante.");
     }
 
-    var result = await client.functions.invoke("generate-renovation-renders", {
+    var result = await invokeWithTimeout("generate-renovation-renders", {
       body:{
         opportunity_id:Number(opportunityId),
         max_images:50
       }
-    });
+    }, 180000);
 
     if(result.error || !result.data || !result.data.success){
       throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore generazione render.");
