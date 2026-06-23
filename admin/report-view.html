@@ -2780,6 +2780,36 @@ function getReportJson(){
   return (report && report.report_json) || {};
 }
 
+
+function isMassafraReport(){
+  var json = getReportJson();
+  var asset = json.asset || {};
+  var txt = [
+    asset.municipality,
+    asset.location,
+    report.location,
+    report.municipality,
+    asset.title,
+    report.title
+  ].join(" ").toLowerCase();
+  return txt.indexOf("massafra") >= 0;
+}
+
+function cleanReportText(value){
+  var text = String(value || "");
+  if(isMassafraReport()){
+    text = text
+      .replace(/Valle d'Itria villages, UNESCO Alberobello, Adriatic\/Ionian coast access and established luxury hospitality benchmarks\./g,
+        "Massafra, gravine, Taranto, costa ionica, Matera e Puglia centrale come circuito turistico di riferimento.")
+      .replace(/Boutique masseria hospitality conversion\./g,"Boutique hospitality conversion.")
+      .replace(/Luxury private villa resale after repositioning\./g,"Luxury palazzo resale after repositioning.")
+      .replace(/International cultural and experiential demand, supported by Valle d'Itria, UNESCO Alberobello, coastal access and luxury hospitality ecosystem\./g,
+        "Domanda culturale ed esperienziale legata a Massafra, gravine, Taranto, costa ionica, Matera e Puglia centrale.")
+      .replace(/best-in-class Puglia hospitality/g,"coherent Puglia / Ionian hospitality benchmarks");
+  }
+  return text;
+}
+
 function getCommittee(){
   var json = getReportJson();
   return json.investment_committee || {};
@@ -2842,7 +2872,7 @@ function getCommitteeComponents(){
 function renderBulletList(items){
   if(!Array.isArray(items) || !items.length) return "<p>-</p>";
   return "<ul class='lux-bullets'>" + items.map(function(item){
-    return "<li>" + escapeHTML(item) + "</li>";
+    return "<li>" + escapeHTML(cleanReportText(item)) + "</li>";
   }).join("") + "</ul>";
 }
 
@@ -2888,7 +2918,7 @@ function renderInvestmentThesisPage(){
 
           <div>
             <div class="lux-small-title">Tesi d’investimento</div>
-            <p>${escapeHTML((thesis && thesis.summary) || "Asset con potenziale di riposizionamento, sostenuto da destinazione, accessibilità e domanda premium.")}</p>
+            <p>${escapeHTML(cleanReportText((thesis && thesis.summary) || "Asset con potenziale di riposizionamento, sostenuto da destinazione, accessibilità e domanda premium."))}</p>
 
             <div class="lux-small-title" style="margin-top:6mm;">Perché l’operazione è interessante</div>
             ${renderBulletList(thesis && thesis.why_invest)}
@@ -2943,7 +2973,7 @@ function renderIntelligencePages(){
 
           <div>
             <div class="lux-small-title">Tourism Intelligence</div>
-            <p>${escapeHTML((tourism && tourism.tourism_positioning) || report.tourism_last_5y || "")}</p>
+            <p>${escapeHTML(cleanReportText((tourism && tourism.tourism_positioning) || report.tourism_last_5y || ""))}</p>
             ${renderMiniData([
               {label:"Presenze attuali", value: tourism && tourism.presences_current ? number(tourism.presences_current) : "-"},
               {label:"Arrivi attuali", value: tourism && tourism.arrivals_current ? number(tourism.arrivals_current) : "-"},
@@ -2968,7 +2998,7 @@ function renderIntelligencePages(){
         <div class="page-grid-2" style="grid-template-columns:1fr 1fr;gap:8mm;">
           <div>
             <div class="lux-small-title">Competitive Luxury Set</div>
-            <p>${escapeHTML((hospitality && hospitality.positioning_note) || "Benchmark hospitality da validare contro il competitive set locale.")}</p>
+            <p>${escapeHTML(cleanReportText((hospitality && hospitality.positioning_note) || "Benchmark hospitality da validare contro il competitive set locale."))}</p>
             ${renderMiniData([
               {label:"ADR modello", value: hospitality && hospitality.adr_model_eur ? euro(hospitality.adr_model_eur) : euro(report.adr_estimate)},
               {label:"Occupazione modello", value: hospitality && hospitality.occupancy_model_percent ? percent(hospitality.occupancy_model_percent) : percent(report.occupancy_rate_estimate)},
@@ -2988,7 +3018,7 @@ function renderIntelligencePages(){
             ${scenarios.length ? renderTable(scenarios,[
               {key:"scenario",label:"Scenario"},
               {key:"annual_growth_percent",label:"Crescita annua",format:percent},
-              {key:"year_10_presences",label:"Presenze anno 10",format:number}
+              {key:"year_10_presences",label:"Presenze anno 10",format:function(v){return v && Number(v)>0 ? number(v) : "Da integrare";}}
             ]) : ""}
             <div class="lux-rule"></div>
             <div class="lux-small-title">Lettura investimento</div>
@@ -3151,17 +3181,16 @@ function renderRevaluationPage(){
 }
 
 function renderMarketPages(){
-  var tourism = getDisplayTourismRows();
+  var tourism = report.tourism_data || [];
   var tourismForecast = (report.report_json && report.report_json.tourism_forecast_data) || report.tourism_forecast_data || [];
-  var market = getDisplayMarketRows();
-  var forecast = getDisplayForecastRows();
-
+  var market = report.real_estate_data || [];
+  var forecast = report.forecast_data || [];
   return `
     <div class="report-page">
       <div class="report-page-inner mini-chart">
         <div class="page-grid-2">
           <div>
-            <h2>Turismo · serie 5 anni</h2>
+            <h2>Turismo ultimi 5 anni</h2>
             <p>${escapeHTML(report.tourism_last_5y || "")}</p>
             ${renderChart(tourism,"presences","Presenze turistiche",number)}
             ${renderTable(tourism,[
@@ -3172,7 +3201,7 @@ function renderMarketPages(){
             ])}
           </div>
           <div>
-            <h2>Mercato immobiliare · serie 5 anni</h2>
+            <h2>Mercato immobiliare</h2>
             <p>${escapeHTML(report.real_estate_market_past || "")}</p>
             ${renderChart(market,"average_price_sqm","Valore medio €/mq",euro)}
             ${renderTable(market,[
@@ -3184,25 +3213,21 @@ function renderMarketPages(){
         </div>
       </div>
     </div>
-
     <div class="report-page">
       <div class="report-page-inner mini-chart">
-        <h2>Forecast valore immobiliare 5 anni</h2>
-        <div class="lux-rule"></div>
-        <p>${escapeHTML(report.real_estate_market_forecast || "")}</p>
-        ${renderChart(forecast,"projected_asset_value","Valore previsto asset",euro)}
-        ${renderTable(forecast,[
-          {key:"year",label:"Anno"},
-          {key:"projected_market_growth_percent",label:"Crescita prevista",format:percent},
-          {key:"projected_asset_value",label:"Valore previsto",format:euro}
-        ])}
-      </div>
-    </div>
-
-    <div class="report-page">
-      <div class="report-page-inner mini-chart">
-        <div class="page-grid-2" style="grid-template-columns:1fr 1fr;gap:8mm;">
+        <div class="page-grid-2" style="grid-template-columns:1.15fr .85fr;">
           <div>
+            <h2>Forecast 5 anni</h2>
+            <p>${escapeHTML(report.real_estate_market_forecast || "")}</p>
+            ${renderChart(forecast,"projected_asset_value","Valore previsto asset",euro)}
+            ${renderTable(forecast,[
+              {key:"year",label:"Anno"},
+              {key:"projected_market_growth_percent",label:"Crescita prevista",format:percent},
+              {key:"projected_asset_value",label:"Valore previsto",format:euro}
+            ])}
+
+            <div class="lux-rule"></div>
+
             <h2>Forecast turismo 5 anni</h2>
             <p>${escapeHTML(report.tourism_forecast_5y || "Previsione turistica prudenziale a 5 anni basata sul trend storico disponibile.")}</p>
             ${renderChart(tourismForecast,"presences","Presenze turistiche previste",number)}
@@ -3213,7 +3238,6 @@ function renderMarketPages(){
               {key:"growth_percent",label:"Crescita prevista",format:percent}
             ])}
           </div>
-
           <div>
             <h2>Rischio & SWOT</h2>
             <p>${escapeHTML(report.risk_analysis || "")}</p>
