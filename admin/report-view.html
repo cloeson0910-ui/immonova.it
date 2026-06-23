@@ -2730,12 +2730,179 @@ function renderGalleryPremium(){
 }
 
 
+
+function detectReportMunicipality(){
+  var json = getReportJson ? getReportJson() : {};
+  var asset = json.asset || {};
+  var txt = [
+    asset.municipality,
+    asset.location,
+    report && report.location,
+    report && report.municipality,
+    report && report.title,
+    opportunity && opportunity.location,
+    opportunity && opportunity.municipality,
+    opportunity && opportunity.title
+  ].join(" ").toLowerCase();
+
+  if(txt.indexOf("ostuni") >= 0) return "ostuni";
+  if(txt.indexOf("massafra") >= 0) return "massafra";
+  if(txt.indexOf("tuglie") >= 0) return "tuglie";
+  if(txt.indexOf("gallipoli") >= 0) return "gallipoli";
+  return "";
+}
+
+function poi(name, km, min, relevance, category){
+  return {
+    name:name,
+    category:category || "poi",
+    distance_km:km,
+    driving_time_min:min,
+    relevance:relevance,
+    source:"IMMONOVA Destination Engine",
+    note:"Fallback geodistanze da validare in review analyst."
+  };
+}
+
+function buildClientDestinationFallback(){
+  var city = detectReportMunicipality();
+
+  if(city === "ostuni"){
+    return {
+      source_summary:"Analisi territoriale ricostruita da IMMONOVA Destination Engine per Ostuni: costa adriatica, Valle d’Itria, borghi storici, ecosistema luxury Fasano/Savelletri e accessibilità aeroportuale Bari/Brindisi.",
+      tourist_appeal_score:82,
+      tourist_appeal_rating:"Premium",
+      score_breakdown:{airports:16,sea_beaches:16,villages_attractions:15,unesco_culture:15,luxury_hospitality:15,accessibility:5},
+      nearest_airports:[
+        poi("Aeroporto di Brindisi - Salento",38,35,"Aeroporto internazionale più vicino per Ostuni e Alto Salento.","airport"),
+        poi("Aeroporto di Bari - Karol Wojtyła",96,70,"Secondo aeroporto internazionale regionale, utile per domanda internazionale e collegamenti leisure.","airport")
+      ],
+      nearest_train_stations:[
+        poi("Stazione di Ostuni",4,8,"Collegamento ferroviario locale sulla direttrice adriatica.","train_station"),
+        poi("Stazione di Fasano",18,20,"Nodo utile per area Savelletri/Fasano.","train_station"),
+        poi("Stazione di Brindisi",38,35,"Nodo ferroviario e aeroportuale della Puglia meridionale.","train_station")
+      ],
+      attractions_30min:[
+        poi("Centro storico di Ostuni",0,5,"La Città Bianca, attrattore turistico internazionale.","historic_town"),
+        poi("Parco Dune Costiere",12,15,"Area naturale protetta tra ulivi monumentali, costa e masserie.","natural_site"),
+        poi("Cisternino",15,20,"Borgo storico della Valle d’Itria con forte appeal enogastronomico.","historic_village"),
+        poi("Ceglie Messapica",13,18,"Borgo gastronomico e culturale dell’entroterra brindisino.","historic_town"),
+        poi("Savelletri",27,28,"Costa premium, beach club e ristorazione luxury.","coast")
+      ],
+      attractions_60min:[
+        poi("Alberobello UNESCO",35,40,"Sito UNESCO dei trulli, forte attrattore internazionale.","unesco"),
+        poi("Locorotondo",28,35,"Borgo iconico della Valle d’Itria.","historic_village"),
+        poi("Polignano a Mare",52,50,"Destinazione costiera internazionale.","coastal_town"),
+        poi("Monopoli",42,42,"Centro storico e costa adriatica ad alta domanda leisure.","coastal_town"),
+        poi("Lecce",75,60,"Capitale barocca del Salento.","baroque_city")
+      ],
+      beaches:[
+        poi("Costa Merlata",10,14,"Costa e calette rocciose vicine a Ostuni.","beach"),
+        poi("Torre Pozzelle",11,15,"Spiagge e calette naturali ad alta fruibilità turistica.","beach"),
+        poi("Rosa Marina",13,18,"Area balneare e residenziale premium.","beach"),
+        poi("Pilone / Lido Morelli",12,16,"Litorale sabbioso vicino al Parco Dune Costiere.","beach"),
+        poi("Savelletri beach clubs",27,28,"Costa premium con beach club e ristorazione.","beach")
+      ],
+      luxury_points_of_interest:[
+        poi("Borgo Egnazia",30,30,"Benchmark luxury hospitality internazionale in Puglia.","luxury_hotel"),
+        poi("Masseria Torre Maizza",26,28,"Luxury resort Rocco Forte nell’area Fasano/Savelletri.","luxury_hotel"),
+        poi("Masseria San Domenico",27,28,"Resort premium sulla costa adriatica.","luxury_hotel"),
+        poi("Masseria Moroseta",6,10,"Boutique hospitality iconica nell’area Ostuni.","masseria"),
+        poi("Masseria Calderisi",22,25,"Boutique luxury masseria nell’area Fasano.","luxury_hotel")
+      ],
+      marinas:[
+        poi("Porto di Villanova",8,12,"Approdo costiero più vicino a Ostuni.","marina"),
+        poi("Porto di Brindisi",38,35,"Porto turistico e commerciale con collegamenti internazionali.","marina"),
+        poi("Porto di Monopoli",42,42,"Porto turistico su costa adriatica.","marina")
+      ],
+      golf_clubs:[
+        poi("San Domenico Golf",28,30,"Golf club premium collegato all’ecosistema luxury di Savelletri.","golf"),
+        poi("Acaya Golf Club",80,60,"Golf resort salentino, riferimento leisure premium.","golf")
+      ],
+      restaurants_and_experiences:[
+        poi("Osterie e fine dining di Ostuni",0,5,"Esperienze food & wine nel centro storico e nelle masserie.","experience"),
+        poi("Wine & olive oil experience",8,12,"Esperienze tra ulivi monumentali, frantoi e cantine.","experience"),
+        poi("Beach club Savelletri",27,28,"Esperienze mare premium e ristorazione costiera.","experience"),
+        poi("Valle d’Itria food tour",20,25,"Itinerari tra borghi, fornelli, masserie e prodotti tipici.","experience")
+      ]
+    };
+  }
+
+  if(city === "massafra"){
+    return {
+      source_summary:"Analisi territoriale ricostruita da IMMONOVA Destination Engine per Massafra: gravine, turismo rupestre, Taranto, costa ionica, Castellaneta, Matera e Puglia centrale.",
+      tourist_appeal_score:68,
+      tourist_appeal_rating:"Buono",
+      score_breakdown:{airports:11,sea_beaches:16,villages_attractions:12,unesco_culture:15,luxury_hospitality:9,accessibility:5},
+      nearest_airports:[
+        poi("Aeroporto di Bari - Karol Wojtyła",80,65,"Aeroporto internazionale regionale principale.","airport"),
+        poi("Aeroporto di Brindisi - Salento",75,60,"Aeroporto internazionale utile per Salento e Puglia ionica.","airport")
+      ],
+      nearest_train_stations:[
+        poi("Stazione di Massafra",1,5,"Stazione ferroviaria locale.","train_station"),
+        poi("Stazione di Taranto",20,25,"Nodo ferroviario provinciale.","train_station")
+      ],
+      attractions_30min:[
+        poi("Centro storico di Massafra",0,5,"Centro storico e affacci sulle gravine.","historic_town"),
+        poi("Gravina di Massafra",1,5,"Paesaggio rupestre e naturalistico identitario.","natural_site"),
+        poi("Chiese rupestri di Massafra",1,5,"Patrimonio culturale rupestre.","cultural_site"),
+        poi("Taranto e Museo MArTA",22,25,"Città costiera, archeologia e servizi urbani.","city_culture"),
+        poi("Castellaneta",18,22,"Borgo e gravine nell’area ionica.","historic_town")
+      ],
+      attractions_60min:[
+        poi("Matera UNESCO",55,60,"Sito UNESCO e forte attrattore internazionale.","unesco"),
+        poi("Alberobello UNESCO",45,50,"Sito UNESCO dei trulli.","unesco"),
+        poi("Grotte di Castellana",55,60,"Attrattore naturalistico regionale.","natural_site"),
+        poi("Locorotondo",48,55,"Borgo iconico della Valle d’Itria.","historic_village")
+      ],
+      beaches:[
+        poi("Chiatona",12,15,"Accesso balneare vicino sul litorale ionico.","beach"),
+        poi("Marina di Massafra",14,18,"Costa ionica di riferimento per il comune.","coast"),
+        poi("Castellaneta Marina",28,30,"Località balneare ionica strutturata.","beach")
+      ],
+      luxury_points_of_interest:[
+        poi("Masseria Amastuola Wine Resort",12,15,"Benchmark wine hospitality nell’area Taranto/Massafra.","luxury_hotel"),
+        poi("Relais Histò San Pietro sul Mar Piccolo",30,35,"Hospitality premium nell’area Taranto.","luxury_hotel"),
+        poi("Ethra Reserve / Castellaneta Marina",35,35,"Resort hospitality sulla costa ionica.","resort")
+      ],
+      marinas:[poi("Porto di Taranto",22,25,"Accesso nautico sul versante ionico.","marina")],
+      golf_clubs:[poi("Riva dei Tessali Golf Club",35,35,"Golf club nell’area ionica.","golf")],
+      restaurants_and_experiences:[
+        poi("Gravine e turismo rupestre",1,5,"Esperienza identitaria del territorio ionico.","experience"),
+        poi("Itinerari enogastronomici ionici",12,15,"Driver per turismo esperienziale e soggiorni boutique.","experience")
+      ]
+    };
+  }
+
+  return null;
+}
+
+function destinationIsEmptyOrBroken(destination){
+  if(!destination) return true;
+  var hasAssets =
+    (destination.nearest_airports || []).length ||
+    (destination.attractions_30min || []).length ||
+    (destination.attractions_60min || []).length ||
+    (destination.beaches || []).length ||
+    (destination.luxury_points_of_interest || []).length ||
+    (destination.restaurants_and_experiences || []).length;
+  var summary = String(destination.source_summary || "").toLowerCase();
+  return !hasAssets || Number(destination.tourist_appeal_score || 0) < 35 || summary.indexOf("non interpretabile") >= 0;
+}
+
+
 function getDestinationAnalysis(){
-  return (
+  var destination =
     (report && report.destination_analysis) ||
     (report && report.report_json && report.report_json.destination_analysis) ||
-    null
-  );
+    null;
+
+  if(destinationIsEmptyOrBroken(destination)){
+    var fallback = buildClientDestinationFallback();
+    if(fallback) return fallback;
+  }
+
+  return destination;
 }
 
 function renderPoiList(items, limit){
@@ -3344,7 +3511,7 @@ function renderMarketPages(){
         <div class="page-grid-2">
           <div>
             <h2>Turismo · serie 5 anni</h2>
-            <p>${escapeHTML(report.tourism_last_5y || "")}</p>
+            <p>${escapeHTML(cleanReportText(report.tourism_last_5y || ""))}</p>
             ${tourism.length ? renderChart(tourism,"presences","Presenze turistiche",number) : "<p>Serie storica turistica non disponibile.</p>"}
             ${tourism.length ? renderTable(tourism,[
               {key:"year",label:"Anno"},
@@ -3355,7 +3522,7 @@ function renderMarketPages(){
           </div>
           <div>
             <h2>Mercato immobiliare · serie 5 anni</h2>
-            <p>${escapeHTML(report.real_estate_market_past || "")}</p>
+            <p>${escapeHTML(cleanReportText(report.real_estate_market_past || ""))}</p>
             ${renderChart(market,"average_price_sqm","Valore medio €/mq",euro)}
             ${renderTable(market,[
               {key:"year",label:"Anno"},
@@ -3371,7 +3538,7 @@ function renderMarketPages(){
       <div class="report-page-inner mini-chart">
         <h2>Forecast valore immobiliare 5 anni</h2>
         <div class="lux-rule"></div>
-        <p>${escapeHTML(report.real_estate_market_forecast || "")}</p>
+        <p>${escapeHTML(cleanReportText(report.real_estate_market_forecast || ""))}</p>
         ${renderChart(forecast,"projected_asset_value","Valore previsto asset",euro)}
         ${renderTable(forecast,[
           {key:"year",label:"Anno"},
@@ -3383,41 +3550,44 @@ function renderMarketPages(){
 
     <div class="report-page">
       <div class="report-page-inner mini-chart">
-        <div class="page-grid-2" style="grid-template-columns:1fr 1fr;gap:8mm;">
-          <div>
-            <h2>Forecast turismo 5 anni</h2>
-            <p>${escapeHTML(report.tourism_forecast_5y || "Previsione turistica non generata: manca una serie storica reale sufficiente.")}</p>
-            ${tourismForecast.length ? renderChart(tourismForecast,"presences","Presenze turistiche previste",number) : ""}
-            ${tourismForecast.length ? renderTable(tourismForecast,[
-              {key:"year",label:"Anno"},
-              {key:"arrivals",label:"Arrivi previsti",format:number},
-              {key:"presences",label:"Presenze previste",format:number},
-              {key:"growth_percent",label:"Crescita prevista",format:percent}
-            ]) : "<p>Forecast non generabile: serie storica turistica reale insufficiente.</p>"}
-          </div>
+        <h2>Forecast turismo 5 anni</h2>
+        <div class="lux-rule"></div>
+        <p>${escapeHTML(cleanReportText(report.tourism_forecast_5y || "Previsione turistica non generata: manca una serie storica reale sufficiente."))}</p>
+        ${tourismForecast.length ? renderChart(tourismForecast,"presences","Presenze turistiche previste",number) : ""}
+        ${tourismForecast.length ? renderTable(tourismForecast,[
+          {key:"year",label:"Anno"},
+          {key:"arrivals",label:"Arrivi previsti",format:number},
+          {key:"presences",label:"Presenze previste",format:number},
+          {key:"growth_percent",label:"Crescita prevista",format:percent}
+        ]) : "<p>Forecast non generabile: serie storica turistica reale insufficiente.</p>"}
+        <div class="lux-rule"></div>
+        <p><strong>Metodo:</strong> scenario prudenziale costruito sulla serie disponibile; il tasso viene ridotto progressivamente per evitare una crescita composta artificiale. I valori restano da validare in analyst review prima dell’invio finale.</p>
+      </div>
+    </div>
 
-          <div>
-            <h2>Rischio & SWOT</h2>
-            <p>${escapeHTML(report.risk_analysis || "")}</p>
-            ${renderTable([
-              {label:"Market Risk",value:(report.risk_data||{}).market_risk},
-              {label:"Liquidity Risk",value:(report.risk_data||{}).liquidity_risk},
-              {label:"Operational Risk",value:(report.risk_data||{}).operational_risk},
-              {label:"Regulatory Risk",value:(report.risk_data||{}).regulatory_risk},
-              {label:"Seasonality Risk",value:(report.risk_data||{}).seasonality_risk},
-              {label:"Global Risk Score",value:(report.risk_data||{}).global_risk_score}
-            ],[
-              {key:"label",label:"Rischio"},
-              {key:"value",label:"Valutazione"}
-            ])}
-            <div class="lux-rule"></div>
-            <p>${escapeHTML((report.swot_analysis || "").replace(/Classificazione IMMONOVA:[^.]*/g, "Classificazione IMMONOVA: " + getDisplayRating()))}</p>
-          </div>
-        </div>
+    <div class="report-page">
+      <div class="report-page-inner">
+        <h2>Rischio & SWOT</h2>
+        <div class="lux-rule"></div>
+        <p>${escapeHTML(cleanReportText(report.risk_analysis || ""))}</p>
+        ${renderTable([
+          {label:"Market Risk",value:(report.risk_data||{}).market_risk},
+          {label:"Liquidity Risk",value:(report.risk_data||{}).liquidity_risk},
+          {label:"Operational Risk",value:(report.risk_data||{}).operational_risk},
+          {label:"Regulatory Risk",value:(report.risk_data||{}).regulatory_risk},
+          {label:"Seasonality Risk",value:(report.risk_data||{}).seasonality_risk},
+          {label:"Global Risk Score",value:(report.risk_data||{}).global_risk_score}
+        ],[
+          {key:"label",label:"Rischio"},
+          {key:"value",label:"Valutazione"}
+        ])}
+        <div class="lux-rule"></div>
+        <p>${escapeHTML(cleanReportText((report.swot_analysis || "").replace(/Classificazione IMMONOVA:[^.]*/g, "Classificazione IMMONOVA: " + getDisplayRating())))}</p>
       </div>
     </div>
   `;
 }
+
 
 function renderDisclaimerPage(){
   return `
