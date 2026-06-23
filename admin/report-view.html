@@ -3535,8 +3535,9 @@ async function loadReport(){
   applyCalculatedInputs();
 
   var calculated = calculateOverride();
-  report.investment_score = getDisplayScore() || calculated.score;
   report.estimated_roi = calculated.roi;
+  report.investment_score = calculateRealisticInvestmentScore(calculated.price, calculated.roi, calculated.breakEven, calculated.net, calculated.revaluation);
+  report.investment_rating = getRatingFromScoreAndFinancials(report.investment_score, calculated.roi, calculated.breakEven);
   report.break_even_years = calculated.breakEven;
   report.projected_revaluation_5y_percent = calculated.revaluation;
   report.projected_value_5y = calculated.value5y;
@@ -3550,6 +3551,30 @@ async function loadReport(){
   await renderReportTranslated();
 }
 
+
+function getUnderwritingOverridesForGeneration(){
+  var adr = numberOrNull("ov_adr");
+  var occupancy = numberOrNull("ov_occupancy");
+  var units = numberOrNull("ov_units");
+  var totalInvestment = numberOrNull("ov_price");
+  var value5y = numberOrNull("ov_value_5y");
+  var revaluation = numberOrNull("ov_revaluation");
+  var costRate = numberOrNull("ov_cost_rate");
+
+  var payload = {};
+
+  if(adr !== null) payload.adr = adr;
+  if(occupancy !== null) payload.occupancy = occupancy;
+  if(units !== null) payload.units = units;
+  if(totalInvestment !== null) payload.total_investment = totalInvestment;
+  if(value5y !== null) payload.value_5y = value5y;
+  if(revaluation !== null) payload.revaluation = revaluation;
+  if(costRate !== null) payload.cost_rate = costRate;
+
+  return payload;
+}
+
+
 generateBtn.addEventListener("click", async function(){
   setStatus("Generazione dossier in corso...", "");
   generateBtn.disabled = true;
@@ -3558,7 +3583,10 @@ generateBtn.addEventListener("click", async function(){
 
   try{
     var result = await invokeWithTimeout("generate-investment-report", {
-      body:{ opportunity_id:Number(opportunityId) }
+      body:{
+        opportunity_id:Number(opportunityId),
+        underwriting_overrides:getUnderwritingOverridesForGeneration()
+      }
     }, 180000);
 
     if(result.error || !result.data || !result.data.success){
@@ -3567,7 +3595,14 @@ generateBtn.addEventListener("click", async function(){
 
     report = result.data.report;
     await loadRenovationRenders();
-    fillOverrideForm();
+
+    var generationOverrides = getUnderwritingOverridesForGeneration();
+    var hasGenerationOverrides = Object.keys(generationOverrides).length > 0;
+
+    if(!hasGenerationOverrides){
+      fillOverrideForm();
+    }
+
     applyCalculatedInputs();
 
     var calculated = calculateOverride();
@@ -3693,6 +3728,7 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
     net_annual_income_estimate:c.net,
     break_even_years:c.breakEven,
     investment_score:calculateRealisticInvestmentScore(c.price, c.roi, c.breakEven, c.net, c.revaluation),
+    investment_rating:getRatingFromScoreAndFinancials(calculateRealisticInvestmentScore(c.price, c.roi, c.breakEven, c.net, c.revaluation), c.roi, c.breakEven),
     estimated_roi:c.roi,
     projected_revaluation_5y_percent:c.revaluation,
     projected_value_5y:c.value5y,
@@ -3718,7 +3754,7 @@ document.getElementById("saveOverrideBtn").addEventListener("click", async funct
   report = result.data;
   await loadRenovationRenders();
   fillOverrideForm();
-  renderReport();
+  await renderReportTranslated();
   setStatus("Dossier aggiornato correttamente.", "success");
 });
 
