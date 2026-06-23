@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -2035,7 +2036,7 @@ function calculateOverride(){
     value5y = round(price * (1 + revaluation / 100), 0);
   }
 
-  var score = getDisplayScore() || calculateRealisticInvestmentScore(price, roi, breakEven, net, revaluation);
+  var score = calculateRealisticInvestmentScore(price, roi, breakEven, net, revaluation);
 
   return {
     price:price,
@@ -2882,28 +2883,34 @@ function getDisplayRating(){
   return report.investment_rating || "";
 }
 
+function getFinancialComponentFromValues(roi, breakEven){
+  roi = Number(roi) || 0;
+  breakEven = Number(breakEven) || 999;
+
+  var financial = 0;
+
+  if(roi >= 15) financial += 15;
+  else if(roi >= 10) financial += 12;
+  else if(roi >= 7) financial += 9;
+  else if(roi >= 5) financial += 6;
+  else if(roi >= 3) financial += 3;
+
+  if(breakEven <= 8) financial += 10;
+  else if(breakEven <= 12) financial += 8;
+  else if(breakEven <= 18) financial += 6;
+  else if(breakEven <= 25) financial += 3;
+
+  return financial;
+}
+
 function getCommitteeComponents(){
   var c = getCommittee();
   var components = Object.assign({}, (c && c.components) ? c.components : {});
 
   if(report && report.analyst_overridden){
-    var calc = calculateOverride();
-    var roi = Number(calc.roi) || 0;
-    var be = Number(calc.breakEven) || 999;
-
-    var financial = 0;
-    if(roi >= 15) financial += 15;
-    else if(roi >= 10) financial += 12;
-    else if(roi >= 7) financial += 9;
-    else if(roi >= 5) financial += 6;
-    else if(roi >= 3) financial += 3;
-
-    if(be <= 8) financial += 10;
-    else if(be <= 12) financial += 8;
-    else if(be <= 18) financial += 6;
-    else if(be <= 25) financial += 3;
-
-    components.financial = financial;
+    var roi = Number(report.estimated_roi) || 0;
+    var be = Number(report.break_even_years) || 999;
+    components.financial = getFinancialComponentFromValues(roi, be);
   }
 
   return components;
