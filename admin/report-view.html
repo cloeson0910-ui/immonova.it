@@ -2130,9 +2130,21 @@ function buildDisplayHistoryRows(rows, valueKey, growthKey, minYears){
   var first = rows[0];
   var needed = minYears - rows.length;
   var firstValue = Number(first[valueKey]);
-  var g = Number(first[growthKey]);
-  if(!isFinite(g) || Math.abs(g) < 0.1){
-    g = rows.length >= 2 ? Number(rows[1][growthKey]) || 1.5 : 1.5;
+  var g = 1.5;
+
+  if(rows.length >= 2){
+    var last = rows[rows.length - 1];
+    var periods = Math.max(1, Number(last.year) - Number(first.year));
+    var firstVal = Number(first[valueKey]);
+    var lastVal = Number(last[valueKey]);
+
+    if(firstVal > 0 && lastVal > 0){
+      g = (Math.pow(lastVal / firstVal, 1 / periods) - 1) * 100;
+    }else{
+      g = Number(last[growthKey]) || 1.5;
+    }
+  }else if(Number(first[growthKey])){
+    g = Number(first[growthKey]);
   }
 
   g = Math.max(-4, Math.min(4, g));
@@ -3227,27 +3239,28 @@ function renderRevaluationPage(){
 }
 
 function renderMarketPages(){
-  var tourism = report.tourism_data || [];
+  var tourism = getDisplayTourismRows();
   var tourismForecast = (report.report_json && report.report_json.tourism_forecast_data) || report.tourism_forecast_data || [];
-  var market = report.real_estate_data || [];
-  var forecast = report.forecast_data || [];
+  var market = getDisplayMarketRows();
+  var forecast = getDisplayForecastRows();
+
   return `
     <div class="report-page">
       <div class="report-page-inner mini-chart">
         <div class="page-grid-2">
           <div>
-            <h2>Turismo ultimi 5 anni</h2>
+            <h2>Turismo · serie 5 anni</h2>
             <p>${escapeHTML(report.tourism_last_5y || "")}</p>
-            ${renderChart(tourism,"presences","Presenze turistiche",number)}
-            ${renderTable(tourism,[
+            ${tourism.length ? renderChart(tourism,"presences","Presenze turistiche",number) : "<p>Serie storica turistica non disponibile.</p>"}
+            ${tourism.length ? renderTable(tourism,[
               {key:"year",label:"Anno"},
               {key:"arrivals",label:"Arrivi",format:number},
               {key:"presences",label:"Presenze",format:number},
               {key:"growth_percent",label:"Crescita",format:percent}
-            ])}
+            ]) : ""}
           </div>
           <div>
-            <h2>Mercato immobiliare</h2>
+            <h2>Mercato immobiliare · serie 5 anni</h2>
             <p>${escapeHTML(report.real_estate_market_past || "")}</p>
             ${renderChart(market,"average_price_sqm","Valore medio €/mq",euro)}
             ${renderTable(market,[
@@ -3259,31 +3272,36 @@ function renderMarketPages(){
         </div>
       </div>
     </div>
+
     <div class="report-page">
       <div class="report-page-inner mini-chart">
-        <div class="page-grid-2" style="grid-template-columns:1.15fr .85fr;">
+        <h2>Forecast valore immobiliare 5 anni</h2>
+        <div class="lux-rule"></div>
+        <p>${escapeHTML(report.real_estate_market_forecast || "")}</p>
+        ${renderChart(forecast,"projected_asset_value","Valore previsto asset",euro)}
+        ${renderTable(forecast,[
+          {key:"year",label:"Anno"},
+          {key:"projected_market_growth_percent",label:"Crescita prevista",format:percent},
+          {key:"projected_asset_value",label:"Valore previsto",format:euro}
+        ])}
+      </div>
+    </div>
+
+    <div class="report-page">
+      <div class="report-page-inner mini-chart">
+        <div class="page-grid-2" style="grid-template-columns:1fr 1fr;gap:8mm;">
           <div>
-            <h2>Forecast 5 anni</h2>
-            <p>${escapeHTML(report.real_estate_market_forecast || "")}</p>
-            ${renderChart(forecast,"projected_asset_value","Valore previsto asset",euro)}
-            ${renderTable(forecast,[
-              {key:"year",label:"Anno"},
-              {key:"projected_market_growth_percent",label:"Crescita prevista",format:percent},
-              {key:"projected_asset_value",label:"Valore previsto",format:euro}
-            ])}
-
-            <div class="lux-rule"></div>
-
             <h2>Forecast turismo 5 anni</h2>
-            <p>${escapeHTML(report.tourism_forecast_5y || "Previsione turistica prudenziale a 5 anni basata sul trend storico disponibile.")}</p>
-            ${renderChart(tourismForecast,"presences","Presenze turistiche previste",number)}
-            ${renderTable(tourismForecast,[
+            <p>${escapeHTML(report.tourism_forecast_5y || "Previsione turistica non generata: manca una serie storica reale sufficiente.")}</p>
+            ${tourismForecast.length ? renderChart(tourismForecast,"presences","Presenze turistiche previste",number) : ""}
+            ${tourismForecast.length ? renderTable(tourismForecast,[
               {key:"year",label:"Anno"},
               {key:"arrivals",label:"Arrivi previsti",format:number},
               {key:"presences",label:"Presenze previste",format:number},
               {key:"growth_percent",label:"Crescita prevista",format:percent}
-            ])}
+            ]) : "<p>Forecast non generabile: serie storica turistica reale insufficiente.</p>"}
           </div>
+
           <div>
             <h2>Rischio & SWOT</h2>
             <p>${escapeHTML(report.risk_analysis || "")}</p>
@@ -3306,7 +3324,6 @@ function renderMarketPages(){
     </div>
   `;
 }
-
 
 function renderDisclaimerPage(){
   return `
