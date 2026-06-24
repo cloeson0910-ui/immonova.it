@@ -584,6 +584,38 @@ tr{
   .photo-grid img,.photo-grid img:first-child{height:260px}
 }
 
+
+.sources-list{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:3mm 6mm;
+  margin-top:4mm;
+}
+.source-item{
+  border-bottom:1px solid rgba(165,129,57,.16);
+  padding:2.5mm 0;
+  font-size:11px;
+  line-height:1.45;
+}
+.source-cat{
+  font-size:8px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#a58139;
+  margin-bottom:1mm;
+}
+.confidence-strip{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:4mm;
+  margin:5mm 0;
+}
+.confidence-box{
+  border:1px solid rgba(165,129,57,.18);
+  padding:4mm;
+  background:rgba(255,252,244,.14);
+}
+
 @media print{
   @page{
     size:A4 landscape;
@@ -1455,7 +1487,7 @@ tr{
       </div>
 
       <div class="field">
-        <label for="ov_revaluation">Rivalutazione 5Y %</label>
+        <label for="ov_revaluation">Value Creation 5Y %</label>
         <input type="number" id="ov_revaluation" step="0.1">
       </div>
 
@@ -2521,7 +2553,7 @@ function renderSummaryPage(){
           <div class="kpi-value">${number(report.break_even_years)} anni</div>
         </div>
         <div class="kpi">
-          <div class="kpi-label">Rivalutazione 5Y</div>
+          <div class="kpi-label">Value Creation 5Y</div>
           <div class="kpi-value">${percent(report.projected_revaluation_5y_percent)}</div>
         </div>
       </div>
@@ -2543,7 +2575,7 @@ function renderSummaryPage(){
         <div class="data-summary-item"><div class="data-summary-label">ROI</div><div class="data-summary-value">${percent(report.estimated_roi)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Break-even</div><div class="data-summary-value">${number(report.break_even_years)} anni</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Score</div><div class="data-summary-value">${number(getDisplayScore())}/100</div></div>
-        <div class="data-summary-item"><div class="data-summary-label">Rivalutazione 5Y</div><div class="data-summary-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
+        <div class="data-summary-item"><div class="data-summary-label">Value Creation 5Y</div><div class="data-summary-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Valore previsto 5Y</div><div class="data-summary-value">${euro(report.projected_value_5y)}</div></div>
         <div class="data-summary-item"><div class="data-summary-label">Costi operativi</div><div class="data-summary-value">${percent(numberOrNull("ov_cost_rate") || 32)}</div></div>
       </div>
@@ -3744,7 +3776,7 @@ function renderCommitteeClosingPage(){
 
             ${renderMiniData([
               {label:"Recommendation", value: getDisplayRecommendation()},
-              {label:"Risk score (10=alto)", value: (report.risk_data && report.risk_data.global_risk_score) ? number(report.risk_data.global_risk_score) + "/10" : "-"},
+              {label:"Investment Risk (10=alto)", value: (report.risk_data && report.risk_data.global_risk_score) ? number(report.risk_data.global_risk_score) + "/10" : "-"},
               {label:"Break-even", value: number(calculateOverride().breakEven) + " anni"},
               {label:"ROI", value: percent(calculateOverride().roi)}
             ])}
@@ -3767,6 +3799,101 @@ function renderCommitteeClosingPage(){
 }
 
 
+
+function getInvestmentStructure(){
+  var json = getReportJson();
+  return json.investment_structure || {};
+}
+
+function renderInvestmentStructurePage(){
+  var s = getInvestmentStructure();
+  if(!s || !s.total_project_cost){
+    return "";
+  }
+
+  return `
+    <div class="report-page">
+      <div class="report-page-inner">
+        <h2>Investment Structure</h2>
+        <div class="lux-rule"></div>
+
+        <div class="page-grid-2" style="grid-template-columns:1fr 1fr;gap:8mm;">
+          <div>
+            <div class="lux-small-title">Capitale dell’operazione</div>
+            ${renderMiniData([
+              {label:"Prezzo acquisto", value:euro(s.purchase_price)},
+              {label:"Ristrutturazione min", value:euro(s.renovation_cost_min)},
+              {label:"Ristrutturazione max", value:euro(s.renovation_cost_max)},
+              {label:"Ristrutturazione media", value:euro(s.renovation_cost_avg)},
+              {label:"Total Project Cost", value:euro(s.total_project_cost)}
+            ])}
+          </div>
+          <div>
+            <div class="lux-small-title">Metodo finanziario</div>
+            <p>${escapeHTML(s.calculation_note || "Tutti i KPI finanziari sono calcolati sul capitale totale dell’operazione.")}</p>
+            <div class="break-even-callout">
+              <strong>Regola di calcolo</strong><br>
+              Break-even = Total Project Cost / Net Operating Cash Flow.<br>
+              ROI = Net Operating Income / Total Project Cost.<br>
+              La rivalutazione distingue value creation da CAPEX e trend di mercato.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getSourceRegistry(){
+  var json = getReportJson();
+  return json.source_registry || [];
+}
+
+function getDataConfidence(){
+  var json = getReportJson();
+  return json.data_confidence || {};
+}
+
+function renderSourcesPage(){
+  var sources = getSourceRegistry();
+  var c = getDataConfidence();
+
+  if(!sources.length){
+    return "";
+  }
+
+  return `
+    <div class="report-page">
+      <div class="report-page-inner compact-table">
+        <h2>Data Sources & Confidence</h2>
+        <div class="lux-rule"></div>
+
+        <div class="confidence-strip">
+          <div class="confidence-box"><div class="lux-small-title">Overall</div><div class="lux-metric-value">${number(c.overall_percent || 0)}%</div></div>
+          <div class="confidence-box"><div class="lux-small-title">Mercato</div><div class="lux-metric-value">${number(c.market_percent || 0)}%</div></div>
+          <div class="confidence-box"><div class="lux-small-title">Turismo</div><div class="lux-metric-value">${number(c.tourism_percent || 0)}%</div></div>
+          <div class="confidence-box"><div class="lux-small-title">Hospitality</div><div class="lux-metric-value">${number(c.hospitality_percent || 0)}%</div></div>
+        </div>
+
+        <p>Le fonti sotto riportate sono quelle utilizzate o normalizzate dal motore IMMONOVA. I dati previsionali restano modelli di scenario e non garanzie di risultato.</p>
+
+        <div class="sources-list">
+          ${sources.slice(0,60).map(function(s){
+            return `<div class="source-item">
+              <div class="source-cat">${escapeHTML(s.category || "Fonte")}</div>
+              <strong>${escapeHTML(s.label || "-")}</strong><br>
+              ${escapeHTML(s.publisher || "")}${s.year ? " · " + escapeHTML(String(s.year)) : ""}${s.value ? " · " + escapeHTML(String(s.value)) : ""}<br>
+              ${s.url ? `<span>${escapeHTML(s.url)}</span><br>` : ""}
+              ${s.note ? `<span>${escapeHTML(s.note)}</span>` : ""}
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
 function renderPremiumSummaryPage(){
   return `
     <div class="report-page">
@@ -3777,7 +3904,7 @@ function renderPremiumSummaryPage(){
           <div class="lux-metric-box"><div class="lux-small-title">Investment Score</div><div class="lux-metric-value">${number(getDisplayScore())}/100</div></div>
           <div class="lux-metric-box"><div class="lux-small-title">ROI stimato</div><div class="lux-metric-value">${percent(report.estimated_roi)}</div></div>
           <div class="lux-metric-box"><div class="lux-small-title">Break-even</div><div class="lux-metric-value">${number(report.break_even_years)} anni</div></div>
-          <div class="lux-metric-box"><div class="lux-small-title">Rivalutazione 5Y</div><div class="lux-metric-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
+          <div class="lux-metric-box"><div class="lux-small-title">Value Creation 5Y</div><div class="lux-metric-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
         </div>
         <div class="lux-data-grid">
           <div class="lux-data-item"><div class="lux-data-label">Valore acquisto</div><div class="lux-data-value">${euro(getAcquisitionValue())}</div></div>
@@ -3797,7 +3924,7 @@ function renderPremiumSummaryPage(){
           <div class="lux-data-item"><div class="lux-data-label">Break-even</div><div class="lux-data-value">${number(report.break_even_years)} anni</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Score</div><div class="lux-data-value">${number(getDisplayScore())}/100</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Classificazione</div><div class="lux-data-value">${escapeHTML(getDisplayRating() || "-")}</div></div>
-          <div class="lux-data-item"><div class="lux-data-label">Rivalutazione 5Y</div><div class="lux-data-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
+          <div class="lux-data-item"><div class="lux-data-label">Value Creation 5Y</div><div class="lux-data-value">${percent(report.projected_revaluation_5y_percent)}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Valore previsto 5Y</div><div class="lux-data-value">${euro(report.projected_value_5y)}</div></div>
           <div class="lux-data-item"><div class="lux-data-label">Costi operativi</div><div class="lux-data-value">${percent(numberOrNull("ov_cost_rate") || 32)}</div></div>
         </div>
@@ -3848,13 +3975,13 @@ function renderRevaluationPage(){
   return `
     <div class="report-page">
       <div class="report-page-inner compact-table">
-        <h2>Rivalutazione 15 anni</h2>
+        <h2>Value Creation & Trend 15 anni</h2>
         <div class="lux-rule"></div>
         <div class="page-grid-2" style="grid-template-columns:1.15fr .85fr;gap:8mm;">
           <div>
             ${renderTable(buildRevaluation15Rows(),[
               {key:"year",label:"Anno"},
-              {key:"growth",label:"Crescita annua",format:percent},
+              {key:"growth",label:"Trend mercato",format:percent},
               {key:"value",label:"Valore stimato",format:euro},
               {key:"gain",label:"Plusvalenza",format:euro}
             ])}
@@ -4004,6 +4131,7 @@ function renderReport(){
       <div class="cover-meta">${escapeHTML(opportunity.location || "")}<br>${escapeHTML(opportunity.category || "")}<br>${t("generated")} ${escapeHTML(new Date(report.generated_at).toLocaleDateString("it-IT"))} ${overrideBadge}</div>
     </div>
     ${renderPremiumSummaryPage()}
+    ${renderInvestmentStructurePage()}
     ${renderAssetLocationPage()}
     ${renderInvestmentThesisPage()}
     ${renderDestinationAnalysisPage()}
@@ -4015,6 +4143,7 @@ function renderReport(){
     ${renderRevaluationPage()}
     ${renderMarketPages()}
     ${renderCommitteeClosingPage()}
+    ${renderSourcesPage()}
     ${renderDisclaimerPage()}
   `;
 }
