@@ -335,6 +335,33 @@ button.primary:disabled{
 .success{color:#4f7f45}
 .error{color:#9c2f2f}
 
+
+.map-tools{
+  grid-column:1 / -1;
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+  align-items:center;
+  padding:18px;
+  border:1px solid rgba(165,129,57,.18);
+  background:rgba(255,252,244,.16);
+}
+.map-tools button{
+  padding:12px 18px;
+  border:1px solid rgba(165,129,57,.42);
+  background:rgba(255,252,244,.22);
+  color:#a58139;
+  text-transform:uppercase;
+  font-size:10px;
+  letter-spacing:.18em;
+  cursor:pointer;
+}
+.map-tools span{
+  font-size:12px;
+  color:#8f7643;
+  line-height:1.6;
+}
+
 @media(max-width:760px){
   .header{
     flex-direction:column;
@@ -648,6 +675,33 @@ button.primary:disabled{
 
         <div class="section-title">Localizzazione e accessibilità</div>
 
+
+        <div class="field full">
+          <label for="address">Indirizzo / Via / Contrada</label>
+          <input type="text" id="address" placeholder="Es. Contrada San Paolo 15">
+        </div>
+
+        <div class="field">
+          <label for="postal_code">CAP</label>
+          <input type="text" id="postal_code" placeholder="Es. 74015">
+        </div>
+
+        <div class="field">
+          <label for="locality">Località / Frazione</label>
+          <input type="text" id="locality" placeholder="Es. San Paolo / Contrada / Centro storico">
+        </div>
+
+        <div class="field full">
+          <label for="formatted_address">Indirizzo completo geocodificato</label>
+          <input type="text" id="formatted_address" readonly placeholder="Compilato automaticamente dalla geolocalizzazione">
+        </div>
+
+        <div class="map-tools">
+          <button type="button" id="geoBtn">Geolocalizza</button>
+          <button type="button" id="mapBtn">Mostra sulla mappa</button>
+          <span id="geoStatus">Usa indirizzo, CAP, località, comune, provincia e regione per ottenere coordinate più precise.</span>
+        </div>
+
         <div class="field">
           <label for="latitude">Latitudine</label>
           <input type="number" step="any" id="latitude">
@@ -796,6 +850,97 @@ function setValue(id, value){
   var el = document.getElementById(id);
   if(el && value !== null && value !== undefined) el.value = value;
 }
+
+
+function buildAddressQuery(){
+  var parts = [
+    textOrNull("address"),
+    textOrNull("postal_code"),
+    textOrNull("locality"),
+    textOrNull("municipality"),
+    textOrNull("province"),
+    textOrNull("region"),
+    "Italia"
+  ].filter(Boolean);
+
+  return parts.join(", ");
+}
+
+function setGeoStatus(message, type){
+  var el = document.getElementById("geoStatus");
+  if(!el) return;
+  el.textContent = message || "";
+  el.style.color = type === "error" ? "#9c2f2f" : (type === "success" ? "#4f7f45" : "#8f7643");
+}
+
+async function geocodeAddress(){
+  var query = buildAddressQuery();
+
+  if(!query || query === "Italia"){
+    setGeoStatus("Inserisci almeno indirizzo/località/comune prima di geolocalizzare.", "error");
+    return;
+  }
+
+  setGeoStatus("Geolocalizzazione in corso...", "");
+
+  try{
+    var url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=" + encodeURIComponent(query);
+    var response = await fetch(url, {
+      headers:{
+        "Accept":"application/json"
+      }
+    });
+
+    if(!response.ok){
+      throw new Error("Servizio geocoding non disponibile.");
+    }
+
+    var data = await response.json();
+
+    if(!data || !data.length){
+      throw new Error("Nessun risultato trovato. Controlla indirizzo, CAP e comune.");
+    }
+
+    var item = data[0];
+
+    setValue("latitude", item.lat);
+    setValue("longitude", item.lon);
+    setValue("formatted_address", item.display_name || query);
+
+    setGeoStatus("Coordinate trovate e indirizzo completo aggiornato.", "success");
+  }catch(error){
+    setGeoStatus(error.message || "Errore geolocalizzazione.", "error");
+  }
+}
+
+function openMap(){
+  var lat = numberOrNull("latitude");
+  var lon = numberOrNull("longitude");
+  var formatted = textOrNull("formatted_address");
+  var query = formatted || buildAddressQuery();
+
+  if(lat !== null && lon !== null){
+    window.open("https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lon), "_blank");
+    return;
+  }
+
+  if(query){
+    window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(query), "_blank");
+    return;
+  }
+
+  setGeoStatus("Inserisci indirizzo o coordinate per aprire la mappa.", "error");
+}
+
+function bindGeoTools(){
+  var geoBtn = document.getElementById("geoBtn");
+  var mapBtn = document.getElementById("mapBtn");
+
+  if(geoBtn) geoBtn.addEventListener("click", geocodeAddress);
+  if(mapBtn) mapBtn.addEventListener("click", openMap);
+}
+
+document.addEventListener("DOMContentLoaded", bindGeoTools);
 
 function setStatus(message, type){
   statusBox.className = "status " + (type || "");
@@ -990,6 +1135,10 @@ aiBtn.addEventListener("click", async function(){
       category:category,
       location:location,
       municipality:municipality,
+      address:textOrNull("address"),
+      locality:textOrNull("locality"),
+      postal_code:textOrNull("postal_code"),
+      formatted_address:textOrNull("formatted_address"),
       province:textOrNull("province"),
       region:textOrNull("region"),
       price:textOrNull("price"),
@@ -1028,6 +1177,10 @@ aiBtn.addEventListener("click", async function(){
     setValue("municipality", ai.municipality);
     setValue("province", ai.province);
     setValue("region", ai.region);
+    setValue("address", ai.address);
+    setValue("locality", ai.locality);
+    setValue("postal_code", ai.postal_code);
+    setValue("formatted_address", ai.formatted_address);
     setValue("latitude", ai.latitude);
     setValue("longitude", ai.longitude);
     setValue("distance_to_sea_km", ai.distance_to_sea_km);
@@ -1117,6 +1270,10 @@ document.getElementById("opportunityForm").addEventListener("submit", async func
       category:document.getElementById("category").value,
       location:textOrNull("location"),
       municipality:textOrNull("municipality"),
+      address:textOrNull("address"),
+      locality:textOrNull("locality"),
+      postal_code:textOrNull("postal_code"),
+      formatted_address:textOrNull("formatted_address"),
       province:textOrNull("province"),
       region:textOrNull("region"),
       price:textOrNull("price"),
