@@ -2289,12 +2289,17 @@ function getDisplayTourismRows(){
 }
 
 function buildForecastFromOverride(value5y){
+  var existing = (report && report.forecast_data) || (report && report.report_json && report.report_json.forecast_data) || [];
+  if(existing && existing.length){
+    return existing;
+  }
+
   var currentYear = new Date().getFullYear();
   var price = getPurchasePrice();
   var rows = [];
 
   if(!price || !value5y || value5y <= 0){
-    return report.forecast_data || [];
+    return [];
   }
 
   var rates = getShapedAnnualRates(price, value5y, 5);
@@ -2377,7 +2382,11 @@ function buildRevaluation15Rows(){
       lastRate = rate;
     }else{
       var decayYears = i - 5;
-      rate = Math.max(0.8, lastRate * Math.pow(0.88, decayYears));
+      if(lastRate < 0){
+        rate = Math.max(-1.5, lastRate * Math.pow(0.88, decayYears));
+      }else{
+        rate = Math.max(0, lastRate * Math.pow(0.88, decayYears));
+      }
       value = value * (1 + rate / 100);
     }
 
@@ -3592,7 +3601,7 @@ function renderInvestmentThesisPage(){
               {label:"Tourism", value:number((getCommitteeComponents()||{}).tourism || 0) + "/20"},
               {label:"Hospitality", value:number((getCommitteeComponents()||{}).hospitality || 0) + "/20"},
               {label:"Financial", value:number((getCommitteeComponents()||{}).financial || 0) + "/25"},
-              {label:"Risk", value:number((getCommitteeComponents()||{}).risk || 0) + "/10"}
+              {label:"Risk Control", value:number((getCommitteeComponents()||{}).risk || 0) + "/10"}
             ])}
           </div>
 
@@ -3735,7 +3744,7 @@ function renderCommitteeClosingPage(){
 
             ${renderMiniData([
               {label:"Recommendation", value: getDisplayRecommendation()},
-              {label:"Risk posture", value: (report.risk_data && report.risk_data.global_risk_score) ? number(report.risk_data.global_risk_score) + "/10" : "-"},
+              {label:"Risk score (10=alto)", value: (report.risk_data && report.risk_data.global_risk_score) ? number(report.risk_data.global_risk_score) + "/10" : "-"},
               {label:"Break-even", value: number(calculateOverride().breakEven) + " anni"},
               {label:"ROI", value: percent(calculateOverride().roi)}
             ])}
@@ -3899,13 +3908,13 @@ function renderMarketPages(){
 
     <div class="report-page">
       <div class="report-page-inner mini-chart">
-        <h2>Forecast valore immobiliare 5 anni</h2>
+        <h2>Forecast valore asset 5 anni</h2>
         <div class="lux-rule"></div>
         <p>${escapeHTML(cleanReportText(report.real_estate_market_forecast || ""))}</p>
         ${renderChart(forecast,"projected_asset_value","Valore previsto asset",euro)}
         ${renderTable(forecast,[
           {key:"year",label:"Anno"},
-          {key:"projected_market_growth_percent",label:"Crescita prevista",format:percent},
+          {key:"projected_market_growth_percent",label:"Trend mercato",format:percent},
           {key:"projected_asset_value",label:"Valore previsto",format:euro}
         ])}
       </div>
@@ -3939,7 +3948,7 @@ function renderMarketPages(){
           {label:"Operational Risk",value:(report.risk_data||{}).operational_risk},
           {label:"Regulatory Risk",value:(report.risk_data||{}).regulatory_risk},
           {label:"Seasonality Risk",value:(report.risk_data||{}).seasonality_risk},
-          {label:"Global Risk Score",value:(report.risk_data||{}).global_risk_score}
+          {label:"Global Risk Score (10=alto)",value:(report.risk_data||{}).global_risk_score}
         ],[
           {key:"label",label:"Rischio"},
           {key:"value",label:"Valutazione"}
