@@ -657,6 +657,52 @@ button.danger{
   opacity:.9;
 }
 
+
+.document-file-list{
+  grid-column:1 / -1;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  font-size:11px;
+  line-height:1.5;
+  color:#8f7643;
+}
+
+.document-file-item{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:8px 10px;
+  border:1px solid rgba(165,129,57,.14);
+  background:rgba(255,252,244,.18);
+}
+
+.document-file-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.document-file-actions a,
+.document-file-actions button{
+  padding:7px 10px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  color:#a67f34;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:9px;
+  letter-spacing:.12em;
+  cursor:pointer;
+}
+
+.document-file-actions .danger{
+  color:#9c2f2f;
+  border-color:rgba(156,47,47,.35);
+}
+
 .document-inline-progress{
   grid-column:1 / -1;
   display:none;
@@ -1215,14 +1261,14 @@ var loadedOpportunity = null;
 
 
 var REQUIRED_DOCUMENTS = [
-  { key:"owner_identity", label:"Documento identità proprietario", hint:"Carta identità o passaporto del venditore." },
-  { key:"owner_tax_code", label:"Codice fiscale proprietario", hint:"Codice fiscale o tessera sanitaria." },
+  { key:"owner_identity", label:"Documento identità proprietario", hint:"Carta identità o passaporto del venditore. Puoi caricare più documenti se i proprietari sono più di uno." },
+  { key:"owner_tax_code", label:"Codice fiscale proprietario", hint:"Codice fiscale o tessera sanitaria. Puoi caricare più file." },
   { key:"deed_of_origin", label:"Atto di provenienza", hint:"Rogito, successione, donazione o altro titolo di provenienza." },
-  { key:"cadastral_report", label:"Visura catastale", hint:"Dati catastali aggiornati: foglio, particella, subalterno, rendita." },
-  { key:"cadastral_plan", label:"Planimetria catastale", hint:"Planimetria conforme allo stato di fatto." },
+  { key:"cadastral_report", label:"Visure catastali", hint:"Visura catastale aggiornata. Puoi caricare più visure, subalterni o estratti." },
+  { key:"cadastral_plan", label:"Planimetrie catastali", hint:"Planimetria conforme allo stato di fatto. Puoi caricare più planimetrie o un PDF multipagina." },
   { key:"ape", label:"APE", hint:"Attestato di Prestazione Energetica valido." },
-  { key:"urban_planning", label:"Titoli edilizi / urbanistici", hint:"Licenza, concessione, permesso di costruire, CILA, SCIA o sanatorie." },
-  { key:"technical_conformity", label:"Conformità urbanistica e catastale", hint:"Relazione tecnica o dichiarazione di stato legittimo, se disponibile." },
+  { key:"urban_planning", label:"Permessi edilizi / sanatorie", hint:"Permesso di costruire, licenza, concessione, CILA, SCIA, condoni e sanatorie. Carica tutti i file disponibili." },
+  { key:"technical_conformity", label:"Conformità urbanistica e catastale", hint:"Relazione tecnica, dichiarazione di stato legittimo o verifica conformità." },
   { key:"habitability", label:"Agibilità / abitabilità", hint:"Certificato o segnalazione certificata di agibilità, se presente." },
   { key:"systems_certifications", label:"Certificazioni impianti", hint:"Elettrico, idrico, gas, riscaldamento o dichiarazioni disponibili." }
 ];
@@ -1244,7 +1290,6 @@ function setDocumentsStatus(message, type){
   el.textContent = message || "";
   el.style.color = type === "error" ? "#9c2f2f" : (type === "success" ? "#4f7f45" : "#8f7643");
 }
-
 
 function showWorkProgress(prefix, message, percent){
   var box = document.getElementById(prefix + "WorkProgress");
@@ -1273,9 +1318,12 @@ function hideWorkProgress(prefix, delay){
   }, delay == null ? 700 : delay);
 }
 
+function safeDocumentKey(documentType){
+  return String(documentType || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+}
 
 function setDocumentRowProgress(documentType, message, percent, active){
-  var safeType = String(documentType || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+  var safeType = safeDocumentKey(documentType);
   var box = document.getElementById("docProgress_" + safeType);
   var bar = document.getElementById("docProgressBar_" + safeType);
   var text = document.getElementById("docProgressText_" + safeType);
@@ -1303,10 +1351,40 @@ function hideDocumentRowProgress(documentType, delay){
   }, delay == null ? 900 : delay);
 }
 
-function getDocumentByType(type){
-  return opportunityDocuments.find(function(doc){
+function getDocumentsByType(type){
+  return opportunityDocuments.filter(function(doc){
     return doc.document_type === type;
-  }) || null;
+  }).sort(function(a,b){
+    return new Date(a.uploaded_at || a.created_at || 0) - new Date(b.uploaded_at || b.created_at || 0);
+  });
+}
+
+function getDocumentByType(type){
+  var docs = getDocumentsByType(type);
+  return docs[0] || null;
+}
+
+function loadedDocumentTypesCount(){
+  return REQUIRED_DOCUMENTS.filter(function(item){
+    return getDocumentsByType(item.key).length > 0;
+  }).length;
+}
+
+function renderDocumentFileList(item, docs){
+  if(!docs || docs.length === 0){
+    return '<div class="document-file">' + escapeHTML(item.hint) + '</div>';
+  }
+
+  return '<div class="document-file-list">' + docs.map(function(doc, index){
+    var name = doc.file_name || (item.label + ' ' + (index + 1));
+    var view = doc.file_url ? '<a href="' + escapeHTML(doc.file_url) + '" target="_blank" rel="noopener">Visualizza</a>' : '';
+    var del = '<button type="button" class="danger" onclick="deleteOpportunityDocument(\'' + escapeHTML(doc.id) + '\',\'' + escapeHTML(item.key) + '\')">Elimina</button>';
+    return '' +
+      '<div class="document-file-item">' +
+        '<span>File ' + (index + 1) + ': ' + escapeHTML(name) + '</span>' +
+        '<span class="document-file-actions">' + view + del + '</span>' +
+      '</div>';
+  }).join('') + '</div>';
 }
 
 function renderDocuments(){
@@ -1317,10 +1395,7 @@ function renderDocuments(){
 
   if(!grid) return;
 
-  var loaded = REQUIRED_DOCUMENTS.filter(function(item){
-    return !!getDocumentByType(item.key);
-  }).length;
-
+  var loaded = loadedDocumentTypesCount();
   var total = REQUIRED_DOCUMENTS.length;
   var percent = total ? Math.round((loaded / total) * 100) : 0;
 
@@ -1329,13 +1404,12 @@ function renderDocuments(){
   if(progress) progress.style.width = percent + "%";
 
   grid.innerHTML = REQUIRED_DOCUMENTS.map(function(item){
-    var doc = getDocumentByType(item.key);
-    var loadedClass = doc ? " loaded" : "";
-    var statusText = doc ? "Caricato" : "Mancante";
-    var viewHtml = doc && doc.file_url ? '<a href="' + escapeHTML(doc.file_url) + '" target="_blank" rel="noopener">Visualizza</a>' : '';
-    var deleteHtml = doc ? '<button type="button" class="danger" onclick="deleteOpportunityDocument(\'' + item.key + '\')">Elimina</button>' : '';
-    var fileInfo = doc ? '<div class="document-file">File: ' + escapeHTML(doc.file_name || "Documento caricato") + '</div>' : '<div class="document-file">' + escapeHTML(item.hint) + '</div>';
-    var safeKey = String(item.key).replace(/[^a-zA-Z0-9_-]/g, "_");
+    var docs = getDocumentsByType(item.key);
+    var isLoaded = docs.length > 0;
+    var loadedClass = isLoaded ? " loaded" : "";
+    var statusText = isLoaded ? (docs.length + " file") : "Mancante";
+    var fileInfo = renderDocumentFileList(item, docs);
+    var safeKey = safeDocumentKey(item.key);
     var rowProgress = '' +
       '<div class="document-inline-progress" id="docProgress_' + safeKey + '">' +
         '<div class="document-inline-progress-top">' +
@@ -1352,10 +1426,8 @@ function renderDocuments(){
         '<div class="document-name"><strong>' + escapeHTML(item.label) + '</strong>' + escapeHTML(item.hint) + '</div>' +
         '<div><span class="document-status' + loadedClass + '">' + statusText + '</span></div>' +
         '<div class="document-actions">' +
-          viewHtml +
-          '<label class="document-upload-label" for="doc_' + item.key + '">' + (doc ? 'Sostituisci' : 'Carica') + '</label>' +
-          '<input type="file" id="doc_' + item.key + '" data-doc-type="' + item.key + '" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx">' +
-          deleteHtml +
+          '<label class="document-upload-label" for="doc_' + item.key + '">' + (isLoaded ? 'Carica altro' : 'Carica') + '</label>' +
+          '<input type="file" id="doc_' + item.key + '" data-doc-type="' + item.key + '" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" multiple>' +
         '</div>' +
         fileInfo +
         rowProgress +
@@ -1366,12 +1438,80 @@ function renderDocuments(){
     var input = document.getElementById("doc_" + item.key);
     if(input){
       input.addEventListener("change", function(){
-        if(input.files && input.files[0]){
-          uploadOpportunityDocument(item.key, input.files[0]);
+        if(input.files && input.files.length > 0){
+          if(!id){
+            setDocumentsStatus(input.files.length + " file selezionati: saranno caricati automaticamente dopo il salvataggio della proposta.", "success");
+            renderPendingDocumentSelection();
+            return;
+          }
+          uploadOpportunityDocumentFiles(item.key, Array.from(input.files));
         }
       });
     }
   });
+}
+
+function renderPendingDocumentSelection(){
+  var grid = document.getElementById("documentsGrid");
+  if(!grid || id) return;
+
+  var selectedTypes = 0;
+
+  REQUIRED_DOCUMENTS.forEach(function(item){
+    var input = document.getElementById("doc_" + item.key);
+    if(input && input.files && input.files.length > 0) selectedTypes++;
+  });
+
+  var counter = document.getElementById("documentsCounter");
+  var label = document.getElementById("documentsCounterLabel");
+  var progress = document.getElementById("documentsProgressBar");
+  var total = REQUIRED_DOCUMENTS.length;
+  var percent = total ? Math.round((selectedTypes / total) * 100) : 0;
+
+  if(counter) counter.textContent = selectedTypes + "/" + total;
+  if(label) label.textContent = selectedTypes === total ? "Pronta" : "Da caricare al salvataggio";
+  if(progress) progress.style.width = percent + "%";
+
+  REQUIRED_DOCUMENTS.forEach(function(item){
+    var input = document.getElementById("doc_" + item.key);
+    var row = input ? input.closest(".document-row") : null;
+    if(row && input.files && input.files.length > 0){
+      var status = row.querySelector(".document-status");
+      var info = row.querySelector(".document-file");
+      if(status){
+        status.classList.add("loaded");
+        status.textContent = input.files.length + " selezionati";
+      }
+      if(info){
+        var names = Array.from(input.files).map(function(file){ return file.name; }).join(", ");
+        info.textContent = "File selezionati: " + names;
+      }
+    }
+  });
+}
+
+async function uploadSelectedDocumentsAfterCreate(){
+  if(!id) return;
+
+  var selected = [];
+
+  REQUIRED_DOCUMENTS.forEach(function(item){
+    var input = document.getElementById("doc_" + item.key);
+    if(input && input.files && input.files.length > 0){
+      Array.from(input.files).forEach(function(file){
+        selected.push({ type:item.key, file:file });
+      });
+    }
+  });
+
+  if(selected.length === 0) return;
+
+  for(var i = 0; i < selected.length; i++){
+    setDocumentRowProgress(selected[i].type, "Caricamento documento " + (i + 1) + " di " + selected.length + " dopo salvataggio...", 8, true);
+    await uploadOpportunityDocument(selected[i].type, selected[i].file, true);
+  }
+
+  await loadOpportunityDocuments();
 }
 
 async function loadOpportunityDocuments(){
@@ -1384,7 +1524,7 @@ async function loadOpportunityDocuments(){
     .from("opportunity_documents")
     .select("*")
     .eq("opportunity_id", id)
-    .order("uploaded_at", { ascending:false });
+    .order("uploaded_at", { ascending:true });
 
   if(result.error){
     console.error(result.error);
@@ -1398,20 +1538,32 @@ async function loadOpportunityDocuments(){
   renderDocuments();
 }
 
-async function uploadOpportunityDocument(documentType, file){
+async function uploadOpportunityDocumentFiles(documentType, files){
+  files = (files || []).filter(Boolean);
+  if(files.length === 0) return;
+
+  for(var i = 0; i < files.length; i++){
+    await uploadOpportunityDocument(documentType, files[i], i < files.length - 1, i + 1, files.length);
+  }
+
+  await loadOpportunityDocuments();
+}
+
+async function uploadOpportunityDocument(documentType, file, skipReload, index, total){
   if(!id){
     setDocumentsStatus("Salva prima l’opportunità, poi carica la documentazione.", "error");
     return;
   }
 
   try{
-    setDocumentsStatus("Caricamento documento in corso...");
-    setDocumentRowProgress(documentType, "Preparazione upload documento...", 8, true);
+    var prefix = total && total > 1 ? ("File " + index + " di " + total + ": ") : "";
+    setDocumentsStatus(prefix + "caricamento documento in corso...");
+    setDocumentRowProgress(documentType, prefix + "preparazione upload documento...", 8, true);
 
     var safeName = cleanFileName(file.name || (documentType + ".pdf"));
     var path = id + "/" + documentType + "/" + Date.now() + "-" + safeName;
 
-    setDocumentRowProgress(documentType, "Upload file su archivio IMMONOVA...", 35, true);
+    setDocumentRowProgress(documentType, prefix + "upload file su archivio IMMONOVA...", 35, true);
 
     var uploadResult = await client
       .storage
@@ -1425,56 +1577,40 @@ async function uploadOpportunityDocument(documentType, file){
       throw uploadResult.error;
     }
 
-    setDocumentRowProgress(documentType, "Generazione link sicuro del documento...", 62, true);
+    setDocumentRowProgress(documentType, prefix + "generazione link sicuro del documento...", 62, true);
 
     var publicUrl = client
       .storage
       .from("opportunity-documents")
       .getPublicUrl(path);
 
-    var existing = getDocumentByType(documentType);
+    setDocumentRowProgress(documentType, prefix + "registrazione documento nella checklist...", 78, true);
 
-    setDocumentRowProgress(documentType, existing ? "Aggiornamento scheda documento..." : "Registrazione documento nella checklist...", 78, true);
+    var insertResult = await client
+      .from("opportunity_documents")
+      .insert({
+        opportunity_id:id,
+        document_type:documentType,
+        file_name:file.name,
+        file_path:path,
+        file_url:publicUrl.data.publicUrl,
+        mime_type:file.type || null,
+        file_size:file.size || null
+      });
 
-    if(existing){
-      var updateResult = await client
-        .from("opportunity_documents")
-        .update({
-          file_name:file.name,
-          file_path:path,
-          file_url:publicUrl.data.publicUrl,
-          mime_type:file.type || null,
-          file_size:file.size || null,
-          updated_at:new Date().toISOString()
-        })
-        .eq("id", existing.id);
-
-      if(updateResult.error){
-        throw updateResult.error;
-      }
-    }else{
-      var insertResult = await client
-        .from("opportunity_documents")
-        .insert({
-          opportunity_id:id,
-          document_type:documentType,
-          file_name:file.name,
-          file_path:path,
-          file_url:publicUrl.data.publicUrl,
-          mime_type:file.type || null,
-          file_size:file.size || null
-        });
-
-      if(insertResult.error){
-        throw insertResult.error;
-      }
+    if(insertResult.error){
+      throw insertResult.error;
     }
 
-    setDocumentRowProgress(documentType, "Aggiornamento checklist documentale...", 92, true);
-    await loadOpportunityDocuments();
-    setDocumentRowProgress(documentType, "Documento caricato correttamente.", 100, true);
+    setDocumentRowProgress(documentType, prefix + "aggiornamento checklist documentale...", 92, true);
+
+    if(!skipReload){
+      await loadOpportunityDocuments();
+    }
+
+    setDocumentRowProgress(documentType, prefix + "documento caricato correttamente.", 100, true);
     hideDocumentRowProgress(documentType, 1100);
-    setDocumentsStatus("Documento caricato correttamente.", "success");
+    setDocumentsStatus("Documento caricato correttamente. Puoi caricarne subito un altro dalla stessa riga.", "success");
   }catch(error){
     console.error(error);
     setDocumentRowProgress(documentType, "Errore durante il caricamento.", 100, true);
@@ -1483,8 +1619,10 @@ async function uploadOpportunityDocument(documentType, file){
   }
 }
 
-async function deleteOpportunityDocument(documentType){
-  var doc = getDocumentByType(documentType);
+async function deleteOpportunityDocument(documentId, documentType){
+  var doc = opportunityDocuments.find(function(item){
+    return String(item.id) === String(documentId);
+  });
 
   if(!doc){
     return;
@@ -1495,7 +1633,7 @@ async function deleteOpportunityDocument(documentType){
 
   try{
     setDocumentsStatus("Eliminazione documento in corso...");
-    setDocumentRowProgress(documentType, "Eliminazione documento dall’archivio...", 25, true);
+    setDocumentRowProgress(documentType || doc.document_type, "Eliminazione documento dall’archivio...", 25, true);
 
     var deleteResult = await client
       .from("opportunity_documents")
@@ -1507,26 +1645,25 @@ async function deleteOpportunityDocument(documentType){
     }
 
     if(doc.file_path){
-      setDocumentRowProgress(documentType, "Rimozione file dallo storage...", 58, true);
+      setDocumentRowProgress(documentType || doc.document_type, "Rimozione file dallo storage...", 58, true);
       await client
         .storage
         .from("opportunity-documents")
         .remove([doc.file_path]);
     }
 
-    setDocumentRowProgress(documentType, "Aggiornamento checklist documentale...", 85, true);
+    setDocumentRowProgress(documentType || doc.document_type, "Aggiornamento checklist documentale...", 85, true);
     await loadOpportunityDocuments();
-    setDocumentRowProgress(documentType, "Documento eliminato correttamente.", 100, true);
-    hideDocumentRowProgress(documentType, 1100);
+    setDocumentRowProgress(documentType || doc.document_type, "Documento eliminato correttamente.", 100, true);
+    hideDocumentRowProgress(documentType || doc.document_type, 1100);
     setDocumentsStatus("Documento eliminato correttamente.", "success");
   }catch(error){
     console.error(error);
-    setDocumentRowProgress(documentType, "Errore durante l’eliminazione.", 100, true);
-    hideDocumentRowProgress(documentType, 2200);
+    setDocumentRowProgress(documentType || (doc && doc.document_type), "Errore durante l’eliminazione.", 100, true);
+    hideDocumentRowProgress(documentType || (doc && doc.document_type), 2200);
     setDocumentsStatus("Errore eliminazione documento: " + (error.message || "operazione non riuscita"), "error");
   }
 }
-
 
 document.getElementById("reportLink").href = "report-view.html?id=" + encodeURIComponent(id || "");
 document.getElementById("reportBtn").href = "report-view.html?id=" + encodeURIComponent(id || "");
