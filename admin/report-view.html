@@ -4146,26 +4146,34 @@ async function renderPdfDocumentPages(doc){
   for(var pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++){
     var page = await pdf.getPage(pageNumber);
     var viewport = page.getViewport({ scale:1 });
-    var maxWidth = 1500;
-    var maxHeight = 950;
-    var scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height, 2.2);
+    var maxWidth = 1800;
+    var maxHeight = 1120;
+    var scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height, 2.6);
     var scaled = page.getViewport({ scale:scale });
     var canvas = document.createElement("canvas");
-    var context = canvas.getContext("2d");
+    var context = canvas.getContext("2d", { alpha:false });
 
     canvas.width = Math.floor(scaled.width);
     canvas.height = Math.floor(scaled.height);
 
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
     await page.render({ canvasContext:context, viewport:scaled }).promise;
 
-    var wrap = document.createElement("div");
-    wrap.className = "technical-document-canvas-wrap";
-    wrap.appendChild(canvas);
+    /*
+      IMPORTANTISSIMO:
+      non usare canvas.outerHTML. outerHTML salva solo il tag <canvas>,
+      non i pixel disegnati da PDF.js. In stampa/PDF il risultato diventa
+      una pagina bianca con solo intestazione e footer.
+      Convertiamo invece ogni pagina renderizzata in immagine PNG incorporata.
+    */
+    var imageData = canvas.toDataURL("image/png", 1.0);
 
     pages.push(technicalDocumentPageShell(
       doc,
       "Pagina " + pageNumber + " di " + pdf.numPages,
-      wrap.outerHTML
+      `<div class="technical-document-image-wrap"><img src="${imageData}" alt="${escapeHTML((doc.file_name || technicalDocumentTypeLabel(doc.document_type)) + ' pagina ' + pageNumber)}"></div>`
     ));
   }
 
