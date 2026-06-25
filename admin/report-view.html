@@ -4017,12 +4017,48 @@ function renderDisclaimerPage(){
 function renderEconomicsPage(){
   var rows = (report && (report.rent_15y_data || (report.report_json && report.report_json.rent_15y_data))) || [];
   if(!rows || !rows.length) return "";
+
+  var structure = getInvestmentStructure ? getInvestmentStructure() : {};
+  var totalProjectCost = Number(structure.total_project_cost || 0);
+
+  if(!totalProjectCost){
+    var json = getReportJson();
+    totalProjectCost =
+      Number((json.asset && (json.asset.total_project_cost || json.asset.total_investment_avg)) || 0) ||
+      Number(report.total_investment || report.total_investment_avg || 0);
+  }
+
+  var cumulative = 0;
+  var breakFound = false;
+  var breakYear = null;
+
+  rows = rows.map(function(row){
+    var profit = Number(row.profit || 0);
+    cumulative += profit;
+
+    var hit = !breakFound && totalProjectCost > 0 && cumulative >= totalProjectCost;
+    if(hit){
+      breakFound = true;
+      breakYear = row.year;
+    }
+
+    return Object.assign({}, row, {
+      cumulative: Math.round(cumulative),
+      is_break_even: hit
+    });
+  });
+
+  var breakText = breakYear
+    ? `Break-even calcolato sul Total Project Cost (${euro(totalProjectCost)}): anno ${escapeHTML(breakYear)}.`
+    : `Break-even non raggiunto nei 15 anni sul Total Project Cost (${euro(totalProjectCost)}).`;
+
   return `
     <div class="report-page">
       <div class="report-page-inner compact-table">
         <h2>Affitto breve · Rent Projection 15 anni</h2>
         <div class="lux-rule"></div>
         <p>${escapeHTML(cleanReportText(report.short_rental_analysis || ""))}</p>
+        <div class="break-even-callout">${breakText}</div>
         ${renderTable(rows,[
           {key:"year",label:"Anno"},
           {key:"revenue",label:"Fatturato",format:euro},
