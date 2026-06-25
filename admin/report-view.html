@@ -1123,6 +1123,94 @@ tr{
 }
 
 
+
+
+/* ===== IMMONOVA TECHNICAL DOCUMENTS IN REPORT ===== */
+.technical-documents-loading{
+  padding:18px;
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(255,255,255,.34);
+  color:#8f7643;
+  font-size:13px;
+  line-height:1.6;
+}
+.technical-document-page{
+  background:#fffdf8;
+}
+.technical-document-header{
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  align-items:flex-start;
+  margin-bottom:12px;
+}
+.technical-document-title{
+  font-size:22px;
+  font-weight:300;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:#b08a3c;
+  line-height:1.25;
+}
+.technical-document-meta{
+  text-align:right;
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#8f7643;
+  line-height:1.6;
+  max-width:38%;
+}
+.technical-document-canvas-wrap,
+.technical-document-image-wrap,
+.technical-document-fallback{
+  width:100%;
+  height:150mm;
+  border:1px solid rgba(166,127,52,.18);
+  background:white;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+.technical-document-canvas-wrap canvas{
+  max-width:100%;
+  max-height:100%;
+  display:block;
+}
+.technical-document-image-wrap img{
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;
+  display:block;
+}
+.technical-document-fallback{
+  flex-direction:column;
+  gap:14px;
+  padding:28px;
+  text-align:center;
+  color:#735f36;
+}
+.technical-document-fallback a{
+  color:#a67f34;
+  text-decoration:none;
+  border:1px solid rgba(166,127,52,.28);
+  padding:12px 18px;
+  text-transform:uppercase;
+  font-size:10px;
+  letter-spacing:.16em;
+}
+@media print{
+  .technical-documents-loading{display:none!important}
+  .technical-document-page{width:297mm;height:210mm;min-height:210mm;page-break-after:always;break-after:page;background:#fffdf8;overflow:hidden}
+  .technical-document-page .report-page-inner{padding:9mm 12mm;height:100%}
+  .technical-document-title{font-size:12pt;letter-spacing:.15em}
+  .technical-document-meta{font-size:5.8pt;line-height:1.45}
+  .technical-document-canvas-wrap,
+  .technical-document-image-wrap,
+  .technical-document-fallback{height:168mm}
+}
+
 /* ===== IMMONOVA AI GENERATION PROGRESS ===== */
 .loader-overlay{
   position:fixed;
@@ -1527,6 +1615,7 @@ tr{
 
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 
@@ -1559,6 +1648,12 @@ var currentUser = null;
 var opportunity = null;
 var report = null;
 var renovationRenders = [];
+var propertyDocuments = [];
+
+if(window.pdfjsLib){
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+}
+
 
 function escapeHTML(value){
   return String(value === null || value === undefined ? "" : value)
@@ -1838,6 +1933,7 @@ async function translateRenderedDossier(){
 
 async function renderReportTranslated(){
   renderReport();
+  await renderTechnicalDocumentsIntoReport();
 
   if(requestedLanguage !== "it"){
     await translateRenderedDossier();
@@ -3960,6 +4056,187 @@ function getDataConfidence(){
   };
 }
 
+
+function technicalDocumentTypeLabel(type){
+  var labels = {
+    cadastral_plan:"Planimetria catastale",
+    cadastral_report:"Visura catastale"
+  };
+  return labels[type] || type || "Documento tecnico";
+}
+
+function isPdfDocument(doc){
+  var mime = String(doc && doc.mime_type || "").toLowerCase();
+  var name = String(doc && doc.file_name || doc && doc.file_url || "").toLowerCase();
+  return mime.indexOf("pdf") >= 0 || name.endsWith(".pdf");
+}
+
+function isImageDocument(doc){
+  var mime = String(doc && doc.mime_type || "").toLowerCase();
+  var name = String(doc && doc.file_name || doc && doc.file_url || "").toLowerCase();
+  return mime.indexOf("image/") === 0 || /\.(png|jpe?g|webp|gif)$/i.test(name);
+}
+
+function technicalDocumentPageShell(doc, pageLabel, innerHtml){
+  var typeLabel = technicalDocumentTypeLabel(doc.document_type);
+  var fileName = doc.file_name || "Documento";
+  return `
+    <div class="report-page technical-document-page">
+      <div class="report-page-inner">
+        <div class="technical-document-header">
+          <div>
+            <div class="technical-document-title">${escapeHTML(typeLabel)}</div>
+            <div class="lux-rule"></div>
+          </div>
+          <div class="technical-document-meta">
+            ${escapeHTML(pageLabel || "Documento")}<br>
+            ${escapeHTML(fileName)}
+          </div>
+        </div>
+        ${innerHtml}
+        <div class="page-footer">
+          <span>IMMONOVA · Documentazione tecnica</span>
+          <span>Confidential</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTechnicalDocumentsPlaceholder(){
+  return `<div id="technicalDocumentsMount"></div>`;
+}
+
+async function loadPropertyDocuments(){
+  if(!opportunityId){
+    propertyDocuments = [];
+    return;
+  }
+
+  var result = await client
+    .from("opportunity_documents")
+    .select("*")
+    .eq("opportunity_id", opportunityId)
+    .in("document_type", ["cadastral_plan", "cadastral_report"])
+    .order("document_type", { ascending:true })
+    .order("uploaded_at", { ascending:true });
+
+  if(result.error){
+    console.warn("Documentazione catastale non caricata:", result.error.message);
+    propertyDocuments = [];
+    return;
+  }
+
+  propertyDocuments = result.data || [];
+}
+
+async function renderPdfDocumentPages(doc){
+  if(!window.pdfjsLib){
+    throw new Error("PDF.js non disponibile.");
+  }
+
+  var url = doc.file_url;
+  if(!url){
+    throw new Error("URL documento mancante.");
+  }
+
+  var pdf = await window.pdfjsLib.getDocument({ url:url, withCredentials:false }).promise;
+  var pages = [];
+
+  for(var pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++){
+    var page = await pdf.getPage(pageNumber);
+    var viewport = page.getViewport({ scale:1 });
+    var maxWidth = 1500;
+    var maxHeight = 950;
+    var scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height, 2.2);
+    var scaled = page.getViewport({ scale:scale });
+    var canvas = document.createElement("canvas");
+    var context = canvas.getContext("2d");
+
+    canvas.width = Math.floor(scaled.width);
+    canvas.height = Math.floor(scaled.height);
+
+    await page.render({ canvasContext:context, viewport:scaled }).promise;
+
+    var wrap = document.createElement("div");
+    wrap.className = "technical-document-canvas-wrap";
+    wrap.appendChild(canvas);
+
+    pages.push(technicalDocumentPageShell(
+      doc,
+      "Pagina " + pageNumber + " di " + pdf.numPages,
+      wrap.outerHTML
+    ));
+  }
+
+  return pages.join("");
+}
+
+function renderImageDocumentPage(doc){
+  return technicalDocumentPageShell(
+    doc,
+    "Documento immagine",
+    `<div class="technical-document-image-wrap"><img src="${escapeHTML(doc.file_url || "")}" alt="${escapeHTML(doc.file_name || technicalDocumentTypeLabel(doc.document_type))}"></div>`
+  );
+}
+
+function renderDocumentFallbackPage(doc, message){
+  return technicalDocumentPageShell(
+    doc,
+    "Documento allegato",
+    `<div class="technical-document-fallback">
+      <div>${escapeHTML(message || "Anteprima non disponibile nel viewer. Il documento resta allegato e apribile separatamente.")}</div>
+      ${doc.file_url ? `<a href="${escapeHTML(doc.file_url)}" target="_blank" rel="noopener">Apri documento</a>` : ""}
+    </div>`
+  );
+}
+
+async function renderTechnicalDocumentsIntoReport(){
+  var mount = document.getElementById("technicalDocumentsMount");
+  if(!mount) return;
+
+  var docs = (propertyDocuments || []).filter(function(doc){
+    return doc && ["cadastral_plan", "cadastral_report"].includes(doc.document_type);
+  });
+
+  if(docs.length === 0){
+    mount.innerHTML = "";
+    return;
+  }
+
+  mount.innerHTML = `
+    <div class="report-page technical-document-page">
+      <div class="report-page-inner">
+        <h2>Documentazione catastale</h2>
+        <div class="lux-rule"></div>
+        <p>Le planimetrie catastali e le visure caricate nella proposta vengono inserite nel dossier come pagine stampabili. I PDF multipagina sono separati automaticamente: ogni pagina del documento diventa una pagina del report.</p>
+        <div class="technical-documents-loading">Preparazione documenti tecnici per stampa/PDF...</div>
+        <div class="page-footer"><span>IMMONOVA · Documentazione tecnica</span><span>Confidential</span></div>
+      </div>
+    </div>
+  `;
+
+  var html = "";
+
+  for(var i = 0; i < docs.length; i++){
+    var doc = docs[i];
+    try{
+      if(isPdfDocument(doc)){
+        html += await renderPdfDocumentPages(doc);
+      }else if(isImageDocument(doc)){
+        html += renderImageDocumentPage(doc);
+      }else{
+        html += renderDocumentFallbackPage(doc, "Formato non renderizzabile direttamente nel viewer.");
+      }
+    }catch(error){
+      console.warn("Errore rendering documento tecnico:", error);
+      html += renderDocumentFallbackPage(doc, "Non è stato possibile renderizzare automaticamente questo documento nel report. Può dipendere da CORS, permessi Storage o formato PDF non supportato dal browser.");
+    }
+  }
+
+  mount.innerHTML = html;
+}
+
 function renderSourcesPage(){
   var sources = getSourceRegistry();
   var c = getDataConfidence();
@@ -4106,6 +4383,7 @@ function renderReport(){
     ${renderRevaluationPage()}
     ${renderMarketPages()}
     ${renderCommitteeClosingPage()}
+    ${renderTechnicalDocumentsPlaceholder()}
     ${renderSourcesPage()}
     ${renderDisclaimerPage()}
   `;
@@ -4174,6 +4452,7 @@ async function loadReport(){
     return;
   }
   await loadRenovationRenders();
+  await loadPropertyDocuments();
   fillOverrideForm();
   applyCalculatedInputs();
 
