@@ -723,6 +723,17 @@ button.danger{
     <button type="button" class="ai-button" id="aiBtn">
       Analizza con IA
     </button>
+    <div id="aiWorkProgress" class="work-progress">
+      <div class="work-progress-top">
+        <div class="work-progress-title">Analisi IA</div>
+        <div class="work-progress-percent" id="aiWorkPercent">0%</div>
+      </div>
+      <div class="work-progress-track">
+        <div class="work-progress-bar" id="aiWorkBar"></div>
+      </div>
+      <div class="work-progress-message" id="aiWorkMessage">Preparazione...</div>
+    </div>
+
   </div>
 
   <div id="loading" class="loading">Caricamento...</div>
@@ -2231,6 +2242,7 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
 
 aiBtn.addEventListener("click", async function(){
   setStatus("Analisi IA in corso...", "");
+  showWorkProgress("ai", "Preparazione analisi IA...", 8);
   aiBtn.disabled = true;
   aiBtn.textContent = "Analisi...";
 
@@ -2280,9 +2292,13 @@ aiBtn.addEventListener("click", async function(){
       full_description:textOrNull("full_description")
     };
 
+    updateWorkProgress("ai", "Invio dati alla funzione IA...", 28);
+
     var result = await client.functions.invoke("analyze-opportunity", {
       body:body
     });
+
+    updateWorkProgress("ai", "Lettura risultato e compilazione campi...", 72);
 
     if(result.error || !result.data || !result.data.success){
       throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore analisi IA.");
@@ -2312,9 +2328,13 @@ aiBtn.addEventListener("click", async function(){
     setValue("preliminary_investment_score", ai.preliminary_investment_score);
 
     aiGenerated = true;
+    updateWorkProgress("ai", "Analisi IA completata.", 100);
+    hideWorkProgress("ai", 1000);
     setStatus("Analisi IA completata. Salva le modifiche per aggiornare la proposta.", "success");
 
   }catch(error){
+    updateWorkProgress("ai", "Errore durante l’analisi IA.", 100);
+    hideWorkProgress("ai", 1800);
     setStatus(error.message || "Errore durante l'analisi IA.", "error");
   }
 
