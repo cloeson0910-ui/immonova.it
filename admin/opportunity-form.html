@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Modifica Opportunità | IMMONOVA Admin</title>
+<title>Nuova Opportunità | IMMONOVA Admin</title>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -701,28 +701,37 @@ button.danger{
   <nav class="nav">
     <a href="dashboard.html">Dashboard</a>
     <a href="opportunities.html">Opportunità</a>
-    <a id="reportLink" href="#">Dossier IA</a>
+    
     <button id="logoutBtn">Logout</button>
   </nav>
 </header>
 
 <section class="panel">
-  <h1>Modifica Opportunità</h1>
+  <h1>Nuova Opportunità</h1>
 
   <p class="intro">
-    Aggiorna i dati dell’opportunità, arricchisci la scheda con IA, gestisci immagini,
-    pubblicazione e messa in evidenza.
+    Carica una nuova opportunità IMMONOVA. Puoi salvare e inviare la proposta anche con documenti mancanti: la pubblicazione resta sempre validata da un admin.
   </p>
 
   <div class="ai-box">
     <div class="ai-title">AI Assistant</div>
     <div class="ai-text">
-      Usa l’IA anche sulle opportunità già caricate per generare o rigenerare descrizioni,
-      dati territoriali, aeroporto, distanze, analisi turistica, mercato e affitto breve.
+      Usa l’IA per precompilare descrizioni, dati territoriali, aeroporto, distanze, analisi turistica, mercato e affitto breve prima dell’invio.
     </div>
     <button type="button" class="ai-button" id="aiBtn">
       Analizza con IA
     </button>
+    <div id="aiWorkProgress" class="work-progress">
+      <div class="work-progress-top">
+        <div class="work-progress-title">Analisi IA</div>
+        <div class="work-progress-percent" id="aiWorkPercent">0%</div>
+      </div>
+      <div class="work-progress-track">
+        <div class="work-progress-bar" id="aiWorkBar"></div>
+      </div>
+      <div class="work-progress-message" id="aiWorkMessage">Preparazione...</div>
+    </div>
+
   </div>
 
   <div id="loading" class="loading">Caricamento...</div>
@@ -778,19 +787,19 @@ button.danger{
       <div class="section-title">Media</div>
 
       <div class="field full">
-        <label>Copertina attuale</label>
+        <label>Copertina</label>
         <img id="coverPreview" class="preview-cover" alt="Copertina attuale">
         <div id="noCoverText" class="file-note">Nessuna copertina caricata.</div>
         <button type="button" class="soft" id="removeCoverBtn">Rimuovi Copertina</button>
       </div>
 
       <div class="field full">
-        <label for="coverFile">Sostituisci / Aggiungi Copertina</label>
+        <label for="coverFile">Aggiungi Copertina</label>
         <input type="file" id="coverFile" accept="image/*">
       </div>
 
       <div class="field full">
-        <label>Gallery attuale</label>
+        <label>Gallery</label>
         <div id="galleryPreview" class="gallery-preview"></div>
         <div id="noGalleryText" class="file-note">Nessuna immagine gallery caricata.</div>
       </div>
@@ -1113,10 +1122,9 @@ button.danger{
     </div>
 
     <div class="actions">
-      <button type="submit" class="primary" id="saveBtn">Salva Modifiche</button>
+      <button type="submit" class="primary" id="saveBtn">Salva e invia proposta</button>
       <a href="opportunities.html" class="secondary">Annulla</a>
-      <a id="reportBtn" href="#" class="secondary">Apri Dossier IA</a>
-      <button type="button" class="danger" id="deleteBtn">Elimina</button>
+      
     </div>
 
     <div id="status" class="status"></div>
@@ -1162,6 +1170,7 @@ var renderImages = [];
 var coverRemoved = false;
 var aiGenerated = false;
 var loadedOpportunity = null;
+var currentUser = null;
 
 
 var REQUIRED_DOCUMENTS = [
@@ -1275,11 +1284,80 @@ function renderDocuments(){
     if(input){
       input.addEventListener("change", function(){
         if(input.files && input.files[0]){
+          if(!id){
+            setDocumentsStatus("Documento selezionato: sarà caricato automaticamente dopo il salvataggio della proposta.", "success");
+            renderPendingDocumentSelection();
+            return;
+          }
           uploadOpportunityDocument(item.key, input.files[0]);
         }
       });
     }
   });
+}
+
+
+function renderPendingDocumentSelection(){
+  var grid = document.getElementById("documentsGrid");
+  if(!grid || id) return;
+
+  var selected = 0;
+
+  REQUIRED_DOCUMENTS.forEach(function(item){
+    var input = document.getElementById("doc_" + item.key);
+    if(input && input.files && input.files[0]) selected++;
+  });
+
+  var counter = document.getElementById("documentsCounter");
+  var label = document.getElementById("documentsCounterLabel");
+  var progress = document.getElementById("documentsProgressBar");
+  var total = REQUIRED_DOCUMENTS.length;
+  var percent = total ? Math.round((selected / total) * 100) : 0;
+
+  if(counter) counter.textContent = selected + "/" + total;
+  if(label) label.textContent = selected === total ? "Pronta" : "Da caricare al salvataggio";
+  if(progress) progress.style.width = percent + "%";
+
+  REQUIRED_DOCUMENTS.forEach(function(item){
+    var input = document.getElementById("doc_" + item.key);
+    var row = input ? input.closest(".document-row") : null;
+    if(row && input.files && input.files[0]){
+      var status = row.querySelector(".document-status");
+      var info = row.querySelector(".document-file");
+      if(status){
+        status.classList.add("loaded");
+        status.textContent = "Selezionato";
+      }
+      if(info){
+        info.textContent = "File selezionato: " + input.files[0].name;
+      }
+    }
+  });
+}
+
+async function uploadSelectedDocumentsAfterCreate(){
+  if(!id) return;
+
+  var selected = [];
+
+  REQUIRED_DOCUMENTS.forEach(function(item){
+    var input = document.getElementById("doc_" + item.key);
+    if(input && input.files && input.files[0]){
+      selected.push({ type:item.key, file:input.files[0] });
+    }
+  });
+
+  if(selected.length === 0) return;
+
+  showWorkProgress("documents", "Preparazione caricamento documenti selezionati...", 5);
+
+  for(var i = 0; i < selected.length; i++){
+    updateWorkProgress("documents", "Caricamento documento " + (i + 1) + " di " + selected.length + "...", 10 + Math.round((i / selected.length) * 80));
+    await uploadOpportunityDocument(selected[i].type, selected[i].file);
+  }
+
+  updateWorkProgress("documents", "Documentazione caricata correttamente.", 100);
+  hideWorkProgress("documents", 1000);
 }
 
 async function loadOpportunityDocuments(){
@@ -1436,8 +1514,10 @@ async function deleteOpportunityDocument(documentType){
 }
 
 
-document.getElementById("reportLink").href = "report-view.html?id=" + encodeURIComponent(id || "");
-document.getElementById("reportBtn").href = "report-view.html?id=" + encodeURIComponent(id || "");
+var reportLinkEl = document.getElementById("reportLink");
+var reportBtnEl = document.getElementById("reportBtn");
+if(reportLinkEl) reportLinkEl.href = "report-view.html?id=" + encodeURIComponent(id || "");
+if(reportBtnEl) reportBtnEl.href = "report-view.html?id=" + encodeURIComponent(id || "");
 
 
 
@@ -2056,90 +2136,25 @@ async function checkAuth(){
     return false;
   }
 
+  currentUser = result.data.session.user;
   return true;
 }
 
 async function loadOpportunity(){
-  if(!id){
-    loading.textContent = "Opportunità non selezionata.";
-    return;
-  }
+  await loadCategories("");
 
-  var result = await client
-    .from("opportunities")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if(result.error || !result.data){
-    loading.textContent = "Opportunità non trovata.";
-    return;
-  }
-
-  var data = result.data;
-  loadedOpportunity = data;
-
-  await loadCategories(data.category || "");
-
-  setValue("title", data.title || "");
-  setValue("investment_type", data.investment_type || "");
-  setValue("location", data.location || "");
-  setValue("municipality", data.municipality || "");
-  setValue("address", data.address || "");
-  setValue("locality", data.locality || "");
-  setValue("postal_code", data.postal_code || "");
-  setValue("formatted_address", data.formatted_address || "");
-  setValue("province", data.province || "");
-  setValue("region", data.region || "");
-  setValue("price", data.price || "");
-
-  setValue("bedrooms", data.bedrooms);
-  setValue("bathrooms", data.bathrooms);
-  setValue("internal_size", data.internal_size);
-  setValue("land_size", data.land_size);
-  setValue("construction_year", data.construction_year);
-  setValue("energy_class", data.energy_class || "");
-  setValue("property_condition", data.property_condition || "");
-
-  setValue("renovation_required", data.renovation_required === true ? "true" : "false");
-  setValue("renovation_level", data.renovation_level || "");
-  setValue("renovation_style", data.renovation_style || "");
-  setValue("renovation_area_sqm", data.renovation_area_sqm);
-  setValue("renovation_cost_min", data.renovation_cost_min);
-  setValue("renovation_cost_max", data.renovation_cost_max);
-  setValue("renovation_cost_avg", data.renovation_cost_avg);
-  setValue("renovation_notes", data.renovation_notes || "");
-
-
-  setValue("latitude", data.latitude);
-  setValue("longitude", data.longitude);
-  setValue("distance_to_sea_km", data.distance_to_sea_km);
-  setValue("nearest_airport", data.nearest_airport || "");
-  setValue("distance_to_airport_km", data.distance_to_airport_km);
-
-  setValue("short_description", data.short_description || "");
-  setValue("full_description", data.full_description || "");
-  setValue("location_summary", data.location_summary || "");
-  setValue("tourism_summary", data.tourism_summary || "");
-  setValue("market_summary", data.market_summary || "");
-  setValue("ai_short_rental_summary", data.ai_short_rental_summary || "");
-  setValue("preliminary_investment_score", data.preliminary_investment_score);
-
-  document.getElementById("featured").checked = data.featured === true;
-  document.getElementById("published").checked = data.published === true;
-
-  aiGenerated = data.ai_generated_description === true;
-
-  currentCoverUrl = data.cover_image || "";
-  galleryImages = normalizeGallery(data.gallery_images);
+  loadedOpportunity = null;
+  currentCoverUrl = "";
+  galleryImages = [];
+  renovationImages = [];
+  renderImages = [];
+  opportunityDocuments = [];
 
   renderCover();
   renderGallery();
   syncRenovationRequired();
   calculateRenovationBudget();
-  await loadRenovationImages();
-  await loadRenovationRenders();
-  await loadOpportunityDocuments();
+  renderDocuments();
 
   loading.style.display = "none";
   form.style.display = "block";
@@ -2231,6 +2246,7 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
 
 aiBtn.addEventListener("click", async function(){
   setStatus("Analisi IA in corso...", "");
+  showWorkProgress("ai", "Preparazione analisi IA...", 8);
   aiBtn.disabled = true;
   aiBtn.textContent = "Analisi...";
 
@@ -2280,9 +2296,13 @@ aiBtn.addEventListener("click", async function(){
       full_description:textOrNull("full_description")
     };
 
+    updateWorkProgress("ai", "Invio dati alla funzione IA...", 28);
+
     var result = await client.functions.invoke("analyze-opportunity", {
       body:body
     });
+
+    updateWorkProgress("ai", "Lettura risultato e compilazione campi...", 72);
 
     if(result.error || !result.data || !result.data.success){
       throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore analisi IA.");
@@ -2312,9 +2332,13 @@ aiBtn.addEventListener("click", async function(){
     setValue("preliminary_investment_score", ai.preliminary_investment_score);
 
     aiGenerated = true;
+    updateWorkProgress("ai", "Analisi IA completata.", 100);
+    hideWorkProgress("ai", 1000);
     setStatus("Analisi IA completata. Salva le modifiche per aggiornare la proposta.", "success");
 
   }catch(error){
+    updateWorkProgress("ai", "Errore durante l’analisi IA.", 100);
+    hideWorkProgress("ai", 1800);
     setStatus(error.message || "Errore durante l'analisi IA.", "error");
   }
 
@@ -2332,53 +2356,54 @@ document.getElementById("removeCoverBtn").addEventListener("click", function(){
 form.addEventListener("submit", async function(e){
   e.preventDefault();
 
-  setStatus("Salvataggio in corso...", "");
-  showWorkProgress("save", "Preparazione salvataggio opportunità...", 8);
+  setStatus("Salvataggio proposta in corso...", "");
+  showWorkProgress("save", "Preparazione salvataggio nuova opportunità...", 6);
   saveBtn.disabled = true;
   saveBtn.textContent = "Salvataggio...";
 
   try{
     var title = document.getElementById("title").value.trim();
+
+    if(!title){
+      throw new Error("Inserisci il titolo della proposta.");
+    }
+
     var baseSlug = slugify(title);
     var timestamp = Date.now();
-    var folder = (baseSlug || "opportunity") + "-" + id + "-" + timestamp;
+    var tempFolder = (baseSlug || "opportunity") + "-new-" + timestamp;
 
-    var finalCoverUrl = currentCoverUrl;
+    var finalCoverUrl = "";
     var coverFile = document.getElementById("coverFile").files[0];
 
     if(coverFile){
-      setStatus("Caricamento nuova copertina...", "");
-      updateWorkProgress("save", "Caricamento nuova copertina...", 22);
-      var coverPath = "cover/" + folder + "/" + cleanFileName(coverFile.name);
+      setStatus("Caricamento copertina...", "");
+      updateWorkProgress("save", "Caricamento copertina...", 18);
+      var coverPath = "cover/" + tempFolder + "/" + cleanFileName(coverFile.name);
       finalCoverUrl = await uploadImage(coverFile, coverPath);
     }
 
-    var galleryFiles = Array.prototype.slice.call(document.getElementById("galleryFiles").files);
+    var galleryFiles = Array.prototype.slice.call(document.getElementById("galleryFiles").files || []);
+    galleryImages = [];
 
     if(galleryFiles.length > 0){
-      setStatus("Caricamento nuove immagini gallery...", "");
-      updateWorkProgress("save", "Caricamento nuove immagini gallery...", 38);
+      setStatus("Caricamento immagini gallery...", "");
+      updateWorkProgress("save", "Caricamento gallery...", 30);
 
       for(var i = 0; i < galleryFiles.length; i++){
-        updateWorkProgress("save", "Caricamento immagine gallery " + (i + 1) + " di " + galleryFiles.length + "...", 38 + Math.round(((i + 1) / galleryFiles.length) * 18));
+        updateWorkProgress("save", "Caricamento immagine gallery " + (i + 1) + " di " + galleryFiles.length + "...", 30 + Math.round(((i + 1) / galleryFiles.length) * 20));
         var file = galleryFiles[i];
-        var galleryPath = "gallery/" + folder + "/" + (i + 1) + "-" + cleanFileName(file.name);
+        var galleryPath = "gallery/" + tempFolder + "/" + (i + 1) + "-" + cleanFileName(file.name);
         var url = await uploadImage(file, galleryPath);
         galleryImages.push(url);
       }
     }
 
-    if(isRenovationRequired()){
-      updateWorkProgress("save", "Verifica foto ristrutturazione e render...", 62);
-      await uploadAndInsertRenovationImages(folder);
-      calculateRenovationBudget();
-    }
-
-    setStatus("Aggiornamento dati opportunità...", "");
-    updateWorkProgress("save", "Aggiornamento dati opportunità su Supabase...", 78);
+    calculateRenovationBudget();
+    updateWorkProgress("save", "Creazione opportunità su Supabase...", 60);
 
     var payload = {
       title:title,
+      slug:baseSlug ? baseSlug + "-" + timestamp : "opportunity-" + timestamp,
       category:textOrNull("category"),
       investment_type:textOrNull("investment_type"),
       location:textOrNull("location"),
@@ -2427,59 +2452,47 @@ form.addEventListener("submit", async function(e){
       ai_generated_description:aiGenerated,
       ai_generated_at:aiGenerated ? new Date().toISOString() : null,
 
-      featured:document.getElementById("featured").checked,
-      published:document.getElementById("published").checked,
+      user_id:currentUser ? currentUser.id : null,
+      review_status:"da_verificare",
+      featured:false,
+      published:false,
+      created_at:new Date().toISOString(),
       updated_at:new Date().toISOString()
     };
 
     var result = await client
       .from("opportunities")
-      .update(payload)
-      .eq("id", id);
+      .insert(payload)
+      .select("id")
+      .single();
 
     if(result.error){
       throw result.error;
     }
 
-    updateWorkProgress("save", "Modifiche salvate correttamente.", 100);
+    id = result.data.id;
+
+    updateWorkProgress("save", "Opportunità creata. Caricamento documenti selezionati...", 78);
+
+    await uploadSelectedDocumentsAfterCreate();
+
+    updateWorkProgress("save", "Proposta inviata correttamente.", 100);
     hideWorkProgress("save", 1000);
-    setStatus("Modifiche salvate correttamente.", "success");
+    setStatus("Proposta inviata correttamente. La pubblicazione resterà in attesa di validazione admin.", "success");
     saveBtn.disabled = false;
-    saveBtn.textContent = "Salva Modifiche";
+    saveBtn.textContent = "Salva e invia proposta";
+
+    setTimeout(function(){
+      window.location.href = "opportunity-edit.html?id=" + encodeURIComponent(id);
+    }, 1200);
 
   }catch(error){
     updateWorkProgress("save", "Errore durante il salvataggio.", 100);
     hideWorkProgress("save", 1800);
     setStatus(error.message || "Errore durante il salvataggio.", "error");
     saveBtn.disabled = false;
-    saveBtn.textContent = "Salva Modifiche";
+    saveBtn.textContent = "Salva e invia proposta";
   }
-});
-
-document.getElementById("deleteBtn").addEventListener("click", async function(){
-  var confirmDelete = confirm("Vuoi eliminare definitivamente questa opportunità?");
-
-  if(!confirmDelete){
-    return;
-  }
-
-  setStatus("Eliminazione in corso...", "");
-
-  var result = await client
-    .from("opportunities")
-    .delete()
-    .eq("id", id);
-
-  if(result.error){
-    setStatus(result.error.message, "error");
-    return;
-  }
-
-  setStatus("Opportunità eliminata correttamente.", "success");
-
-  setTimeout(function(){
-    window.location.href = "opportunities.html";
-  }, 900);
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async function(){
