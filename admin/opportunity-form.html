@@ -512,6 +512,61 @@ button.danger{
   transition:width .25s ease;
 }
 
+.work-progress{
+  display:none;
+  margin-top:16px;
+  padding:16px;
+  border:1px solid rgba(165,129,57,.24);
+  background:rgba(255,252,244,.24);
+}
+
+.work-progress.active{
+  display:block;
+}
+
+.work-progress-top{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  align-items:center;
+  margin-bottom:10px;
+}
+
+.work-progress-title{
+  font-size:10px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:#a58139;
+}
+
+.work-progress-percent{
+  font-size:11px;
+  letter-spacing:.14em;
+  color:#8f7643;
+}
+
+.work-progress-track{
+  width:100%;
+  height:9px;
+  border:1px solid rgba(165,129,57,.20);
+  background:rgba(255,255,255,.18);
+  overflow:hidden;
+}
+
+.work-progress-bar{
+  height:100%;
+  width:0%;
+  background:#a58139;
+  transition:width .28s ease;
+}
+
+.work-progress-message{
+  margin-top:10px;
+  font-size:12px;
+  line-height:1.6;
+  color:#8f7643;
+}
+
 .documents-grid{
   display:grid;
   grid-template-columns:1fr;
@@ -767,6 +822,17 @@ button.danger{
         </div>
         <div id="documentsGrid" class="documents-grid"></div>
         <div id="documentsStatus" class="file-note" style="margin-top:14px;"></div>
+        <div id="documentsWorkProgress" class="work-progress">
+          <div class="work-progress-top">
+            <div class="work-progress-title">Operazione documento</div>
+            <div class="work-progress-percent" id="documentsWorkPercent">0%</div>
+          </div>
+          <div class="work-progress-track">
+            <div class="work-progress-bar" id="documentsWorkBar"></div>
+          </div>
+          <div class="work-progress-message" id="documentsWorkMessage">Preparazione...</div>
+        </div>
+
       </div>
 
 
@@ -1054,6 +1120,17 @@ button.danger{
     </div>
 
     <div id="status" class="status"></div>
+    <div id="saveWorkProgress" class="work-progress">
+      <div class="work-progress-top">
+        <div class="work-progress-title">Salvataggio opportunità</div>
+        <div class="work-progress-percent" id="saveWorkPercent">0%</div>
+      </div>
+      <div class="work-progress-track">
+        <div class="work-progress-bar" id="saveWorkBar"></div>
+      </div>
+      <div class="work-progress-message" id="saveWorkMessage">Preparazione...</div>
+    </div>
+
 
   </form>
 </section>
@@ -1116,6 +1193,34 @@ function setDocumentsStatus(message, type){
   if(!el) return;
   el.textContent = message || "";
   el.style.color = type === "error" ? "#9c2f2f" : (type === "success" ? "#4f7f45" : "#8f7643");
+}
+
+
+function showWorkProgress(prefix, message, percent){
+  var box = document.getElementById(prefix + "WorkProgress");
+  if(!box) return;
+  box.classList.add("active");
+  updateWorkProgress(prefix, message || "Operazione in corso...", percent == null ? 5 : percent);
+}
+
+function updateWorkProgress(prefix, message, percent){
+  var bar = document.getElementById(prefix + "WorkBar");
+  var percentEl = document.getElementById(prefix + "WorkPercent");
+  var messageEl = document.getElementById(prefix + "WorkMessage");
+  var value = Math.max(0, Math.min(100, Number(percent || 0)));
+
+  if(bar) bar.style.width = value + "%";
+  if(percentEl) percentEl.textContent = Math.round(value) + "%";
+  if(messageEl) messageEl.textContent = message || "Operazione in corso...";
+}
+
+function hideWorkProgress(prefix, delay){
+  window.setTimeout(function(){
+    var box = document.getElementById(prefix + "WorkProgress");
+    if(!box) return;
+    box.classList.remove("active");
+    updateWorkProgress(prefix, "Preparazione...", 0);
+  }, delay == null ? 700 : delay);
 }
 
 function getDocumentByType(type){
@@ -1209,9 +1314,12 @@ async function uploadOpportunityDocument(documentType, file){
 
   try{
     setDocumentsStatus("Caricamento documento in corso...");
+    showWorkProgress("documents", "Preparazione upload documento...", 8);
 
     var safeName = cleanFileName(file.name || (documentType + ".pdf"));
     var path = id + "/" + documentType + "/" + Date.now() + "-" + safeName;
+
+    updateWorkProgress("documents", "Upload file su archivio IMMONOVA...", 35);
 
     var uploadResult = await client
       .storage
@@ -1225,12 +1333,16 @@ async function uploadOpportunityDocument(documentType, file){
       throw uploadResult.error;
     }
 
+    updateWorkProgress("documents", "Generazione link sicuro del documento...", 62);
+
     var publicUrl = client
       .storage
       .from("opportunity-documents")
       .getPublicUrl(path);
 
     var existing = getDocumentByType(documentType);
+
+    updateWorkProgress("documents", existing ? "Aggiornamento scheda documento..." : "Registrazione documento nella checklist...", 78);
 
     if(existing){
       var updateResult = await client
@@ -1266,10 +1378,15 @@ async function uploadOpportunityDocument(documentType, file){
       }
     }
 
+    updateWorkProgress("documents", "Aggiornamento checklist documentale...", 92);
     await loadOpportunityDocuments();
+    updateWorkProgress("documents", "Documento caricato correttamente.", 100);
+    hideWorkProgress("documents", 900);
     setDocumentsStatus("Documento caricato correttamente.", "success");
   }catch(error){
     console.error(error);
+    updateWorkProgress("documents", "Errore durante il caricamento.", 100);
+    hideWorkProgress("documents", 1800);
     setDocumentsStatus("Errore caricamento documento: " + (error.message || "operazione non riuscita"), "error");
   }
 }
@@ -1286,6 +1403,7 @@ async function deleteOpportunityDocument(documentType){
 
   try{
     setDocumentsStatus("Eliminazione documento in corso...");
+    showWorkProgress("documents", "Eliminazione documento dall’archivio...", 25);
 
     var deleteResult = await client
       .from("opportunity_documents")
@@ -1297,16 +1415,22 @@ async function deleteOpportunityDocument(documentType){
     }
 
     if(doc.file_path){
+      updateWorkProgress("documents", "Rimozione file dallo storage...", 58);
       await client
         .storage
         .from("opportunity-documents")
         .remove([doc.file_path]);
     }
 
+    updateWorkProgress("documents", "Aggiornamento checklist documentale...", 85);
     await loadOpportunityDocuments();
-    setDocumentsStatus("Documento eliminato.", "success");
+    updateWorkProgress("documents", "Documento eliminato correttamente.", 100);
+    hideWorkProgress("documents", 900);
+    setDocumentsStatus("Documento eliminato correttamente.", "success");
   }catch(error){
     console.error(error);
+    updateWorkProgress("documents", "Errore durante l’eliminazione.", 100);
+    hideWorkProgress("documents", 1800);
     setDocumentsStatus("Errore eliminazione documento: " + (error.message || "operazione non riuscita"), "error");
   }
 }
@@ -2209,6 +2333,7 @@ form.addEventListener("submit", async function(e){
   e.preventDefault();
 
   setStatus("Salvataggio in corso...", "");
+  showWorkProgress("save", "Preparazione salvataggio opportunità...", 8);
   saveBtn.disabled = true;
   saveBtn.textContent = "Salvataggio...";
 
@@ -2223,6 +2348,7 @@ form.addEventListener("submit", async function(e){
 
     if(coverFile){
       setStatus("Caricamento nuova copertina...", "");
+      updateWorkProgress("save", "Caricamento nuova copertina...", 22);
       var coverPath = "cover/" + folder + "/" + cleanFileName(coverFile.name);
       finalCoverUrl = await uploadImage(coverFile, coverPath);
     }
@@ -2231,8 +2357,10 @@ form.addEventListener("submit", async function(e){
 
     if(galleryFiles.length > 0){
       setStatus("Caricamento nuove immagini gallery...", "");
+      updateWorkProgress("save", "Caricamento nuove immagini gallery...", 38);
 
       for(var i = 0; i < galleryFiles.length; i++){
+        updateWorkProgress("save", "Caricamento immagine gallery " + (i + 1) + " di " + galleryFiles.length + "...", 38 + Math.round(((i + 1) / galleryFiles.length) * 18));
         var file = galleryFiles[i];
         var galleryPath = "gallery/" + folder + "/" + (i + 1) + "-" + cleanFileName(file.name);
         var url = await uploadImage(file, galleryPath);
@@ -2241,11 +2369,13 @@ form.addEventListener("submit", async function(e){
     }
 
     if(isRenovationRequired()){
+      updateWorkProgress("save", "Verifica foto ristrutturazione e render...", 62);
       await uploadAndInsertRenovationImages(folder);
       calculateRenovationBudget();
     }
 
     setStatus("Aggiornamento dati opportunità...", "");
+    updateWorkProgress("save", "Aggiornamento dati opportunità su Supabase...", 78);
 
     var payload = {
       title:title,
@@ -2311,11 +2441,15 @@ form.addEventListener("submit", async function(e){
       throw result.error;
     }
 
+    updateWorkProgress("save", "Modifiche salvate correttamente.", 100);
+    hideWorkProgress("save", 1000);
     setStatus("Modifiche salvate correttamente.", "success");
     saveBtn.disabled = false;
     saveBtn.textContent = "Salva Modifiche";
 
   }catch(error){
+    updateWorkProgress("save", "Errore durante il salvataggio.", 100);
+    hideWorkProgress("save", 1800);
     setStatus(error.message || "Errore durante il salvataggio.", "error");
     saveBtn.disabled = false;
     saveBtn.textContent = "Salva Modifiche";
