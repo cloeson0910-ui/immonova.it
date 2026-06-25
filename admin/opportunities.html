@@ -258,6 +258,42 @@ font-size:13px;
 .success{color:#4f7f45}
 .error{color:#9c2f2f}
 
+
+.docs-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:70px;
+  padding:8px 10px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.22);
+  color:#8f5b28;
+  font-size:11px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+
+.docs-pill.complete{
+  color:#4f7f45;
+  border-color:rgba(79,127,69,.34);
+  background:rgba(79,127,69,.08);
+}
+
+.docs-pill.low{
+  color:#9c2f2f;
+  border-color:rgba(156,47,47,.30);
+  background:rgba(156,47,47,.06);
+}
+
+.docs-mini{
+  margin-top:6px;
+  font-size:10px;
+  line-height:1.5;
+  color:#8f7643;
+  max-width:170px;
+}
+
 @media(max-width:900px){
 .header{
 flex-direction:column;
@@ -338,13 +374,14 @@ Caricamento area riservata...
 <th>Prezzo</th>
 <th>Stato Revisione</th>
 <th>Pubblicata</th>
+<th>Documenti</th>
 <th>Azioni</th>
 </tr>
 </thead>
 
 <tbody id="opportunitiesTable">
 <tr>
-<td colspan="7" class="empty">Caricamento...</td>
+<td colspan="8" class="empty">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -373,6 +410,34 @@ let currentUser = null;
 let currentProfile = null;
 let isAdmin = false;
 let allOpportunities = [];
+
+
+const REQUIRED_DOCUMENT_TYPES = [
+  "owner_identity",
+  "owner_tax_code",
+  "deed_of_origin",
+  "cadastral_report",
+  "cadastral_plan",
+  "ape",
+  "urban_planning",
+  "technical_conformity",
+  "habitability",
+  "systems_certifications"
+];
+
+const REQUIRED_DOCUMENT_LABELS = {
+  owner_identity:"Identità",
+  owner_tax_code:"Codice fiscale",
+  deed_of_origin:"Atto provenienza",
+  cadastral_report:"Visura catastale",
+  cadastral_plan:"Planimetria",
+  ape:"APE",
+  urban_planning:"Titoli edilizi",
+  technical_conformity:"Conformità",
+  habitability:"Agibilità",
+  systems_certifications:"Impianti"
+};
+
 
 function escapeHTML(value){
   return String(value ?? "")
@@ -466,15 +531,75 @@ async function loadOpportunities(){
     console.error(error);
     table.innerHTML = `
       <tr>
-        <td colspan="7" class="empty">Errore nel caricamento.</td>
+        <td colspan="8" class="empty">Errore nel caricamento.</td>
       </tr>
     `;
     return;
   }
 
   allOpportunities = data || [];
+  await attachDocumentCounts();
 
   applyFilters();
+}
+
+async function attachDocumentCounts(){
+  const ids = allOpportunities.map(item => item.id).filter(Boolean);
+
+  allOpportunities = allOpportunities.map(item => ({
+    ...item,
+    documents_loaded_count:0,
+    documents_missing_labels:Object.values(REQUIRED_DOCUMENT_LABELS)
+  }));
+
+  if(ids.length === 0){
+    return;
+  }
+
+  const { data, error } = await client
+    .from("opportunity_documents")
+    .select("opportunity_id, document_type")
+    .in("opportunity_id", ids);
+
+  if(error){
+    console.error(error);
+    return;
+  }
+
+  const byOpportunity = {};
+
+  (data || []).forEach(row => {
+    if(!byOpportunity[row.opportunity_id]){
+      byOpportunity[row.opportunity_id] = new Set();
+    }
+    if(REQUIRED_DOCUMENT_TYPES.includes(row.document_type)){
+      byOpportunity[row.opportunity_id].add(row.document_type);
+    }
+  });
+
+  allOpportunities = allOpportunities.map(item => {
+    const loadedSet = byOpportunity[item.id] || new Set();
+    const missing = REQUIRED_DOCUMENT_TYPES.filter(type => !loadedSet.has(type));
+
+    return {
+      ...item,
+      documents_loaded_count:loadedSet.size,
+      documents_missing_labels:missing.map(type => REQUIRED_DOCUMENT_LABELS[type] || type)
+    };
+  });
+}
+
+function renderDocumentSummary(item){
+  const total = REQUIRED_DOCUMENT_TYPES.length;
+  const loaded = item.documents_loaded_count || 0;
+  const cls = loaded === total ? "complete" : (loaded <= 3 ? "low" : "");
+  const missing = item.documents_missing_labels || [];
+  const missingText = missing.length === 0 ? "Documenti completi" : "Mancano: " + missing.slice(0,3).join(", ") + (missing.length > 3 ? "..." : "");
+
+  return `
+    <span class="docs-pill ${cls}">${loaded}/${total}</span>
+    <div class="docs-mini">${escapeHTML(missingText)}</div>
+  `;
 }
 
 function applyFilters(){
@@ -505,7 +630,7 @@ function renderTable(data){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="7" class="empty">Nessuna proposta presente.</td>
+        <td colspan="8" class="empty">Nessuna proposta presente.</td>
       </tr>
     `;
     return;
@@ -530,6 +655,10 @@ function renderTable(data){
 
         <td class="${item.published ? "published" : "not-published"}">
           ${item.published ? "Sì" : "No"}
+        </td>
+
+        <td>
+          ${renderDocumentSummary(item)}
         </td>
 
         <td>
