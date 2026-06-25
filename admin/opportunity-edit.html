@@ -657,6 +657,55 @@ button.danger{
   opacity:.9;
 }
 
+.document-inline-progress{
+  grid-column:1 / -1;
+  display:none;
+  margin-top:4px;
+  padding:12px;
+  border:1px solid rgba(165,129,57,.22);
+  background:rgba(255,252,244,.26);
+}
+
+.document-inline-progress.active{
+  display:block;
+}
+
+.document-inline-progress-top{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:center;
+  margin-bottom:8px;
+}
+
+.document-inline-progress-message{
+  font-size:11px;
+  line-height:1.5;
+  color:#8f7643;
+}
+
+.document-inline-progress-percent{
+  font-size:10px;
+  letter-spacing:.14em;
+  color:#a58139;
+  white-space:nowrap;
+}
+
+.document-inline-progress-track{
+  width:100%;
+  height:8px;
+  border:1px solid rgba(165,129,57,.18);
+  background:rgba(255,255,255,.20);
+  overflow:hidden;
+}
+
+.document-inline-progress-bar{
+  height:100%;
+  width:0%;
+  background:#a58139;
+  transition:width .25s ease;
+}
+
 @media(max-width:760px){
   .document-row{
     grid-template-columns:1fr;
@@ -833,16 +882,6 @@ button.danger{
         </div>
         <div id="documentsGrid" class="documents-grid"></div>
         <div id="documentsStatus" class="file-note" style="margin-top:14px;"></div>
-        <div id="documentsWorkProgress" class="work-progress">
-          <div class="work-progress-top">
-            <div class="work-progress-title">Operazione documento</div>
-            <div class="work-progress-percent" id="documentsWorkPercent">0%</div>
-          </div>
-          <div class="work-progress-track">
-            <div class="work-progress-bar" id="documentsWorkBar"></div>
-          </div>
-          <div class="work-progress-message" id="documentsWorkMessage">Preparazione...</div>
-        </div>
 
       </div>
 
@@ -1234,6 +1273,36 @@ function hideWorkProgress(prefix, delay){
   }, delay == null ? 700 : delay);
 }
 
+
+function setDocumentRowProgress(documentType, message, percent, active){
+  var safeType = String(documentType || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+  var box = document.getElementById("docProgress_" + safeType);
+  var bar = document.getElementById("docProgressBar_" + safeType);
+  var text = document.getElementById("docProgressText_" + safeType);
+  var pct = document.getElementById("docProgressPercent_" + safeType);
+
+  var value = Number(percent);
+  if(!Number.isFinite(value)) value = 0;
+  value = Math.max(0, Math.min(100, value));
+
+  if(box){
+    if(active === false){
+      box.classList.remove("active");
+    }else{
+      box.classList.add("active");
+    }
+  }
+  if(bar) bar.style.width = value + "%";
+  if(text) text.textContent = message || "Operazione in corso...";
+  if(pct) pct.textContent = Math.round(value) + "%";
+}
+
+function hideDocumentRowProgress(documentType, delay){
+  setTimeout(function(){
+    setDocumentRowProgress(documentType, "Preparazione...", 0, false);
+  }, delay == null ? 900 : delay);
+}
+
 function getDocumentByType(type){
   return opportunityDocuments.find(function(doc){
     return doc.document_type === type;
@@ -1266,6 +1335,17 @@ function renderDocuments(){
     var viewHtml = doc && doc.file_url ? '<a href="' + escapeHTML(doc.file_url) + '" target="_blank" rel="noopener">Visualizza</a>' : '';
     var deleteHtml = doc ? '<button type="button" class="danger" onclick="deleteOpportunityDocument(\'' + item.key + '\')">Elimina</button>' : '';
     var fileInfo = doc ? '<div class="document-file">File: ' + escapeHTML(doc.file_name || "Documento caricato") + '</div>' : '<div class="document-file">' + escapeHTML(item.hint) + '</div>';
+    var safeKey = String(item.key).replace(/[^a-zA-Z0-9_-]/g, "_");
+    var rowProgress = '' +
+      '<div class="document-inline-progress" id="docProgress_' + safeKey + '">' +
+        '<div class="document-inline-progress-top">' +
+          '<div class="document-inline-progress-message" id="docProgressText_' + safeKey + '">Preparazione...</div>' +
+          '<div class="document-inline-progress-percent" id="docProgressPercent_' + safeKey + '">0%</div>' +
+        '</div>' +
+        '<div class="document-inline-progress-track">' +
+          '<div class="document-inline-progress-bar" id="docProgressBar_' + safeKey + '"></div>' +
+        '</div>' +
+      '</div>';
 
     return '' +
       '<div class="document-row">' +
@@ -1278,6 +1358,7 @@ function renderDocuments(){
           deleteHtml +
         '</div>' +
         fileInfo +
+        rowProgress +
       '</div>';
   }).join("");
 
@@ -1325,12 +1406,12 @@ async function uploadOpportunityDocument(documentType, file){
 
   try{
     setDocumentsStatus("Caricamento documento in corso...");
-    showWorkProgress("documents", "Preparazione upload documento...", 8);
+    setDocumentRowProgress(documentType, "Preparazione upload documento...", 8, true);
 
     var safeName = cleanFileName(file.name || (documentType + ".pdf"));
     var path = id + "/" + documentType + "/" + Date.now() + "-" + safeName;
 
-    updateWorkProgress("documents", "Upload file su archivio IMMONOVA...", 35);
+    setDocumentRowProgress(documentType, "Upload file su archivio IMMONOVA...", 35, true);
 
     var uploadResult = await client
       .storage
@@ -1344,7 +1425,7 @@ async function uploadOpportunityDocument(documentType, file){
       throw uploadResult.error;
     }
 
-    updateWorkProgress("documents", "Generazione link sicuro del documento...", 62);
+    setDocumentRowProgress(documentType, "Generazione link sicuro del documento...", 62, true);
 
     var publicUrl = client
       .storage
@@ -1353,7 +1434,7 @@ async function uploadOpportunityDocument(documentType, file){
 
     var existing = getDocumentByType(documentType);
 
-    updateWorkProgress("documents", existing ? "Aggiornamento scheda documento..." : "Registrazione documento nella checklist...", 78);
+    setDocumentRowProgress(documentType, existing ? "Aggiornamento scheda documento..." : "Registrazione documento nella checklist...", 78, true);
 
     if(existing){
       var updateResult = await client
@@ -1389,15 +1470,15 @@ async function uploadOpportunityDocument(documentType, file){
       }
     }
 
-    updateWorkProgress("documents", "Aggiornamento checklist documentale...", 92);
+    setDocumentRowProgress(documentType, "Aggiornamento checklist documentale...", 92, true);
     await loadOpportunityDocuments();
-    updateWorkProgress("documents", "Documento caricato correttamente.", 100);
-    hideWorkProgress("documents", 900);
+    setDocumentRowProgress(documentType, "Documento caricato correttamente.", 100, true);
+    hideDocumentRowProgress(documentType, 1100);
     setDocumentsStatus("Documento caricato correttamente.", "success");
   }catch(error){
     console.error(error);
-    updateWorkProgress("documents", "Errore durante il caricamento.", 100);
-    hideWorkProgress("documents", 1800);
+    setDocumentRowProgress(documentType, "Errore durante il caricamento.", 100, true);
+    hideDocumentRowProgress(documentType, 2200);
     setDocumentsStatus("Errore caricamento documento: " + (error.message || "operazione non riuscita"), "error");
   }
 }
@@ -1414,7 +1495,7 @@ async function deleteOpportunityDocument(documentType){
 
   try{
     setDocumentsStatus("Eliminazione documento in corso...");
-    showWorkProgress("documents", "Eliminazione documento dall’archivio...", 25);
+    setDocumentRowProgress(documentType, "Eliminazione documento dall’archivio...", 25, true);
 
     var deleteResult = await client
       .from("opportunity_documents")
@@ -1426,22 +1507,22 @@ async function deleteOpportunityDocument(documentType){
     }
 
     if(doc.file_path){
-      updateWorkProgress("documents", "Rimozione file dallo storage...", 58);
+      setDocumentRowProgress(documentType, "Rimozione file dallo storage...", 58, true);
       await client
         .storage
         .from("opportunity-documents")
         .remove([doc.file_path]);
     }
 
-    updateWorkProgress("documents", "Aggiornamento checklist documentale...", 85);
+    setDocumentRowProgress(documentType, "Aggiornamento checklist documentale...", 85, true);
     await loadOpportunityDocuments();
-    updateWorkProgress("documents", "Documento eliminato correttamente.", 100);
-    hideWorkProgress("documents", 900);
+    setDocumentRowProgress(documentType, "Documento eliminato correttamente.", 100, true);
+    hideDocumentRowProgress(documentType, 1100);
     setDocumentsStatus("Documento eliminato correttamente.", "success");
   }catch(error){
     console.error(error);
-    updateWorkProgress("documents", "Errore durante l’eliminazione.", 100);
-    hideWorkProgress("documents", 1800);
+    setDocumentRowProgress(documentType, "Errore durante l’eliminazione.", 100, true);
+    hideDocumentRowProgress(documentType, 2200);
     setDocumentsStatus("Errore eliminazione documento: " + (error.message || "operazione non riuscita"), "error");
   }
 }
