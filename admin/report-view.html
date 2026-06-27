@@ -1209,6 +1209,12 @@ tr{
   .technical-document-canvas-wrap,
   .technical-document-image-wrap,
   .technical-document-fallback{height:168mm}
+  .technical-index-grid{margin-top:6mm}
+  .technical-index-row{grid-template-columns:1.1fr 1.8fr .55fr .55fr;gap:4mm;padding:2.8mm 3.4mm}
+  .technical-index-head{font-size:5.8pt}.technical-index-title{font-size:7.5pt}.technical-index-files{font-size:6.6pt}
+  .technical-separator-kicker{font-size:7pt;margin-bottom:7mm}
+  .technical-separator-title{font-size:28pt;max-width:190mm}
+  .technical-separator-meta{font-size:8pt;margin-top:8mm}
 }
 
 /* ===== IMMONOVA AI GENERATION PROGRESS ===== */
@@ -4057,12 +4063,52 @@ function getDataConfidence(){
 }
 
 
+
 function technicalDocumentTypeLabel(type){
   var labels = {
-    cadastral_plan:"Planimetria catastale",
-    cadastral_report:"Visura catastale"
+    owner_identity:"Documenti identità proprietario",
+    owner_tax_code:"Codici fiscali proprietario",
+    deed_of_origin:"Atti di provenienza",
+    cadastral_report:"Visure catastali",
+    cadastral_plan:"Planimetrie catastali",
+    ape:"APE",
+    urban_planning:"Permessi edilizi / sanatorie",
+    technical_conformity:"Conformità urbanistica e catastale",
+    habitability:"Agibilità / abitabilità",
+    systems_certifications:"Certificazioni impianti"
   };
   return labels[type] || type || "Documento tecnico";
+}
+
+function technicalDocumentSortOrder(type){
+  var order = {
+    cadastral_plan:10,
+    cadastral_report:20,
+    urban_planning:30,
+    technical_conformity:40,
+    habitability:50,
+    ape:60,
+    systems_certifications:70,
+    deed_of_origin:80,
+    owner_identity:90,
+    owner_tax_code:100
+  };
+  return order[type] || 999;
+}
+
+function technicalDocumentAllowedTypes(){
+  return [
+    "cadastral_plan",
+    "cadastral_report",
+    "urban_planning",
+    "technical_conformity",
+    "habitability",
+    "ape",
+    "systems_certifications",
+    "deed_of_origin",
+    "owner_identity",
+    "owner_tax_code"
+  ];
 }
 
 function isPdfDocument(doc){
@@ -4075,6 +4121,25 @@ function isImageDocument(doc){
   var mime = String(doc && doc.mime_type || "").toLowerCase();
   var name = String(doc && doc.file_name || doc && doc.file_url || "").toLowerCase();
   return mime.indexOf("image/") === 0 || /\.(png|jpe?g|webp|gif)$/i.test(name);
+}
+
+function groupTechnicalDocuments(docs){
+  var groups = {};
+
+  (docs || []).forEach(function(doc){
+    if(!doc || !doc.document_type) return;
+    groups[doc.document_type] = groups[doc.document_type] || [];
+    groups[doc.document_type].push(doc);
+  });
+
+  return Object.keys(groups)
+    .sort(function(a,b){ return technicalDocumentSortOrder(a) - technicalDocumentSortOrder(b); })
+    .map(function(type){
+      groups[type].sort(function(a,b){
+        return new Date(a.uploaded_at || a.created_at || 0) - new Date(b.uploaded_at || b.created_at || 0);
+      });
+      return { type:type, label:technicalDocumentTypeLabel(type), docs:groups[type] };
+    });
 }
 
 function technicalDocumentPageShell(doc, pageLabel, innerHtml){
@@ -4095,7 +4160,7 @@ function technicalDocumentPageShell(doc, pageLabel, innerHtml){
         </div>
         ${innerHtml}
         <div class="page-footer">
-          <span>IMMONOVA · Documentazione tecnica</span>
+          <span>IMMONOVA · Documentazione tecnica · ${escapeHTML(typeLabel)}</span>
           <span>Confidential</span>
         </div>
       </div>
@@ -4117,12 +4182,12 @@ async function loadPropertyDocuments(){
     .from("opportunity_documents")
     .select("*")
     .eq("opportunity_id", opportunityId)
-    .in("document_type", ["cadastral_plan", "cadastral_report"])
+    .in("document_type", technicalDocumentAllowedTypes())
     .order("document_type", { ascending:true })
     .order("uploaded_at", { ascending:true });
 
   if(result.error){
-    console.warn("Documentazione catastale non caricata:", result.error.message);
+    console.warn("Documentazione tecnica non caricata:", result.error.message);
     propertyDocuments = [];
     return;
   }
@@ -4161,13 +4226,6 @@ async function renderPdfDocumentPages(doc){
 
     await page.render({ canvasContext:context, viewport:scaled }).promise;
 
-    /*
-      IMPORTANTISSIMO:
-      non usare canvas.outerHTML. outerHTML salva solo il tag <canvas>,
-      non i pixel disegnati da PDF.js. In stampa/PDF il risultato diventa
-      una pagina bianca con solo intestazione e footer.
-      Convertiamo invece ogni pagina renderizzata in immagine PNG incorporata.
-    */
     var imageData = canvas.toDataURL("image/png", 1.0);
 
     pages.push(technicalDocumentPageShell(
@@ -4177,26 +4235,100 @@ async function renderPdfDocumentPages(doc){
     ));
   }
 
-  return pages.join("");
+  return { html:pages.join(""), pageCount:pdf.numPages };
 }
 
 function renderImageDocumentPage(doc){
-  return technicalDocumentPageShell(
-    doc,
-    "Documento immagine",
-    `<div class="technical-document-image-wrap"><img src="${escapeHTML(doc.file_url || "")}" alt="${escapeHTML(doc.file_name || technicalDocumentTypeLabel(doc.document_type))}"></div>`
-  );
+  return {
+    html:technicalDocumentPageShell(
+      doc,
+      "Documento immagine",
+      `<div class="technical-document-image-wrap"><img src="${escapeHTML(doc.file_url || "")}" alt="${escapeHTML(doc.file_name || technicalDocumentTypeLabel(doc.document_type))}"></div>`
+    ),
+    pageCount:1
+  };
 }
 
 function renderDocumentFallbackPage(doc, message){
-  return technicalDocumentPageShell(
-    doc,
-    "Documento allegato",
-    `<div class="technical-document-fallback">
-      <div>${escapeHTML(message || "Anteprima non disponibile nel viewer. Il documento resta allegato e apribile separatamente.")}</div>
-      ${doc.file_url ? `<a href="${escapeHTML(doc.file_url)}" target="_blank" rel="noopener">Apri documento</a>` : ""}
-    </div>`
-  );
+  return {
+    html:technicalDocumentPageShell(
+      doc,
+      "Documento allegato",
+      `<div class="technical-document-fallback">
+        <div>${escapeHTML(message || "Anteprima non disponibile nel viewer. Il documento resta allegato e apribile separatamente.")}</div>
+        ${doc.file_url ? `<a href="${escapeHTML(doc.file_url)}" target="_blank" rel="noopener">Apri documento</a>` : ""}
+      </div>`
+    ),
+    pageCount:1
+  };
+}
+
+function renderTechnicalDocumentsIndexPage(renderedGroups){
+  var totalFiles = 0;
+  var totalPages = 0;
+
+  renderedGroups.forEach(function(group){
+    totalFiles += group.docs.length;
+    totalPages += group.pageCount;
+  });
+
+  var rows = renderedGroups.map(function(group){
+    var fileNames = group.docs.map(function(d){ return d.file_name || "Documento"; }).join(" · ");
+    return `
+      <div class="technical-index-row">
+        <div class="technical-index-title">✓ ${escapeHTML(group.label)}</div>
+        <div class="technical-index-files">${escapeHTML(fileNames)}</div>
+        <div class="technical-index-title">${group.docs.length} file</div>
+        <div class="technical-index-title">${group.pageCount} pagine</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="report-page technical-document-page">
+      <div class="report-page-inner">
+        <h2>Documentazione tecnica</h2>
+        <div class="lux-rule"></div>
+        <p>Indice degli allegati tecnici caricati nella proposta. I PDF multipagina sono separati automaticamente: ogni pagina del documento diventa una pagina stampabile del dossier.</p>
+        <div class="technical-index-grid">
+          <div class="technical-index-row technical-index-head">
+            <div>Categoria</div>
+            <div>File</div>
+            <div>Documenti</div>
+            <div>Pagine</div>
+          </div>
+          ${rows}
+          <div class="technical-index-row">
+            <div class="technical-index-title"><strong>Totale allegati</strong></div>
+            <div class="technical-index-files">Documentazione tecnica inserita a fine dossier</div>
+            <div class="technical-index-title"><strong>${totalFiles} file</strong></div>
+            <div class="technical-index-title"><strong>${totalPages} pagine</strong></div>
+          </div>
+        </div>
+        <div class="page-footer"><span>IMMONOVA · Indice documentazione tecnica</span><span>Confidential</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTechnicalDocumentSeparatorPage(group, doc, pageCount, index, total){
+  return `
+    <div class="report-page technical-document-page">
+      <div class="report-page-inner">
+        <div class="technical-separator">
+          <div class="technical-separator-kicker">Documentazione tecnica</div>
+          <div class="technical-separator-title">${escapeHTML(group.label)}</div>
+          <div class="lux-rule"></div>
+          <div class="technical-separator-meta">
+            ${escapeHTML(doc.file_name || "Documento")}<br>
+            File ${index + 1} di ${total}<br>
+            ${pageCount} ${pageCount === 1 ? "pagina" : "pagine"}
+          </div>
+        </div>
+        <div class="page-footer"><span>IMMONOVA · Documentazione tecnica</span><span>Confidential</span></div>
+      </div>
+    </div>
+  `;
 }
 
 async function renderTechnicalDocumentsIntoReport(){
@@ -4204,7 +4336,7 @@ async function renderTechnicalDocumentsIntoReport(){
   if(!mount) return;
 
   var docs = (propertyDocuments || []).filter(function(doc){
-    return doc && ["cadastral_plan", "cadastral_report"].includes(doc.document_type);
+    return doc && technicalDocumentAllowedTypes().includes(doc.document_type);
   });
 
   if(docs.length === 0){
@@ -4215,32 +4347,61 @@ async function renderTechnicalDocumentsIntoReport(){
   mount.innerHTML = `
     <div class="report-page technical-document-page">
       <div class="report-page-inner">
-        <h2>Documentazione catastale</h2>
+        <h2>Documentazione tecnica</h2>
         <div class="lux-rule"></div>
-        <p>Le planimetrie catastali e le visure caricate nella proposta vengono inserite nel dossier come pagine stampabili. I PDF multipagina sono separati automaticamente: ogni pagina del documento diventa una pagina del report.</p>
+        <p>Preparazione indice, pagine separatrici e allegati tecnici stampabili.</p>
         <div class="technical-documents-loading">Preparazione documenti tecnici per stampa/PDF...</div>
         <div class="page-footer"><span>IMMONOVA · Documentazione tecnica</span><span>Confidential</span></div>
       </div>
     </div>
   `;
 
-  var html = "";
+  var groups = groupTechnicalDocuments(docs);
+  var renderedGroups = [];
 
-  for(var i = 0; i < docs.length; i++){
-    var doc = docs[i];
-    try{
-      if(isPdfDocument(doc)){
-        html += await renderPdfDocumentPages(doc);
-      }else if(isImageDocument(doc)){
-        html += renderImageDocumentPage(doc);
-      }else{
-        html += renderDocumentFallbackPage(doc, "Formato non renderizzabile direttamente nel viewer.");
+  for(var g = 0; g < groups.length; g++){
+    var group = groups[g];
+    var renderedDocs = [];
+    var groupPageCount = 0;
+
+    for(var i = 0; i < group.docs.length; i++){
+      var doc = group.docs[i];
+      var rendered;
+
+      try{
+        if(isPdfDocument(doc)){
+          rendered = await renderPdfDocumentPages(doc);
+        }else if(isImageDocument(doc)){
+          rendered = renderImageDocumentPage(doc);
+        }else{
+          rendered = renderDocumentFallbackPage(doc, "Formato non renderizzabile direttamente nel viewer.");
+        }
+      }catch(error){
+        console.warn("Errore rendering documento tecnico:", error);
+        rendered = renderDocumentFallbackPage(doc, "Non è stato possibile renderizzare automaticamente questo documento nel report. Può dipendere da CORS, permessi Storage o formato PDF non supportato dal browser.");
       }
-    }catch(error){
-      console.warn("Errore rendering documento tecnico:", error);
-      html += renderDocumentFallbackPage(doc, "Non è stato possibile renderizzare automaticamente questo documento nel report. Può dipendere da CORS, permessi Storage o formato PDF non supportato dal browser.");
+
+      groupPageCount += rendered.pageCount || 1;
+      renderedDocs.push({ doc:doc, html:rendered.html, pageCount:rendered.pageCount || 1 });
     }
+
+    renderedGroups.push({
+      type:group.type,
+      label:group.label,
+      docs:group.docs,
+      renderedDocs:renderedDocs,
+      pageCount:groupPageCount
+    });
   }
+
+  var html = renderTechnicalDocumentsIndexPage(renderedGroups);
+
+  renderedGroups.forEach(function(group){
+    group.renderedDocs.forEach(function(item, index){
+      html += renderTechnicalDocumentSeparatorPage(group, item.doc, item.pageCount, index, group.renderedDocs.length);
+      html += item.html;
+    });
+  });
 
   mount.innerHTML = html;
 }
@@ -4391,9 +4552,9 @@ function renderReport(){
     ${renderRevaluationPage()}
     ${renderMarketPages()}
     ${renderCommitteeClosingPage()}
-    ${renderTechnicalDocumentsPlaceholder()}
     ${renderSourcesPage()}
     ${renderDisclaimerPage()}
+    ${renderTechnicalDocumentsPlaceholder()}
   `;
 }
 
