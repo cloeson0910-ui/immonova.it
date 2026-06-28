@@ -752,6 +752,27 @@ button.danger{
   transition:width .25s ease;
 }
 
+
+.event-workflow-box{
+  grid-column:1 / -1;
+  padding:24px;
+  border:1px solid rgba(165,129,57,.24);
+  background:rgba(255,252,244,.18);
+}
+.event-workflow-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
+.event-workflow-title{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:#a58139}
+.event-workflow-note{margin-top:8px;font-size:12px;line-height:1.7;color:#8f7643;max-width:760px}
+.event-workflow-status{min-width:160px;text-align:center;padding:12px 16px;border:1px solid rgba(165,129,57,.28);background:rgba(255,255,255,.18);color:#a58139;font-size:10px;letter-spacing:.18em;text-transform:uppercase}
+.event-workflow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.event-workflow-card{border:1px solid rgba(165,129,57,.16);background:rgba(255,255,255,.12);padding:18px;min-height:180px;display:flex;flex-direction:column;justify-content:space-between}
+.event-workflow-label{font-size:10px;letter-spacing:.20em;text-transform:uppercase;color:#a58139;margin-bottom:10px}
+.event-workflow-text{font-size:12px;line-height:1.65;color:#8f7643;margin-bottom:16px}
+.event-workflow-card button,.event-workflow-card a{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:40px;padding:10px 12px;border:1px solid rgba(165,129,57,.32);background:rgba(255,252,244,.24);color:#a58139;text-decoration:none;text-transform:uppercase;font-size:9px;letter-spacing:.14em;cursor:pointer}
+.event-workflow-card button:hover,.event-workflow-card a:hover{background:#a58139;color:#fff}
+.event-workflow-linked{margin-top:10px;font-size:11px;line-height:1.5;color:#4f7f45}
+.event-workflow-missing{margin-top:10px;font-size:11px;line-height:1.5;color:#8f5b28}
+@media(max-width:760px){.event-workflow-grid{grid-template-columns:1fr}}
+
 @media(max-width:760px){
   .document-row{
     grid-template-columns:1fr;
@@ -796,6 +817,8 @@ button.danger{
   <nav class="nav">
     <a href="dashboard.html">Dashboard</a>
     <a href="opportunities.html">Opportunità</a>
+    <a href="events.html">Eventi</a>
+    <a href="success-stories.html">Success Stories</a>
     <a id="reportLink" href="#">Dossier IA</a>
     <button id="logoutBtn">Logout</button>
   </nav>
@@ -931,6 +954,32 @@ button.danger{
 
       </div>
 
+
+
+      <div class="section-title">Event Workflow</div>
+      <div class="event-workflow-box">
+        <div class="event-workflow-head">
+          <div>
+            <div class="event-workflow-title">Investment Event Workflow</div>
+            <div class="event-workflow-note">Crea eventi già collegati a questa opportunità. Selling Party per presentare l’asset, Closing Party per operazioni concluse, Welcome Party per inaugurazioni post-closing.</div>
+          </div>
+          <div class="event-workflow-status" id="eventWorkflowStatus">Caricamento eventi</div>
+        </div>
+        <div class="event-workflow-grid">
+          <div class="event-workflow-card">
+            <div><div class="event-workflow-label">Selling Party</div><div class="event-workflow-text">Evento privato per invitare potenziali acquirenti e presentare l’opportunità.</div><div id="sellingPartyState" class="event-workflow-missing">Nessun Selling Party collegato.</div></div>
+            <button type="button" id="createSellingPartyBtn">Crea Selling Party</button>
+          </div>
+          <div class="event-workflow-card">
+            <div><div class="event-workflow-label">Closing Party</div><div class="event-workflow-text">Evento collegato alla chiusura dell’operazione. Attiva la Success Story pubblica se confermata.</div><div id="closingPartyState" class="event-workflow-missing">Nessun Closing Party collegato.</div></div>
+            <button type="button" id="createClosingPartyBtn">Crea Closing Party</button>
+          </div>
+          <div class="event-workflow-card">
+            <div><div class="event-workflow-label">Welcome Party</div><div class="event-workflow-text">Evento post-closing per inaugurazione, apertura hospitality o presentazione del nuovo progetto.</div><div id="welcomePartyState" class="event-workflow-missing">Nessun Welcome Party collegato.</div></div>
+            <button type="button" id="createWelcomePartyBtn">Crea Welcome Party</button>
+          </div>
+        </div>
+      </div>
 
       <div class="section-title">Dati tecnici immobile</div>
 
@@ -1665,6 +1714,67 @@ async function deleteOpportunityDocument(documentId, documentType){
   }
 }
 
+
+var linkedOpportunityEvents = [];
+function getEventTypeValue(eventType){return eventType || "selling_party";}
+function getLinkedOpportunityId(event){return event.opportunity_id || event.related_opportunity_id || event.linked_opportunity_id || event.sold_opportunity_id || null;}
+function getEventType(event){return String(event.event_type || event.type || event.category || "").toLowerCase();}
+function getEventTitle(event){return event.title || event.name || "Evento IMMONOVA";}
+function eventMatchesOpportunity(event){var linkedId=getLinkedOpportunityId(event);return linkedId && String(linkedId)===String(id);}
+async function loadLinkedOpportunityEvents(){
+  if(!id) return;
+  var status=document.getElementById("eventWorkflowStatus");
+  try{
+    var result=await client.from("immonova_events").select("*").order("event_date",{ascending:false});
+    if(result.error){throw result.error;}
+    linkedOpportunityEvents=(result.data||[]).filter(eventMatchesOpportunity);
+    renderEventWorkflow();
+    if(status){status.textContent=linkedOpportunityEvents.length+" eventi collegati";}
+  }catch(error){
+    linkedOpportunityEvents=[];
+    renderEventWorkflow();
+    if(status){status.textContent="Eventi non leggibili";}
+    console.warn("Event workflow non caricato:", error.message || error);
+  }
+}
+function renderEventWorkflow(){
+  var selling=linkedOpportunityEvents.filter(function(e){return getEventType(e)==="selling_party";});
+  var closing=linkedOpportunityEvents.filter(function(e){return ["closing_party","closing_event","sold_party","sold_event"].indexOf(getEventType(e))>=0;});
+  var welcome=linkedOpportunityEvents.filter(function(e){return ["welcome_party","welcome_event"].indexOf(getEventType(e))>=0;});
+  setEventWorkflowState("sellingPartyState",selling,"Selling Party");
+  setEventWorkflowState("closingPartyState",closing,"Closing Party");
+  setEventWorkflowState("welcomePartyState",welcome,"Welcome Party");
+}
+function setEventWorkflowState(elementId,items,label){
+  var el=document.getElementById(elementId); if(!el) return;
+  if(!items||items.length===0){el.className="event-workflow-missing";el.textContent="Nessun "+label+" collegato.";return;}
+  el.className="event-workflow-linked";
+  el.innerHTML=items.map(function(item){var date=item.event_date?" · "+escapeHTML(item.event_date):"";return "✓ "+escapeHTML(getEventTitle(item))+date;}).join("<br>");
+}
+function createLinkedEvent(eventType){
+  if(!id){setStatus("Salva prima l’opportunità, poi crea l’evento collegato.","error");return;}
+  var title=(loadedOpportunity&&loadedOpportunity.title)||textOrNull("title")||"";
+  var location=(loadedOpportunity&&loadedOpportunity.location)||textOrNull("location")||"";
+  var cover=(loadedOpportunity&&loadedOpportunity.cover_image)||currentCoverUrl||"";
+  var labelMap={selling_party:"Selling Party",closing_party:"Closing Party",welcome_party:"Welcome Party"};
+  var params=new URLSearchParams();
+  params.set("opportunity_id",id);
+  params.set("event_type",getEventTypeValue(eventType));
+  params.set("title",(labelMap[eventType]||"Investment Event")+(title?" · "+title:""));
+  if(title) params.set("opportunity_title",title);
+  if(location) params.set("location",location);
+  if(cover) params.set("cover_image",cover);
+  window.location.href="event-form.html?"+params.toString();
+}
+function bindEventWorkflow(){
+  var sellingBtn=document.getElementById("createSellingPartyBtn");
+  var closingBtn=document.getElementById("createClosingPartyBtn");
+  var welcomeBtn=document.getElementById("createWelcomePartyBtn");
+  if(sellingBtn) sellingBtn.addEventListener("click",function(){createLinkedEvent("selling_party");});
+  if(closingBtn) closingBtn.addEventListener("click",function(){createLinkedEvent("closing_party");});
+  if(welcomeBtn) welcomeBtn.addEventListener("click",function(){createLinkedEvent("welcome_party");});
+}
+
 document.getElementById("reportLink").href = "report-view.html?id=" + encodeURIComponent(id || "");
 document.getElementById("reportBtn").href = "report-view.html?id=" + encodeURIComponent(id || "");
 
@@ -1865,6 +1975,7 @@ function bindGeoTools(){
 }
 
 document.addEventListener("DOMContentLoaded", bindGeoTools);
+document.addEventListener("DOMContentLoaded", bindEventWorkflow);
 
 
 function setStatus(message, type){
@@ -2368,6 +2479,7 @@ async function loadOpportunity(){
   calculateRenovationBudget();
   await loadRenovationImages();
   await loadRenovationRenders();
+  await loadLinkedOpportunityEvents();
   await loadOpportunityDocuments();
 
   loading.style.display = "none";
