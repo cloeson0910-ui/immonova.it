@@ -383,12 +383,12 @@ const id = params.get("id");
 const pageContent = document.getElementById("pageContent");
 const languageSelect = document.getElementById("languageSelect");
 
+const SUPPORTED_LANGUAGES = ["it","en","fr","de","es","ar"];
+
 let currentOpportunity = null;
 let currentLanguage = normalizeLanguage(params.get("lang") || localStorage.getItem("immonova_public_language") || navigator.language || "en");
 let currentRequestTemplate = "";
 let lastRenderedSignature = "";
-
-const SUPPORTED_LANGUAGES = ["it","en","fr","de","es","ar"];
 
 const UI_TRANSLATIONS = {
   it:{
@@ -710,6 +710,29 @@ const UI_TRANSLATIONS = {
     send_error:"حدث خطأ أثناء إرسال الطلب."
   }
 };
+
+function withTimeout(promise, ms){
+  return new Promise(function(resolve, reject){
+    var done = false;
+    var timer = setTimeout(function(){
+      if(done) return;
+      done = true;
+      reject(new Error("Translation timeout"));
+    }, ms || 3500);
+
+    Promise.resolve(promise).then(function(value){
+      if(done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    }).catch(function(error){
+      if(done) return;
+      done = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
 
 function escapeHTML(value){
   return String(value ?? "")
