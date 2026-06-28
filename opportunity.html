@@ -59,6 +59,41 @@ body::after{
   letter-spacing:.35em;
 }
 
+
+
+.top-actions{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+}
+
+.language-select{
+  padding:11px 18px;
+  border:1px solid rgba(165,129,57,.42);
+  background:rgba(255,252,244,.22);
+  color:#a58139;
+  text-transform:uppercase;
+  font-size:10px;
+  letter-spacing:.14em;
+  cursor:pointer;
+  outline:none;
+  font-family:inherit;
+  width:auto;
+  margin:0;
+}
+
+html[dir="rtl"] body{
+  direction:rtl;
+}
+
+html[dir="rtl"] .header,
+html[dir="rtl"] .content,
+html[dir="rtl"] .form-grid,
+html[dir="rtl"] .data-grid{
+  direction:rtl;
+}
+
 .nav a{
   padding:11px 24px;
   border:1px solid rgba(165,129,57,.42);
@@ -315,9 +350,19 @@ button:disabled{
 
 <header class="header">
   <a href="index.html" class="logo">IMMONOVA</a>
-  <nav class="nav">
-    <a href="opportunities.html">Opportunities</a>
-  </nav>
+  <div class="top-actions">
+    <nav class="nav">
+      <a href="opportunities.html" data-i18n="nav_opportunities">Opportunities</a>
+    </nav>
+    <select id="languageSelect" class="language-select" aria-label="Language">
+      <option value="it">IT</option>
+      <option value="en">EN</option>
+      <option value="fr">FR</option>
+      <option value="de">DE</option>
+      <option value="es">ES</option>
+      <option value="ar">AR</option>
+    </select>
+  </div>
 </header>
 
 <div id="pageContent" class="empty">Caricamento opportunità...</div>
@@ -336,8 +381,335 @@ const client = window.supabase.createClient(
 const params = new URLSearchParams(window.location.search);
 const id = params.get("id");
 const pageContent = document.getElementById("pageContent");
+const languageSelect = document.getElementById("languageSelect");
 
 let currentOpportunity = null;
+let currentLanguage = normalizeLanguage(localStorage.getItem("immonova_public_language") || navigator.language || "en");
+let currentRequestTemplate = "";
+let lastRenderedSignature = "";
+
+const SUPPORTED_LANGUAGES = ["it","en","fr","de","es","ar"];
+
+const UI_TRANSLATIONS = {
+  it:{
+    nav_opportunities:"Opportunità",
+    loading_opportunity:"Caricamento opportunità...",
+    no_opportunity:"Opportunità non selezionata.",
+    unavailable:"Opportunità non disponibile.",
+    investment_opportunity:"Opportunità di investimento",
+    private_off_market:"Questa è un'opportunità privata off-market. Le informazioni dettagliate e il dossier di investimento sono disponibili solo dopo qualificazione, accettazione NDA e approvazione manuale da parte di IMMONOVA.",
+    category:"Categoria",
+    investment_value:"Valore investimento",
+    reserved:"Riservato",
+    location:"Location",
+    type:"Tipologia",
+    confidential_note:"Il dossier completo non è disponibile per il download immediato. Le richieste vengono revisionate manualmente da IMMONOVA prima della condivisione di qualsiasi materiale confidenziale.",
+    request_dossier:"Richiedi Dossier",
+    form_intro:"Compila il form di qualificazione. Il dossier sarà inviato solo dopo approvazione manuale e nella lingua da te selezionata.",
+    applicant_data:"Dati richiedente",
+    first_name:"Nome *",
+    last_name:"Cognome *",
+    email:"Email *",
+    phone:"Telefono *",
+    country:"Paese *",
+    company:"Società / Entità",
+    budget_range:"Budget disponibile",
+    under_1m:"Sotto €1M",
+    one_to_three:"€1M - €3M",
+    three_to_five:"€3M - €5M",
+    five_to_ten:"€5M - €10M",
+    over_10m:"Oltre €10M",
+    prefer_not:"Preferisco non dichiararlo",
+    preferred_language:"Lingua preferita *",
+    investor_profile:"Profilo investitore *",
+    private_investor:"Investitore privato",
+    family_office:"Family Office",
+    real_estate_operator:"Operatore Real Estate",
+    hospitality_group:"Gruppo Hospitality",
+    fund:"Fondo di investimento",
+    advisor:"Advisor / Consulente",
+    other:"Altro",
+    message_placeholder:"Messaggio / Intento d'investimento *",
+    message_default:"Vorrei richiedere il dossier confidenziale per:",
+    nda_privacy:"NDA & Privacy",
+    nda_text:"Inviando questa richiesta, il richiedente riconosce che le informazioni, i documenti, le immagini, le ipotesi di business, le proiezioni finanziarie e il dossier di investimento relativi a questa opportunità sono confidenziali. Il richiedente si impegna a non divulgare, riprodurre, inoltrare, pubblicare o utilizzare tali informazioni per finalità diverse dalla valutazione della potenziale opportunità di investimento, salvo autorizzazione scritta di IMMONOVA Off Market Consulting.",
+    nda_accept:"Accetto i termini di riservatezza e gli obblighi NDA relativi a questa opportunità. *",
+    privacy_accept:"Autorizzo IMMONOVA al trattamento dei miei dati per la valutazione e gestione della richiesta dossier. *",
+    submit:"Invia richiesta dossier",
+    sending:"Invio...",
+    sending_status:"Invio richiesta dossier...",
+    required_error:"Compila tutti i campi obbligatori.",
+    nda_error:"Devi accettare l'NDA per richiedere il dossier.",
+    privacy_error:"Devi accettare il trattamento dei dati.",
+    success:"Richiesta inviata correttamente. IMMONOVA verificherà il profilo e invierà il dossier dopo approvazione manuale.",
+    send_error:"Errore durante l'invio della richiesta."
+  },
+  en:{
+    nav_opportunities:"Opportunities",
+    loading_opportunity:"Loading opportunity...",
+    no_opportunity:"Opportunity not selected.",
+    unavailable:"Opportunity unavailable.",
+    investment_opportunity:"Investment Opportunity",
+    private_off_market:"This is a private off-market opportunity. Detailed information and the investment dossier are available only after qualification, NDA acceptance and manual approval by IMMONOVA.",
+    category:"Category",
+    investment_value:"Investment Value",
+    reserved:"Reserved",
+    location:"Location",
+    type:"Type",
+    confidential_note:"The full dossier is not available for immediate download. Requests are reviewed manually by IMMONOVA before any confidential material is shared.",
+    request_dossier:"Request Dossier",
+    form_intro:"Complete the qualification form below. The dossier will be sent only after manual approval and in the language selected by you.",
+    applicant_data:"Applicant Data",
+    first_name:"First name *",
+    last_name:"Last name *",
+    email:"Email *",
+    phone:"Phone *",
+    country:"Country *",
+    company:"Company / Entity",
+    budget_range:"Budget range",
+    under_1m:"Under €1M",
+    one_to_three:"€1M - €3M",
+    three_to_five:"€3M - €5M",
+    five_to_ten:"€5M - €10M",
+    over_10m:"Over €10M",
+    prefer_not:"Prefer not to disclose",
+    preferred_language:"Preferred language *",
+    investor_profile:"Investor profile *",
+    private_investor:"Private Investor",
+    family_office:"Family Office",
+    real_estate_operator:"Real Estate Operator",
+    hospitality_group:"Hospitality Group",
+    fund:"Investment Fund",
+    advisor:"Advisor / Consultant",
+    other:"Other",
+    message_placeholder:"Message / Investment intent *",
+    message_default:"I would like to request the confidential dossier for:",
+    nda_privacy:"NDA & Privacy",
+    nda_text:"By submitting this request, the applicant acknowledges that the information, documents, images, business assumptions, financial projections and investment dossier related to this opportunity are confidential. The applicant agrees not to disclose, reproduce, forward, publish or use such information for purposes other than evaluating the potential investment opportunity, unless expressly authorized in writing by IMMONOVA Off Market Consulting.",
+    nda_accept:"I accept the confidentiality terms and NDA obligations related to this opportunity. *",
+    privacy_accept:"I authorize IMMONOVA to process my data for the purpose of evaluating and managing this dossier request. *",
+    submit:"Submit Dossier Request",
+    sending:"Sending...",
+    sending_status:"Sending dossier request...",
+    required_error:"Please complete all required fields.",
+    nda_error:"You must accept the NDA to request the dossier.",
+    privacy_error:"You must accept data processing.",
+    success:"Request sent successfully. IMMONOVA will review the profile and send the dossier after manual approval.",
+    send_error:"Error while sending the request."
+  },
+  fr:{
+    nav_opportunities:"Opportunités",
+    loading_opportunity:"Chargement de l'opportunité...",
+    no_opportunity:"Opportunité non sélectionnée.",
+    unavailable:"Opportunité non disponible.",
+    investment_opportunity:"Opportunité d'investissement",
+    private_off_market:"Il s'agit d'une opportunité privée off-market. Les informations détaillées et le dossier d'investissement ne sont disponibles qu'après qualification, acceptation de la NDA et approbation manuelle par IMMONOVA.",
+    category:"Catégorie",
+    investment_value:"Valeur d'investissement",
+    reserved:"Réservé",
+    location:"Localisation",
+    type:"Type",
+    confidential_note:"Le dossier complet n'est pas disponible en téléchargement immédiat. Les demandes sont examinées manuellement par IMMONOVA avant tout partage de matériel confidentiel.",
+    request_dossier:"Demander le dossier",
+    form_intro:"Complétez le formulaire de qualification. Le dossier sera envoyé uniquement après approbation manuelle et dans la langue sélectionnée.",
+    applicant_data:"Données du demandeur",
+    first_name:"Prénom *",
+    last_name:"Nom *",
+    email:"Email *",
+    phone:"Téléphone *",
+    country:"Pays *",
+    company:"Société / Entité",
+    budget_range:"Budget",
+    under_1m:"Moins de 1 M€",
+    one_to_three:"1 M€ - 3 M€",
+    three_to_five:"3 M€ - 5 M€",
+    five_to_ten:"5 M€ - 10 M€",
+    over_10m:"Plus de 10 M€",
+    prefer_not:"Préfère ne pas divulguer",
+    preferred_language:"Langue préférée *",
+    investor_profile:"Profil investisseur *",
+    private_investor:"Investisseur privé",
+    family_office:"Family Office",
+    real_estate_operator:"Opérateur immobilier",
+    hospitality_group:"Groupe hôtelier",
+    fund:"Fonds d'investissement",
+    advisor:"Conseiller / Consultant",
+    other:"Autre",
+    message_placeholder:"Message / Intention d'investissement *",
+    message_default:"Je souhaite demander le dossier confidentiel pour :",
+    nda_privacy:"NDA & Confidentialité",
+    nda_text:"En soumettant cette demande, le demandeur reconnaît que les informations, documents, images, hypothèses commerciales, projections financières et dossier d'investissement liés à cette opportunité sont confidentiels. Le demandeur s'engage à ne pas divulguer, reproduire, transférer, publier ou utiliser ces informations à d'autres fins que l'évaluation de l'opportunité d'investissement, sauf autorisation écrite d'IMMONOVA Off Market Consulting.",
+    nda_accept:"J'accepte les conditions de confidentialité et les obligations NDA liées à cette opportunité. *",
+    privacy_accept:"J'autorise IMMONOVA à traiter mes données afin d'évaluer et gérer cette demande de dossier. *",
+    submit:"Envoyer la demande de dossier",
+    sending:"Envoi...",
+    sending_status:"Envoi de la demande de dossier...",
+    required_error:"Veuillez remplir tous les champs obligatoires.",
+    nda_error:"Vous devez accepter la NDA pour demander le dossier.",
+    privacy_error:"Vous devez accepter le traitement des données.",
+    success:"Demande envoyée correctement. IMMONOVA vérifiera le profil et enverra le dossier après approbation manuelle.",
+    send_error:"Erreur lors de l'envoi de la demande."
+  },
+  de:{
+    nav_opportunities:"Opportunitäten",
+    loading_opportunity:"Opportunität wird geladen...",
+    no_opportunity:"Keine Opportunität ausgewählt.",
+    unavailable:"Opportunität nicht verfügbar.",
+    investment_opportunity:"Investment Opportunity",
+    private_off_market:"Dies ist eine private Off-Market-Opportunität. Detaillierte Informationen und das Investment-Dossier sind erst nach Qualifizierung, NDA-Annahme und manueller Freigabe durch IMMONOVA verfügbar.",
+    category:"Kategorie",
+    investment_value:"Investmentwert",
+    reserved:"Reserviert",
+    location:"Standort",
+    type:"Typ",
+    confidential_note:"Das vollständige Dossier steht nicht zum sofortigen Download bereit. Anfragen werden von IMMONOVA manuell geprüft, bevor vertrauliches Material geteilt wird.",
+    request_dossier:"Dossier anfordern",
+    form_intro:"Füllen Sie das Qualifikationsformular aus. Das Dossier wird erst nach manueller Freigabe und in der von Ihnen gewählten Sprache versendet.",
+    applicant_data:"Antragstellerdaten",
+    first_name:"Vorname *",
+    last_name:"Nachname *",
+    email:"E-Mail *",
+    phone:"Telefon *",
+    country:"Land *",
+    company:"Unternehmen / Einheit",
+    budget_range:"Budgetrahmen",
+    under_1m:"Unter 1 Mio. €",
+    one_to_three:"1 Mio. € - 3 Mio. €",
+    three_to_five:"3 Mio. € - 5 Mio. €",
+    five_to_ten:"5 Mio. € - 10 Mio. €",
+    over_10m:"Über 10 Mio. €",
+    prefer_not:"Keine Angabe",
+    preferred_language:"Bevorzugte Sprache *",
+    investor_profile:"Investorenprofil *",
+    private_investor:"Privatinvestor",
+    family_office:"Family Office",
+    real_estate_operator:"Immobilienbetreiber",
+    hospitality_group:"Hospitality-Gruppe",
+    fund:"Investmentfonds",
+    advisor:"Berater / Consultant",
+    other:"Andere",
+    message_placeholder:"Nachricht / Investmentabsicht *",
+    message_default:"Ich möchte das vertrauliche Dossier anfordern für:",
+    nda_privacy:"NDA & Datenschutz",
+    nda_text:"Mit dem Absenden dieser Anfrage erkennt der Antragsteller an, dass die Informationen, Dokumente, Bilder, Geschäftsannahmen, Finanzprognosen und das Investment-Dossier zu dieser Opportunität vertraulich sind. Der Antragsteller verpflichtet sich, diese Informationen nicht offenzulegen, zu vervielfältigen, weiterzuleiten, zu veröffentlichen oder für andere Zwecke als die Bewertung der potenziellen Investmentopportunität zu verwenden, es sei denn, IMMONOVA Off Market Consulting hat dies schriftlich genehmigt.",
+    nda_accept:"Ich akzeptiere die Vertraulichkeitsbedingungen und NDA-Verpflichtungen zu dieser Opportunität. *",
+    privacy_accept:"Ich ermächtige IMMONOVA, meine Daten zur Bewertung und Verwaltung dieser Dossier-Anfrage zu verarbeiten. *",
+    submit:"Dossier-Anfrage senden",
+    sending:"Senden...",
+    sending_status:"Dossier-Anfrage wird gesendet...",
+    required_error:"Bitte füllen Sie alle Pflichtfelder aus.",
+    nda_error:"Sie müssen das NDA akzeptieren, um das Dossier anzufordern.",
+    privacy_error:"Sie müssen der Datenverarbeitung zustimmen.",
+    success:"Anfrage erfolgreich gesendet. IMMONOVA prüft das Profil und sendet das Dossier nach manueller Freigabe.",
+    send_error:"Fehler beim Senden der Anfrage."
+  },
+  es:{
+    nav_opportunities:"Oportunidades",
+    loading_opportunity:"Cargando oportunidad...",
+    no_opportunity:"Oportunidad no seleccionada.",
+    unavailable:"Oportunidad no disponible.",
+    investment_opportunity:"Oportunidad de inversión",
+    private_off_market:"Esta es una oportunidad privada off-market. La información detallada y el dossier de inversión solo están disponibles tras la cualificación, aceptación del NDA y aprobación manual por parte de IMMONOVA.",
+    category:"Categoría",
+    investment_value:"Valor de inversión",
+    reserved:"Reservado",
+    location:"Ubicación",
+    type:"Tipo",
+    confidential_note:"El dossier completo no está disponible para descarga inmediata. Las solicitudes son revisadas manualmente por IMMONOVA antes de compartir cualquier material confidencial.",
+    request_dossier:"Solicitar dossier",
+    form_intro:"Complete el formulario de cualificación. El dossier se enviará solo tras aprobación manual y en el idioma seleccionado.",
+    applicant_data:"Datos del solicitante",
+    first_name:"Nombre *",
+    last_name:"Apellido *",
+    email:"Email *",
+    phone:"Teléfono *",
+    country:"País *",
+    company:"Empresa / Entidad",
+    budget_range:"Rango de presupuesto",
+    under_1m:"Menos de 1 M€",
+    one_to_three:"1 M€ - 3 M€",
+    three_to_five:"3 M€ - 5 M€",
+    five_to_ten:"5 M€ - 10 M€",
+    over_10m:"Más de 10 M€",
+    prefer_not:"Prefiero no divulgarlo",
+    preferred_language:"Idioma preferido *",
+    investor_profile:"Perfil inversor *",
+    private_investor:"Inversor privado",
+    family_office:"Family Office",
+    real_estate_operator:"Operador inmobiliario",
+    hospitality_group:"Grupo hotelero",
+    fund:"Fondo de inversión",
+    advisor:"Advisor / Consultor",
+    other:"Otro",
+    message_placeholder:"Mensaje / Intención de inversión *",
+    message_default:"Me gustaría solicitar el dossier confidencial para:",
+    nda_privacy:"NDA & Privacidad",
+    nda_text:"Al enviar esta solicitud, el solicitante reconoce que la información, documentos, imágenes, hipótesis de negocio, proyecciones financieras y dossier de inversión relacionados con esta oportunidad son confidenciales. El solicitante se compromete a no divulgar, reproducir, reenviar, publicar o utilizar dicha información para fines distintos de evaluar la potencial oportunidad de inversión, salvo autorización expresa por escrito de IMMONOVA Off Market Consulting.",
+    nda_accept:"Acepto los términos de confidencialidad y las obligaciones NDA relacionadas con esta oportunidad. *",
+    privacy_accept:"Autorizo a IMMONOVA a tratar mis datos para evaluar y gestionar esta solicitud de dossier. *",
+    submit:"Enviar solicitud de dossier",
+    sending:"Enviando...",
+    sending_status:"Enviando solicitud de dossier...",
+    required_error:"Complete todos los campos obligatorios.",
+    nda_error:"Debe aceptar el NDA para solicitar el dossier.",
+    privacy_error:"Debe aceptar el tratamiento de datos.",
+    success:"Solicitud enviada correctamente. IMMONOVA revisará el perfil y enviará el dossier tras aprobación manual.",
+    send_error:"Error al enviar la solicitud."
+  },
+  ar:{
+    nav_opportunities:"الفرص",
+    loading_opportunity:"جارٍ تحميل الفرصة...",
+    no_opportunity:"لم يتم اختيار فرصة.",
+    unavailable:"الفرصة غير متاحة.",
+    investment_opportunity:"فرصة استثمارية",
+    private_off_market:"هذه فرصة خاصة خارج السوق. المعلومات التفصيلية وملف الاستثمار متاحان فقط بعد التأهيل وقبول اتفاقية السرية والموافقة اليدوية من IMMONOVA.",
+    category:"الفئة",
+    investment_value:"قيمة الاستثمار",
+    reserved:"محجوز",
+    location:"الموقع",
+    type:"النوع",
+    confidential_note:"الملف الكامل غير متاح للتنزيل الفوري. تتم مراجعة الطلبات يدويًا من قبل IMMONOVA قبل مشاركة أي مواد سرية.",
+    request_dossier:"طلب الملف",
+    form_intro:"أكمل نموذج التأهيل أدناه. سيتم إرسال الملف فقط بعد الموافقة اليدوية وباللغة التي تختارها.",
+    applicant_data:"بيانات مقدم الطلب",
+    first_name:"الاسم الأول *",
+    last_name:"اسم العائلة *",
+    email:"البريد الإلكتروني *",
+    phone:"الهاتف *",
+    country:"الدولة *",
+    company:"الشركة / الكيان",
+    budget_range:"نطاق الميزانية",
+    under_1m:"أقل من 1 مليون يورو",
+    one_to_three:"1 مليون - 3 ملايين يورو",
+    three_to_five:"3 ملايين - 5 ملايين يورو",
+    five_to_ten:"5 ملايين - 10 ملايين يورو",
+    over_10m:"أكثر من 10 ملايين يورو",
+    prefer_not:"أفضل عدم الإفصاح",
+    preferred_language:"اللغة المفضلة *",
+    investor_profile:"ملف المستثمر *",
+    private_investor:"مستثمر خاص",
+    family_office:"مكتب عائلي",
+    real_estate_operator:"مشغل عقاري",
+    hospitality_group:"مجموعة ضيافة",
+    fund:"صندوق استثماري",
+    advisor:"مستشار",
+    other:"أخرى",
+    message_placeholder:"رسالة / نية الاستثمار *",
+    message_default:"أود طلب الملف السري لـ:",
+    nda_privacy:"السرية والخصوصية",
+    nda_text:"بتقديم هذا الطلب، يقر مقدم الطلب بأن المعلومات والوثائق والصور وافتراضات الأعمال والتوقعات المالية وملف الاستثمار المتعلق بهذه الفرصة سرية. يوافق مقدم الطلب على عدم الإفصاح أو النسخ أو إعادة الإرسال أو النشر أو استخدام هذه المعلومات لأي غرض غير تقييم فرصة الاستثمار المحتملة، ما لم يتم التصريح بذلك كتابيًا من IMMONOVA Off Market Consulting.",
+    nda_accept:"أقبل شروط السرية والتزامات اتفاقية عدم الإفصاح المتعلقة بهذه الفرصة. *",
+    privacy_accept:"أفوض IMMONOVA بمعالجة بياناتي لغرض تقييم وإدارة طلب الملف هذا. *",
+    submit:"إرسال طلب الملف",
+    sending:"جارٍ الإرسال...",
+    sending_status:"جارٍ إرسال طلب الملف...",
+    required_error:"يرجى إكمال جميع الحقول المطلوبة.",
+    nda_error:"يجب قبول اتفاقية السرية لطلب الملف.",
+    privacy_error:"يجب قبول معالجة البيانات.",
+    success:"تم إرسال الطلب بنجاح. ستراجع IMMONOVA الملف وترسل الملف بعد الموافقة اليدوية.",
+    send_error:"حدث خطأ أثناء إرسال الطلب."
+  }
+};
 
 function escapeHTML(value){
   return String(value ?? "")
@@ -349,38 +721,142 @@ function escapeHTML(value){
 }
 
 function normalizeLanguage(value){
-  return String(value || "it").trim().toLowerCase();
+  const clean = String(value || "en").trim().toLowerCase().slice(0,2);
+  return SUPPORTED_LANGUAGES.includes(clean) ? clean : "en";
 }
 
-async function loadOpportunity(){
-  if(!id){
-    pageContent.innerHTML = "Opportunità non selezionata.";
-    return;
+function dict(key){
+  return (UI_TRANSLATIONS[currentLanguage] && UI_TRANSLATIONS[currentLanguage][key]) || UI_TRANSLATIONS.en[key] || key;
+}
+
+function applyDirection(){
+  document.documentElement.lang = currentLanguage;
+  document.documentElement.dir = currentLanguage === "ar" ? "rtl" : "ltr";
+}
+
+function applyStaticTranslations(){
+  applyDirection();
+
+  if(languageSelect){
+    languageSelect.value = currentLanguage;
   }
 
-  const { data, error } = await client
-    .from("opportunities")
-    .select("*")
-    .eq("id", id)
-    .eq("published", true)
-    .single();
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    const key = el.getAttribute("data-i18n");
+    el.textContent = dict(key);
+  });
 
-  if(error || !data){
-    pageContent.innerHTML = "Opportunità non disponibile.";
-    return;
+  if(!currentOpportunity){
+    pageContent.textContent = dict("loading_opportunity");
+  }
+}
+
+function updateFormStaticTexts(){
+  const setPlaceholder = function(id,key){
+    const el = document.getElementById(id);
+    if(el) el.placeholder = dict(key);
+  };
+
+  setPlaceholder("first_name","first_name");
+  setPlaceholder("last_name","last_name");
+  setPlaceholder("email","email");
+  setPlaceholder("phone","phone");
+  setPlaceholder("country","country");
+  setPlaceholder("company","company");
+  setPlaceholder("message","message_placeholder");
+
+  const optionLabels = {
+    budget_range:["budget_range","under_1m","one_to_three","three_to_five","five_to_ten","over_10m","prefer_not"],
+    preferred_language:["preferred_language",null,null,null,null,null,null],
+    investor_type:["investor_profile","private_investor","family_office","real_estate_operator","hospitality_group","fund","advisor","other"]
+  };
+
+  Object.keys(optionLabels).forEach(function(selectId){
+    const select = document.getElementById(selectId);
+    if(!select) return;
+    const keys = optionLabels[selectId];
+    Array.prototype.slice.call(select.options).forEach(function(opt,i){
+      if(keys[i]) opt.textContent = dict(keys[i]);
+    });
+  });
+
+  const submitBtn = document.getElementById("submitBtn");
+  if(submitBtn) submitBtn.textContent = dict("submit");
+
+  const message = document.getElementById("message");
+  if(message && (!message.dataset.userEdited || message.value === currentRequestTemplate)){
+    currentRequestTemplate = dict("message_default") + " " + (currentOpportunity && currentOpportunity.title ? currentOpportunity.title : "");
+    message.value = currentRequestTemplate;
+    message.dataset.userEdited = "";
+  }
+}
+
+async function translateWithAI(texts){
+  const cleanTexts = (texts || []).map(function(t){ return String(t || "").trim(); });
+
+  if(currentLanguage === "it" || cleanTexts.length === 0){
+    return cleanTexts;
   }
 
-  currentOpportunity = data;
+  try{
+    const result = await client.functions.invoke("translate-public-content", {
+      body:{
+        language:currentLanguage,
+        source_language:"it",
+        texts:cleanTexts,
+        context:"IMMONOVA luxury real estate investment website. Keep brand names, numbers, currency, locations, emails and legal meaning unchanged."
+      }
+    });
 
+    if(result.error || !result.data || !Array.isArray(result.data.translations)){
+      throw result.error || new Error("Translation unavailable");
+    }
+
+    return result.data.translations.map(function(t,i){ return t || cleanTexts[i]; });
+  }catch(error){
+    console.warn("AI translation fallback:", error && error.message ? error.message : error);
+    return cleanTexts;
+  }
+}
+
+async function translateDynamicOpportunity(data){
+  if(!data || currentLanguage === "it") return data;
+
+  const fields = [
+    data.category || "",
+    data.title || "",
+    data.location || "",
+    data.investment_type || "",
+    data.full_description || data.short_description || ""
+  ];
+
+  const translated = await translateWithAI(fields);
+
+  return Object.assign({}, data, {
+    category_translated:translated[0] || data.category,
+    title_translated:translated[1] || data.title,
+    location_translated:translated[2] || data.location,
+    investment_type_translated:translated[3] || data.investment_type,
+    description_translated:translated[4] || data.full_description || data.short_description
+  });
+}
+
+async function renderOpportunity(data){
+  const translatedData = await translateDynamicOpportunity(data);
+  const category = translatedData.category_translated || data.category;
+  const title = translatedData.title_translated || data.title;
+  const location = translatedData.location_translated || data.location;
+  const investmentType = translatedData.investment_type_translated || data.investment_type;
+  const description = translatedData.description_translated || data.full_description || data.short_description || "";
   const isOffMarket = String(data.category || "").toLowerCase() === "off market";
 
   pageContent.className = "";
 
   pageContent.innerHTML = `
     <section class="hero">
-      <div class="kicker">${escapeHTML(data.category || "Investment Opportunity")}</div>
-      <h1>${escapeHTML(data.title || "")}</h1>
-      <div class="meta">${escapeHTML(data.location || "")} ${data.price ? " · " + escapeHTML(data.price) : ""}</div>
+      <div class="kicker">${escapeHTML(category || dict("investment_opportunity"))}</div>
+      <h1>${escapeHTML(title || "")}</h1>
+      <div class="meta">${escapeHTML(location || "")} ${data.price ? " · " + escapeHTML(data.price) : ""}</div>
     </section>
 
     <section class="content">
@@ -388,15 +864,15 @@ async function loadOpportunity(){
       <div class="panel">
         ${
           data.cover_image && !isOffMarket
-          ? `<img class="cover" src="${escapeHTML(data.cover_image)}" alt="${escapeHTML(data.title || "")}">`
+          ? `<img class="cover" src="${escapeHTML(data.cover_image)}" alt="${escapeHTML(title || "")}">`
           : ""
         }
 
         <div class="description">
           ${
             isOffMarket
-            ? "This is a private off-market opportunity. Detailed information and the investment dossier are available only after qualification, NDA acceptance and manual approval by IMMONOVA."
-            : escapeHTML(data.full_description || data.short_description || "")
+            ? escapeHTML(dict("private_off_market"))
+            : escapeHTML(description || "")
           }
         </div>
 
@@ -405,20 +881,20 @@ async function loadOpportunity(){
           ? `
           <div class="data-grid">
             <div class="data-item">
-              <div class="data-label">Category</div>
-              <div class="data-value">${escapeHTML(data.category || "-")}</div>
+              <div class="data-label">${escapeHTML(dict("category"))}</div>
+              <div class="data-value">${escapeHTML(category || "-")}</div>
             </div>
             <div class="data-item">
-              <div class="data-label">Investment Value</div>
-              <div class="data-value">${escapeHTML(data.price || "Reserved")}</div>
+              <div class="data-label">${escapeHTML(dict("investment_value"))}</div>
+              <div class="data-value">${escapeHTML(data.price || dict("reserved"))}</div>
             </div>
             <div class="data-item">
-              <div class="data-label">Location</div>
-              <div class="data-value">${escapeHTML(data.location || "-")}</div>
+              <div class="data-label">${escapeHTML(dict("location"))}</div>
+              <div class="data-value">${escapeHTML(location || "-")}</div>
             </div>
             <div class="data-item">
-              <div class="data-label">Type</div>
-              <div class="data-value">${escapeHTML(data.investment_type || "-")}</div>
+              <div class="data-label">${escapeHTML(dict("type"))}</div>
+              <div class="data-value">${escapeHTML(investmentType || "-")}</div>
             </div>
           </div>
           `
@@ -426,61 +902,58 @@ async function loadOpportunity(){
         }
 
         <div class="confidential-note">
-          The full dossier is not available for immediate download.
-          Requests are reviewed manually by IMMONOVA before any confidential material is shared.
+          ${escapeHTML(dict("confidential_note"))}
         </div>
       </div>
 
       <aside class="panel">
-        <div class="form-title">Request Dossier</div>
-        <p class="form-intro">
-          Complete the qualification form below. The dossier will be sent only after manual approval and in the language selected by you.
-        </p>
+        <div class="form-title">${escapeHTML(dict("request_dossier"))}</div>
+        <p class="form-intro">${escapeHTML(dict("form_intro"))}</p>
 
         <form id="inquiryForm">
 
-          <div class="form-section-title">Applicant Data</div>
+          <div class="form-section-title">${escapeHTML(dict("applicant_data"))}</div>
 
           <div class="form-grid">
             <div class="field">
-              <input type="text" id="first_name" placeholder="First name *" required>
+              <input type="text" id="first_name" placeholder="${escapeHTML(dict("first_name"))}" required>
             </div>
 
             <div class="field">
-              <input type="text" id="last_name" placeholder="Last name *" required>
+              <input type="text" id="last_name" placeholder="${escapeHTML(dict("last_name"))}" required>
             </div>
 
             <div class="field">
-              <input type="email" id="email" placeholder="Email *" required>
+              <input type="email" id="email" placeholder="${escapeHTML(dict("email"))}" required>
             </div>
 
             <div class="field">
-              <input type="tel" id="phone" placeholder="Phone *" required>
+              <input type="tel" id="phone" placeholder="${escapeHTML(dict("phone"))}" required>
             </div>
 
             <div class="field">
-              <input type="text" id="country" placeholder="Country *" required>
+              <input type="text" id="country" placeholder="${escapeHTML(dict("country"))}" required>
             </div>
 
             <div class="field">
-              <input type="text" id="company" placeholder="Company / Entity">
+              <input type="text" id="company" placeholder="${escapeHTML(dict("company"))}">
             </div>
 
             <div class="field full">
               <select id="budget_range">
-                <option value="">Budget range</option>
-                <option value="under_1m">Under €1M</option>
-                <option value="1m_3m">€1M - €3M</option>
-                <option value="3m_5m">€3M - €5M</option>
-                <option value="5m_10m">€5M - €10M</option>
-                <option value="over_10m">Over €10M</option>
-                <option value="reserved">Prefer not to disclose</option>
+                <option value="">${escapeHTML(dict("budget_range"))}</option>
+                <option value="under_1m">${escapeHTML(dict("under_1m"))}</option>
+                <option value="1m_3m">${escapeHTML(dict("one_to_three"))}</option>
+                <option value="3m_5m">${escapeHTML(dict("three_to_five"))}</option>
+                <option value="5m_10m">${escapeHTML(dict("five_to_ten"))}</option>
+                <option value="over_10m">${escapeHTML(dict("over_10m"))}</option>
+                <option value="reserved">${escapeHTML(dict("prefer_not"))}</option>
               </select>
             </div>
 
             <div class="field full">
               <select id="preferred_language" required>
-                <option value="">Preferred language *</option>
+                <option value="">${escapeHTML(dict("preferred_language"))}</option>
                 <option value="it">Italiano</option>
                 <option value="en">English</option>
                 <option value="fr">Français</option>
@@ -492,49 +965,43 @@ async function loadOpportunity(){
 
             <div class="field full">
               <select id="investor_type" required>
-                <option value="">Investor profile *</option>
-                <option value="private_investor">Private Investor</option>
-                <option value="family_office">Family Office</option>
-                <option value="real_estate_operator">Real Estate Operator</option>
-                <option value="hospitality_group">Hospitality Group</option>
-                <option value="fund">Investment Fund</option>
-                <option value="advisor">Advisor / Consultant</option>
-                <option value="other">Other</option>
+                <option value="">${escapeHTML(dict("investor_profile"))}</option>
+                <option value="private_investor">${escapeHTML(dict("private_investor"))}</option>
+                <option value="family_office">${escapeHTML(dict("family_office"))}</option>
+                <option value="real_estate_operator">${escapeHTML(dict("real_estate_operator"))}</option>
+                <option value="hospitality_group">${escapeHTML(dict("hospitality_group"))}</option>
+                <option value="fund">${escapeHTML(dict("fund"))}</option>
+                <option value="advisor">${escapeHTML(dict("advisor"))}</option>
+                <option value="other">${escapeHTML(dict("other"))}</option>
               </select>
             </div>
 
             <div class="field full">
-              <textarea id="message" placeholder="Message / Investment intent *" required>I would like to request the confidential dossier for: ${escapeHTML(data.title || "")}</textarea>
+              <textarea id="message" placeholder="${escapeHTML(dict("message_placeholder"))}" required>${escapeHTML(dict("message_default") + " " + (title || ""))}</textarea>
             </div>
           </div>
 
           <div class="form-section">
-            <div class="form-section-title">NDA & Privacy</div>
+            <div class="form-section-title">${escapeHTML(dict("nda_privacy"))}</div>
 
-            <div class="nda-text">
-              By submitting this request, the applicant acknowledges that the information, documents, images,
-              business assumptions, financial projections and investment dossier related to this opportunity
-              are confidential. The applicant agrees not to disclose, reproduce, forward, publish or use such
-              information for purposes other than evaluating the potential investment opportunity, unless expressly
-              authorized in writing by IMMONOVA Off Market Consulting.
-            </div>
+            <div class="nda-text">${escapeHTML(dict("nda_text"))}</div>
 
             <div class="consent-box">
               <label class="consent-label">
                 <input type="checkbox" id="nda_accepted" required>
-                <span>I accept the confidentiality terms and NDA obligations related to this opportunity. *</span>
+                <span>${escapeHTML(dict("nda_accept"))}</span>
               </label>
             </div>
 
             <div class="consent-box">
               <label class="consent-label">
                 <input type="checkbox" id="privacy_accepted" required>
-                <span>I authorize IMMONOVA to process my data for the purpose of evaluating and managing this dossier request. *</span>
+                <span>${escapeHTML(dict("privacy_accept"))}</span>
               </label>
             </div>
           </div>
 
-          <button type="submit" id="submitBtn">Submit Dossier Request</button>
+          <button type="submit" id="submitBtn">${escapeHTML(dict("submit"))}</button>
         </form>
 
         <div id="status" class="status"></div>
@@ -543,7 +1010,52 @@ async function loadOpportunity(){
     </section>
   `;
 
+  currentRequestTemplate = dict("message_default") + " " + (title || "");
+
+  const message = document.getElementById("message");
+  if(message){
+    message.dataset.userEdited = "";
+    message.addEventListener("input", function(){
+      message.dataset.userEdited = "true";
+    });
+  }
+
+  const preferredLanguage = document.getElementById("preferred_language");
+  if(preferredLanguage){
+    preferredLanguage.value = currentLanguage;
+  }
+
   document.getElementById("inquiryForm").addEventListener("submit", submitInquiry);
+}
+
+async function loadOpportunity(){
+  if(!id){
+    pageContent.innerHTML = dict("no_opportunity");
+    return;
+  }
+
+  const { data, error } = await client
+    .from("opportunities")
+    .select("*")
+    .eq("id", id)
+    .eq("published", true)
+    .single();
+
+  if(error || !data){
+    pageContent.innerHTML = dict("unavailable");
+    return;
+  }
+
+  currentOpportunity = data;
+  lastRenderedSignature = JSON.stringify({id:data.id, lang:currentLanguage, updated_at:data.updated_at || data.created_at || ""});
+  await renderOpportunity(data);
+}
+
+async function rerenderCurrentOpportunity(){
+  applyStaticTranslations();
+  if(currentOpportunity){
+    await renderOpportunity(currentOpportunity);
+  }
 }
 
 async function submitInquiry(e){
@@ -553,9 +1065,9 @@ async function submitInquiry(e){
   const submitBtn = document.getElementById("submitBtn");
 
   status.className = "status";
-  status.textContent = "Invio richiesta dossier...";
+  status.textContent = dict("sending_status");
   submitBtn.disabled = true;
-  submitBtn.textContent = "Invio...";
+  submitBtn.textContent = dict("sending");
 
   try{
     const firstName = document.getElementById("first_name").value.trim();
@@ -565,22 +1077,22 @@ async function submitInquiry(e){
     const country = document.getElementById("country").value.trim();
     const company = document.getElementById("company").value.trim();
     const budgetRange = document.getElementById("budget_range").value.trim();
-    const preferredLanguage = normalizeLanguage(document.getElementById("preferred_language").value);
+    const preferredLanguage = normalizeLanguage(document.getElementById("preferred_language").value || currentLanguage);
     const investorType = document.getElementById("investor_type").value.trim();
     const message = document.getElementById("message").value.trim();
     const ndaAccepted = document.getElementById("nda_accepted").checked;
     const privacyAccepted = document.getElementById("privacy_accepted").checked;
 
     if(!firstName || !lastName || !email || !phone || !country || !preferredLanguage || !investorType || !message){
-      throw new Error("Compila tutti i campi obbligatori.");
+      throw new Error(dict("required_error"));
     }
 
     if(!ndaAccepted){
-      throw new Error("Devi accettare l'NDA per richiedere il dossier.");
+      throw new Error(dict("nda_error"));
     }
 
     if(!privacyAccepted){
-      throw new Error("Devi accettare il trattamento dei dati.");
+      throw new Error(dict("privacy_error"));
     }
 
     const payload = {
@@ -642,18 +1154,29 @@ async function submitInquiry(e){
     }
 
     status.className = "status success";
-    status.textContent = "Richiesta inviata correttamente. IMMONOVA verificherà il profilo e invierà il dossier dopo approvazione manuale.";
+    status.textContent = dict("success");
     e.target.reset();
+    const preferredLanguageSelect = document.getElementById("preferred_language");
+    if(preferredLanguageSelect) preferredLanguageSelect.value = currentLanguage;
 
   }catch(error){
     status.className = "status error";
-    status.textContent = error.message || "Errore durante l'invio della richiesta.";
+    status.textContent = error.message || dict("send_error");
   }
 
   submitBtn.disabled = false;
-  submitBtn.textContent = "Submit Dossier Request";
+  submitBtn.textContent = dict("submit");
 }
 
+if(languageSelect){
+  languageSelect.addEventListener("change", async function(){
+    currentLanguage = normalizeLanguage(languageSelect.value);
+    localStorage.setItem("immonova_public_language", currentLanguage);
+    await rerenderCurrentOpportunity();
+  });
+}
+
+applyStaticTranslations();
 loadOpportunity();
 </script>
 
