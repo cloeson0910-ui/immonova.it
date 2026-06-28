@@ -74,9 +74,11 @@ body{
 .nav{
   display:flex;
   gap:14px;
+  align-items:center;
 }
 
-.nav a{
+.nav a,
+.lang-toggle{
   padding:11px 24px;
   border:1px solid rgba(165,129,57,.42);
   background:rgba(255,252,244,.22);
@@ -87,6 +89,56 @@ body{
   font-size:10px;
   font-weight:500;
   letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+
+.nav a:hover,
+.lang-toggle:hover{
+  background:#a58139;
+  color:#fff;
+}
+
+.lang-wrap{
+  position:relative;
+}
+
+.lang-menu{
+  position:absolute;
+  right:0;
+  top:calc(100% + 10px);
+  min-width:190px;
+  border:1px solid rgba(165,129,57,.28);
+  background:rgba(244,236,223,.96);
+  backdrop-filter:blur(14px);
+  box-shadow:0 24px 70px rgba(127,100,48,.10);
+  display:none;
+  z-index:30;
+}
+
+.lang-menu.open{
+  display:block;
+}
+
+.lang-menu button{
+  width:100%;
+  padding:13px 16px;
+  border:0;
+  border-bottom:1px solid rgba(165,129,57,.12);
+  background:transparent;
+  color:#8f7643;
+  text-align:left;
+  font-family:inherit;
+  font-size:11px;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+
+.lang-menu button:hover,
+.lang-menu button.active{
+  background:rgba(165,129,57,.12);
+  color:#a58139;
 }
 
 .hero{
@@ -218,6 +270,11 @@ h1{
   letter-spacing:.2em;
 }
 
+.card a:hover{
+  background:#a58139;
+  color:#fff;
+}
+
 .empty{
   grid-column:1 / -1;
   text-align:center;
@@ -246,8 +303,17 @@ h1{
     width:100%;
   }
 
-  .nav a{
+  .nav a,
+  .lang-wrap,
+  .lang-toggle{
+    width:100%;
     text-align:center;
+  }
+
+  .lang-menu{
+    position:relative;
+    top:8px;
+    width:100%;
   }
 
   .card{
@@ -280,15 +346,26 @@ h1{
     <a href="index.html" class="logo">IMMONOVA</a>
 
     <nav class="nav">
-      <a href="opportunities.html">Categories</a>
-      <a href="index.html">Home</a>
+      <a href="opportunities.html" data-i18n="nav_categories">Categories</a>
+      <a href="index.html" data-i18n="nav_home">Home</a>
+      <div class="lang-wrap">
+        <button type="button" class="lang-toggle" id="langToggle">EN</button>
+        <div class="lang-menu" id="langMenu">
+          <button type="button" data-lang="it">Italiano</button>
+          <button type="button" data-lang="en">English</button>
+          <button type="button" data-lang="fr">Français</button>
+          <button type="button" data-lang="de">Deutsch</button>
+          <button type="button" data-lang="es">Español</button>
+          <button type="button" data-lang="ar">العربية</button>
+        </div>
+      </div>
     </nav>
   </header>
 
   <section class="hero">
-    <div class="kicker">Investment Segment</div>
+    <div class="kicker" data-i18n="kicker">Investment Segment</div>
     <h1 id="categoryTitle">Opportunities</h1>
-    <p>
+    <p data-i18n="hero_text">
       Selected investment opportunities reserved for private investors,
       family offices and strategic partners.
     </p>
@@ -309,9 +386,110 @@ const client = window.supabase.createClient(
 
 const params = new URLSearchParams(window.location.search);
 const category = params.get("category");
+const langParam = params.get("lang");
 
-document.getElementById("categoryTitle").textContent =
-  category || "Opportunities";
+const I18N_STORAGE_KEY = "immonova_public_language";
+const SUPPORTED_LANGS = ["it","en","fr","de","es","ar"];
+
+let currentLang = normalizeLang(langParam || localStorage.getItem(I18N_STORAGE_KEY) || "en");
+let loadedItems = [];
+let translatedItemsCache = {};
+
+const STATIC_I18N = {
+  it:{
+    nav_categories:"Categorie",
+    nav_home:"Home",
+    kicker:"Segmento d'investimento",
+    hero_text:"Opportunità di investimento selezionate e riservate a investitori privati, family office e partner strategici.",
+    default_title:"Opportunità",
+    missing_category:"Categoria non selezionata.",
+    load_error:"Errore nel caricamento delle opportunità.",
+    no_results:"Nessuna opportunità pubblicata in questa categoria.\nNuove opportunità riservate saranno disponibili prossimamente.",
+    reserved_value:"Valore riservato",
+    request_access:"Richiedi accesso",
+    view_opportunity:"Vedi opportunità",
+    placeholder:"IMMONOVA\nOFF MARKET\nCONSULTING"
+  },
+  en:{
+    nav_categories:"Categories",
+    nav_home:"Home",
+    kicker:"Investment Segment",
+    hero_text:"Selected investment opportunities reserved for private investors, family offices and strategic partners.",
+    default_title:"Opportunities",
+    missing_category:"Category not selected.",
+    load_error:"Error loading opportunities.",
+    no_results:"No published opportunities in this category.\nNew reserved opportunities will be available soon.",
+    reserved_value:"Reserved value",
+    request_access:"Request Access",
+    view_opportunity:"View Opportunity",
+    placeholder:"IMMONOVA\nOFF MARKET\nCONSULTING"
+  },
+  fr:{
+    nav_categories:"Catégories",
+    nav_home:"Accueil",
+    kicker:"Segment d'investissement",
+    hero_text:"Opportunités d'investissement sélectionnées et réservées aux investisseurs privés, family offices et partenaires stratégiques.",
+    default_title:"Opportunités",
+    missing_category:"Catégorie non sélectionnée.",
+    load_error:"Erreur lors du chargement des opportunités.",
+    no_results:"Aucune opportunité publiée dans cette catégorie.\nDe nouvelles opportunités réservées seront bientôt disponibles.",
+    reserved_value:"Valeur réservée",
+    request_access:"Demander l'accès",
+    view_opportunity:"Voir l'opportunité",
+    placeholder:"IMMONOVA\nOFF MARKET\nCONSULTING"
+  },
+  de:{
+    nav_categories:"Kategorien",
+    nav_home:"Home",
+    kicker:"Investmentsegment",
+    hero_text:"Ausgewählte Investmentmöglichkeiten für private Investoren, Family Offices und strategische Partner.",
+    default_title:"Opportunities",
+    missing_category:"Keine Kategorie ausgewählt.",
+    load_error:"Fehler beim Laden der Opportunities.",
+    no_results:"In dieser Kategorie sind keine veröffentlichten Opportunities vorhanden.\nNeue reservierte Opportunities werden in Kürze verfügbar sein.",
+    reserved_value:"Wert auf Anfrage",
+    request_access:"Zugang anfordern",
+    view_opportunity:"Opportunity ansehen",
+    placeholder:"IMMONOVA\nOFF MARKET\nCONSULTING"
+  },
+  es:{
+    nav_categories:"Categorías",
+    nav_home:"Inicio",
+    kicker:"Segmento de inversión",
+    hero_text:"Oportunidades de inversión seleccionadas y reservadas para inversores privados, family offices y socios estratégicos.",
+    default_title:"Oportunidades",
+    missing_category:"Categoría no seleccionada.",
+    load_error:"Error al cargar las oportunidades.",
+    no_results:"No hay oportunidades publicadas en esta categoría.\nPróximamente estarán disponibles nuevas oportunidades reservadas.",
+    reserved_value:"Valor reservado",
+    request_access:"Solicitar acceso",
+    view_opportunity:"Ver oportunidad",
+    placeholder:"IMMONOVA\nOFF MARKET\nCONSULTING"
+  },
+  ar:{
+    nav_categories:"الفئات",
+    nav_home:"الرئيسية",
+    kicker:"قطاع الاستثمار",
+    hero_text:"فرص استثمارية مختارة ومخصصة للمستثمرين الخاصين والمكاتب العائلية والشركاء الاستراتيجيين.",
+    default_title:"الفرص",
+    missing_category:"لم يتم اختيار الفئة.",
+    load_error:"حدث خطأ أثناء تحميل الفرص.",
+    no_results:"لا توجد فرص منشورة في هذه الفئة.\nستتوفر فرص خاصة جديدة قريباً.",
+    reserved_value:"القيمة سرية",
+    request_access:"طلب الوصول",
+    view_opportunity:"عرض الفرصة",
+    placeholder:"IMMONOVA\nOFF MARKET\nCONSULTING"
+  }
+};
+
+function normalizeLang(value){
+  const lang = String(value || "en").trim().toLowerCase();
+  return SUPPORTED_LANGS.includes(lang) ? lang : "en";
+}
+
+function t(key){
+  return (STATIC_I18N[currentLang] && STATIC_I18N[currentLang][key]) || STATIC_I18N.en[key] || key;
+}
 
 function escapeHTML(value){
   return String(value ?? "")
@@ -320,6 +498,41 @@ function escapeHTML(value){
     .replaceAll(">","&gt;")
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
+}
+
+function encodeLangUrl(url){
+  const separator = url.includes("?") ? "&" : "?";
+  return url + separator + "lang=" + encodeURIComponent(currentLang);
+}
+
+function getCategoryDisplayName(){
+  if(!category) return t("default_title");
+  const fixed = {
+    "Ville":{it:"Ville",en:"Villas",fr:"Villas",de:"Villen",es:"Villas",ar:"فلل"},
+    "Hotel":{it:"Hotel",en:"Hotels",fr:"Hôtels",de:"Hotels",es:"Hoteles",ar:"فنادق"},
+    "Resort":{it:"Resort",en:"Resorts",fr:"Resorts",de:"Resorts",es:"Resorts",ar:"منتجعات"},
+    "Villaggi":{it:"Villaggi",en:"Villages",fr:"Villages",de:"Touristische Anlagen",es:"Complejos turísticos",ar:"قرى سياحية"},
+    "Nuove Edificazioni":{it:"Nuove Edificazioni",en:"New Developments",fr:"Nouveaux développements",de:"Neubauprojekte",es:"Nuevos desarrollos",ar:"مشاريع جديدة"},
+    "Off Market":{it:"Off Market",en:"Off Market",fr:"Off Market",de:"Off Market",es:"Off Market",ar:"خارج السوق"}
+  };
+  return fixed[category] && fixed[category][currentLang] ? fixed[category][currentLang] : category;
+}
+
+function applyStaticI18n(){
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = currentLang === "ar" ? "rtl" : "ltr";
+
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    el.textContent = t(key);
+  });
+
+  document.getElementById("categoryTitle").textContent = getCategoryDisplayName();
+  document.getElementById("langToggle").textContent = currentLang.toUpperCase();
+
+  document.querySelectorAll("#langMenu button").forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("data-lang") === currentLang);
+  });
 }
 
 function renderCover(item){
@@ -334,25 +547,134 @@ function renderCover(item){
   return `
     <div class="card-image">
       <div class="placeholder">
-        IMMONOVA<br>
-        OFF MARKET<br>
-        CONSULTING
+        ${escapeHTML(t("placeholder")).replaceAll("\n","<br>")}
       </div>
     </div>
   `;
+}
+
+async function translateText(text, targetLang){
+  const original = String(text || "").trim();
+  if(!original || targetLang === "it") return original;
+
+  const cacheKey = targetLang + "::" + original;
+  const localCached = sessionStorage.getItem("imn_translate_" + cacheKey);
+  if(localCached) return localCached;
+
+  try{
+    const result = await client.functions.invoke("translate-public-content", {
+      body:{
+        text:original,
+        target_language:targetLang,
+        source_language:"it",
+        context:"IMMONOVA luxury real estate investment website"
+      }
+    });
+
+    if(result.error) throw result.error;
+
+    const translated = result.data && (result.data.translated_text || result.data.translation || result.data.text);
+    if(translated){
+      sessionStorage.setItem("imn_translate_" + cacheKey, translated);
+      return translated;
+    }
+  }catch(error){
+    console.warn("Traduzione dinamica non disponibile:", error.message || error);
+  }
+
+  return original;
+}
+
+async function translateItem(item){
+  if(currentLang === "it") return item;
+
+  const key = currentLang + "::" + item.id;
+  if(translatedItemsCache[key]) return translatedItemsCache[key];
+
+  const translated = {...item};
+  translated.title = await translateText(item.title || "", currentLang);
+  translated.short_description = await translateText(item.short_description || "", currentLang);
+  translated.location = await translateText(item.location || "", currentLang);
+  translated.price = item.price || "";
+
+  translatedItemsCache[key] = translated;
+  return translated;
+}
+
+async function renderResults(){
+  const results = document.getElementById("results");
+
+  if(!category){
+    results.innerHTML = `
+      <div class="empty">
+        ${escapeHTML(t("missing_category"))}
+      </div>
+    `;
+    return;
+  }
+
+  if(!loadedItems || loadedItems.length === 0){
+    results.innerHTML = `
+      <div class="empty">
+        ${escapeHTML(t("no_results")).replaceAll("\n","<br>")}
+      </div>
+    `;
+    return;
+  }
+
+  results.innerHTML = `
+    <div class="empty">
+      ${currentLang === "it" ? "Caricamento opportunità..." : "Loading opportunities..."}
+    </div>
+  `;
+
+  const translatedItems = [];
+  for(let i = 0; i < loadedItems.length; i++){
+    translatedItems.push(await translateItem(loadedItems[i]));
+  }
+
+  results.innerHTML = translatedItems.map(item => {
+    const isOffMarket = String(item.category || "").toLowerCase() === "off market";
+    const url = encodeLangUrl("opportunity.html?id=" + encodeURIComponent(item.id));
+
+    return `
+      <article class="card">
+        <div class="card-content">
+          <div>
+            <div class="meta">${escapeHTML(item.location || "")}</div>
+            <h2>${escapeHTML(item.title || "")}</h2>
+            <p class="desc">${escapeHTML(item.short_description || "")}</p>
+          </div>
+
+          <div>
+            <div class="price">${escapeHTML(item.price || t("reserved_value"))}</div>
+
+            <a href="${url}">
+              ${escapeHTML(isOffMarket ? t("request_access") : t("view_opportunity"))}
+            </a>
+          </div>
+        </div>
+
+        ${renderCover(item)}
+      </article>
+    `;
+  }).join("");
 }
 
 async function loadCategory(){
   const results = document.getElementById("results");
 
   if(!category){
-    results.innerHTML = `
-      <div class="empty">
-        Categoria non selezionata.
-      </div>
-    `;
+    loadedItems = [];
+    await renderResults();
     return;
   }
+
+  results.innerHTML = `
+    <div class="empty">
+      ${currentLang === "it" ? "Caricamento opportunità..." : "Loading opportunities..."}
+    </div>
+  `;
 
   const { data, error } = await client
     .from("opportunities")
@@ -364,45 +686,47 @@ async function loadCategory(){
   if(error){
     results.innerHTML = `
       <div class="empty">
-        Errore nel caricamento delle opportunità.
+        ${escapeHTML(t("load_error"))}
       </div>
     `;
     return;
   }
 
-  if(!data || data.length === 0){
-    results.innerHTML = `
-      <div class="empty">
-        Nessuna opportunità pubblicata in questa categoria.<br>
-        Nuove opportunità riservate saranno disponibili prossimamente.
-      </div>
-    `;
-    return;
-  }
-
-  results.innerHTML = data.map(item => `
-    <article class="card">
-      <div class="card-content">
-        <div>
-          <div class="meta">${escapeHTML(item.location || "")}</div>
-          <h2>${escapeHTML(item.title || "")}</h2>
-          <p class="desc">${escapeHTML(item.short_description || "")}</p>
-        </div>
-
-        <div>
-          <div class="price">${escapeHTML(item.price || "Valore riservato")}</div>
-
-          <a href="opportunity.html?id=${encodeURIComponent(item.id)}">
-            ${item.category === "Off Market" ? "Request Access" : "View Opportunity"}
-          </a>
-        </div>
-      </div>
-
-      ${renderCover(item)}
-    </article>
-  `).join("");
+  loadedItems = data || [];
+  await renderResults();
 }
 
+function changeLanguage(lang){
+  currentLang = normalizeLang(lang);
+  localStorage.setItem(I18N_STORAGE_KEY, currentLang);
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("lang", currentLang);
+  window.history.replaceState({}, "", url.toString());
+
+  applyStaticI18n();
+  renderResults();
+}
+
+document.getElementById("langToggle").addEventListener("click", function(){
+  document.getElementById("langMenu").classList.toggle("open");
+});
+
+document.querySelectorAll("#langMenu button").forEach(btn => {
+  btn.addEventListener("click", function(){
+    document.getElementById("langMenu").classList.remove("open");
+    changeLanguage(this.getAttribute("data-lang"));
+  });
+});
+
+document.addEventListener("click", function(event){
+  const wrap = document.querySelector(".lang-wrap");
+  if(wrap && !wrap.contains(event.target)){
+    document.getElementById("langMenu").classList.remove("open");
+  }
+});
+
+applyStaticI18n();
 loadCategory();
 </script>
 
