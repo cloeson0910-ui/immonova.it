@@ -384,7 +384,7 @@ const pageContent = document.getElementById("pageContent");
 const languageSelect = document.getElementById("languageSelect");
 
 let currentOpportunity = null;
-let currentLanguage = normalizeLanguage(localStorage.getItem("immonova_public_language") || navigator.language || "en");
+let currentLanguage = normalizeLanguage(params.get("lang") || localStorage.getItem("immonova_public_language") || navigator.language || "en");
 let currentRequestTemplate = "";
 let lastRenderedSignature = "";
 
@@ -799,14 +799,14 @@ async function translateWithAI(texts){
   }
 
   try{
-    const result = await client.functions.invoke("translate-public-content", {
+    const result = await withTimeout(client.functions.invoke("translate-public-content", {
       body:{
         language:currentLanguage,
         source_language:"it",
         texts:cleanTexts,
         context:"IMMONOVA luxury real estate investment website. Keep brand names, numbers, currency, locations, emails and legal meaning unchanged."
       }
-    });
+    }), 3500);
 
     if(result.error || !result.data || !Array.isArray(result.data.translations)){
       throw result.error || new Error("Translation unavailable");
@@ -1048,7 +1048,15 @@ async function loadOpportunity(){
 
   currentOpportunity = data;
   lastRenderedSignature = JSON.stringify({id:data.id, lang:currentLanguage, updated_at:data.updated_at || data.created_at || ""});
-  await renderOpportunity(data);
+  try{
+    await renderOpportunity(data);
+  }catch(renderError){
+    console.warn("Render fallback:", renderError);
+    const previousLanguage = currentLanguage;
+    currentLanguage = "it";
+    await renderOpportunity(data);
+    currentLanguage = previousLanguage;
+  }
 }
 
 async function rerenderCurrentOpportunity(){
@@ -1176,8 +1184,16 @@ if(languageSelect){
   });
 }
 
-applyStaticTranslations();
-loadOpportunity();
+try{
+  applyStaticTranslations();
+  loadOpportunity().catch(function(error){
+    console.error(error);
+    pageContent.innerHTML = dict("unavailable") + (error && error.message ? "<br>" + escapeHTML(error.message) : "");
+  });
+}catch(initError){
+  console.error(initError);
+  pageContent.innerHTML = "Errore caricamento pagina.";
+}
 </script>
 
 </body>
