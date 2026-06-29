@@ -294,6 +294,84 @@ font-size:13px;
   max-width:170px;
 }
 
+.commercial-badge{
+  display:inline-block;
+  padding:7px 10px;
+  border:1px solid rgba(166,127,52,.25);
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  white-space:nowrap;
+  background:rgba(255,255,255,.22);
+  color:#a67f34;
+}
+
+.commercial-badge.available{
+  color:#4f7f45;
+  border-color:rgba(79,127,69,.34);
+  background:rgba(79,127,69,.08);
+}
+
+.commercial-badge.under_negotiation{
+  color:#8f5b28;
+  border-color:rgba(143,91,40,.34);
+  background:rgba(143,91,40,.08);
+}
+
+.commercial-badge.reserved{
+  color:#5f6f92;
+  border-color:rgba(95,111,146,.34);
+  background:rgba(95,111,146,.08);
+}
+
+.commercial-badge.sold{
+  color:#1f1a12;
+  border-color:rgba(166,127,52,.55);
+  background:linear-gradient(135deg,rgba(166,127,52,.24),rgba(255,255,255,.28));
+}
+
+.commercial-badge.withdrawn{
+  color:#9c2f2f;
+  border-color:rgba(156,47,47,.35);
+  background:rgba(156,47,47,.07);
+}
+
+.linked-events{
+  margin-top:8px;
+  max-width:260px;
+}
+
+.event-chip{
+  display:inline-block;
+  margin:4px 4px 0 0;
+  padding:6px 8px;
+  border:1px solid rgba(166,127,52,.20);
+  background:rgba(255,255,255,.20);
+  color:#8f7643;
+  font-size:9px;
+  letter-spacing:.10em;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+
+.event-chip.selling_party,
+.event-chip.closing_party{
+  color:#a67f34;
+  border-color:rgba(166,127,52,.38);
+  background:rgba(166,127,52,.08);
+}
+
+.event-link{
+  display:inline-block;
+  margin-top:6px;
+  color:#a67f34;
+  font-size:10px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  text-decoration:none;
+}
+
+
 @media(max-width:900px){
 .header{
 flex-direction:column;
@@ -355,11 +433,20 @@ Caricamento area riservata...
 <input type="text" id="searchInput" class="search" placeholder="Cerca per titolo, categoria, location o stato...">
 
 <select id="statusFilter" class="filter">
-<option value="">Tutti gli stati</option>
+<option value="">Tutti gli stati revisione</option>
 <option value="da_verificare">Da verificare</option>
 <option value="da_revisionare">Da revisionare</option>
 <option value="approvato">Approvato</option>
 <option value="rifiutato">Rifiutato</option>
+</select>
+
+<select id="commercialFilter" class="filter">
+<option value="">Tutti gli stati commerciali</option>
+<option value="available">Disponibile</option>
+<option value="under_negotiation">In trattativa</option>
+<option value="reserved">Riservata</option>
+<option value="sold">Venduta</option>
+<option value="withdrawn">Ritirata</option>
 </select>
 </div>
 
@@ -373,6 +460,7 @@ Caricamento area riservata...
 <th>Location</th>
 <th>Prezzo</th>
 <th>Stato Revisione</th>
+<th>Commerciale</th>
 <th>Pubblicata</th>
 <th>Documenti</th>
 <th>Azioni</th>
@@ -381,7 +469,7 @@ Caricamento area riservata...
 
 <tbody id="opportunitiesTable">
 <tr>
-<td colspan="8" class="empty">Caricamento...</td>
+<td colspan="9" class="empty">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -403,6 +491,7 @@ const table = document.getElementById("opportunitiesTable");
 const statusBox = document.getElementById("status");
 const searchInput = document.getElementById("searchInput");
 const statusFilter = document.getElementById("statusFilter");
+const commercialFilter = document.getElementById("commercialFilter");
 const roleLabel = document.getElementById("roleLabel");
 const subtitle = document.getElementById("subtitle");
 
@@ -462,6 +551,33 @@ function statusLabel(status){
   };
 
   return labels[status] || "Da verificare";
+}
+
+function commercialStatusLabel(status){
+  const labels = {
+    available:"Disponibile",
+    under_negotiation:"In trattativa",
+    reserved:"Riservata",
+    sold:"Venduta",
+    withdrawn:"Ritirata"
+  };
+
+  return labels[status] || "Disponibile";
+}
+
+function eventTypeLabel(type){
+  const labels = {
+    selling_party:"Selling Party",
+    closing_party:"Closing Party",
+    welcome_party:"Welcome Party",
+    past_party:"Party avvenuto",
+    upcoming_party:"Party in programma",
+    investor_tour:"Investor Tour",
+    site_visit:"Site Visit",
+    private_dinner:"Private Dinner"
+  };
+
+  return labels[type] || type || "Evento";
 }
 
 function formatPrice(value){
@@ -531,7 +647,7 @@ async function loadOpportunities(){
     console.error(error);
     table.innerHTML = `
       <tr>
-        <td colspan="8" class="empty">Errore nel caricamento.</td>
+        <td colspan="9" class="empty">Errore nel caricamento.</td>
       </tr>
     `;
     return;
@@ -539,6 +655,7 @@ async function loadOpportunities(){
 
   allOpportunities = data || [];
   await attachDocumentCounts();
+  await attachLinkedEvents();
 
   applyFilters();
 }
@@ -589,6 +706,44 @@ async function attachDocumentCounts(){
   });
 }
 
+async function attachLinkedEvents(){
+  const ids = allOpportunities.map(item => item.id).filter(Boolean);
+
+  allOpportunities = allOpportunities.map(item => ({
+    ...item,
+    linked_events:[]
+  }));
+
+  if(ids.length === 0){
+    return;
+  }
+
+  const { data, error } = await client
+    .from("immonova_events")
+    .select("id, opportunity_id, title, event_type, event_date, published, status, sold_price, investor_count, offers_count, closing_days")
+    .in("opportunity_id", ids)
+    .order("event_date", { ascending:false });
+
+  if(error){
+    console.warn("Eventi collegati non caricati:", error.message);
+    return;
+  }
+
+  const byOpportunity = {};
+
+  (data || []).forEach(event => {
+    if(!byOpportunity[event.opportunity_id]){
+      byOpportunity[event.opportunity_id] = [];
+    }
+    byOpportunity[event.opportunity_id].push(event);
+  });
+
+  allOpportunities = allOpportunities.map(item => ({
+    ...item,
+    linked_events:byOpportunity[item.id] || []
+  }));
+}
+
 function renderDocumentSummary(item){
   const total = REQUIRED_DOCUMENT_TYPES.length;
   const loaded = item.documents_loaded_count || 0;
@@ -602,14 +757,57 @@ function renderDocumentSummary(item){
   `;
 }
 
+function renderCommercialStatus(item){
+  const commercialStatus = item.commercial_status || "available";
+  const label = commercialStatusLabel(commercialStatus);
+  const soldDate = item.sold_at ? new Date(item.sold_at).toLocaleDateString("it-IT") : "";
+
+  return `
+    <span class="commercial-badge ${escapeHTML(commercialStatus)}">${escapeHTML(label)}</span>
+    ${soldDate ? `<div class="docs-mini">Venduta il ${escapeHTML(soldDate)}</div>` : ""}
+  `;
+}
+
+function renderLinkedEvents(item){
+  const events = item.linked_events || [];
+
+  if(events.length === 0){
+    return `<div class="docs-mini">Nessun evento collegato</div>`;
+  }
+
+  const chips = events.slice(0,4).map(event => `
+    <span class="event-chip ${escapeHTML(event.event_type || "")}">
+      ${escapeHTML(eventTypeLabel(event.event_type))}
+    </span>
+  `).join("");
+
+  const firstEvent = events[0];
+
+  return `
+    <div class="linked-events">
+      ${chips}
+      ${events.length > 4 ? `<span class="event-chip">+${events.length - 4}</span>` : ""}
+      ${firstEvent ? `<br><a class="event-link" href="event-edit.html?id=${encodeURIComponent(firstEvent.id)}">Visualizza evento</a>` : ""}
+    </div>
+  `;
+}
+
 function applyFilters(){
   const query = searchInput.value.trim().toLowerCase();
   const selectedStatus = statusFilter.value;
+  const selectedCommercialStatus = commercialFilter.value;
 
   let filtered = allOpportunities.filter(item => {
     const status = item.review_status || "da_verificare";
 
+    const commercialStatus = item.commercial_status || "available";
+
     const matchesStatus = !selectedStatus || status === selectedStatus;
+    const matchesCommercialStatus = !selectedCommercialStatus || commercialStatus === selectedCommercialStatus;
+
+    const eventSearch = (item.linked_events || [])
+      .map(event => [event.title, event.event_type, eventTypeLabel(event.event_type)].join(" "))
+      .join(" ");
 
     const matchesSearch = [
       item.title,
@@ -617,10 +815,13 @@ function applyFilters(){
       item.location,
       item.price,
       status,
-      statusLabel(status)
+      statusLabel(status),
+      commercialStatus,
+      commercialStatusLabel(commercialStatus),
+      eventSearch
     ].some(value => String(value || "").toLowerCase().includes(query));
 
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesCommercialStatus && matchesSearch;
   });
 
   renderTable(filtered);
@@ -630,7 +831,7 @@ function renderTable(data){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="8" class="empty">Nessuna proposta presente.</td>
+        <td colspan="9" class="empty">Nessuna proposta presente.</td>
       </tr>
     `;
     return;
@@ -638,11 +839,12 @@ function renderTable(data){
 
   table.innerHTML = data.map(item => {
     const reviewStatus = item.review_status || "da_verificare";
-    const canPublish = isAdmin && reviewStatus === "approvato";
+    const commercialStatus = item.commercial_status || "available";
+    const canPublish = isAdmin && reviewStatus === "approvato" && commercialStatus !== "sold" && commercialStatus !== "withdrawn";
 
     return `
       <tr>
-        <td>${escapeHTML(item.title || "")}</td>
+        <td>${escapeHTML(item.title || "")}${renderLinkedEvents(item)}</td>
         <td><span class="badge">${escapeHTML(item.category || "")}</span></td>
         <td>${escapeHTML(item.location || "")}</td>
         <td>${escapeHTML(formatPrice(item.price))}</td>
@@ -651,6 +853,10 @@ function renderTable(data){
           <span class="badge ${escapeHTML(reviewStatus)}">
             ${statusLabel(reviewStatus)}
           </span>
+        </td>
+
+        <td>
+          ${renderCommercialStatus(item)}
         </td>
 
         <td class="${item.published ? "published" : "not-published"}">
@@ -676,16 +882,29 @@ function renderTable(data){
 
             ${isAdmin ? `
               <select onchange="changeReviewStatus('${item.id}', this.value)">
-                <option value="">Cambia stato</option>
+                <option value="">Cambia revisione</option>
                 <option value="da_verificare">Da verificare</option>
                 <option value="da_revisionare">Da revisionare</option>
                 <option value="approvato">Approvato</option>
                 <option value="rifiutato">Rifiutato</option>
               </select>
 
-              <button onclick="togglePublished('${item.id}', ${item.published}, '${reviewStatus}')" ${!canPublish && !item.published ? "disabled" : ""}>
+              <select onchange="changeCommercialStatus('${item.id}', this.value)">
+                <option value="">Cambia commerciale</option>
+                <option value="available">Disponibile</option>
+                <option value="under_negotiation">In trattativa</option>
+                <option value="reserved">Riservata</option>
+                <option value="sold">Venduta</option>
+                <option value="withdrawn">Ritirata</option>
+              </select>
+
+              <button onclick="togglePublished('${item.id}', ${item.published}, '${reviewStatus}', '${commercialStatus}')" ${!canPublish && !item.published ? "disabled" : ""}>
                 ${item.published ? "Sospendi" : "Pubblica"}
               </button>
+
+              <a href="event-form.html?opportunity_id=${encodeURIComponent(item.id)}&event_type=selling_party">
+                Selling Party
+              </a>
 
               <button class="danger" onclick="deleteOpportunity('${item.id}')">
                 Elimina
@@ -730,7 +949,72 @@ async function changeReviewStatus(id, newStatus){
   await loadOpportunities();
 }
 
-async function togglePublished(id, currentStatus, reviewStatus){
+async function changeCommercialStatus(id, newStatus){
+  if(!newStatus || !isAdmin){
+    return;
+  }
+
+  const confirmSold = newStatus === "sold"
+    ? confirm("Confermi che questa opportunità è venduta? Verrà sospesa dalle opportunità pubbliche e comparirà nelle Success Stories.")
+    : true;
+
+  if(!confirmSold){
+    return;
+  }
+
+  setStatus("Aggiornamento stato commerciale...", "");
+
+  const now = new Date().toISOString();
+
+  const updateData = {
+    commercial_status:newStatus,
+    updated_at:now
+  };
+
+  if(newStatus === "sold"){
+    updateData.sold_at = now;
+    updateData.published = false;
+  }
+
+  if(newStatus === "reserved"){
+    updateData.reserved_at = now;
+  }
+
+  if(newStatus === "withdrawn"){
+    updateData.withdrawn_at = now;
+    updateData.published = false;
+  }
+
+  if(newStatus === "available" || newStatus === "under_negotiation"){
+    updateData.sold_at = null;
+    updateData.withdrawn_at = null;
+  }
+
+  const { error } = await client
+    .from("opportunities")
+    .update(updateData)
+    .eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  if(newStatus === "sold"){
+    await client.from("opportunity_timeline").insert({
+      opportunity_id:Number(id),
+      timeline_type:"sold",
+      title:"Venduta",
+      description:"Opportunità segnata come venduta da admin. Il prezzo resta riservato.",
+      visibility:"public"
+    });
+  }
+
+  setStatus("Stato commerciale aggiornato correttamente.", "success");
+  await loadOpportunities();
+}
+
+async function togglePublished(id, currentStatus, reviewStatus, commercialStatus){
   if(!isAdmin){
     setStatus("Solo un admin può pubblicare o sospendere una proposta.", "error");
     return;
@@ -738,6 +1022,11 @@ async function togglePublished(id, currentStatus, reviewStatus){
 
   if(!currentStatus && reviewStatus !== "approvato"){
     setStatus("Puoi pubblicare solo una proposta approvata.", "error");
+    return;
+  }
+
+  if(!currentStatus && (commercialStatus === "sold" || commercialStatus === "withdrawn")){
+    setStatus("Una proposta venduta o ritirata non può essere pubblicata tra le opportunità disponibili.", "error");
     return;
   }
 
@@ -790,6 +1079,7 @@ async function deleteOpportunity(id){
 
 searchInput.addEventListener("input", applyFilters);
 statusFilter.addEventListener("change", applyFilters);
+commercialFilter.addEventListener("change", applyFilters);
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await client.auth.signOut();
