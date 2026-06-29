@@ -107,81 +107,10 @@ function setValue(id,value){const el=document.getElementById(id);if(el&&value!==
 function num(id){const n=Number(val(id));return Number.isFinite(n)?n:null}
 function setStatus(m,t){statusBox.className='status '+(t||'');statusBox.textContent=m||''}
 function progress(p,t){progressWrap.style.display='block';progressText.style.display='block';progressFill.style.width=p+'%';progressText.textContent=t||''}
-
-function eventCanMarkSold(){
-  const type=val("event_type");
-  return ["selling_party","closing_party"].includes(type);
-}
-
-function updateSoldCheckboxVisibility(){
-  const box=document.getElementById("mark_sold");
-  if(!box)return;
-  const wrap=box.closest(".checks");
-  if(!wrap)return;
-  wrap.style.display=eventCanMarkSold() ? "flex" : "none";
-  if(!eventCanMarkSold())box.checked=false;
-}
-
-async function insertTimeline(opportunityId,eventId,timelineType,title,description,visibility){
-  if(!opportunityId)return;
-  const payload={
-    opportunity_id:Number(opportunityId),
-    event_id:eventId||null,
-    timeline_type:timelineType,
-    title:title,
-    description:description||null,
-    visibility:visibility||"public"
-  };
-  const {error}=await client.from("opportunity_timeline").insert(payload);
-  if(error)console.warn("Timeline non aggiornata:",error.message);
-}
-
-async function updateOpportunityAfterEvent(eventRow){
-  const opportunityId=val("opportunity_id");
-  if(!opportunityId)return;
-
-  const type=val("event_type");
-  const eventLabel=eventTypeLabel(type);
-  const oppTitle=linkedOpportunity?.title||"Opportunità IMMONOVA";
-  const eventTitle=val("title")||eventLabel+" · "+oppTitle;
-
-  await insertTimeline(
-    opportunityId,
-    eventRow.id,
-    type,
-    eventLabel,
-    eventTitle,
-    "public"
-  );
-
-  const markSold=document.getElementById("mark_sold")?.checked;
-
-  if(markSold && eventCanMarkSold()){
-    const now=new Date().toISOString();
-
-    const {error}=await client
-      .from("opportunities")
-      .update({
-        commercial_status:"sold",
-        sold_at:now,
-        sold_event_id:eventRow.id,
-        published:false,
-        updated_at:now
-      })
-      .eq("id",opportunityId);
-
-    if(error)throw error;
-
-    await insertTimeline(
-      opportunityId,
-      eventRow.id,
-      "sold",
-      "Venduta",
-      "Opportunità conclusa e spostata nelle Success Stories. Il prezzo di vendita resta riservato e non viene pubblicato.",
-      "public"
-    );
-  }
-}
+function eventCanMarkSold(){const type=val("event_type");return ["selling_party","closing_party"].includes(type)}
+function updateSoldCheckboxVisibility(){const box=document.getElementById("mark_sold");if(!box)return;const wrap=box.closest(".checks");if(!wrap)return;wrap.style.display=eventCanMarkSold()?"flex":"none";if(!eventCanMarkSold())box.checked=false}
+async function insertTimeline(opportunityId,eventId,timelineType,title,description,visibility){if(!opportunityId)return;const {error}=await client.from("opportunity_timeline").insert({opportunity_id:Number(opportunityId),event_id:eventId||null,timeline_type:timelineType,title:title,description:description||null,visibility:visibility||"public"});if(error)console.warn("Timeline non aggiornata:",error.message)}
+async function updateOpportunityAfterEvent(eventRow){const opportunityId=val("opportunity_id");if(!opportunityId)return;const type=val("event_type");await insertTimeline(opportunityId,eventRow.id,type,eventTypeLabel(type),val("title")||eventTypeLabel(type),"public");const markSold=document.getElementById("mark_sold")?.checked;if(markSold&&eventCanMarkSold()){const now=new Date().toISOString();const {error}=await client.from("opportunities").update({commercial_status:"sold",sold_at:now,sold_event_id:eventRow.id,updated_at:now}).eq("id",opportunityId);if(error)throw error;await insertTimeline(opportunityId,eventRow.id,"sold","Investment Completed","Opportunità conclusa e spostata nelle Success Stories. Il prezzo di vendita resta riservato.","public")}}
 
 async function checkAuth(){
   const {data:{session},error}=await client.auth.getSession();
@@ -388,11 +317,7 @@ async function loadOpportunities(){
     }
   });
 
-  document.getElementById("event_type").addEventListener("change",()=>{
-    updateSoldCheckboxVisibility();
-    if(linkedOpportunity)applyOpportunityToEvent(linkedOpportunity,true);
-  });
-
+  document.getElementById("event_type").addEventListener("change",()=>{updateSoldCheckboxVisibility();if(linkedOpportunity)applyOpportunityToEvent(linkedOpportunity,true);});
   updateSoldCheckboxVisibility();
 }
 
@@ -499,7 +424,7 @@ document.getElementById('eventForm').addEventListener('submit',async e=>{
     }
 
     progress(100,'Evento salvato.');
-    setStatus('Evento creato correttamente. Se marcato come venduto, l’opportunità è stata spostata in Success Stories.','success');
+    setStatus('Evento creato correttamente.','success');
 
     setTimeout(()=>location.href='event-edit.html?id='+encodeURIComponent(data.id),700);
   }catch(err){
