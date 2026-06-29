@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>IMMONOVA | Test Dossier Request Email</title>
+<title>IMMONOVA | Test Email</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./js/config.js"></script>
@@ -49,7 +49,7 @@ input,textarea{
   font:inherit;
   color:#3c2d15;
 }
-textarea{min-height:120px;resize:vertical;line-height:1.6}
+textarea{min-height:145px;resize:vertical;line-height:1.6}
 .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
 button{
   border:none;cursor:pointer;border-radius:999px;padding:14px 22px;
@@ -79,25 +79,25 @@ button{
 </header>
 
 <main class="panel">
-  <h1>Test dossier-request-email</h1>
+  <h1>Test invio email</h1>
   <p class="lead">
-    Test diretto della Edge Function <b>dossier-request-email</b>. Usa <b>./js/config.js</b> e invia il payload nel formato reale della richiesta dossier.
+    Test reale della Edge Function <b>dossier-request-email</b>. Usa automaticamente <b>./js/config.js</b>.
   </p>
 
   <div class="grid">
     <div class="field">
-      <label>Destinatario test</label>
+      <label>Email destinatario test</label>
       <input id="email" value="amministrazione@immonova-consulting.it">
     </div>
 
     <div class="field">
       <label>Lingua</label>
-      <input id="language" value="it">
+      <input id="preferred_language" value="it">
     </div>
 
     <div class="field full">
       <label>Opportunità</label>
-      <input id="opportunity" value="Test email IMMONOVA">
+      <input id="opportunity_title" value="Test email IMMONOVA">
     </div>
 
     <div class="field full">
@@ -107,10 +107,9 @@ button{
   </div>
 
   <div class="actions">
-    <button class="primary" id="sendBtn">Invia test reale</button>
-    <button class="secondary" id="directBtn">Test URL funzione</button>
+    <button class="primary" id="sendBtn">Invia test</button>
     <button class="secondary" id="previewBtn">Anteprima payload</button>
-    <button class="secondary" id="clientBtn">Test config.js</button>
+    <button class="secondary" id="configBtn">Test config.js</button>
     <button class="secondary" id="clearBtn">Pulisci log</button>
   </div>
 
@@ -141,23 +140,16 @@ function getSupabaseAnonKey(){
   return "sb_publishable_YySRrYs6VqiGLmP9958PjA_dUM6MDU8";
 }
 
-function getSupabaseClient(){
-  return window.supabaseClient || window.client || window.sb || window.db || null;
-}
-
 function functionUrl(){
   return getSupabaseUrl().replace(/\/$/,"") + "/functions/v1/" + FUNCTION_NAME;
 }
 
 function cleanError(error){
-  if(!error) return null;
   return {
-    name:error.name || null,
-    message:error.message || String(error),
-    status:error.status || error.statusCode || null,
-    code:error.code || null,
-    details:error.details || null,
-    hint:error.hint || null
+    name:error?.name || null,
+    message:error?.message || String(error),
+    status:error?.status || error?.statusCode || null,
+    code:error?.code || null
   };
 }
 
@@ -169,8 +161,8 @@ function buildPayload(){
       first_name:"Test",
       last_name:"IMMONOVA",
       phone:"+39 000 000 0000",
-      opportunity_title:$("opportunity").value.trim(),
-      preferred_language:$("language").value.trim() || "it",
+      opportunity_title:$("opportunity_title").value.trim(),
+      preferred_language:$("preferred_language").value.trim() || "it",
       investor_type:"Test",
       country:"Italia",
       budget_range:"Test",
@@ -180,63 +172,32 @@ function buildPayload(){
   };
 }
 
-async function testConfig(){
-  const client = getSupabaseClient();
+function testConfig(){
+  const client = window.supabaseClient || window.client || null;
+
   log({
     success:!!client,
-    message:client ? "config.js OK: client Supabase trovato." : "Client Supabase non trovato.",
+    message:client ? "config.js OK." : "Client Supabase non trovato.",
     function_name:FUNCTION_NAME,
     function_url:functionUrl(),
-    has_supabase_library:typeof window.supabase,
-    has_window_supabaseClient:typeof window.supabaseClient,
-    has_functions:!!client?.functions
+    supabase_library:typeof window.supabase,
+    supabaseClient:typeof window.supabaseClient
   }, client ? "ok" : "err");
-}
-
-async function testFunctionUrl(){
-  try{
-    log("Test URL funzione in corso...");
-
-    const response = await fetch(functionUrl(),{
-      method:"OPTIONS",
-      headers:{
-        "apikey":getSupabaseAnonKey(),
-        "Authorization":"Bearer " + getSupabaseAnonKey()
-      }
-    });
-
-    const text = await response.text().catch(()=> "");
-
-    log({
-      success:response.ok,
-      message:response.ok ? "La funzione risponde alla preflight OPTIONS." : "La funzione risponde ma con errore.",
-      url:functionUrl(),
-      status:response.status,
-      statusText:response.statusText,
-      body:text
-    }, response.ok ? "ok" : "err");
-
-  }catch(error){
-    log({
-      success:false,
-      message:"Impossibile raggiungere la funzione. Se qui appare Failed to fetch, la funzione non è raggiungibile o il CORS/preflight è bloccato.",
-      url:functionUrl(),
-      error:cleanError(error)
-    },"err");
-  }
 }
 
 async function sendTest(){
   try{
     $("sendBtn").disabled = true;
-    log("Invio richiesta dossier...");
 
     const payload = buildPayload();
+    const url = functionUrl();
 
-    if(!payload.request.email) throw new Error("Email destinatario mancante.");
+    if(!payload.request.email) throw new Error("Email mancante.");
     if(!payload.request.opportunity_title) throw new Error("Opportunità mancante.");
 
-    const response = await fetch(functionUrl(),{
+    log("Invio a " + url + " ...");
+
+    const response = await fetch(url,{
       method:"POST",
       headers:{
         "Content-Type":"application/json",
@@ -247,7 +208,7 @@ async function sendTest(){
     });
 
     const text = await response.text();
-    let data;
+    let data = null;
 
     try{
       data = text ? JSON.parse(text) : null;
@@ -258,20 +219,19 @@ async function sendTest(){
     if(!response.ok){
       log({
         success:false,
-        message:"La funzione è stata raggiunta ma ha risposto con errore.",
-        url:functionUrl(),
+        message:"La Edge Function ha risposto con errore.",
+        url,
         status:response.status,
         statusText:response.statusText,
-        response:data,
-        payload
+        response:data
       },"err");
       return;
     }
 
     log({
       success:true,
-      message:"Richiesta inviata correttamente alla funzione.",
-      url:functionUrl(),
+      message:"Email test inviata.",
+      url,
       status:response.status,
       response:data
     },"ok");
@@ -279,7 +239,7 @@ async function sendTest(){
   }catch(error){
     log({
       success:false,
-      message:"Failed to fetch: la richiesta non arriva alla funzione o viene bloccata prima della risposta.",
+      message:"Richiesta bloccata prima della risposta della funzione.",
       url:functionUrl(),
       error:cleanError(error)
     },"err");
@@ -289,9 +249,8 @@ async function sendTest(){
 }
 
 $("sendBtn").addEventListener("click",sendTest);
-$("directBtn").addEventListener("click",testFunctionUrl);
 $("previewBtn").addEventListener("click",()=>log(buildPayload()));
-$("clientBtn").addEventListener("click",testConfig);
+$("configBtn").addEventListener("click",testConfig);
 $("clearBtn").addEventListener("click",()=>log("Log pulito."));
 </script>
 </body>
