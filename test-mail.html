@@ -4,8 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>IMMONOVA | Test Email</title>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/supabase.js"></script>
+<script src="./js/config.js"></script>
 
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -80,12 +81,10 @@ button{
 <main class="panel">
   <h1>Test invio email</h1>
   <p class="lead">
-    Questa pagina testa la Edge Function email del progetto IMMONOVA.
-    Carica automaticamente il client Supabase se esiste già in <b>/js/supabase.js</b>.
+    Test diretto della Edge Function email di IMMONOVA. Usa automaticamente <b>./js/config.js</b>.
   </p>
 
   <div class="grid">
-
     <div class="field">
       <label>Edge Function</label>
       <input id="functionName" value="send-email">
@@ -110,6 +109,7 @@ button{
   <div class="actions">
     <button class="primary" id="sendBtn">Invia test</button>
     <button class="secondary" id="previewBtn">Anteprima payload</button>
+    <button class="secondary" id="clientBtn">Test config.js</button>
     <button class="secondary" id="clearBtn">Pulisci log</button>
   </div>
 
@@ -118,42 +118,90 @@ button{
 </div>
 
 <script>
-const supabaseClient = window.supabaseClient;
-
 const $ = id => document.getElementById(id);
 const result = $("result");
+
+function getSupabaseClient(){
+  return window.supabaseClient || window.client || window.sb || window.db || null;
+}
 
 function log(data,type=""){
   result.className = "result " + type;
   result.textContent = typeof data === "string" ? data : JSON.stringify(data,null,2);
 }
 
+function cleanError(error){
+  if(!error) return null;
+  return {
+    name:error.name || null,
+    message:error.message || String(error),
+    status:error.status || error.statusCode || null,
+    code:error.code || null,
+    details:error.details || null,
+    hint:error.hint || null
+  };
+}
+
 function buildPayload(){
+  const message = $("message").value.trim();
+
   return {
     to: $("to").value.trim(),
     subject: $("subject").value.trim(),
-    message: $("message").value.trim(),
+    message: message,
     html: `
-      <div style="font-family:Arial,sans-serif;color:#3c2d15">
-        <h2 style="color:#a67f34">IMMONOVA</h2>
-        <p>${$("message").value.trim()}</p>
+      <div style="font-family:Arial,sans-serif;color:#3c2d15;line-height:1.6">
+        <h2 style="color:#a67f34;letter-spacing:4px">IMMONOVA</h2>
+        <p>${message.replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll("\n","<br>")}</p>
       </div>
     `,
     meta:{
       project:"IMMONOVA",
-      source:"test-email.html",
+      source:"test-mail.html",
+      config:"./js/config.js",
       created_at:new Date().toISOString()
     }
   };
 }
 
+async function testConfig(){
+  const client = getSupabaseClient();
+
+  if(!client){
+    log({
+      success:false,
+      message:"config.js caricato ma nessun client trovato.",
+      expected:"window.supabaseClient oppure window.client oppure window.sb oppure window.db",
+      check:"Apri ./js/config.js e verifica che crei window.supabaseClient = window.supabase.createClient(...)"
+    },"err");
+    return;
+  }
+
+  const hasFunctions = !!client.functions;
+  const hasAuth = !!client.auth;
+
+  log({
+    success:true,
+    message:"Client Supabase trovato da config.js.",
+    client_found:true,
+    has_functions:hasFunctions,
+    has_auth:hasAuth
+  },"ok");
+}
+
 async function sendTest(){
   try{
     $("sendBtn").disabled = true;
-    log("Controllo Supabase...");
+    log("Invio in corso...");
 
-    if(!supabaseClient){
-      throw new Error("window.supabaseClient non inizializzato.");
+    const client = getSupabaseClient();
+
+    if(!client){
+      throw new Error("Client Supabase non trovato. config.js deve creare window.supabaseClient.");
+    }
+
+    if(!client.functions || !client.functions.invoke){
+      throw new Error("Il client trovato non contiene functions.invoke.");
     }
 
     const functionName = $("functionName").value.trim();
@@ -162,18 +210,16 @@ async function sendTest(){
     if(!functionName) throw new Error("Nome Edge Function mancante.");
     if(!payload.to) throw new Error("Destinatario mancante.");
     if(!payload.subject) throw new Error("Oggetto mancante.");
+    if(!payload.message) throw new Error("Messaggio mancante.");
 
-    log("Invio alla Edge Function: " + functionName);
-
-    const { data,error } = await supabaseClient.functions.invoke(functionName,{
-      body:payload
-    });
+    const { data,error } = await client.functions.invoke(functionName,{ body:payload });
 
     if(error) throw error;
 
     log({
       success:true,
       message:"Email inviata correttamente.",
+      function:functionName,
       response:data
     },"ok");
 
@@ -181,7 +227,7 @@ async function sendTest(){
     log({
       success:false,
       message:error.message || "Errore durante invio email.",
-      error:error
+      error:cleanError(error)
     },"err");
   }finally{
     $("sendBtn").disabled = false;
@@ -190,6 +236,7 @@ async function sendTest(){
 
 $("sendBtn").addEventListener("click",sendTest);
 $("previewBtn").addEventListener("click",()=>log(buildPayload()));
+$("clientBtn").addEventListener("click",testConfig);
 $("clearBtn").addEventListener("click",()=>log("Log pulito."));
 </script>
 </body>
