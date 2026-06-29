@@ -56,48 +56,13 @@ body{
   padding:46px 28px 90px;
 }
 
-.header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  margin-bottom:90px;
-}
-
-.logo{
-  color:#a58139;
-  text-decoration:none;
-  font-size:22px;
-  font-weight:300;
-  letter-spacing:.35em;
-}
-
-.nav{
-  display:flex;
-  gap:14px;
-  align-items:center;
-}
-
-.nav a,
-.lang-toggle{
-  padding:11px 24px;
-  border:1px solid rgba(165,129,57,.42);
-  background:rgba(255,252,244,.22);
-  backdrop-filter:blur(8px);
-  color:#a58139;
-  text-decoration:none;
-  text-transform:uppercase;
-  font-size:10px;
-  font-weight:500;
-  letter-spacing:.18em;
-  cursor:pointer;
-  font-family:inherit;
-}
-
-.nav a:hover,
-.lang-toggle:hover{
-  background:#a58139;
-  color:#fff;
-}
+.header{padding:34px 52px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.10);background:rgba(244,236,223,.62);backdrop-filter:blur(14px);position:sticky;top:0;z-index:20}
+.logo{font-size:24px;font-weight:300;letter-spacing:.35em;color:#a67f34;text-decoration:none}
+.nav{display:flex;gap:30px;align-items:center;flex-wrap:wrap}
+.nav a,.lang-toggle{padding:0;border:none;background:transparent;color:#a67f34;text-decoration:none;text-transform:uppercase;font-size:11px;font-weight:400;letter-spacing:.24em;cursor:pointer;font-family:inherit;position:relative}
+.nav a::after,.lang-toggle::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:1px;background:#a67f34;transform:scaleX(0);transform-origin:center;transition:transform .28s ease}
+.nav a:hover::after,.lang-toggle:hover::after{transform:scaleX(1)}
+.nav a:hover,.lang-toggle:hover{background:transparent;color:#7f6430}
 
 .lang-wrap{
   position:relative;
@@ -344,10 +309,11 @@ h1{
 
   <header class="header">
     <a href="index.html" class="logo">IMMONOVA</a>
-
     <nav class="nav">
-      <a href="opportunities.html" data-i18n="nav_categories">Categories</a>
       <a href="index.html" data-i18n="nav_home">Home</a>
+      <a href="opportunities.html" data-i18n="nav_categories">Categories</a>
+      <a href="events.html">Events</a>
+      <a href="success-stories.html">Success Stories</a>
       <div class="lang-wrap">
         <button type="button" class="lang-toggle" id="langToggle">EN</button>
         <div class="lang-menu" id="langMenu">
@@ -647,7 +613,7 @@ async function renderResults(){
           </div>
 
           <div>
-            <div class="price">${escapeHTML(item.price || t("reserved_value"))}</div>
+            <div class="price">${escapeHTML(item.show_price_public === false ? t("reserved_value") : (item.price || t("reserved_value")))}</div>
 
             <a href="${url}">
               ${escapeHTML(isOffMarket ? t("request_access") : t("view_opportunity"))}
@@ -681,6 +647,8 @@ async function loadCategory(){
     .select("*")
     .eq("published", true)
     .eq("category", category)
+    .neq("commercial_status", "sold")
+    .neq("commercial_status", "withdrawn")
     .order("created_at", { ascending:false });
 
   if(error){
