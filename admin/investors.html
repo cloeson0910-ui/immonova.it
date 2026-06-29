@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Investitori | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{
+  text-decoration:none;
+  color:#a67f34;
+}
+.logo-main{
+  font-size:24px;
+  font-weight:600;
+  letter-spacing:.35em;
+}
+.logo-sub{
+  margin-top:6px;
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.18em;
+  color:#a58139;
+}
+.header-actions{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.header-actions a,
+.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.header-actions a:hover,
+.logout:hover{
+  background:#a67f34;
+  color:#fff;
+}
+.container{
+  max-width:1500px;
+  margin:auto;
+  padding:40px;
+}
+.kicker{
+  font-size:11px;
+  letter-spacing:.32em;
+  text-transform:uppercase;
+  color:#9a793c;
+  margin-bottom:12px;
+}
+.title-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:22px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+}
+.title{
+  font-size:42px;
+  font-weight:200;
+  letter-spacing:.05em;
+  color:#a67f34;
+}
+.subtitle{
+  font-size:15px;
+  line-height:1.8;
+  color:#8f7643;
+  max-width:860px;
+  margin-bottom:28px;
+}
+.primary-link{
+  display:inline-block;
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  background:#a67f34;
+  color:#fffaf0;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+}
+.stats{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:16px;
+  margin-bottom:28px;
+}
+.stat{
+  min-height:130px;
+  padding:22px;
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(255,255,255,.22);
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+.stat-label{
+  font-size:10px;
+  line-height:1.5;
+  letter-spacing:.20em;
+  text-transform:uppercase;
+  color:#8f7643;
+}
+.stat-value{
+  font-size:44px;
+  line-height:1;
+  font-weight:200;
+  color:#a67f34;
+}
+.toolbar{
+  display:grid;
+  grid-template-columns:1.4fr repeat(4,.8fr);
+  gap:12px;
+  margin-bottom:24px;
+}
+.search,
+.filter{
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.25);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+}
+.table-wrapper{
+  background:rgba(255,255,255,.20);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  overflow:auto;
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:1280px;
+}
+th{
+  text-align:left;
+  padding:18px;
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  border-bottom:1px solid rgba(166,127,52,.15);
+  white-space:nowrap;
+}
+td{
+  padding:18px;
+  border-bottom:1px solid rgba(166,127,52,.08);
+  vertical-align:top;
+  font-size:14px;
+  line-height:1.6;
+}
+.name{
+  color:#a67f34;
+  font-size:17px;
+  margin-bottom:4px;
+}
+.muted{
+  color:#8f7643;
+  font-size:12px;
+  line-height:1.6;
+}
+.badge{
+  display:inline-block;
+  padding:7px 10px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.22);
+  color:#a67f34;
+  font-size:10px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  margin:2px 4px 2px 0;
+  white-space:nowrap;
+}
+.badge.vip{color:#1f1a12;border-color:rgba(166,127,52,.55);background:linear-gradient(135deg,rgba(166,127,52,.24),rgba(255,255,255,.28))}
+.badge.active{color:#4f7f45;border-color:rgba(79,127,69,.34);background:rgba(79,127,69,.08)}
+.badge.inactive{color:#9c2f2f;border-color:rgba(156,47,47,.35);background:rgba(156,47,47,.07)}
+.badge.optin{color:#4f7f45;border-color:rgba(79,127,69,.34);background:rgba(79,127,69,.08)}
+.badge.noopt{color:#8f5b28;border-color:rgba(143,91,40,.34);background:rgba(143,91,40,.08)}
+.actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.actions a,
+.actions button{
+  padding:9px 12px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:10px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.actions .danger{
+  color:#9c2f2f;
+  border-color:rgba(156,47,47,.35);
+}
+.status{
+  margin-bottom:18px;
+  min-height:20px;
+  font-size:13px;
+}
+.success{color:#4f7f45}
+.error{color:#9c2f2f}
+.empty{
+  padding:40px;
+  text-align:center;
+  opacity:.7;
+}
+@media(max-width:1050px){
+  .stats{grid-template-columns:1fr 1fr}
+  .toolbar{grid-template-columns:1fr 1fr}
+}
+@media(max-width:700px){
+  .header{flex-direction:column;gap:18px}
+  .header-actions{justify-content:center}
+  .container{padding:28px 22px}
+  .stats,.toolbar{grid-template-columns:1fr}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+
+  <div class="header-actions">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="opportunities.html">Opportunità</a>
+    <a href="events.html">Eventi</a>
+    <a href="investors.html">Investitori</a>
+    <a href="users.html" id="usersLink">Utenti</a>
+    <button class="logout" id="logoutBtn">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="kicker">Investor Relationship Management</div>
+
+  <div class="title-row">
+    <div>
+      <h1 class="title">Investitori</h1>
+    </div>
+    <a class="primary-link" href="investor-form.html">Nuovo Investitore</a>
+  </div>
+
+  <p class="subtitle">
+    Anagrafica investitori IMMONOVA con preferenze di budget, aree, categorie, lingua e consenso per inviti email / WhatsApp.
+  </p>
+
+  <div id="status" class="status"></div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Investitori<br>Totali</div>
+      <div class="stat-value" id="totalCount">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Email<br>Opt-in</div>
+      <div class="stat-value" id="emailCount">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">WhatsApp<br>Opt-in</div>
+      <div class="stat-value" id="whatsappCount">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">VIP / Active<br>Pipeline</div>
+      <div class="stat-value" id="vipCount">0</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input id="searchInput" class="search" placeholder="Cerca nome, email, società, paese, zona...">
+
+    <select id="statusFilter" class="filter">
+      <option value="">Tutti gli stati</option>
+      <option value="active">Attivi</option>
+      <option value="vip">VIP</option>
+      <option value="inactive">Inattivi</option>
+    </select>
+
+    <select id="categoryFilter" class="filter">
+      <option value="">Tutte le categorie</option>
+    </select>
+
+    <select id="areaFilter" class="filter">
+      <option value="">Tutte le aree</option>
+    </select>
+
+    <select id="channelFilter" class="filter">
+      <option value="">Tutti i consensi</option>
+      <option value="email">Email opt-in</option>
+      <option value="whatsapp">WhatsApp opt-in</option>
+      <option value="both">Email + WhatsApp</option>
+    </select>
+  </div>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Investitore</th>
+          <th>Contatti</th>
+          <th>Profilo</th>
+          <th>Budget</th>
+          <th>Aree</th>
+          <th>Categorie</th>
+          <th>Consensi</th>
+          <th>Azioni</th>
+        </tr>
+      </thead>
+      <tbody id="investorsTable">
+        <tr><td colspan="8" class="empty">Caricamento investitori...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const table = document.getElementById("investorsTable");
+const statusBox = document.getElementById("status");
+const searchInput = document.getElementById("searchInput");
+const statusFilter = document.getElementById("statusFilter");
+const categoryFilter = document.getElementById("categoryFilter");
+const areaFilter = document.getElementById("areaFilter");
+const channelFilter = document.getElementById("channelFilter");
+
+let currentUser = null;
+let currentProfile = null;
+let allInvestors = [];
+
+function esc(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setStatus(message,type){
+  statusBox.className = "status " + (type || "");
+  statusBox.textContent = message || "";
+}
+
+function fmtBudget(min,max){
+  const f = n => new Intl.NumberFormat("it-IT", {
+    style:"currency",
+    currency:"EUR",
+    maximumFractionDigits:0
+  }).format(Number(n));
+
+  if(min && max) return f(min) + " - " + f(max);
+  if(min) return "Da " + f(min);
+  if(max) return "Fino a " + f(max);
+  return "Non indicato";
+}
+
+function typeLabel(type){
+  const map = {
+    private:"Private Investor",
+    private_investor:"Private Investor",
+    family_office:"Family Office",
+    real_estate_operator:"Real Estate Operator",
+    hospitality_group:"Hospitality Group",
+    fund:"Investment Fund",
+    advisor:"Advisor",
+    other:"Altro"
+  };
+  return map[type] || type || "Investor";
+}
+
+function statusLabel(status){
+  const map = {
+    active:"Attivo",
+    vip:"VIP",
+    inactive:"Inattivo"
+  };
+  return map[status] || status || "Attivo";
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+
+  if(error || !session){
+    window.location.href = "login.html";
+    return false;
+  }
+
+  currentUser = session.user;
+  return true;
+}
+
+async function loadProfile(){
+  const { data, error } = await client
+    .from("profiles")
+    .select("id,email,full_name,role")
+    .eq("id", currentUser.id)
+    .single();
+
+  if(error || !data){
+    setStatus("Profilo utente non trovato.", "error");
+    return false;
+  }
+
+  currentProfile = data;
+
+  if(currentProfile.role !== "admin"){
+    setStatus("Accesso riservato agli admin.", "error");
+    table.innerHTML = '<tr><td colspan="8" class="empty">Accesso non autorizzato.</td></tr>';
+    return false;
+  }
+
+  return true;
+}
+
+async function loadInvestors(){
+  setStatus("", "");
+
+  const { data, error } = await client
+    .from("investors")
+    .select("*, investor_categories(category), investor_areas(area)")
+    .order("created_at", { ascending:false });
+
+  if(error){
+    console.error(error);
+    table.innerHTML = '<tr><td colspan="8" class="empty">Errore caricamento investitori.</td></tr>';
+    setStatus(error.message, "error");
+    return;
+  }
+
+  allInvestors = data || [];
+  buildFilters();
+  renderStats();
+  applyFilters();
+}
+
+function buildFilters(){
+  const categories = new Set();
+  const areas = new Set();
+
+  allInvestors.forEach(inv => {
+    (inv.investor_categories || []).forEach(row => {
+      if(row.category) categories.add(row.category);
+    });
+    (inv.investor_areas || []).forEach(row => {
+      if(row.area) areas.add(row.area);
+    });
+  });
+
+  categoryFilter.innerHTML = '<option value="">Tutte le categorie</option>' +
+    [...categories].sort().map(v => '<option value="'+esc(v)+'">'+esc(v)+'</option>').join("");
+
+  areaFilter.innerHTML = '<option value="">Tutte le aree</option>' +
+    [...areas].sort().map(v => '<option value="'+esc(v)+'">'+esc(v)+'</option>').join("");
+}
+
+function renderStats(){
+  document.getElementById("totalCount").textContent = allInvestors.length;
+  document.getElementById("emailCount").textContent = allInvestors.filter(i => i.email_opt_in).length;
+  document.getElementById("whatsappCount").textContent = allInvestors.filter(i => i.whatsapp_opt_in).length;
+  document.getElementById("vipCount").textContent = allInvestors.filter(i => i.status === "vip" || i.status === "active").length;
+}
+
+function investorSearchText(inv){
+  const categories = (inv.investor_categories || []).map(x => x.category).join(" ");
+  const areas = (inv.investor_areas || []).map(x => x.area).join(" ");
+
+  return [
+    inv.first_name,
+    inv.last_name,
+    inv.company,
+    inv.email,
+    inv.phone,
+    inv.whatsapp,
+    inv.country,
+    inv.city,
+    inv.preferred_language,
+    inv.investor_type,
+    inv.status,
+    categories,
+    areas,
+    inv.notes
+  ].join(" ").toLowerCase();
+}
+
+function applyFilters(){
+  const query = searchInput.value.trim().toLowerCase();
+  const status = statusFilter.value;
+  const category = categoryFilter.value;
+  const area = areaFilter.value;
+  const channel = channelFilter.value;
+
+  const filtered = allInvestors.filter(inv => {
+    const matchesSearch = !query || investorSearchText(inv).includes(query);
+    const matchesStatus = !status || inv.status === status;
+
+    const categories = (inv.investor_categories || []).map(x => x.category);
+    const areas = (inv.investor_areas || []).map(x => x.area);
+
+    const matchesCategory = !category || categories.includes(category);
+    const matchesArea = !area || areas.includes(area);
+
+    let matchesChannel = true;
+    if(channel === "email") matchesChannel = !!inv.email_opt_in;
+    if(channel === "whatsapp") matchesChannel = !!inv.whatsapp_opt_in;
+    if(channel === "both") matchesChannel = !!inv.email_opt_in && !!inv.whatsapp_opt_in;
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesArea && matchesChannel;
+  });
+
+  renderTable(filtered);
+}
+
+function renderBadges(values){
+  if(!values || !values.length){
+    return '<span class="muted">-</span>';
+  }
+
+  return values.map(v => '<span class="badge">'+esc(v)+'</span>').join("");
+}
+
+function renderTable(data){
+  if(!data.length){
+    table.innerHTML = '<tr><td colspan="8" class="empty">Nessun investitore trovato.</td></tr>';
+    return;
+  }
+
+  table.innerHTML = data.map(inv => {
+    const categories = (inv.investor_categories || []).map(x => x.category).filter(Boolean);
+    const areas = (inv.investor_areas || []).map(x => x.area).filter(Boolean);
+    const statusClass = inv.status === "vip" ? "vip" : (inv.status === "inactive" ? "inactive" : "active");
+
+    return `
+      <tr>
+        <td>
+          <div class="name">${esc((inv.first_name || "") + " " + (inv.last_name || ""))}</div>
+          <div class="muted">${esc(inv.company || "")}</div>
+          <span class="badge ${statusClass}">${esc(statusLabel(inv.status))}</span>
+        </td>
+
+        <td>
+          <div>${esc(inv.email || "-")}</div>
+          <div class="muted">${esc(inv.phone || "")}</div>
+          <div class="muted">${inv.whatsapp ? "WA: " + esc(inv.whatsapp) : ""}</div>
+        </td>
+
+        <td>
+          <span class="badge">${esc(typeLabel(inv.investor_type))}</span>
+          <div class="muted">${esc(inv.country || "")}${inv.city ? " · " + esc(inv.city) : ""}</div>
+          <div class="muted">Lingua: ${esc((inv.preferred_language || "it").toUpperCase())}</div>
+        </td>
+
+        <td>${esc(fmtBudget(inv.budget_min, inv.budget_max))}</td>
+
+        <td>${renderBadges(areas)}</td>
+
+        <td>${renderBadges(categories)}</td>
+
+        <td>
+          <span class="badge ${inv.email_opt_in ? "optin" : "noopt"}">Email ${inv.email_opt_in ? "OK" : "NO"}</span>
+          <span class="badge ${inv.whatsapp_opt_in ? "optin" : "noopt"}">WA ${inv.whatsapp_opt_in ? "OK" : "NO"}</span>
+        </td>
+
+        <td>
+          <div class="actions">
+            <a href="investor-form.html?id=${encodeURIComponent(inv.id)}">Modifica</a>
+            <a href="mailto:${encodeURIComponent(inv.email || "")}">Email</a>
+            ${inv.whatsapp ? `<a href="https://wa.me/${encodeURIComponent(String(inv.whatsapp).replace(/[^0-9]/g,""))}" target="_blank">WhatsApp</a>` : ""}
+            <button class="danger" onclick="deleteInvestor('${inv.id}')">Elimina</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+window.deleteInvestor = async function(id){
+  if(!confirm("Eliminare definitivamente questo investitore?")){
+    return;
+  }
+
+  setStatus("Eliminazione investitore...", "");
+
+  const { error } = await client
+    .from("investors")
+    .delete()
+    .eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setStatus("Investitore eliminato.", "success");
+  await loadInvestors();
+};
+
+searchInput.addEventListener("input", applyFilters);
+statusFilter.addEventListener("change", applyFilters);
+categoryFilter.addEventListener("change", applyFilters);
+areaFilter.addEventListener("change", applyFilters);
+channelFilter.addEventListener("change", applyFilters);
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  if(await checkAuth()){
+    const ok = await loadProfile();
+    if(ok) await loadInvestors();
+  }
+})();
+</script>
+</body>
+</html>
