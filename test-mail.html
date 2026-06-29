@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>IMMONOVA | Test Email</title>
+<title>IMMONOVA | Test Dossier Request Email</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./js/config.js"></script>
@@ -49,7 +49,7 @@ input,textarea{
   font:inherit;
   color:#3c2d15;
 }
-textarea{min-height:145px;resize:vertical;line-height:1.6}
+textarea{min-height:120px;resize:vertical;line-height:1.6}
 .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
 button{
   border:none;cursor:pointer;border-radius:999px;padding:14px 22px;
@@ -79,35 +79,36 @@ button{
 </header>
 
 <main class="panel">
-  <h1>Test invio email</h1>
+  <h1>Test dossier-request-email</h1>
   <p class="lead">
-    Test diretto della Edge Function dossier-request-email di IMMONOVA. Usa automaticamente <b>./js/config.js</b>.
+    Test diretto della Edge Function <b>dossier-request-email</b>. Usa <b>./js/config.js</b> e invia il payload nel formato reale della richiesta dossier.
   </p>
 
   <div class="grid">
     <div class="field">
-      <label>Edge Function</label>
-      <input id="functionName" value="dossier-request-email">
+      <label>Destinatario test</label>
+      <input id="email" value="amministrazione@immonova-consulting.it">
     </div>
 
     <div class="field">
-      <label>Destinatario</label>
-      <input id="to" value="amministrazione@immonova-consulting.it">
+      <label>Lingua</label>
+      <input id="language" value="it">
     </div>
 
     <div class="field full">
-      <label>Oggetto</label>
-      <input id="subject" value="Test email IMMONOVA">
+      <label>Opportunità</label>
+      <input id="opportunity" value="Test email IMMONOVA">
     </div>
 
     <div class="field full">
       <label>Messaggio</label>
-      <textarea id="message">Questa è una email di test generata da IMMONOVA.</textarea>
+      <textarea id="message">Questa è una richiesta dossier di test generata da IMMONOVA.</textarea>
     </div>
   </div>
 
   <div class="actions">
-    <button class="primary" id="sendBtn">Invia test</button>
+    <button class="primary" id="sendBtn">Invia test reale</button>
+    <button class="secondary" id="directBtn">Test URL funzione</button>
     <button class="secondary" id="previewBtn">Anteprima payload</button>
     <button class="secondary" id="clientBtn">Test config.js</button>
     <button class="secondary" id="clearBtn">Pulisci log</button>
@@ -118,16 +119,34 @@ button{
 </div>
 
 <script>
+const FUNCTION_NAME = "dossier-request-email";
+
 const $ = id => document.getElementById(id);
 const result = $("result");
+
+function log(data,type=""){
+  result.className = "result " + type;
+  result.textContent = typeof data === "string" ? data : JSON.stringify(data,null,2);
+}
+
+function getSupabaseUrl(){
+  if(typeof SUPABASE_URL !== "undefined") return SUPABASE_URL;
+  if(window.SUPABASE_URL) return window.SUPABASE_URL;
+  return "https://bpzzmitmbavcmcasswbu.supabase.co";
+}
+
+function getSupabaseAnonKey(){
+  if(typeof SUPABASE_ANON_KEY !== "undefined") return SUPABASE_ANON_KEY;
+  if(window.SUPABASE_ANON_KEY) return window.SUPABASE_ANON_KEY;
+  return "sb_publishable_YySRrYs6VqiGLmP9958PjA_dUM6MDU8";
+}
 
 function getSupabaseClient(){
   return window.supabaseClient || window.client || window.sb || window.db || null;
 }
 
-function log(data,type=""){
-  result.className = "result " + type;
-  result.textContent = typeof data === "string" ? data : JSON.stringify(data,null,2);
+function functionUrl(){
+  return getSupabaseUrl().replace(/\/$/,"") + "/functions/v1/" + FUNCTION_NAME;
 }
 
 function cleanError(error){
@@ -143,90 +162,125 @@ function cleanError(error){
 }
 
 function buildPayload(){
-  const message = $("message").value.trim();
-
   return {
-    to: $("to").value.trim(),
-    subject: $("subject").value.trim(),
-    message: message,
-    html: `
-      <div style="font-family:Arial,sans-serif;color:#3c2d15;line-height:1.6">
-        <h2 style="color:#a67f34;letter-spacing:4px">IMMONOVA</h2>
-        <p>${message.replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll("\n","<br>")}</p>
-      </div>
-    `,
-    meta:{
-      project:"IMMONOVA",
-      source:"test-mail.html",
-      config:"./js/config.js",
-      created_at:new Date().toISOString()
+    request:{
+      email:$("email").value.trim(),
+      full_name:"Test IMMONOVA",
+      first_name:"Test",
+      last_name:"IMMONOVA",
+      phone:"+39 000 000 0000",
+      opportunity_title:$("opportunity").value.trim(),
+      preferred_language:$("language").value.trim() || "it",
+      investor_type:"Test",
+      country:"Italia",
+      budget_range:"Test",
+      company:"IMMONOVA Test",
+      message:$("message").value.trim()
     }
   };
 }
 
 async function testConfig(){
   const client = getSupabaseClient();
+  log({
+    success:!!client,
+    message:client ? "config.js OK: client Supabase trovato." : "Client Supabase non trovato.",
+    function_name:FUNCTION_NAME,
+    function_url:functionUrl(),
+    has_supabase_library:typeof window.supabase,
+    has_window_supabaseClient:typeof window.supabaseClient,
+    has_functions:!!client?.functions
+  }, client ? "ok" : "err");
+}
 
-  if(!client){
+async function testFunctionUrl(){
+  try{
+    log("Test URL funzione in corso...");
+
+    const response = await fetch(functionUrl(),{
+      method:"OPTIONS",
+      headers:{
+        "apikey":getSupabaseAnonKey(),
+        "Authorization":"Bearer " + getSupabaseAnonKey()
+      }
+    });
+
+    const text = await response.text().catch(()=> "");
+
+    log({
+      success:response.ok,
+      message:response.ok ? "La funzione risponde alla preflight OPTIONS." : "La funzione risponde ma con errore.",
+      url:functionUrl(),
+      status:response.status,
+      statusText:response.statusText,
+      body:text
+    }, response.ok ? "ok" : "err");
+
+  }catch(error){
     log({
       success:false,
-      message:"config.js caricato ma nessun client trovato.",
-      expected:"window.supabaseClient oppure window.client oppure window.sb oppure window.db",
-      check:"Apri ./js/config.js e verifica che crei window.supabaseClient = window.supabase.createClient(...)"
+      message:"Impossibile raggiungere la funzione. Se qui appare Failed to fetch, la funzione non è raggiungibile o il CORS/preflight è bloccato.",
+      url:functionUrl(),
+      error:cleanError(error)
     },"err");
-    return;
   }
-
-  const hasFunctions = !!client.functions;
-  const hasAuth = !!client.auth;
-
-  log({
-    success:true,
-    message:"Client Supabase trovato da config.js.",
-    client_found:true,
-    has_functions:hasFunctions,
-    has_auth:hasAuth
-  },"ok");
 }
 
 async function sendTest(){
   try{
     $("sendBtn").disabled = true;
-    log("Invio in corso...");
+    log("Invio richiesta dossier...");
 
-    const client = getSupabaseClient();
-
-    if(!client){
-      throw new Error("Client Supabase non trovato. config.js deve creare window.supabaseClient.");
-    }
-
-    if(!client.functions || !client.functions.invoke){
-      throw new Error("Il client trovato non contiene functions.invoke.");
-    }
-
-    const functionName = $("functionName").value.trim();
     const payload = buildPayload();
 
-    if(!functionName) throw new Error("Nome Edge Function mancante.");
-    if(!payload.to) throw new Error("Destinatario mancante.");
-    if(!payload.subject) throw new Error("Oggetto mancante.");
-    if(!payload.message) throw new Error("Messaggio mancante.");
+    if(!payload.request.email) throw new Error("Email destinatario mancante.");
+    if(!payload.request.opportunity_title) throw new Error("Opportunità mancante.");
 
-    const { data,error } = await client.functions.invoke(functionName,{ body:payload });
+    const response = await fetch(functionUrl(),{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "apikey":getSupabaseAnonKey(),
+        "Authorization":"Bearer " + getSupabaseAnonKey()
+      },
+      body:JSON.stringify(payload)
+    });
 
-    if(error) throw error;
+    const text = await response.text();
+    let data;
+
+    try{
+      data = text ? JSON.parse(text) : null;
+    }catch{
+      data = text;
+    }
+
+    if(!response.ok){
+      log({
+        success:false,
+        message:"La funzione è stata raggiunta ma ha risposto con errore.",
+        url:functionUrl(),
+        status:response.status,
+        statusText:response.statusText,
+        response:data,
+        payload
+      },"err");
+      return;
+    }
 
     log({
       success:true,
-      message:"Email inviata correttamente.",
-      function:functionName,
+      message:"Richiesta inviata correttamente alla funzione.",
+      url:functionUrl(),
+      status:response.status,
       response:data
     },"ok");
 
   }catch(error){
     log({
       success:false,
-      message:error.message || "Errore durante invio email.",
+      message:"Failed to fetch: la richiesta non arriva alla funzione o viene bloccata prima della risposta.",
+      url:functionUrl(),
       error:cleanError(error)
     },"err");
   }finally{
@@ -235,6 +289,7 @@ async function sendTest(){
 }
 
 $("sendBtn").addEventListener("click",sendTest);
+$("directBtn").addEventListener("click",testFunctionUrl);
 $("previewBtn").addEventListener("click",()=>log(buildPayload()));
 $("clientBtn").addEventListener("click",testConfig);
 $("clearBtn").addEventListener("click",()=>log("Log pulito."));
