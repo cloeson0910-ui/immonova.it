@@ -137,6 +137,10 @@ body::after{
   background:rgba(255,255,255,.25);
   color:#a67f34;
 }
+.submit-btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
 .form-wrapper{
   background:rgba(255,255,255,.20);
   backdrop-filter:blur(8px);
@@ -225,20 +229,40 @@ textarea{
 .check-card input{
   width:auto;
 }
-.status{
-  margin-bottom:18px;
-  min-height:20px;
-  font-size:13px;
-}
-.success{color:#4f7f45}
-.error{color:#9c2f2f}
 .footer-actions{
   display:flex;
   justify-content:space-between;
-  align-items:center;
-  gap:14px;
+  align-items:flex-end;
+  gap:18px;
   flex-wrap:wrap;
   margin-top:32px;
+}
+.save-panel{
+  min-width:340px;
+  flex:1;
+  max-width:560px;
+}
+.progress-text{
+  min-height:18px;
+  margin-bottom:10px;
+  font-size:13px;
+  color:#8f7643;
+}
+.progress-text.success{color:#4f7f45}
+.progress-text.error{color:#9c2f2f}
+.progress-bar{
+  width:100%;
+  height:6px;
+  border:1px solid rgba(166,127,52,.20);
+  background:rgba(255,255,255,.28);
+  overflow:hidden;
+  margin-bottom:14px;
+}
+.progress-fill{
+  width:0%;
+  height:100%;
+  background:#a67f34;
+  transition:width .35s ease;
 }
 @media(max-width:900px){
   .grid,.grid-3{grid-template-columns:1fr}
@@ -248,6 +272,7 @@ textarea{
   .header-actions{justify-content:center}
   .container{padding:28px 22px}
   .form-wrapper{padding:24px}
+  .save-panel{min-width:100%;max-width:100%}
 }
 </style>
 </head>
@@ -285,8 +310,6 @@ textarea{
     Crea o aggiorna il profilo investitore con dati anagrafici, budget, aree geografiche, categorie di investimento,
     lingua preferita e consensi per future comunicazioni email / WhatsApp.
   </p>
-
-  <div id="status" class="status"></div>
 
   <form id="investorForm" class="form-wrapper">
 
@@ -432,7 +455,14 @@ textarea{
 
     <div class="footer-actions">
       <a class="secondary-link" href="investors.html">Annulla</a>
-      <button class="submit-btn" type="submit" id="saveBtn">Salva Investitore</button>
+
+      <div class="save-panel">
+        <div id="progressText" class="progress-text"></div>
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+        <button class="submit-btn" type="submit" id="saveBtn">Salva Investitore</button>
+      </div>
     </div>
 
   </form>
@@ -449,16 +479,18 @@ const params = new URLSearchParams(window.location.search);
 const investorId = params.get("id");
 
 const form = document.getElementById("investorForm");
-const statusBox = document.getElementById("status");
 const pageTitle = document.getElementById("pageTitle");
 const saveBtn = document.getElementById("saveBtn");
+const progressText = document.getElementById("progressText");
+const progressFill = document.getElementById("progressFill");
 
 let currentUser = null;
 let currentProfile = null;
 
-function setStatus(message,type){
-  statusBox.className = "status " + (type || "");
-  statusBox.textContent = message || "";
+function setProgress(message,percent,type){
+  progressText.className = "progress-text " + (type || "");
+  progressText.textContent = message || "";
+  progressFill.style.width = (percent || 0) + "%";
 }
 
 function val(id){
@@ -501,18 +533,11 @@ async function loadProfile(){
     .single();
 
   if(error || !data){
-    setStatus("Profilo utente non trovato.", "error");
+    setProgress("Profilo utente non trovato.", 100, "error");
     return false;
   }
 
   currentProfile = data;
-
-  if(currentProfile.role !== "admin"){
-    setStatus("Accesso riservato agli admin.", "error");
-    form.style.display = "none";
-    return false;
-  }
-
   return true;
 }
 
@@ -523,6 +548,8 @@ async function loadInvestor(){
   document.title = "Modifica Investitore | IMMONOVA Admin";
   saveBtn.textContent = "Aggiorna Investitore";
 
+  setProgress("Caricamento investitore...", 25, "");
+
   const { data, error } = await client
     .from("investors")
     .select("*, investor_categories(category), investor_areas(area)")
@@ -530,7 +557,7 @@ async function loadInvestor(){
     .single();
 
   if(error || !data){
-    setStatus("Investitore non trovato.", "error");
+    setProgress("Investitore non trovato o non autorizzato.", 100, "error");
     return;
   }
 
@@ -558,10 +585,12 @@ async function loadInvestor(){
   document.querySelectorAll('input[name="category"]').forEach(input => {
     input.checked = categories.includes(input.value);
   });
+
+  setProgress("", 0, "");
 }
 
 function collectInvestorPayload(){
-  return {
+  const payload = {
     first_name: val("first_name"),
     last_name: val("last_name"),
     company: val("company") || null,
@@ -580,6 +609,12 @@ function collectInvestorPayload(){
     notes: val("notes") || null,
     updated_at: new Date().toISOString()
   };
+
+  if(!investorId){
+    payload.created_by = currentUser.id;
+  }
+
+  return payload;
 }
 
 function collectCategories(){
@@ -590,18 +625,20 @@ function collectCategories(){
 async function saveInvestor(event){
   event.preventDefault();
 
-  setStatus("Salvataggio investitore...", "");
   saveBtn.disabled = true;
+  setProgress("Controllo dati investitore...", 10, "");
 
   const payload = collectInvestorPayload();
 
   if(!payload.first_name || !payload.last_name){
-    setStatus("Nome e cognome sono obbligatori.", "error");
+    setProgress("Nome e cognome sono obbligatori.", 100, "error");
     saveBtn.disabled = false;
     return;
   }
 
   let savedId = investorId;
+
+  setProgress("Salvataggio anagrafica investitore...", 35, "");
 
   if(investorId){
     const { error } = await client
@@ -609,44 +646,46 @@ async function saveInvestor(event){
       .update(payload)
       .eq("id", investorId);
 
-    if(error){
-      setStatus(error.message, "error");
-      saveBtn.disabled = false;
-      return;
-    }
+    if(error) throw error;
   }else{
-    payload.created_by = currentUser.id;
-
     const { data, error } = await client
       .from("investors")
       .insert(payload)
       .select("id")
       .single();
 
-    if(error){
-      setStatus(error.message, "error");
-      saveBtn.disabled = false;
-      return;
-    }
+    if(error) throw error;
 
     savedId = data.id;
   }
 
+  setProgress("Aggiornamento aree e categorie...", 65, "");
   await saveRelations(savedId);
 
-  setStatus("Investitore salvato correttamente.", "success");
+  setProgress("Investitore salvato correttamente.", 100, "success");
 
   setTimeout(() => {
     window.location.href = "investors.html";
-  }, 700);
+  }, 800);
 }
 
 async function saveRelations(id){
   const categories = collectCategories();
   const areas = splitValues(val("areas"));
 
-  await client.from("investor_categories").delete().eq("investor_id", id);
-  await client.from("investor_areas").delete().eq("investor_id", id);
+  const delCat = await client
+    .from("investor_categories")
+    .delete()
+    .eq("investor_id", id);
+
+  if(delCat.error) throw delCat.error;
+
+  const delArea = await client
+    .from("investor_areas")
+    .delete()
+    .eq("investor_id", id);
+
+  if(delArea.error) throw delArea.error;
 
   if(categories.length){
     const rows = categories.map(category => ({
@@ -654,7 +693,10 @@ async function saveRelations(id){
       category
     }));
 
-    const { error } = await client.from("investor_categories").insert(rows);
+    const { error } = await client
+      .from("investor_categories")
+      .insert(rows);
+
     if(error) throw error;
   }
 
@@ -664,7 +706,10 @@ async function saveRelations(id){
       area
     }));
 
-    const { error } = await client.from("investor_areas").insert(rows);
+    const { error } = await client
+      .from("investor_areas")
+      .insert(rows);
+
     if(error) throw error;
   }
 }
@@ -674,7 +719,7 @@ form.addEventListener("submit", async event => {
     await saveInvestor(event);
   }catch(error){
     console.error(error);
-    setStatus(error.message || "Errore durante il salvataggio.", "error");
+    setProgress(error.message || "Errore durante il salvataggio.", 100, "error");
     saveBtn.disabled = false;
   }
 });
