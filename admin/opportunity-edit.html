@@ -3053,14 +3053,107 @@ async function createCrmTemporaryList(matches, listName){
   return listId;
 }
 
+function opportunityBaseInfoText(){
+  var title = textOrNull("title") || "Opportunità IMMONOVA";
+  var location = textOrNull("location") || textOrNull("municipality") || textOrNull("region") || "Location riservata";
+  var category = textOrNull("category") || "Opportunità off market";
+  var price = textOrNull("price") || "Valore riservato";
+  var shortDescription = textOrNull("short_description") || "Opportunità selezionata dal network IMMONOVA Off Market Consulting.";
+
+  return "IMMONOVA Off Market Consulting\n\n" +
+    "Informazioni base opportunità — nessun dossier allegato.\n\n" +
+    "Titolo: " + title + "\n" +
+    "Categoria: " + category + "\n" +
+    "Location: " + location + "\n" +
+    "Valore indicativo: " + price + "\n\n" +
+    shortDescription + "\n\n" +
+    "Se desideri maggiori informazioni, rispondi a questo messaggio. Il dossier completo resta riservato e viene condiviso solo dopo valutazione manuale IMMONOVA.";
+}
+
+function buildEmailPayloadForInvestor(match){
+  var inv = match.investor;
+  var firstName = inv.first_name || "";
+  var lastName = inv.last_name || "";
+  var fullName = ((firstName + " " + lastName).trim()) || inv.full_name || "Investitore IMMONOVA";
+  var budget = crmBudgetLabel(inv.budget_min, inv.budget_max);
+
+  return {
+    request:{
+      email:inv.email,
+      full_name:fullName,
+      first_name:firstName || fullName,
+      last_name:lastName || "",
+      phone:inv.phone || inv.whatsapp || "",
+      opportunity_id:Number(id),
+      opportunity_title:textOrNull("title") || "Opportunità IMMONOVA",
+      preferred_language:inv.preferred_language || "it",
+      investor_type:inv.investor_type || "Investor",
+      country:inv.country || "",
+      budget_range:budget || "Non indicato",
+      company:inv.company || null,
+      message:opportunityBaseInfoText(),
+      source_page:window.location.href,
+      crm_mode:"base_opportunity_info",
+      include_dossier:false,
+      dossier_sent:false,
+      match_score:match.score,
+      match_reasons:match.reasons
+    }
+  };
+}
+
+function whatsappLinkForInvestor(match){
+  var inv = match.investor;
+  var raw = String(inv.whatsapp || inv.phone || "").replace(/[^0-9]/g, "");
+  if(!raw) return null;
+  return "https://wa.me/" + raw + "?text=" + encodeURIComponent(opportunityBaseInfoText());
+}
+
+function openWhatsappLinks(matches){
+  var whatsappMatches = matches.filter(function(item){
+    return item.investor.whatsapp_opt_in && whatsappLinkForInvestor(item);
+  });
+
+  if(!whatsappMatches.length){
+    return 0;
+  }
+
+  var first = whatsappMatches[0];
+  window.open(whatsappLinkForInvestor(first), "_blank");
+
+  if(whatsappMatches.length > 1){
+    var links = whatsappMatches.slice(1).map(function(item, index){
+      var inv = item.investor;
+      var name = ((inv.first_name || "") + " " + (inv.last_name || "")).trim() || inv.full_name || ("Investitore " + (index + 2));
+      return (index + 2) + ". " + name + "\n" + whatsappLinkForInvestor(item);
+    }).join("\n\n");
+
+    console.log("Link WhatsApp restanti:\n" + links);
+    alert("WhatsApp: ho aperto il primo destinatario. Per evitare blocchi popup del browser, trovi gli altri link nella console oppure puoi aprirli dalla lista investitori. Destinatari WhatsApp totali: " + whatsappMatches.length);
+  }
+
+  return whatsappMatches.length;
+}
+
 async function sendBaseInfoToMatches(matches, mode){
   if(!matches.length){
     throw new Error("Seleziona almeno un investitore.");
   }
 
+  var emailMatches = matches.filter(function(item){
+    return item.investor.email_opt_in && item.investor.email;
+  });
+
+  var whatsappMatches = matches.filter(function(item){
+    return item.investor.whatsapp_opt_in && (item.investor.whatsapp || item.investor.phone);
+  });
+
   var confirmed = confirm(
-    "Inviare informazioni base dell’opportunità a " + matches.length + " investitori?\n\n" +
-    "Non verrà allegato nessun dossier. Verranno inviate solo informazioni base e richiesta di interesse."
+    "Inviare informazioni base dell’opportunità?\n\n" +
+    "Investitori selezionati: " + matches.length + "\n" +
+    "Email inviabili: " + emailMatches.length + "\n" +
+    "WhatsApp preparabili: " + whatsappMatches.length + "\n\n" +
+    "Non verrà allegato nessun dossier. L’invio email userà la Edge Function dossier-request-email. WhatsApp verrà aperto manualmente con messaggio già compilato."
   );
 
   if(!confirmed) return;
@@ -3068,22 +3161,35 @@ async function sendBaseInfoToMatches(matches, mode){
   setCrmStatus("Creazione lista temporanea prima dell’invio...");
   var listId = await createCrmTemporaryList(matches, "Invio info base · " + (textOrNull("title") || "Opportunità") + " · " + new Date().toLocaleString("it-IT"));
 
-  setCrmStatus("Invio informazioni base in corso...");
+  var sentEmails = 0;
+  var failedEmails = 0;
 
-  var result = await client.functions.invoke("send-opportunity-info", {
-    body:{
-      opportunity_id:Number(id),
-      list_id:listId,
-      mode:mode || "selected",
-      include_dossier:false
+  for(var i = 0; i < emailMatches.length; i++){
+    var match = emailMatches[i];
+    var inv = match.investor;
+    setCrmStatus("Invio email " + (i + 1) + " di " + emailMatches.length + " a " + (inv.email || "investitore") + "...");
+
+    var result = await client.functions.invoke("dossier-request-email", {
+      body:buildEmailPayloadForInvestor(match)
+    });
+
+    if(result.error || (result.data && (result.data.ok === false || result.data.success === false))){
+      console.warn("Errore invio email", inv.email, result);
+      failedEmails++;
+    }else{
+      sentEmails++;
     }
-  });
-
-  if(result.error || !result.data || result.data.success === false){
-    throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore invio informazioni base.");
   }
 
-  setCrmStatus("Informazioni base inviate. Lista salvata nel CRM.", "success");
+  var openedWhatsapp = openWhatsappLinks(matches);
+
+  setCrmStatus(
+    "Lista CRM salvata. Email inviate: " + sentEmails +
+    (failedEmails ? " · email fallite: " + failedEmails : "") +
+    " · WhatsApp preparati: " + openedWhatsapp +
+    ". Nessun dossier allegato.",
+    failedEmails ? "error" : "success"
+  );
 }
 
 function bindCrmMatchTools(){
