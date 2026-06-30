@@ -3102,6 +3102,50 @@ function buildEmailPayloadForInvestor(match){
   };
 }
 
+async function invokeDossierRequestEmail(payload){
+  var functionUrl = String(SUPABASE_URL || "").replace(/\/+$/, "") + "/functions/v1/dossier-request-email";
+  var authToken = SUPABASE_ANON_KEY;
+
+  try{
+    var sessionResult = await client.auth.getSession();
+    if(sessionResult && sessionResult.data && sessionResult.data.session && sessionResult.data.session.access_token){
+      authToken = sessionResult.data.session.access_token;
+    }
+  }catch(e){
+    authToken = SUPABASE_ANON_KEY;
+  }
+
+  var response = await fetch(functionUrl, {
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "apikey":SUPABASE_ANON_KEY,
+      "Authorization":"Bearer " + authToken
+    },
+    body:JSON.stringify(payload)
+  });
+
+  var rawText = await response.text();
+  var data = null;
+
+  try{
+    data = rawText ? JSON.parse(rawText) : null;
+  }catch(e){
+    data = { raw:rawText };
+  }
+
+  if(!response.ok){
+    var message = data && (data.error || data.message || data.raw) ? (data.error || data.message || data.raw) : rawText;
+    throw new Error("Edge Function dossier-request-email HTTP " + response.status + ": " + (message || "richiesta non riuscita"));
+  }
+
+  if(data && (data.ok === false || data.success === false)){
+    throw new Error(data.error || data.message || "La Edge Function ha risposto con esito negativo.");
+  }
+
+  return data;
+}
+
 function whatsappLinkForInvestor(match){
   var inv = match.investor;
   var raw = String(inv.whatsapp || inv.phone || "").replace(/[^0-9]/g, "");
@@ -3169,15 +3213,15 @@ async function sendBaseInfoToMatches(matches, mode){
     var inv = match.investor;
     setCrmStatus("Invio email " + (i + 1) + " di " + emailMatches.length + " a " + (inv.email || "investitore") + "...");
 
-    var result = await client.functions.invoke("dossier-request-email", {
-      body:buildEmailPayloadForInvestor(match)
-    });
-
-    if(result.error || (result.data && (result.data.ok === false || result.data.success === false))){
-      console.warn("Errore invio email", inv.email, result);
-      failedEmails++;
-    }else{
+    try{
+      var payload = buildEmailPayloadForInvestor(match);
+      var result = await invokeDossierRequestEmail(payload);
+      console.log("Email inviata", inv.email, result);
       sentEmails++;
+    }catch(sendError){
+      console.warn("Errore invio email", inv.email, sendError);
+      failedEmails++;
+      setCrmStatus("Errore email per " + (inv.email || "investitore") + ": " + (sendError.message || "richiesta non riuscita"), "error");
     }
   }
 
