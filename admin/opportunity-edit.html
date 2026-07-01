@@ -3053,21 +3053,43 @@ async function createCrmTemporaryList(matches, listName){
   return listId;
 }
 
-function opportunityBaseInfoText(){
+function opportunityPreviewUrl(){
+  var base = window.location.origin + window.location.pathname.replace(/\/admin\/[^/]*$/, "/");
+  return base + "opportunities.html?id=" + encodeURIComponent(id || "");
+}
+
+function opportunityBaseInfoText(investor){
   var title = textOrNull("title") || "Opportunità IMMONOVA";
   var location = textOrNull("location") || textOrNull("municipality") || textOrNull("region") || "Location riservata";
   var category = textOrNull("category") || "Opportunità off market";
-  var price = textOrNull("price") || "Valore riservato";
   var shortDescription = textOrNull("short_description") || "Opportunità selezionata dal network IMMONOVA Off Market Consulting.";
+  var name = investor ? ((investor.first_name || "") + " " + (investor.last_name || "")).trim() : "";
+  var greeting = name ? ("Buongiorno " + name + ",") : "Buongiorno,";
 
-  return "IMMONOVA Off Market Consulting\n\n" +
-    "Informazioni base opportunità — nessun dossier allegato.\n\n" +
-    "Titolo: " + title + "\n" +
-    "Categoria: " + category + "\n" +
-    "Location: " + location + "\n" +
-    "Valore indicativo: " + price + "\n\n" +
-    shortDescription + "\n\n" +
-    "Se desideri maggiori informazioni, rispondi a questo messaggio. Il dossier completo resta riservato e viene condiviso solo dopo valutazione manuale IMMONOVA.";
+  return greeting + "
+
+" +
+    "IMMONOVA ha selezionato per lei una nuova opportunità off-market che potrebbe essere coerente con il suo profilo di investimento.
+
+" +
+    "Asset: " + title + "
+" +
+    "Area: " + location + "
+" +
+    "Categoria: " + category + "
+
+" +
+    shortDescription + "
+
+" +
+    "Anteprima: " + opportunityPreviewUrl() + "
+
+" +
+    "Questa comunicazione contiene solo informazioni preliminari. Il dossier completo e i dati economici riservati vengono condivisi esclusivamente su richiesta e previa valutazione interna.
+
+" +
+    "IMMONOVA
+Off Market Consulting";
 }
 
 function buildEmailPayloadForInvestor(match){
@@ -3075,35 +3097,29 @@ function buildEmailPayloadForInvestor(match){
   var firstName = inv.first_name || "";
   var lastName = inv.last_name || "";
   var fullName = ((firstName + " " + lastName).trim()) || inv.full_name || "Investitore IMMONOVA";
-  var budget = crmBudgetLabel(inv.budget_min, inv.budget_max);
 
   return {
-    request:{
-      email:inv.email,
-      full_name:fullName,
-      first_name:firstName || fullName,
-      last_name:lastName || "",
-      phone:inv.phone || inv.whatsapp || "",
-      opportunity_id:Number(id),
-      opportunity_title:textOrNull("title") || "Opportunità IMMONOVA",
-      preferred_language:inv.preferred_language || "it",
-      investor_type:inv.investor_type || "Investor",
-      country:inv.country || "",
-      budget_range:budget || "Non indicato",
-      company:inv.company || null,
-      message:opportunityBaseInfoText(),
-      source_page:window.location.href,
-      crm_mode:"base_opportunity_info",
-      include_dossier:false,
-      dossier_sent:false,
-      match_score:match.score,
-      match_reasons:match.reasons
-    }
+    to:inv.email,
+    email:inv.email,
+    investor_name:fullName,
+    name:fullName,
+    opportunity_id:Number(id),
+    opportunity_title:textOrNull("title") || "Opportunità IMMONOVA",
+    location:textOrNull("location") || textOrNull("municipality") || textOrNull("region") || "Location riservata",
+    category:textOrNull("category") || "Off Market",
+    short_description:textOrNull("short_description") || "",
+    cover_image:currentCoverUrl || "",
+    preview_url:opportunityPreviewUrl(),
+    language:inv.preferred_language || "it",
+    match_score:match.score,
+    match_reasons:match.reasons,
+    include_dossier:false,
+    dossier_sent:false
   };
 }
 
-async function invokeDossierRequestEmail(payload){
-  var functionUrl = String(SUPABASE_URL || "").replace(/\/+$/, "") + "/functions/v1/dossier-request-email";
+async function invokeOpportunityPreviewEmail(payload){
+  var functionUrl = String(SUPABASE_URL || "").replace(/\/+$/, "") + "/functions/v1/opportunity-preview-email";
   var authToken = SUPABASE_ANON_KEY;
 
   try{
@@ -3136,7 +3152,7 @@ async function invokeDossierRequestEmail(payload){
 
   if(!response.ok){
     var message = data && (data.error || data.message || data.raw) ? (data.error || data.message || data.raw) : rawText;
-    throw new Error("Edge Function dossier-request-email HTTP " + response.status + ": " + (message || "richiesta non riuscita"));
+    throw new Error("Edge Function opportunity-preview-email HTTP " + response.status + ": " + (message || "richiesta non riuscita"));
   }
 
   if(data && (data.ok === false || data.success === false)){
@@ -3146,14 +3162,42 @@ async function invokeDossierRequestEmail(payload){
   return data;
 }
 
+async function recordOpportunityContact(match, channel, status, listId, errorMessage){
+  if(!match || !match.investor || !id) return;
+
+  var inv = match.investor;
+  var row = {
+    opportunity_id:Number(id),
+    investor_id:inv.id,
+    list_id:listId || null,
+    channel:channel,
+    status:status || "sent",
+    subject:"Opportunity Preview",
+    message_type:"opportunity_preview",
+    email:inv.email || null,
+    phone:inv.whatsapp || inv.phone || null,
+    match_score:match.score || 0,
+    match_reasons:match.reasons || [],
+    include_dossier:false,
+    dossier_sent:false,
+    error_message:errorMessage || null,
+    created_by:currentUser ? currentUser.id : null
+  };
+
+  var result = await client.from("opportunity_contact_history").insert(row);
+  if(result.error){
+    console.warn("Storico CRM non aggiornato:", result.error.message);
+  }
+}
+
 function whatsappLinkForInvestor(match){
   var inv = match.investor;
   var raw = String(inv.whatsapp || inv.phone || "").replace(/[^0-9]/g, "");
   if(!raw) return null;
-  return "https://wa.me/" + raw + "?text=" + encodeURIComponent(opportunityBaseInfoText());
+  return "https://wa.me/" + raw + "?text=" + encodeURIComponent(opportunityBaseInfoText(inv));
 }
 
-function openWhatsappLinks(matches){
+async function openWhatsappLinks(matches, listId){
   var whatsappMatches = matches.filter(function(item){
     return item.investor.whatsapp_opt_in && whatsappLinkForInvestor(item);
   });
@@ -3164,16 +3208,25 @@ function openWhatsappLinks(matches){
 
   var first = whatsappMatches[0];
   window.open(whatsappLinkForInvestor(first), "_blank");
+  await recordOpportunityContact(first, "whatsapp", "prepared", listId, null);
 
   if(whatsappMatches.length > 1){
     var links = whatsappMatches.slice(1).map(function(item, index){
       var inv = item.investor;
       var name = ((inv.first_name || "") + " " + (inv.last_name || "")).trim() || inv.full_name || ("Investitore " + (index + 2));
-      return (index + 2) + ". " + name + "\n" + whatsappLinkForInvestor(item);
-    }).join("\n\n");
+      return (index + 2) + ". " + name + "
+" + whatsappLinkForInvestor(item);
+    }).join("
 
-    console.log("Link WhatsApp restanti:\n" + links);
-    alert("WhatsApp: ho aperto il primo destinatario. Per evitare blocchi popup del browser, trovi gli altri link nella console oppure puoi aprirli dalla lista investitori. Destinatari WhatsApp totali: " + whatsappMatches.length);
+");
+
+    for(var i = 1; i < whatsappMatches.length; i++){
+      await recordOpportunityContact(whatsappMatches[i], "whatsapp", "prepared", listId, null);
+    }
+
+    console.log("Link WhatsApp restanti:
+" + links);
+    alert("WhatsApp: ho aperto il primo destinatario. Per evitare blocchi popup del browser, trovi gli altri link nella console. Destinatari WhatsApp totali: " + whatsappMatches.length);
   }
 
   return whatsappMatches.length;
@@ -3197,7 +3250,7 @@ async function sendBaseInfoToMatches(matches, mode){
     "Investitori selezionati: " + matches.length + "\n" +
     "Email inviabili: " + emailMatches.length + "\n" +
     "WhatsApp preparabili: " + whatsappMatches.length + "\n\n" +
-    "Non verrà allegato nessun dossier. L’invio email userà la Edge Function dossier-request-email. WhatsApp verrà aperto manualmente con messaggio già compilato."
+    "Non verrà allegato nessun dossier. L’invio email userà la Edge Function opportunity-preview-email. WhatsApp verrà aperto manualmente con messaggio già compilato."
   );
 
   if(!confirmed) return;
@@ -3215,17 +3268,19 @@ async function sendBaseInfoToMatches(matches, mode){
 
     try{
       var payload = buildEmailPayloadForInvestor(match);
-      var result = await invokeDossierRequestEmail(payload);
+      var result = await invokeOpportunityPreviewEmail(payload);
       console.log("Email inviata", inv.email, result);
+      await recordOpportunityContact(match, "email", "sent", listId, null);
       sentEmails++;
     }catch(sendError){
       console.warn("Errore invio email", inv.email, sendError);
       failedEmails++;
+      await recordOpportunityContact(match, "email", "failed", listId, sendError.message || "richiesta non riuscita");
       setCrmStatus("Errore email per " + (inv.email || "investitore") + ": " + (sendError.message || "richiesta non riuscita"), "error");
     }
   }
 
-  var openedWhatsapp = openWhatsappLinks(matches);
+  var openedWhatsapp = await openWhatsappLinks(matches, listId);
 
   setCrmStatus(
     "Lista CRM salvata. Email inviate: " + sentEmails +
