@@ -3066,30 +3066,24 @@ function opportunityBaseInfoText(investor){
   var name = investor ? ((investor.first_name || "") + " " + (investor.last_name || "")).trim() : "";
   var greeting = name ? ("Buongiorno " + name + ",") : "Buongiorno,";
 
-  return greeting + "
-
-" +
-    "IMMONOVA ha selezionato per lei una nuova opportunità off-market che potrebbe essere coerente con il suo profilo di investimento.
-
-" +
-    "Asset: " + title + "
-" +
-    "Area: " + location + "
-" +
-    "Categoria: " + category + "
-
-" +
-    shortDescription + "
-
-" +
-    "Anteprima: " + opportunityPreviewUrl() + "
-
-" +
-    "Questa comunicazione contiene solo informazioni preliminari. Il dossier completo e i dati economici riservati vengono condivisi esclusivamente su richiesta e previa valutazione interna.
-
-" +
-    "IMMONOVA
-Off Market Consulting";
+  return [
+    greeting,
+    "",
+    "IMMONOVA ha selezionato per lei una nuova opportunità off-market che potrebbe essere coerente con il suo profilo di investimento.",
+    "",
+    "Asset: " + title,
+    "Area: " + location,
+    "Categoria: " + category,
+    "",
+    shortDescription,
+    "",
+    "Anteprima: " + opportunityPreviewUrl(),
+    "",
+    "Questa comunicazione contiene solo informazioni preliminari. Il dossier completo e i dati economici riservati vengono condivisi esclusivamente su richiesta e previa valutazione interna.",
+    "",
+    "IMMONOVA",
+    "Off Market Consulting"
+  ].join("\n");
 }
 
 function buildEmailPayloadForInvestor(match){
@@ -3214,18 +3208,14 @@ async function openWhatsappLinks(matches, listId){
     var links = whatsappMatches.slice(1).map(function(item, index){
       var inv = item.investor;
       var name = ((inv.first_name || "") + " " + (inv.last_name || "")).trim() || inv.full_name || ("Investitore " + (index + 2));
-      return (index + 2) + ". " + name + "
-" + whatsappLinkForInvestor(item);
-    }).join("
-
-");
+      return (index + 2) + ". " + name + "\n" + whatsappLinkForInvestor(item);
+    }).join("\n\n");
 
     for(var i = 1; i < whatsappMatches.length; i++){
       await recordOpportunityContact(whatsappMatches[i], "whatsapp", "prepared", listId, null);
     }
 
-    console.log("Link WhatsApp restanti:
-" + links);
+    console.log("Link WhatsApp restanti:\n" + links);
     alert("WhatsApp: ho aperto il primo destinatario. Per evitare blocchi popup del browser, trovi gli altri link nella console. Destinatari WhatsApp totali: " + whatsappMatches.length);
   }
 
