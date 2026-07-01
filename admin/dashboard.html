@@ -181,8 +181,81 @@ body::after{
 .request-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .request-btn{padding:8px 10px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.20);color:#a67f34;cursor:pointer;font-size:9px;letter-spacing:.12em;text-transform:uppercase}
 .request-btn.approve{border-color:rgba(72,118,72,.35);color:#517a4f}.request-btn.reject{border-color:rgba(130,45,38,.28);color:#8f3f2d}
-@media(max-width:1220px){.command-grid{grid-template-columns:repeat(3,1fr)}.alerts-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.chart-grid{grid-template-columns:1fr}.mini-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:760px){.header{padding:24px 22px;flex-direction:column;gap:18px}.logo{align-items:center}.logo-svg{width:250px}.header-actions{justify-content:center}.container{padding:34px 22px 54px}.title{font-size:34px}.command-grid,.alerts-grid,.opportunity-grid,.mini-grid{grid-template-columns:1fr}.quick-actions{justify-content:flex-start}.requests-row{grid-template-columns:1fr}.request-actions{justify-content:flex-start}}
+
+.value-command-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:18px;
+  margin-bottom:34px;
+}
+.value-command-card{
+  min-height:128px;
+  padding:22px;
+  background:rgba(255,255,255,.22);
+  border:1px solid rgba(166,127,52,.16);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+}
+.value-command-label{
+  font-size:10px;
+  letter-spacing:.20em;
+  text-transform:uppercase;
+  color:#8f7643;
+  line-height:1.5;
+  margin-bottom:12px;
+}
+.value-command-value{
+  font-size:28px;
+  font-weight:200;
+  color:#a67f34;
+  line-height:1.14;
+}
+.value-command-note{
+  margin-top:10px;
+  font-size:11px;
+  line-height:1.5;
+  color:#8f7643;
+}
+.portfolio-charts{
+  margin-top:18px;
+  padding:24px;
+  border:1px solid rgba(166,127,52,.16);
+  background:rgba(255,255,255,.18);
+  box-shadow:0 24px 70px rgba(127,100,48,.06);
+}
+.chart-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px;
+}
+.chart-card{
+  border:1px solid rgba(166,127,52,.14);
+  background:rgba(255,255,255,.16);
+  padding:18px;
+  overflow:hidden;
+}
+.chart-title{
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin-bottom:12px;
+}
+.chart-svg{
+  width:100%;
+  height:260px;
+  display:block;
+}
+.axis{stroke:rgba(127,100,48,.58);stroke-width:1}
+.grid-line{stroke:rgba(127,100,48,.16);stroke-width:1}
+.chart-bar{fill:rgba(166,127,52,.50)}
+.chart-text{
+  fill:#7f6430;
+  font-size:11px;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+}
+
+@media(max-width:1220px){.command-grid,.value-command-grid{grid-template-columns:repeat(3,1fr)}.alerts-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.chart-grid{grid-template-columns:1fr}.mini-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:760px){.header{padding:24px 22px;flex-direction:column;gap:18px}.logo{align-items:center}.logo-svg{width:250px}.header-actions{justify-content:center}.container{padding:34px 22px 54px}.title{font-size:34px}.command-grid,.value-command-grid,.alerts-grid,.opportunity-grid,.mini-grid{grid-template-columns:1fr}.quick-actions{justify-content:flex-start}.requests-row{grid-template-columns:1fr}.request-actions{justify-content:flex-start}}
 </style>
 </head>
 
@@ -316,7 +389,7 @@ function sumBy(items,mapper){return items.reduce((sum,item)=>sum+(Number(mapper(
 function postRenovationOpportunityValue(o){const report=reportForOpportunity(o.id);if(report&&Number(report.projected_value_5y)>0)return Number(report.projected_value_5y);if(report?.report_json?.kpi&&Number(report.report_json.kpi.projected_value_5y)>0)return Number(report.report_json.kpi.projected_value_5y);return opportunityValue(o)}
 function groupValues(items){const published=items.filter(o=>o.published===true);const evaluation=items.filter(o=>["da_verificare","da_revisionare"].includes(o.review_status||"da_verificare"));const rejected=items.filter(o=>o.review_status==="rifiutato");return {total:sumBy(items,opportunityValue),published:sumBy(published,opportunityValue),evaluation:sumBy(evaluation,opportunityValue),rejected:sumBy(rejected,opportunityValue),postRenovation:sumBy(items,postRenovationOpportunityValue),publishedCount:published.length,evaluationCount:evaluation.length,rejectedCount:rejected.length}}
 function statusGroups(items){return [{key:"da_verificare",label:"Da verificare",count:items.filter(o=>(o.review_status||"da_verificare")==="da_verificare").length,value:sumBy(items.filter(o=>(o.review_status||"da_verificare")==="da_verificare"),opportunityValue)},{key:"da_revisionare",label:"Da revisionare",count:items.filter(o=>o.review_status==="da_revisionare").length,value:sumBy(items.filter(o=>o.review_status==="da_revisionare"),opportunityValue)},{key:"approvato",label:"Approvate",count:items.filter(o=>o.review_status==="approvato").length,value:sumBy(items.filter(o=>o.review_status==="approvato"),opportunityValue)},{key:"rifiutato",label:"Rifiutate",count:items.filter(o=>o.review_status==="rifiutato").length,value:sumBy(items.filter(o=>o.review_status==="rifiutato"),opportunityValue)}]}
-function renderBarChart(targetId,groups,valueKey,formatFn){const target=document.getElementById(targetId);if(!target)return;const width=560,height=260,padL=54,padR=24,padT=24,padB=54,chartW=width-padL-padR,chartH=height-padT-padB;const values=groups.map(g=>Number(g[valueKey])||0);const max=Math.max(...values,1);const barW=chartW/groups.length*.56,gap=chartW/groups.length;let grid="";for(let i=0;i<=4;i++){const y=padT+chartH-(chartH/4)*i;const val=max/4*i;grid+=`<line class="grid-line" x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}"></line><text class="chart-text" x="6" y="${y+4}">${escapeHTML(formatFn?formatFn(val):Math.round(val))}</text>`}const bars=groups.map((g,i)=>{const val=Number(g[valueKey])||0;const h=max>0?(val/max)*chartH:0;const x=padL+gap*i+(gap-barW)/2;const y=padT+chartH-h;return `<rect class="chart-bar" x="${x}" y="${y}" width="${barW}" height="${h}"></rect><text class="chart-text" x="${x-4}" y="${height-28}">${escapeHTML(g.label.split(" ")[0])}</text><text class="chart-text" x="${x}" y="${y-8}">${escapeHTML(formatFn?formatFn(val):val)}</text>`}).join("");target.innerHTML=`<svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${grid}<line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${height-padB}"></line><line class="axis" x1="${padL}" y1="${height-padB}" x2="${width-padR}" y2="${height-padB}"></line>${bars}</svg>`}
+function renderBarChart(targetId,groups,valueKey,formatFn){const target=document.getElementById(targetId);if(!target)return;const width=560,height=260,padL=54,padR=24,padT=24,padB=54,chartW=width-padL-padR,chartH=height-padT-padB;const values=groups.map(g=>Number(g[valueKey])||0);const max=Math.max(...values,1);const barW=chartW/groups.length*.56,gap=chartW/groups.length;let grid="";for(let i=0;i<=4;i++){const y=padT+chartH-(chartH/4)*i;const val=max/4*i;grid+=`<line class="grid-line" x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}"></line><text class="chart-text" x="6" y="${y+4}">${escapeHTML(formatFn?formatFn(val):Math.round(val))}</text>`}const bars=groups.map((g,i)=>{const val=Number(g[valueKey])||0;const h=max>0?(val/max)*chartH:0;const x=padL+gap*i+(gap-barW)/2;const y=padT+chartH-h;return `<rect class="chart-bar" x="${x}" y="${y}" width="${barW}" height="${h}"></rect><text class="chart-text" x="${x+(barW/2)}" y="${height-28}" text-anchor="middle">${escapeHTML(g.label)}</text><text class="chart-text" x="${x+(barW/2)}" y="${Math.max(y-8,14)}" text-anchor="middle">${escapeHTML(formatFn?formatFn(val):val)}</text>`}).join("");target.innerHTML=`<svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${grid}<line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${height-padB}"></line><line class="axis" x1="${padL}" y1="${height-padB}" x2="${width-padR}" y2="${height-padB}"></line>${bars}</svg>`}
 function renderPortfolio(items){const values=groupValues(items||allOpportunities);const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val};set("portfolioTotalValue",compactEuro(values.total));set("portfolioPublishedValue",compactEuro(values.published));set("portfolioEvaluationValue",compactEuro(values.evaluation));set("portfolioRejectedValue",compactEuro(values.rejected));set("portfolioPostRenovationValue",compactEuro(values.postRenovation));set("portfolioPublishedNote",values.publishedCount+" opportunità pubblicate");set("portfolioEvaluationNote",values.evaluationCount+" opportunità in valutazione");set("portfolioRejectedNote",values.rejectedCount+" opportunità rifiutate");const groups=statusGroups(items||allOpportunities);renderBarChart("statusCountChart",groups,"count",v=>Math.round(v));renderBarChart("statusValueChart",groups,"value",compactEuro)}
 function normalize(v){return String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")}
 function formatDate(v){if(!v)return "-";try{return new Date(v).toLocaleDateString("it-IT",{day:"2-digit",month:"short"})}catch(e){return "-"}}
