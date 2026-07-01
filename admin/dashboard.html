@@ -88,6 +88,7 @@ body::after{
   justify-content:center;
 }
 .btn.secondary{background:rgba(255,255,255,.18);color:#a67f34}
+.boot-status{margin-bottom:18px;padding:14px 16px;border:1px solid rgba(166,127,52,.18);background:rgba(255,252,244,.20);color:#8f7643;font-size:12px;line-height:1.6;display:none}.boot-status.error{color:#9c2f2f;border-color:rgba(156,47,47,.30)}.boot-status.success{color:#4f7f45;border-color:rgba(79,127,69,.30)}
 .global-search{margin-bottom:28px}
 .search-input{
   width:100%;
@@ -219,6 +220,8 @@ body::after{
     </div>
   </section>
 
+  <div id="bootStatus" class="boot-status"></div>
+
   <section class="global-search">
     <input type="text" id="searchInput" class="search-input" placeholder="Cerca opportunità, investitori, eventi, città, stato, categoria...">
   </section>
@@ -280,6 +283,7 @@ const requestsList=document.getElementById("requestsList");
 const crmSideList=document.getElementById("crmSideList");
 const eventsGrid=document.getElementById("eventsGrid");
 const activityTimeline=document.getElementById("activityTimeline");
+const bootStatus=document.getElementById("bootStatus");
 
 function escapeHTML(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 function statusLabel(status){const labels={da_verificare:"Da verificare",da_revisionare:"Da revisionare",approvato:"Approvato",rifiutato:"Rifiutato"};return labels[status]||"Da verificare"}
@@ -294,14 +298,15 @@ function formatDate(v){if(!v)return "-";try{return new Date(v).toLocaleDateStrin
 function formatTime(v){if(!v)return "-";try{return new Date(v).toLocaleString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}catch(e){return "-"}}
 function eventDateValue(e){return e.event_date||e.created_at||null}
 
+function setBoot(message,type){if(!bootStatus)return;bootStatus.textContent=message||"";bootStatus.className="boot-status "+(type||"");bootStatus.style.display=message?"block":"none"}
 async function checkAuth(){const {data:{session},error}=await client.auth.getSession();if(error||!session){window.location.href="login.html";return false}currentUser=session.user;return true}
 async function loadProfile(){const {data,error}=await client.from("profiles").select("id,email,full_name,role").eq("id",currentUser.id).single();if(error){console.error(error);return}currentProfile=data;isAdmin=currentProfile?.role==="admin"||currentProfile?.role==="ceo";roleLabel.textContent=isAdmin?"Area Admin":"Area Collaboratore";document.querySelectorAll(".admin-only").forEach(el=>el.style.display=isAdmin?"inline-flex":"none");document.querySelectorAll(".admin-only-block").forEach(el=>el.style.display=isAdmin?"block":"none")}
-async function loadReports(){const {data,error}=await client.from("opportunity_reports").select("id,opportunity_id,total_investment_avg,projected_value_5y,estimated_roi,report_json,generated_at,created_at").order("generated_at",{ascending:false});if(error){latestReports=[];return}latestReports=data||[]}
-async function loadOpportunities(){const {data,error}=await client.from("opportunities").select("*").order("created_at",{ascending:false});if(error){opportunitiesCards.innerHTML='<div class="error">Errore caricamento opportunità.</div>';return}allOpportunities=data||[]}
-async function loadInvestors(){const {data,error}=await client.from("investors").select("*, investor_categories(category), investor_areas(area)").order("created_at",{ascending:false}).limit(200);if(error){allInvestors=[];return}allInvestors=data||[]}
-async function loadEvents(){const {data,error}=await client.from("immonova_events").select("*").order("created_at",{ascending:false}).limit(60);if(error){allEvents=[];return}allEvents=data||[]}
-async function loadContactHistory(){const {data,error}=await client.from("opportunity_contact_history").select("*").order("created_at",{ascending:false}).limit(80);if(error){contactHistory=[];return}contactHistory=data||[]}
-async function loadInvestorRequests(){if(!isAdmin){investorRequests=[];renderInvestorRequests();return}const {data,error}=await client.from("investor_requests").select("*").order("created_at",{ascending:false}).limit(40);if(error){investorRequests=[];if(requestsList)requestsList.innerHTML='<div class="error">Errore caricamento richieste dossier.</div>';return}investorRequests=data||[];renderInvestorRequests()}
+async function loadReports(){try{const {data,error}=await client.from("opportunity_reports").select("id,opportunity_id,total_investment_avg,projected_value_5y,estimated_roi,report_json,generated_at,created_at").order("generated_at",{ascending:false});if(error){console.warn("Report non caricati:",error.message);latestReports=[];return}latestReports=data||[]}catch(e){console.warn(e);latestReports=[]}}
+async function loadOpportunities(){try{const {data,error}=await client.from("opportunities").select("*").order("created_at",{ascending:false});if(error){console.error("Opportunità:",error.message);allOpportunities=[];opportunitiesCards.innerHTML='<div class="error">Errore caricamento opportunità: '+escapeHTML(error.message)+'</div>';setBoot("Errore caricamento opportunità: "+error.message,"error");return}allOpportunities=data||[]}catch(e){console.error(e);allOpportunities=[];opportunitiesCards.innerHTML='<div class="error">Errore caricamento opportunità.</div>';setBoot("Errore Javascript caricamento opportunità: "+(e.message||e),"error")}}
+async function loadInvestors(){try{let result=await client.from("investors").select("*, investor_categories(category), investor_areas(area)").order("created_at",{ascending:false}).limit(200);if(result.error){console.warn("Investitori con relazioni non caricati:",result.error.message);result=await client.from("investors").select("*").order("created_at",{ascending:false}).limit(200)}if(result.error){console.warn("Investitori non caricati:",result.error.message);allInvestors=[];crmSideList.innerHTML='<div class="error">Errore caricamento investitori: '+escapeHTML(result.error.message)+'</div>';return}allInvestors=result.data||[]}catch(e){console.warn(e);allInvestors=[]}}
+async function loadEvents(){try{const {data,error}=await client.from("immonova_events").select("*").order("created_at",{ascending:false}).limit(60);if(error){console.warn("Eventi non caricati:",error.message);allEvents=[];eventsGrid.innerHTML='<div class="error">Errore caricamento eventi: '+escapeHTML(error.message)+'</div>';return}allEvents=data||[]}catch(e){console.warn(e);allEvents=[]}}
+async function loadContactHistory(){try{const {data,error}=await client.from("opportunity_contact_history").select("*").order("created_at",{ascending:false}).limit(80);if(error){console.warn("Storico CRM non caricato:",error.message);contactHistory=[];return}contactHistory=data||[]}catch(e){console.warn(e);contactHistory=[]}}
+async function loadInvestorRequests(){try{if(!isAdmin){investorRequests=[];renderInvestorRequests();return}const {data,error}=await client.from("investor_requests").select("*").order("created_at",{ascending:false}).limit(40);if(error){console.warn("Richieste dossier non caricate:",error.message);investorRequests=[];if(requestsList)requestsList.innerHTML='<div class="error">Errore caricamento richieste dossier: '+escapeHTML(error.message)+'</div>';return}investorRequests=data||[];renderInvestorRequests()}catch(e){console.warn(e);investorRequests=[]}}
 
 function updateStats(){const total=allOpportunities.length;const pending=allOpportunities.filter(o=>(o.review_status||"da_verificare")==="da_verificare").length;const sold=allOpportunities.filter(o=>o.commercial_status==="sold"||o.sold_at).length;const totalValue=sumBy(allOpportunities,opportunityValue);const emailOpt=allInvestors.filter(i=>i.email_opt_in).length;const upcoming=allEvents.filter(e=>e.event_date&&new Date(e.event_date)>=new Date(new Date().toDateString())).length;
   document.getElementById("totalCount").textContent=total;document.getElementById("verifyCount").textContent=pending;document.getElementById("soldCount").textContent=sold;document.getElementById("investorsCount").textContent=allInvestors.length;document.getElementById("eventsCount").textContent=allEvents.length;document.getElementById("activityCount").textContent=contactHistory.length;document.getElementById("totalValue").textContent=compactEuro(totalValue);document.getElementById("investorsNote").textContent=emailOpt+" email opt-in";document.getElementById("eventsNote").textContent=upcoming+" in programma";
@@ -328,7 +333,7 @@ window.rejectInvestorRequest=async function(requestId){const note=prompt("Motivo
 function renderAll(items){updateStats();renderAlerts();renderOpportunities(items||allOpportunities);renderCrmSide();renderEvents();renderTimeline()}
 searchInput.addEventListener("input",()=>{const q=normalize(searchInput.value);if(!q){renderAll(allOpportunities);return}const filtered=allOpportunities.filter(o=>[o.title,o.category,o.location,o.price,o.review_status,o.commercial_status,o.investment_type].some(v=>normalize(v).includes(q)));renderOpportunities(filtered)})
 document.getElementById("logoutBtn").addEventListener("click",async()=>{await client.auth.signOut();window.location.href="../index.html"})
-(async function init(){if(await checkAuth()){await loadProfile();await Promise.all([loadReports(),loadOpportunities(),loadInvestors(),loadEvents(),loadContactHistory()]);await loadInvestorRequests();renderAll(allOpportunities)}})();
+(async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);setBoot("","");}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
 </script>
 </body>
 </html>
