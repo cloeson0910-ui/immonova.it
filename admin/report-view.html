@@ -2948,25 +2948,12 @@ function renderGalleryPremium(){
 
 
 
-function detectReportMunicipality(){
-  var json = getReportJson ? getReportJson() : {};
-  var asset = json.asset || {};
-  var txt = [
-    asset.municipality,
-    asset.location,
-    report && report.location,
-    report && report.municipality,
-    report && report.title,
-    opportunity && opportunity.location,
-    opportunity && opportunity.municipality,
-    opportunity && opportunity.title
-  ].join(" ").toLowerCase();
-
-  if(txt.indexOf("ostuni") >= 0) return "ostuni";
-  if(txt.indexOf("massafra") >= 0) return "massafra";
-  if(txt.indexOf("tuglie") >= 0) return "tuglie";
-  if(txt.indexOf("gallipoli") >= 0) return "gallipoli";
-  return "";
+function normalizeDestinationTitle(value){
+  return String(value || "")
+    .replace(/_/g," ")
+    .replace(/\s+/g," ")
+    .trim()
+    .replace(/^./, function(c){ return c.toUpperCase(); });
 }
 
 function poi(name, km, min, relevance, category){
@@ -2977,243 +2964,9 @@ function poi(name, km, min, relevance, category){
     driving_time_min:min,
     relevance:relevance,
     source:"IMMONOVA Destination Engine",
-    note:"Fallback geodistanze da validare in review analyst."
+    note:"Distanza stimata da validare in analyst review."
   };
 }
-
-function buildClientDestinationFallback(){
-  var city = detectReportMunicipality();
-
-  if(city === "ostuni"){
-    return {
-      source_summary:"Analisi territoriale ricostruita da IMMONOVA Destination Engine per Ostuni: costa adriatica, Valle d’Itria, borghi storici, ecosistema luxury Fasano/Savelletri e accessibilità aeroportuale Bari/Brindisi.",
-      tourist_appeal_score:82,
-      tourist_appeal_rating:"Premium",
-      score_breakdown:{airports:16,sea_beaches:16,villages_attractions:15,unesco_culture:15,luxury_hospitality:15,accessibility:5},
-      nearest_airports:[
-        poi("Aeroporto di Brindisi - Salento",38,35,"Aeroporto internazionale più vicino per Ostuni e Alto Salento.","airport"),
-        poi("Aeroporto di Bari - Karol Wojtyła",96,70,"Secondo aeroporto internazionale regionale, utile per domanda internazionale e collegamenti leisure.","airport")
-      ],
-      nearest_train_stations:[
-        poi("Stazione di Ostuni",4,8,"Collegamento ferroviario locale sulla direttrice adriatica.","train_station"),
-        poi("Stazione di Fasano",18,20,"Nodo utile per area Savelletri/Fasano.","train_station"),
-        poi("Stazione di Brindisi",38,35,"Nodo ferroviario e aeroportuale della Puglia meridionale.","train_station")
-      ],
-      attractions_30min:[
-        poi("Centro storico di Ostuni",0,5,"La Città Bianca, attrattore turistico internazionale.","historic_town"),
-        poi("Parco Dune Costiere",12,15,"Area naturale protetta tra ulivi monumentali, costa e masserie.","natural_site"),
-        poi("Cisternino",15,20,"Borgo storico della Valle d’Itria con forte appeal enogastronomico.","historic_village"),
-        poi("Ceglie Messapica",13,18,"Borgo gastronomico e culturale dell’entroterra brindisino.","historic_town"),
-        poi("Savelletri",27,28,"Costa premium, beach club e ristorazione luxury.","coast")
-      ],
-      attractions_60min:[
-        poi("Alberobello UNESCO",35,40,"Sito UNESCO dei trulli, forte attrattore internazionale.","unesco"),
-        poi("Locorotondo",28,35,"Borgo iconico della Valle d’Itria.","historic_village"),
-        poi("Polignano a Mare",52,50,"Destinazione costiera internazionale.","coastal_town"),
-        poi("Monopoli",42,42,"Centro storico e costa adriatica ad alta domanda leisure.","coastal_town"),
-        poi("Lecce",75,60,"Capitale barocca del Salento.","baroque_city")
-      ],
-      beaches:[
-        poi("Costa Merlata",10,14,"Costa e calette rocciose vicine a Ostuni.","beach"),
-        poi("Torre Pozzelle",11,15,"Spiagge e calette naturali ad alta fruibilità turistica.","beach"),
-        poi("Rosa Marina",13,18,"Area balneare e residenziale premium.","beach"),
-        poi("Pilone / Lido Morelli",12,16,"Litorale sabbioso vicino al Parco Dune Costiere.","beach"),
-        poi("Savelletri beach clubs",27,28,"Costa premium con beach club e ristorazione.","beach")
-      ],
-      luxury_points_of_interest:[
-        poi("Borgo Egnazia",30,30,"Benchmark luxury hospitality internazionale in Puglia.","luxury_hotel"),
-        poi("Masseria Torre Maizza",26,28,"Luxury resort Rocco Forte nell’area Fasano/Savelletri.","luxury_hotel"),
-        poi("Masseria San Domenico",27,28,"Resort premium sulla costa adriatica.","luxury_hotel"),
-        poi("Masseria Moroseta",6,10,"Boutique hospitality iconica nell’area Ostuni.","masseria"),
-        poi("Masseria Calderisi",22,25,"Boutique luxury masseria nell’area Fasano.","luxury_hotel")
-      ],
-      marinas:[
-        poi("Porto di Villanova",8,12,"Approdo costiero più vicino a Ostuni.","marina"),
-        poi("Porto di Brindisi",38,35,"Porto turistico e commerciale con collegamenti internazionali.","marina"),
-        poi("Porto di Monopoli",42,42,"Porto turistico su costa adriatica.","marina")
-      ],
-      golf_clubs:[
-        poi("San Domenico Golf",28,30,"Golf club premium collegato all’ecosistema luxury di Savelletri.","golf"),
-        poi("Acaya Golf Club",80,60,"Golf resort salentino, riferimento leisure premium.","golf")
-      ],
-      restaurants_and_experiences:[
-        poi("Osterie e fine dining di Ostuni",0,5,"Esperienze food & wine nel centro storico e nelle masserie.","experience"),
-        poi("Wine & olive oil experience",8,12,"Esperienze tra ulivi monumentali, frantoi e cantine.","experience"),
-        poi("Beach club Savelletri",27,28,"Esperienze mare premium e ristorazione costiera.","experience"),
-        poi("Valle d’Itria food tour",20,25,"Itinerari tra borghi, fornelli, masserie e prodotti tipici.","experience")
-      ]
-    };
-  }
-
-  if(city === "massafra"){
-    return {
-      source_summary:"Analisi territoriale ricostruita da IMMONOVA Destination Engine per Massafra: gravine, turismo rupestre, Taranto, costa ionica, Castellaneta, Matera e Puglia centrale.",
-      tourist_appeal_score:68,
-      tourist_appeal_rating:"Buono",
-      score_breakdown:{airports:11,sea_beaches:16,villages_attractions:12,unesco_culture:15,luxury_hospitality:9,accessibility:5},
-      nearest_airports:[
-        poi("Aeroporto di Bari - Karol Wojtyła",80,65,"Aeroporto internazionale regionale principale.","airport"),
-        poi("Aeroporto di Brindisi - Salento",75,60,"Aeroporto internazionale utile per Salento e Puglia ionica.","airport")
-      ],
-      nearest_train_stations:[
-        poi("Stazione di Massafra",1,5,"Stazione ferroviaria locale.","train_station"),
-        poi("Stazione di Taranto",20,25,"Nodo ferroviario provinciale.","train_station")
-      ],
-      attractions_30min:[
-        poi("Centro storico di Massafra",0,5,"Centro storico e affacci sulle gravine.","historic_town"),
-        poi("Gravina di Massafra",1,5,"Paesaggio rupestre e naturalistico identitario.","natural_site"),
-        poi("Chiese rupestri di Massafra",1,5,"Patrimonio culturale rupestre.","cultural_site"),
-        poi("Taranto e Museo MArTA",22,25,"Città costiera, archeologia e servizi urbani.","city_culture"),
-        poi("Castellaneta",18,22,"Borgo e gravine nell’area ionica.","historic_town")
-      ],
-      attractions_60min:[
-        poi("Matera UNESCO",55,60,"Sito UNESCO e forte attrattore internazionale.","unesco"),
-        poi("Alberobello UNESCO",45,50,"Sito UNESCO dei trulli.","unesco"),
-        poi("Grotte di Castellana",55,60,"Attrattore naturalistico regionale.","natural_site"),
-        poi("Locorotondo",48,55,"Borgo iconico della Valle d’Itria.","historic_village")
-      ],
-      beaches:[
-        poi("Chiatona",12,15,"Accesso balneare vicino sul litorale ionico.","beach"),
-        poi("Marina di Massafra",14,18,"Costa ionica di riferimento per il comune.","coast"),
-        poi("Castellaneta Marina",28,30,"Località balneare ionica strutturata.","beach")
-      ],
-      luxury_points_of_interest:[
-        poi("Masseria Amastuola Wine Resort",12,15,"Benchmark wine hospitality nell’area Taranto/Massafra.","luxury_hotel"),
-        poi("Relais Histò San Pietro sul Mar Piccolo",30,35,"Hospitality premium nell’area Taranto.","luxury_hotel"),
-        poi("Ethra Reserve / Castellaneta Marina",35,35,"Resort hospitality sulla costa ionica.","resort")
-      ],
-      marinas:[poi("Porto di Taranto",22,25,"Accesso nautico sul versante ionico.","marina")],
-      golf_clubs:[poi("Riva dei Tessali Golf Club",35,35,"Golf club nell’area ionica.","golf")],
-      restaurants_and_experiences:[
-        poi("Gravine e turismo rupestre",1,5,"Esperienza identitaria del territorio ionico.","experience"),
-        poi("Itinerari enogastronomici ionici",12,15,"Driver per turismo esperienziale e soggiorni boutique.","experience")
-      ]
-    };
-  }
-
-
-  if(city === "tuglie"){
-    return {
-      source_summary:"Analisi territoriale ricostruita da IMMONOVA Destination Engine per Tuglie: borgo salentino nell’entroterra ionico, vicino a Gallipoli, Baia Verde e costa ionica, con posizionamento ideale per soggiorni leisure che cercano autenticità e accesso rapido al mare.",
-      tourist_appeal_score:72,
-      tourist_appeal_rating:"Forte",
-      score_breakdown:{airports:11,sea_beaches:16,villages_attractions:13,unesco_culture:8,luxury_hospitality:12,accessibility:12},
-      nearest_airports:[
-        poi("Aeroporto di Brindisi - Salento",78,60,"Aeroporto internazionale principale per il Salento.","airport"),
-        poi("Aeroporto di Bari - Karol Wojtyła",190,120,"Secondo aeroporto regionale, utile per collegamenti internazionali aggiuntivi.","airport")
-      ],
-      nearest_train_stations:[
-        poi("Stazione di Tuglie",1,4,"Fermata ferroviaria locale.","train_station"),
-        poi("Stazione di Gallipoli",12,15,"Stazione della principale destinazione balneare vicina.","train_station"),
-        poi("Stazione di Lecce",38,35,"Nodo ferroviario del Salento.","train_station")
-      ],
-      attractions_30min:[
-        poi("Gallipoli centro storico",12,15,"Centro storico sul mare, porto e attrattore turistico principale.","coastal_town"),
-        poi("Baia Verde",14,18,"Spiagge e beach club ad alta domanda stagionale.","beach"),
-        poi("Nardò",18,20,"Borgo storico e servizi culturali.","historic_town"),
-        poi("Galatina",20,22,"Centro storico e Basilica di Santa Caterina d’Alessandria.","historic_town"),
-        poi("Alezio",6,8,"Borgo salentino vicino al circuito Gallipoli.","historic_village")
-      ],
-      attractions_60min:[
-        poi("Lecce",38,35,"Capitale barocca del Salento.","baroque_city"),
-        poi("Porto Cesareo",35,40,"Destinazione balneare ionica.","coastal_town"),
-        poi("Otranto",52,55,"Centro storico e costa adriatica salentina.","coastal_town"),
-        poi("Santa Maria di Leuca",55,55,"Estremo sud del Salento, attrattore costiero.","coastal_town")
-      ],
-      beaches:[
-        poi("Baia Verde",14,18,"Spiaggia e beach club di riferimento per Gallipoli.","beach"),
-        poi("Punta della Suina",18,22,"Spiaggia iconica del litorale gallipolino.","beach"),
-        poi("Rivabella",13,17,"Litorale sabbioso vicino a Gallipoli.","beach"),
-        poi("Lido Pizzo",20,25,"Area naturale e balneare premium.","beach"),
-        poi("Porto Selvaggio",28,32,"Parco naturale costiero ad alto appeal.","beach")
-      ],
-      luxury_points_of_interest:[
-        poi("Palazzo Presta Gallipoli",12,15,"Boutique hospitality nel centro storico di Gallipoli.","luxury_hotel"),
-        poi("Biancodonda Greenblu Hotel & SPA",12,15,"Hospitality premium in area Gallipoli.","luxury_hotel"),
-        poi("Masseria Relais Santa Teresa",18,22,"Masseria hospitality nell’area Nardò/Gallipoli.","masseria"),
-        poi("Naturalis Bio Resort",35,35,"Luxury masseria resort nel Salento.","luxury_hotel")
-      ],
-      marinas:[
-        poi("Porto di Gallipoli",12,15,"Porto turistico principale della costa ionica salentina.","marina"),
-        poi("Porto Cesareo",35,40,"Porto turistico e area marina protetta.","marina")
-      ],
-      golf_clubs:[
-        poi("Acaya Golf Club",55,55,"Golf resort salentino.","golf")
-      ],
-      restaurants_and_experiences:[
-        poi("Ristorazione e nightlife Gallipoli",12,15,"Driver forte per turismo leisure e giovani adulti.","experience"),
-        poi("Wine experience Salento",15,20,"Cantine, degustazioni e itinerari enogastronomici.","experience"),
-        poi("Borghi del Salento",20,25,"Galatina, Nardò, Alezio e centri storici minori.","experience")
-      ]
-    };
-  }
-
-  if(city === "martina franca"){
-    return {
-      source_summary:"Analisi territoriale ricostruita da IMMONOVA Destination Engine per Martina Franca: centro storico barocco della Valle d’Itria, posizione strategica tra Locorotondo, Cisternino, Alberobello, Ostuni, Fasano e costa adriatica/ionica.",
-      tourist_appeal_score:78,
-      tourist_appeal_rating:"Forte",
-      score_breakdown:{airports:11,sea_beaches:11,villages_attractions:15,unesco_culture:15,luxury_hospitality:15,accessibility:11},
-      nearest_airports:[
-        poi("Aeroporto di Brindisi - Salento",75,60,"Aeroporto internazionale più vicino per Valle d’Itria e Puglia meridionale.","airport"),
-        poi("Aeroporto di Bari - Karol Wojtyła",90,70,"Aeroporto internazionale regionale principale.","airport")
-      ],
-      nearest_train_stations:[
-        poi("Stazione di Martina Franca",1,5,"Stazione ferroviaria locale.","train_station"),
-        poi("Stazione di Fasano",25,30,"Nodo verso costa adriatica e Savelletri.","train_station")
-      ],
-      attractions_30min:[
-        poi("Centro storico di Martina Franca",0,5,"Barocco, palazzi storici e forte identità architettonica.","historic_town"),
-        poi("Locorotondo",6,10,"Borgo iconico della Valle d’Itria.","historic_village"),
-        poi("Cisternino",13,18,"Borgo turistico e food experience.","historic_village"),
-        poi("Alberobello UNESCO",15,20,"Sito UNESCO dei trulli.","unesco")
-      ],
-      attractions_60min:[
-        poi("Ostuni",25,30,"Città Bianca e domanda internazionale.","historic_town"),
-        poi("Monopoli",38,45,"Centro storico costiero e mare.","coastal_town"),
-        poi("Polignano a Mare",45,50,"Destinazione costiera internazionale.","coastal_town"),
-        poi("Taranto",35,40,"Museo MArTA, costa ionica e servizi urbani.","city_culture")
-      ],
-      beaches:[
-        poi("Savelletri",32,35,"Costa premium e beach club.","beach"),
-        poi("Torre Canne",28,35,"Località balneare servita.","beach"),
-        poi("Capitolo / Monopoli",38,45,"Area beach club e costa adriatica.","beach")
-      ],
-      luxury_points_of_interest:[
-        poi("Borgo Egnazia",32,35,"Benchmark luxury hospitality internazionale in Puglia.","luxury_hotel"),
-        poi("Masseria Torre Maizza",30,35,"Luxury resort Rocco Forte.","luxury_hotel"),
-        poi("Masseria San Domenico",32,35,"Resort premium sulla costa adriatica.","luxury_hotel")
-      ],
-      marinas:[
-        poi("Porto di Monopoli",38,45,"Porto turistico su costa adriatica.","marina"),
-        poi("Porto di Taranto",35,40,"Porto sul versante ionico.","marina")
-      ],
-      golf_clubs:[
-        poi("San Domenico Golf",32,35,"Golf club premium di Savelletri.","golf")
-      ],
-      restaurants_and_experiences:[
-        poi("Valle d’Itria food tour",5,10,"Fornelli, masserie, vino e prodotti locali.","experience"),
-        poi("Festival della Valle d’Itria",0,5,"Evento culturale internazionale a Martina Franca.","experience")
-      ]
-    };
-  }
-
-  return null;
-}
-
-function destinationIsEmptyOrBroken(destination){
-  if(!destination) return true;
-  var hasAssets =
-    (destination.nearest_airports || []).length ||
-    (destination.attractions_30min || []).length ||
-    (destination.attractions_60min || []).length ||
-    (destination.beaches || []).length ||
-    (destination.luxury_points_of_interest || []).length ||
-    (destination.restaurants_and_experiences || []).length;
-  var summary = String(destination.source_summary || "").toLowerCase();
-  return !hasAssets || Number(destination.tourist_appeal_score || 0) < 35 || summary.indexOf("non interpretabile") >= 0;
-}
-
 
 function getDestinationAnalysis(){
   var destination =
@@ -3221,18 +2974,90 @@ function getDestinationAnalysis(){
     (report && report.report_json && report.report_json.destination_analysis) ||
     null;
 
-  if(destinationIsEmptyOrBroken(destination)){
-    var fallback = buildClientDestinationFallback();
-    if(fallback) return fallback;
+  return destination || null;
+}
+
+function safeDestinationItems(items){
+  if(!Array.isArray(items)) return [];
+  return items
+    .filter(function(item){ return item && item.name; })
+    .sort(function(a,b){
+      var da = Number(a.distance_km);
+      var db = Number(b.distance_km);
+      if(!Number.isFinite(da)) da = 99999;
+      if(!Number.isFinite(db)) db = 99999;
+      return da - db;
+    });
+}
+
+function destinationHasItems(destination){
+  if(!destination) return false;
+  var keys = [
+    "nearest_airports",
+    "nearest_train_stations",
+    "attractions_30min",
+    "attractions_60min",
+    "beaches",
+    "luxury_points_of_interest",
+    "marinas",
+    "golf_clubs",
+    "restaurants_and_experiences"
+  ];
+  return keys.some(function(key){ return safeDestinationItems(destination[key]).length > 0; }) ||
+    (Array.isArray(destination.destination_categories) && destination.destination_categories.some(function(c){ return safeDestinationItems(c.items).length > 0; }));
+}
+
+function categoryFromLegacy(title, key, weight, relevance, items){
+  var list = safeDestinationItems(items);
+  if(!list.length) return null;
+  return {
+    key:key,
+    title:title,
+    weight:weight,
+    relevance:relevance,
+    items:list
+  };
+}
+
+function getDestinationCategories(destination){
+  if(!destination) return [];
+
+  var dynamic = Array.isArray(destination.destination_categories)
+    ? destination.destination_categories
+        .map(function(c){
+          return {
+            key:c.key || c.category || c.title || "category",
+            title:c.title || c.label || c.category || normalizeDestinationTitle(c.key),
+            weight:Number(c.weight || c.score || 0),
+            relevance:c.relevance || c.note || "",
+            items:safeDestinationItems(c.items)
+          };
+        })
+        .filter(function(c){ return c.title && c.items.length > 0; })
+    : [];
+
+  if(dynamic.length){
+    return dynamic.sort(function(a,b){ return (b.weight || 0) - (a.weight || 0); });
   }
 
-  return destination;
+  var legacy = [
+    categoryFromLegacy("International accessibility", "accessibility_airports", 9, "Airport access and international arrival capacity.", destination.nearest_airports),
+    categoryFromLegacy("Rail and transit", "rail_transit", 7, "Rail, metro and local connectivity.", destination.nearest_train_stations),
+    categoryFromLegacy("Culture and attractions", "culture_attractions", 8, "Museums, landmarks, heritage, city attractions and destination demand drivers.", [].concat(destination.attractions_30min || [], destination.attractions_60min || [])),
+    categoryFromLegacy("Coast, beaches and waterfront", "coast_beach", 7, "Sea, waterfront, beaches and beach-club ecosystem where geographically relevant.", destination.beaches),
+    categoryFromLegacy("Luxury hospitality", "luxury_hospitality", 8, "Luxury hotels, resorts, branded hospitality and benchmark competitive set.", destination.luxury_points_of_interest),
+    categoryFromLegacy("Marina and yachting", "marina_yachting", 6, "Marinas, ports, waterfront and yachting infrastructure where relevant.", destination.marinas),
+    categoryFromLegacy("Golf and outdoor", "golf_outdoor", 5, "Golf clubs, outdoor activities and premium leisure amenities.", destination.golf_clubs),
+    categoryFromLegacy("Fine dining and experiences", "fine_dining_experiences", 7, "Restaurants, food and wine, cultural, lifestyle and curated experiences.", destination.restaurants_and_experiences)
+  ].filter(Boolean);
+
+  return legacy.sort(function(a,b){ return (b.weight || 0) - (a.weight || 0); });
 }
 
 function renderPoiList(items, limit){
-  items = Array.isArray(items) ? items : [];
+  items = safeDestinationItems(items);
   if(items.length === 0){
-    return '<div class="destination-poi"><div class="destination-poi-meta">Dato non disponibile nel dossier generato.</div></div>';
+    return "";
   }
 
   return items.slice(0, limit || 5).map(function(item){
@@ -3242,17 +3067,45 @@ function renderPoiList(items, limit){
     return `
       <div class="destination-poi">
         <div class="destination-poi-name">${escapeHTML(item.name || "-")}</div>
-        <div class="destination-poi-meta">${escapeHTML(distance)} · ${escapeHTML(time)} in auto<br>${escapeHTML(relevance)}</div>
+        <div class="destination-poi-meta">${escapeHTML(distance)} · ${escapeHTML(time)}<br>${escapeHTML(relevance)}</div>
       </div>
     `;
   }).join("");
 }
 
-function renderDestinationCard(title, items, limit){
+function renderDestinationCard(title, items, limit, relevance){
+  var html = renderPoiList(items, limit || 5);
+  if(!html) return "";
   return `
     <div class="destination-card">
       <div class="destination-card-title">${escapeHTML(title)}</div>
-      ${renderPoiList(items, limit || 5)}
+      ${relevance ? '<p style="font-size:11px;line-height:1.45;margin-bottom:2mm;color:#8f7643;">' + escapeHTML(relevance) + '</p>' : ''}
+      ${html}
+    </div>
+  `;
+}
+
+function renderDestinationPositioning(destination){
+  var p = (destination && destination.destination_positioning) || {};
+  var has = ["luxury_tourism","international_accessibility","investment_appeal","hospitality_ecosystem","lifestyle","business_appeal"].some(function(k){ return Number(p[k]) > 0; });
+  if(!has) return "";
+
+  var rows = [
+    ["Luxury Tourism", p.luxury_tourism],
+    ["International Access", p.international_accessibility],
+    ["Investment Appeal", p.investment_appeal],
+    ["Hospitality Ecosystem", p.hospitality_ecosystem],
+    ["Lifestyle", p.lifestyle],
+    ["Business Appeal", p.business_appeal]
+  ].filter(function(row){ return Number(row[1]) > 0; });
+
+  return `
+    <div class="destination-card">
+      <div class="destination-card-title">Destination Positioning</div>
+      <div class="destination-breakdown">
+        ${rows.map(function(row){ return '<div class="destination-breakdown-item"><div class="destination-breakdown-label">' + escapeHTML(row[0]) + '</div><div class="destination-breakdown-value">' + escapeHTML(number(row[1])) + '/10</div></div>'; }).join("")}
+      </div>
+      ${p.narrative ? '<p style="margin-top:4mm;">' + escapeHTML(p.narrative) + '</p>' : ''}
     </div>
   `;
 }
@@ -3260,13 +3113,17 @@ function renderDestinationCard(title, items, limit){
 function renderDestinationAnalysisPage(){
   var destination = getDestinationAnalysis();
 
-  if(!destination){
+  if(!destination || !destinationHasItems(destination)){
     return "";
   }
 
   var breakdown = destination.score_breakdown || {};
   var score = Number(destination.tourist_appeal_score || 0);
   var rating = destination.tourist_appeal_rating || "-";
+  var context = destination.destination_context || {};
+  var categories = getDestinationCategories(destination);
+  var firstCategories = categories.slice(0,4);
+  var secondCategories = categories.slice(4,10);
 
   return `
     <div class="report-page">
@@ -3280,7 +3137,12 @@ function renderDestinationAnalysisPage(){
               <div class="destination-score-number">${number(score)}</div>
               <div class="destination-score-label">/100 · ${escapeHTML(rating)}</div>
             </div>
-            <p>${escapeHTML(getTerritorialNarrative())}</p>
+            <p>${escapeHTML(destination.source_summary || getTerritorialNarrative())}</p>
+            ${context.destination_type || context.city || context.country ? `
+              <div class="asset-address-box" style="margin-bottom:5mm;">
+                <div class="asset-address-line"><strong>Contesto:</strong> ${escapeHTML([context.destination_type, context.city, context.region, context.country].filter(Boolean).join(" · "))}</div>
+                <div class="asset-address-line"><strong>Driver:</strong> ${escapeHTML(Array.isArray(context.primary_demand_drivers) ? context.primary_demand_drivers.slice(0,5).join(", ") : "-")}</div>
+              </div>` : ""}
             ${(() => {
               var p = getTerritorialProfile();
               if(!p) return "";
@@ -3290,19 +3152,19 @@ function renderDestinationAnalysisPage(){
               </div>`;
             })()}
             <div class="destination-breakdown">
-              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Aeroporti</div><div class="destination-breakdown-value">${number(breakdown.airports || 0)}</div></div>
-              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Mare</div><div class="destination-breakdown-value">${number(breakdown.sea_beaches || 0)}</div></div>
-              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Borghi</div><div class="destination-breakdown-value">${number(breakdown.villages_attractions || 0)}</div></div>
-              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Cultura</div><div class="destination-breakdown-value">${number(breakdown.unesco_culture || 0)}</div></div>
-              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Luxury</div><div class="destination-breakdown-value">${number(breakdown.luxury_hospitality || 0)}</div></div>
               <div class="destination-breakdown-item"><div class="destination-breakdown-label">Accesso</div><div class="destination-breakdown-value">${number(breakdown.accessibility || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Aeroporti</div><div class="destination-breakdown-value">${number(breakdown.airports || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Cultura</div><div class="destination-breakdown-value">${number(breakdown.unesco_culture || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Lifestyle</div><div class="destination-breakdown-value">${number(breakdown.villages_attractions || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Luxury</div><div class="destination-breakdown-value">${number(breakdown.luxury_hospitality || 0)}</div></div>
+              <div class="destination-breakdown-item"><div class="destination-breakdown-label">Waterfront</div><div class="destination-breakdown-value">${number(breakdown.sea_beaches || 0)}</div></div>
             </div>
           </div>
           <div class="destination-grid">
-            ${renderDestinationCard("Aeroporti più vicini", destination.nearest_airports, 4)}
-            ${renderDestinationCard("Stazioni principali", destination.nearest_train_stations, 4)}
-            ${renderDestinationCard("Attrazioni entro 30 minuti", destination.attractions_30min, 5)}
-            ${renderDestinationCard("Attrazioni entro 60 minuti", destination.attractions_60min, 5)}
+            ${renderDestinationCard("Aeroporti / International Access", destination.nearest_airports, 4)}
+            ${renderDestinationCard("Rail / Transit", destination.nearest_train_stations, 4)}
+            ${renderDestinationCard("Primary Attractions", destination.attractions_30min, 5)}
+            ${renderDestinationCard("Regional Reach", destination.attractions_60min, 5)}
           </div>
         </div>
       </div>
@@ -3310,25 +3172,32 @@ function renderDestinationAnalysisPage(){
 
     <div class="report-page">
       <div class="report-page-inner">
-        <h2>Coast, Luxury Ecosystem & Experiences</h2>
+        <h2>Destination Ecosystem</h2>
         <div class="lux-rule"></div>
         <div class="destination-grid">
-          ${renderDestinationCard("Spiagge, costa e beach club", destination.beaches, 6)}
-          ${renderDestinationCard("Luxury hospitality benchmark", destination.luxury_points_of_interest, 6)}
-          ${renderDestinationCard("Porti turistici / Marina", destination.marinas, 4)}
-          ${renderDestinationCard("Golf club", destination.golf_clubs, 4)}
-          ${renderDestinationCard("Ristoranti ed esperienze", destination.restaurants_and_experiences, 6)}
+          ${firstCategories.map(function(c){ return renderDestinationCard(c.title, c.items, 5, c.relevance); }).join("")}
+          ${renderDestinationPositioning(destination)}
           <div class="destination-card">
             <div class="destination-card-title">Lettura investment</div>
             <p>
-              Questa sezione misura cosa può attrarre domanda turistica intorno alla proprietà:
-              accessibilità aeroportuale, borghi, costa, cultura, luxury hospitality e servizi premium.
-              Il valore non sostituisce i KPI finanziari, ma aiuta a spiegare potenziale ADR, occupancy e appeal internazionale.
+              Questa sezione misura cosa può attrarre domanda qualificata intorno alla proprietà:
+              accessibilità internazionale, cultura, business, lifestyle, hospitality premium, ristorazione,
+              waterfront, outdoor e servizi rilevanti per lo specifico mercato. Le categorie non pertinenti alla destinazione vengono omesse.
             </p>
           </div>
         </div>
       </div>
     </div>
+    ${secondCategories.length ? `
+    <div class="report-page">
+      <div class="report-page-inner">
+        <h2>Additional Destination Drivers</h2>
+        <div class="lux-rule"></div>
+        <div class="destination-grid">
+          ${secondCategories.map(function(c){ return renderDestinationCard(c.title, c.items, 5, c.relevance); }).join("")}
+        </div>
+      </div>
+    </div>` : ""}
   `;
 }
 
