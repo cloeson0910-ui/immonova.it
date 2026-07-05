@@ -123,7 +123,7 @@ function normalizeGallery(value){if(!value)return[];if(Array.isArray(value))retu
 function getTitle(){return clean(opportunity&&opportunity.title)||clean(report&&report.title)||"Dossier IMMONOVA";}
 function getLocation(){return clean(opportunity&&opportunity.location)||clean(report&&report.location)||clean(opportunity&&opportunity.city)||"";}
 function getCategory(){return clean(opportunity&&opportunity.category)||clean(report&&report.category)||"";}
-function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||clean(report&&report.cover_image)||gallery[0]||"";}
+function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||gallery[0]||"";}
 function getGeneratedDate(){var d=(report&&report.created_at)||(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat("it-IT").format(new Date(d));}catch(e){return "";}}
 async function checkAuth(){var sessionRes=await client.auth.getSession();var session=sessionRes&&sessionRes.data&&sessionRes.data.session;if(!session){window.location.href="login.html";return null;}currentUser=session.user;return session;}
 async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-form.html?id="+encodeURIComponent(opportunityId);}
@@ -138,40 +138,82 @@ function getAsset(){var j=getReportJson();return j.asset||{};}
 function parsePrice(v){var raw=String(v||"");if(!raw||/riservato|trattativa/i.test(raw))return 0;var n=Number(raw.replace(/[^\d,.-]/g,"").replace(/\./g,"").replace(",","."));return Number.isFinite(n)?n:0;}
 function getPurchasePrice(){var a=getAsset();return firstFinite(report&&report.purchase_price,report&&report.price_numeric,a.purchase_price,a.price_raw_numeric,opportunity&&opportunity.price_numeric,parsePrice(opportunity&&opportunity.price));}
 function getRenovationAvg(){var a=getAsset();var scenarios=(report&&report.renovation_scenarios)||(getReportJson().renovation_scenarios)||{};var selected=(report&&report.renovation_selected_style)||a.renovation_style||a.renovation_selected_style||"normale";if(selected==="standard")selected="normale";var sc=scenarios[selected]||scenarios.normale||scenarios.standard||{};return firstFinite(report&&report.renovation_cost_avg,a.renovation_cost_avg,sc.cost_avg);}
+function hasOwn(v){return v!==null&&v!==undefined&&String(v).trim()!=="";}
+function deepFind(obj, keys){
+  var wanted=keys.map(function(k){return String(k).toLowerCase();});
+  var seen=new Set();
+  function walk(x){
+    if(!x||typeof x!=="object"||seen.has(x))return 0;
+    seen.add(x);
+    if(Array.isArray(x)){
+      for(var i=0;i<x.length;i++){var r=walk(x[i]);if(Number.isFinite(r)&&r!==0)return r;}
+      return 0;
+    }
+    for(var k in x){
+      if(!Object.prototype.hasOwnProperty.call(x,k))continue;
+      var lk=String(k).toLowerCase();
+      if(wanted.indexOf(lk)>=0){
+        var n=Number(String(x[k]).replace(/[^\d,.-]/g,"").replace(/\./g,"").replace(",","."));
+        if(Number.isFinite(n)&&n!==0)return n;
+      }
+    }
+    for(var k2 in x){var r2=walk(x[k2]);if(Number.isFinite(r2)&&r2!==0)return r2;}
+    return 0;
+  }
+  return walk(obj);
+}
+function getRenovationAvg(){
+  var j=getReportJson();var a=getAsset();
+  var scenarios=(report&&report.renovation_scenarios)||j.renovation_scenarios||j.renovation||j.economics||{};
+  var selected=(report&&report.renovation_selected_style)||a.renovation_style||a.renovation_selected_style||"normale";
+  if(selected==="standard")selected="normale";
+  var sc=scenarios[selected]||scenarios.normale||scenarios.standard||scenarios.base||{};
+  return firstFinite(
+    report&&report.renovation_cost_avg,
+    report&&report.renovation_cost,
+    a.renovation_cost_avg,
+    a.renovation_cost,
+    sc.cost_avg,
+    sc.total,
+    deepFind(j,["renovation_cost_avg","renovation_cost","ristrutturazione_media","ristrutturazione","renovation_average","average_renovation_cost"])
+  );
+}
 function buildFinance(){
-  var a=getAsset();var sr=(report&&report.short_rental_data)||(getReportJson().short_rental_data)||{};
+  var j=getReportJson();var a=getAsset();var sr=(report&&report.short_rental_data)||j.short_rental_data||j.short_rental||j.economics||{};
   var purchase=getPurchasePrice();
   var renovation=getRenovationAvg();
-  var taxes=firstFinite(report&&report.acquisition_tax,purchase*0.09);
-  var notary=firstFinite(report&&report.notary_cost,purchase*0.015);
-  var agency=firstFinite(report&&report.agency_cost,purchase*0.03);
-  var dueDiligence=firstFinite(report&&report.due_diligence_cost,purchase*0.01);
-  var tech=firstFinite(report&&report.technical_cost,renovation*0.08);
-  var ffe=firstFinite(report&&report.ffe_cost,renovation*0.10);
-  var marketing=firstFinite(report&&report.marketing_cost,Math.max(15000,purchase*0.015));
-  var contingency=firstFinite(report&&report.contingency_cost,renovation*0.08);
-  var acquisition=firstFinite(report&&report.acquisition_total,purchase+taxes+notary+agency+dueDiligence);
-  var development=firstFinite(report&&report.development_total,renovation+tech+ffe+marketing+contingency);
-  var total=firstFinite(report&&report.total_project_cost,report&&report.total_investment_avg,a.total_investment_avg,acquisition+development);
-  var revenue=firstFinite(report&&report.annual_revenue,sr.annual_revenue,a.annual_revenue);
-  var costs=firstFinite(report&&report.annual_cost,sr.annual_cost,a.annual_cost,revenue*0.35);
-  var net=firstFinite(report&&report.annual_net_income,report&&report.net_income,sr.net_income,a.net_income,revenue-costs);
-  var roi=firstFinite(report&&report.roi,sr.roi,a.roi,total>0&&net>0?(net/total)*100:0);
-  var breakEven=firstFinite(report&&report.break_even_years,sr.break_even_years,a.break_even_years,total>0&&net>0?total/net:0);
-  var value5=firstFinite(report&&report.projected_value_5y,report&&report.value_5y,a.projected_value_5y,a.value_5y,total*1.2);
-  var adr=firstFinite(report&&report.adr,sr.adr,a.adr);
-  var occupancy=firstFinite(report&&report.occupancy_rate,sr.occupancy_rate,a.occupancy_rate);
-  var score=firstFinite(report&&report.investment_score,a.investment_score,roi>=14?84:roi>=10?76:roi>=6?64:54);
-  var grade=score>=88?"A":score>=80?"A-":score>=70?"B+":score>=60?"B":score>=50?"C":"D";
-  return {purchase:purchase,taxes:taxes,notary:notary,agency:agency,dueDiligence:dueDiligence,acquisition:acquisition,renovation:renovation,tech:tech,ffe:ffe,marketing:marketing,contingency:contingency,development:development,total:total,revenue:revenue,costs:costs,net:net,roi:roi,breakEven:breakEven,value5:value5,adr:adr,occupancy:occupancy,score:score,grade:grade};
+  var taxes=firstFinite(report&&report.acquisition_tax,deepFind(j,["acquisition_tax","taxes","imposte","imposte_tasse"]),purchase?purchase*0.09:0);
+  var notary=firstFinite(report&&report.notary_cost,deepFind(j,["notary_cost","notaio"]),purchase?purchase*0.015:0);
+  var agency=firstFinite(report&&report.agency_cost,deepFind(j,["agency_cost","brokerage","agenzia"]),purchase?purchase*0.03:0);
+  var dueDiligence=firstFinite(report&&report.due_diligence_cost,deepFind(j,["due_diligence_cost","due_diligence","due_diligence_tecnica_legale"]),purchase?purchase*0.01:0);
+  var tech=firstFinite(report&&report.technical_cost,deepFind(j,["technical_cost","spese_tecniche","technical_fees"]),renovation?renovation*0.08:0);
+  var ffe=firstFinite(report&&report.ffe_cost,deepFind(j,["ffe_cost","ff_e","arredi","furniture"]),renovation?renovation*0.10:0);
+  var marketing=firstFinite(report&&report.marketing_cost,deepFind(j,["marketing_cost","marketing_apertura"]),purchase?Math.max(15000,purchase*0.015):0);
+  var contingency=firstFinite(report&&report.contingency_cost,deepFind(j,["contingency_cost","contingency","imprevisti"]),renovation?renovation*0.08:0);
+  var acquisition=firstFinite(report&&report.acquisition_total,deepFind(j,["acquisition_total","totale_acquisizione"]),purchase+taxes+notary+agency+dueDiligence);
+  var development=firstFinite(report&&report.development_total,deepFind(j,["development_total","totale_sviluppo"]),renovation+tech+ffe+marketing+contingency);
+  var total=firstFinite(report&&report.total_project_cost,report&&report.total_investment_avg,a.total_project_cost,a.total_investment_avg,deepFind(j,["total_project_cost","total_investment","total_investment_avg","total_project_investment"]),acquisition+development);
+  var revenue=firstFinite(report&&report.annual_revenue,sr.annual_revenue,a.annual_revenue,deepFind(j,["annual_revenue","gross_revenue","ricavi_annui"]));
+  var costs=firstFinite(report&&report.annual_cost,sr.annual_cost,a.annual_cost,deepFind(j,["annual_cost","operating_costs","costi_annui"]));
+  var net=firstFinite(report&&report.annual_net_income,report&&report.net_income,sr.net_income,a.net_income,deepFind(j,["annual_net_income","net_income","noi","reddito_netto_annuo"]),(revenue&&costs)?revenue-costs:0);
+  var roi=firstFinite(report&&report.roi,sr.roi,a.roi,deepFind(j,["roi"]),(total>0&&net>0)?(net/total)*100:0);
+  var breakEven=firstFinite(report&&report.break_even_years,sr.break_even_years,a.break_even_years,deepFind(j,["break_even_years","break_even","breakeven"]),(total>0&&net>0)?total/net:0);
+  return {purchase:purchase,taxes:taxes,notary:notary,agency:agency,dueDiligence:dueDiligence,acquisition:acquisition,renovation:renovation,tech:tech,ffe:ffe,marketing:marketing,contingency:contingency,development:development,total:total,revenue:revenue,costs:costs,net:net,roi:roi,breakEven:breakEven};
 }
 function statusFromScore(v){v=Number(v)||0;return v>=80?"Positivo":v>=60?"Da monitorare":"Critico";}
-function renderInvestmentSnapshot(){var f=buildFinance();return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investor-first snapshot</div><h2 class="section-title">Investment Snapshot</h2><div class="lux-rule"></div><div class="grade-layout"><div class="grade-box"><div class="grade-label">Investment Grade</div><div class="grade-value">'+escapeHTML(f.grade)+'</div><div class="grade-sub">'+escapeHTML(statusFromScore(f.score))+'</div></div><div><div class="metric-grid"><div class="metric-card"><div class="metric-label">Investment Score</div><div class="metric-value">'+escapeHTML(number(Math.round(f.score*10)/10))+'<span style="font-size:16px">/100</span></div><div class="metric-note">Valutazione preliminare basata sui dati interni disponibili.</div></div><div class="metric-card"><div class="metric-label">Expected ROI</div><div class="metric-value">'+escapeHTML(percent(f.roi))+'</div><div class="metric-note">NOI / Total Project Cost.</div></div><div class="metric-card"><div class="metric-label">Break-even</div><div class="metric-value">'+(f.breakEven?escapeHTML(String(Math.round(f.breakEven*10)/10)):"-")+'</div><div class="metric-note">anni stimati su cash flow operativo.</div></div><div class="metric-card"><div class="metric-label">Total Project Cost</div><div class="metric-value">'+escapeHTML(euro(f.total))+'</div><div class="metric-note">Acquisizione + sviluppo + contingency.</div></div></div><div class="score-bar"><div class="score-fill" style="width:'+Math.max(0,Math.min(100,f.score))+'%"></div></div><p class="info-text">Questa pagina non usa ancora le Edge esterne: misura la base finanziaria interna del dossier e verifica che prezzo, costi, ROI e break-even siano coerenti prima di aggiungere intelligence territoriale.</p></div></div></div></article>';}
-function renderFinancialSnapshot(){var f=buildFinance();var cons={roi:f.roi*.78,breakEven:f.breakEven?f.breakEven*1.22:0,net:f.net*.78};var opt={roi:f.roi*1.25,breakEven:f.breakEven?f.breakEven*.80:0,net:f.net*1.25};return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial scenario analysis</div><h2 class="section-title">Executive Financial Snapshot</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Total Investment</div><div class="metric-value">'+escapeHTML(euro(f.total))+'</div></div><div class="metric-card"><div class="metric-label">Net Income</div><div class="metric-value">'+escapeHTML(euro(f.net))+'</div></div><div class="metric-card"><div class="metric-label">ROI</div><div class="metric-value">'+escapeHTML(percent(f.roi))+'</div></div></div><div><table class="scenario-table"><thead><tr><th>Scenario</th><th>ROI</th><th>Break-even</th><th>Net Income</th></tr></thead><tbody><tr><td>Conservativo</td><td>'+escapeHTML(percent(cons.roi))+'</td><td>'+(cons.breakEven?escapeHTML(String(Math.round(cons.breakEven*10)/10)):"-")+'</td><td>'+escapeHTML(euro(cons.net))+'</td></tr><tr class="scenario-base"><td>Base</td><td>'+escapeHTML(percent(f.roi))+'</td><td>'+(f.breakEven?escapeHTML(String(Math.round(f.breakEven*10)/10)):"-")+'</td><td>'+escapeHTML(euro(f.net))+'</td></tr><tr><td>Ottimistico</td><td>'+escapeHTML(percent(opt.roi))+'</td><td>'+(opt.breakEven?escapeHTML(String(Math.round(opt.breakEven*10)/10)):"-")+'</td><td>'+escapeHTML(euro(opt.net))+'</td></tr></tbody></table><p class="info-text">Gli scenari sono costruiti sul dato base interno: conservativo -22%, ottimistico +25%. Nei prossimi step sostituiremo questi moltiplicatori con output dedicati delle Edge e benchmark territoriali.</p></div></div></div></article>';}
+function renderInternalFacts(){
+  var f=buildFinance();
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Internal financial base</div><h2 class="section-title">Dati economici interni</h2><div class="lux-rule"></div><div class="metric-grid"><div class="metric-card"><div class="metric-label">Prezzo acquisto</div><div class="metric-value">'+escapeHTML(euro(f.purchase))+'</div><div class="metric-note">Dato opportunità / report interno.</div></div><div class="metric-card"><div class="metric-label">Totale acquisizione</div><div class="metric-value">'+escapeHTML(euro(f.acquisition))+'</div><div class="metric-note">Prezzo + imposte + notaio + agenzia + due diligence.</div></div><div class="metric-card"><div class="metric-label">Totale sviluppo</div><div class="metric-value">'+escapeHTML(euro(f.development))+'</div><div class="metric-note">Ristrutturazione + tecnici + FF&E + marketing + contingency.</div></div><div class="metric-card"><div class="metric-label">Total Project Cost</div><div class="metric-value">'+escapeHTML(euro(f.total))+'</div><div class="metric-note">Base economica reale per i KPI successivi.</div></div></div><p class="info-text"><strong>Nessuna valutazione investimento in questo step.</strong> Investment Grade, Investment Score e rating verranno stampati solo quando colleghiamo le Edge di intelligence/publishing. Qui mostriamo soltanto numeri interni verificabili.</p></div></article>';
+}
+function renderFinancialSnapshot(){
+  var f=buildFinance();
+  var hasOperating=f.net>0&&f.total>0;
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income</div><div class="metric-value">'+(f.net?escapeHTML(euro(f.net)):'Non disponibile')+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI</div><div class="metric-value">'+(hasOperating?escapeHTML(percent(f.roi)):'Non disponibile')+'</div><div class="metric-note">Calcolato solo se esiste NOI reale.</div></div><div class="metric-card"><div class="metric-label">Break-even</div><div class="metric-value">'+(hasOperating&&f.breakEven?escapeHTML(String(Math.round(f.breakEven*10)/10))+' anni':'Non disponibile')+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow.</div></div></div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">Questa pagina non inventa scenari e non assegna rating. Se il dossier/report interno non contiene reddito netto, ROI e break-even restano non disponibili. Gli scenari conservativo/base/ottimistico verranno aggiunti solo quando colleghiamo i dati territoriali e turistici.</p></div></div></div></div></article>';
+}
 function renderInvestmentStructure(){var f=buildFinance();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px"><div class="cost-title">Total Project Cost</div>'+row('Acquisizione + sviluppo',f.total,'total')+'<p class="info-text">Tutti i KPI finanziari di questo nuovo view saranno calcolati sul Total Project Cost: acquisto + imposte + notaio + agenzia + due diligence + ristrutturazione + spese tecniche + FF&E + marketing + contingency.</p></div></div></article>';}
 function renderDebugBootstrap(){return '<div class="debug-panel"><div class="debug-title">Step 2 · Dati interni + struttura finanziaria</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Render AI</div><div class="debug-value">'+number(renovationRenders.length)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Documenti</div><div class="debug-value">'+number(propertyDocuments.length)+'</div></div>'+'</div></div>';}
-function renderBook(){pageTitle.textContent=getTitle();book.innerHTML=renderCover()+renderInvestmentSnapshot()+renderFinancialSnapshot()+renderInvestmentStructure()+renderDebugBootstrap();}
-async function init(){try{setStatus("Caricamento dati interni IMMONOVA...","");await checkAuth();await loadOpportunity();await Promise.all([loadLatestReport(),loadRenovationRenders(),loadPropertyDocuments()]);renderBook();setStatus("Step 2 completato: cover, investment snapshot, financial snapshot e total project cost caricati.","success");}catch(e){console.error(e);book.innerHTML='<div class="empty">Errore: '+escapeHTML(e.message||e)+'</div>';setStatus(String(e.message||e),"error");}}
+function renderBook(){pageTitle.textContent=getTitle();book.innerHTML=renderCover()+renderInternalFacts()+renderFinancialSnapshot()+renderInvestmentStructure()+renderDebugBootstrap();}
+async function init(){try{setStatus("Caricamento dati interni IMMONOVA...","");await checkAuth();await loadOpportunity();await Promise.all([loadLatestReport(),loadRenovationRenders(),loadPropertyDocuments()]);renderBook();setStatus("Step 2 corretto: cover, dati economici interni, ROI e total project cost caricati senza rating inventati.","success");}catch(e){console.error(e);book.innerHTML='<div class="empty">Errore: '+escapeHTML(e.message||e)+'</div>';setStatus(String(e.message||e),"error");}}
 if(loadBtn)loadBtn.addEventListener("click",init);
 if(logoutBtn)logoutBtn.addEventListener("click",async function(){await client.auth.signOut();window.location.href="../index.html";});
 init();
