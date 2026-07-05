@@ -1497,6 +1497,11 @@ tr{
   .immo-section-tag{font-size:5.8pt!important;margin-bottom:1.5mm!important}
 }
 
+
+.asset-context-title{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#7f6430;margin:-2mm 0 4mm 0;}
+.immo-mini-table td,.immo-mini-table th{font-size:9px;line-height:1.18;padding:2px 4px;}
+.report-page-inner.compact-table{padding-top:34px;}
+@media print{.asset-context-title{font-size:7pt;margin:-1mm 0 3mm 0}.immo-mini-table td,.immo-mini-table th{font-size:5.8pt;padding:.55mm 1mm}.report-page-inner.compact-table{padding-top:8mm}}
 </style>
 </head>
 
@@ -4557,7 +4562,8 @@ async function runFullImmonovaIntelligencePipeline(){
     ["accessibility", "immonova-accessibility-engine", base],
     ["poi", "immonova-poi-engine", base],
     ["heritage", "immonova-heritage-engine", base],
-    ["coastal", "immonova-coastal-engine", base]
+    ["coastal", "immonova-coastal-engine", base],
+    ["tourism", "immonova-tourism-engine", base]
   ];
 
   var settled = await Promise.all(calls.map(function(c){
@@ -4584,7 +4590,8 @@ async function runFullImmonovaIntelligencePipeline(){
     poi: out.poi,
     hospitality: out.poi,
     heritage: out.heritage,
-    coastal: out.coastal
+    coastal: out.coastal,
+    tourism: out.tourism || null
   });
 
   try{
@@ -4605,6 +4612,7 @@ async function runFullImmonovaIntelligencePipeline(){
     hospitality: out.poi,
     heritage: out.heritage,
     coastal: out.coastal,
+    tourism: out.tourism || null,
     destination: out.destination,
     destination_engine: out.destination
   };
@@ -4644,6 +4652,7 @@ function buildPublishingInput(){
   var heritage = firstValue(live.heritage, json.heritage_engine, json.heritage, json.heritage_analysis, null);
   var poi = firstValue(live.poi, json.poi_engine, json.poi, json.hospitality_engine, json.hospitality, null);
   var accessibility = firstValue(live.accessibility, json.accessibility_engine, json.accessibility, json.accessibility_analysis, null);
+  var tourism = firstValue(live.tourism, json.tourism_engine, json.tourism, json.tourism_intelligence, null);
   var locationProfile = firstValue(live.location_profile, json.location_profile, json.locationProfile, report && report.location_profile, null);
   var evidence = firstValue(live.evidence, immonovaEvidenceResult, json.evidence_engine, json.evidence, json.investment_evidence, null);
 
@@ -4674,6 +4683,8 @@ function buildPublishingInput(){
     poi:poi,
     hospitality:poi,
     accessibility:accessibility,
+    tourism:tourism,
+    tourism_engine:tourism,
     evidence:evidence,
     evidence_engine:evidence,
     financials:{
@@ -4760,6 +4771,7 @@ function renderInvestmentGradeBlock(){
         <div class="lux-small-title">Investor-first Snapshot</div>
         <h2>Investment Grade</h2>
         <div class="lux-rule"></div>
+        <div class="asset-context-title">${escapeHTML(opportunity && opportunity.title || '')}</div>
         <div class="page-grid-2" style="grid-template-columns:.42fr 1.58fr;align-items:center;">
           <div>
             <div style="font-size:72px;font-weight:200;color:#a67f34;line-height:1;">${escapeHTML(d.grade || "-")}</div>
@@ -4794,6 +4806,7 @@ function renderPublishingMetricGridBlock(){
         <div class="lux-small-title">30-second Decision Page</div>
         <h2>Investment Snapshot</h2>
         <div class="lux-rule"></div>
+        <div class="asset-context-title">${escapeHTML(opportunity && opportunity.title || '')}</div>
         <div class="page-grid-3">
           ${metrics.map(function(m){return `<div class="lux-metric-box"><div class="lux-small-title">${escapeHTML(m.label_fallback || m.id || "Metric")}</div><div class="lux-metric-value">${escapeHTML(m.value)}${escapeHTML(m.suffix || "")}</div><p>${escapeHTML(statusLabel(m.status))}</p></div>`;}).join("")}
         </div>
@@ -4959,6 +4972,37 @@ function uniqAssets(list){
     return true;
   });
 }
+
+function normText(v){
+  return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
+function itemText(a){ return normText([a && a.name, a && a.title, a && a.address, a && a.subtype, a && a.category, a && a.primary_subtype, a && a.matched_keyword, Array.isArray(a && a.types) ? a.types.join(' ') : ''].filter(Boolean).join(' ')); }
+function hasWordText(txt, words){ return words.some(function(w){ return txt.indexOf(normText(w)) >= 0; }); }
+function isRejectedHeritageAsset(a){
+  var t=itemText(a);
+  return hasWordText(t,['banca','bank','filiale','atm','bancomat','credito','assicurazioni','insurance','restaurant','ristorante','pizzeria','barber','beauty','farmacia','pharmacy','doctor','health']);
+}
+function isAirportAsset(a){ var t=itemText(a); return hasWordText(t,['airport','aeroporto']) || /airport/i.test(String(a && (a.subtype||a.category||''))); }
+function isRailAsset(a){ var t=itemText(a); return hasWordText(t,['train station','stazione','rail','ferrovie','fs']) || /train|rail/i.test(String(a && (a.subtype||a.category||''))); }
+function isPortAsset(a){ var t=itemText(a); return hasWordText(t,['porto','port','marina','yacht','porticciolo','darsena']); }
+function isCoastalMarinaOrPort(a){ var t=itemText(a); return hasWordText(t,['marina','porto','porticciolo','darsena','yacht','gallipoli','san foca']); }
+function isBeachAsset(a){ var t=itemText(a); return hasWordText(t,['spiaggia','beach','lido','baia','torre','sabbia','dune']); }
+function isHeritageUrbanAsset(a){ var t=itemText(a); return hasWordText(t,['piazza','porta','anfiteatro','amphitheatre','amphitheater','duomo','basilica','santa croce','sant oronzo','carlo v','teatro romano','arco','rudiae','napoli','san biagio']); }
+function importanceBoost(a){
+  var t=itemText(a); var b=0;
+  if(hasWordText(t,['sant oronzo','anfiteatro','amphitheatre','amphitheater','duomo','santa croce','carlo v','porta napoli','porta rudiae','porta san biagio'])) b+=1000;
+  if(hasWordText(t,['gallipoli','san foca','bari','brindisi','porto cesareo','otranto'])) b+=300;
+  if(Number(a && a.reviews)>1000) b+=80;
+  return b;
+}
+function sortByRelevance(list){
+  return uniqAssets(list).sort(function(a,b){
+    var sa = importanceBoost(a) + Number(a.score || a.coastal_score || a.heritage_score || 0) + Math.log10(Math.max(1,Number(a.reviews||0)))*25 - Number(a.distance_km||999)*0.2;
+    var sb = importanceBoost(b) + Number(b.score || b.coastal_score || b.heritage_score || 0) + Math.log10(Math.max(1,Number(b.reviews||0)))*25 - Number(b.distance_km||999)*0.2;
+    return sb-sa;
+  });
+}
+
 function collectNamedAssets(obj, max){
   var out=[];
   function walk(v, depth){
@@ -4975,13 +5019,7 @@ function collectNamedAssets(obj, max){
     if(typeof v === 'object') Object.keys(v).forEach(function(k){ walk(v[k], depth+1); });
   }
   walk(obj,0);
-  out = uniqAssets(out);
-  out.sort(function(a,b){
-    var sa = Number(a.score || a.coastal_score || a.heritage_score || a.rating || 0);
-    var sb = Number(b.score || b.coastal_score || b.heritage_score || b.rating || 0);
-    if(sb !== sa) return sb-sa;
-    return Number(a.distance_km || 999) - Number(b.distance_km || 999);
-  });
+  out = sortByRelevance(out);
   return out.slice(0,max || 10);
 }
 function renderHardKpi(label,value,note){
@@ -5003,25 +5041,29 @@ function renderLiveCoastalHardDataPage(){
   if(!Object.keys(c).length) return '';
   var counts = safeObj(deepGet(c,['coastal_profile.ecosystem_density.category_counts','coastal_ecosystem.executive_summary.category_counts','category_counts']));
   var density = safeObj(deepGet(c,['coastal_profile.ecosystem_density','coastal_ecosystem.executive_summary']));
-  var total = countValue(density,['total_assets']) || countValue(c,['coastal_profile.ecosystem_density.total_assets','coastal_ecosystem.executive_summary.total_assets']);
-  var assets = collectNamedAssets(c, 12);
-  var beachClubBySubtype = collectNamedAssets(c, 200).filter(function(a){ return /beach[_\s-]?club/i.test(String(a.subtype || a.primary_subtype || a.matched_keyword || a.name || '')); }).length;
-  var beaches = Number(counts.beaches || counts.beach || 0);
+  var allAssets = collectNamedAssets(c, 240);
+  var total = countValue(density,['total_assets']) || countValue(c,['coastal_profile.ecosystem_density.total_assets','coastal_ecosystem.executive_summary.total_assets']) || allAssets.length;
+  var marinaAssets = sortByRelevance(allAssets.filter(isCoastalMarinaOrPort));
+  var beachAssets = sortByRelevance(allAssets.filter(isBeachAsset));
+  var beachClubBySubtype = allAssets.filter(function(a){ return /beach[_\s-]?club|lido/i.test(String(a.subtype || a.primary_subtype || a.matched_keyword || a.name || '')); }).length;
+  var beaches = Number(counts.beaches || counts.beach || beachAssets.length || 0);
   var beachClubs = Number(counts.beach_clubs || counts.beach_club || beachClubBySubtype || 0);
-  var marinas = Number(counts.marinas || counts.marina || 0);
-  var ports = Number(counts.ports || counts.port || 0);
-  var reserves = Number(counts.natural_reserves || counts.reserves || 0);
-  return '<div class="report-page"><div class="report-page-inner">'+
-    '<div class="immo-section-tag">Territorial Intelligence · hard data</div><h2>Coastal Intelligence</h2><div class="lux-rule"></div>'+
+  var marinas = Number(counts.marinas || counts.marina || marinaAssets.filter(function(a){return /marina|yacht|porticciolo/i.test(itemText(a));}).length || 0);
+  var ports = Number(counts.ports || counts.port || marinaAssets.filter(function(a){return /porto|port|darsena|gallipoli|san foca/i.test(itemText(a));}).length || 0);
+  var reserves = Number(counts.natural_reserves || counts.reserves || allAssets.filter(function(a){return /riserva|reserve|protected|parco|oasi/i.test(itemText(a));}).length || 0);
+  var top = sortByRelevance([].concat(marinaAssets, beachAssets, allAssets)).slice(0,18);
+  return '<div class="report-page"><div class="report-page-inner compact-table">'+
+    '<div class="immo-section-tag">Territorial Intelligence · hard data</div><h2>Coastal Intelligence</h2><div class="lux-rule"></div>'+ 
+    '<div class="asset-context-title">'+escapeHTML(opportunity && opportunity.title || '')+'</div>'+ 
     '<div class="immo-hard-kpi-grid">'+
-      renderHardKpi('Asset costieri', total || assets.length, 'inventario validato')+
+      renderHardKpi('Asset costieri', total, 'inventario validato')+
       renderHardKpi('Spiagge', beaches, 'beach inventory')+
-      renderHardKpi('Beach club', beachClubs, 'premium / leisure')+
+      renderHardKpi('Beach club / lidi', beachClubs, 'premium / leisure')+
       renderHardKpi('Marine', marinas, 'yachting infrastructure')+
       renderHardKpi('Porti', ports, 'port access')+
       renderHardKpi('Riserve', reserves, 'natural coastal assets')+
-    '</div>'+
-    '<div class="immo-two-col"><div><div class="lux-small-title">Lettura per investitore</div><p class="immo-module-note">Questa pagina non descrive genericamente “ecosistema marittimo”: mostra quanti asset costieri sono stati effettivamente restituiti dagli engine, come sono distribuiti e quali risultano più rilevanti per leisure, luxury hospitality e sviluppo turistico.</p><div class="immo-pill-row"><span class="immo-pill">Score '+escapeHTML(formatScoreValue(deepGet(c,['coastal_profile.score','score'])))+'</span><span class="immo-pill">Nearest '+escapeHTML(formatScoreValue(deepGet(c,['coastal_profile.nearest_coastal_asset_km','nearest_coastal_asset_km'])))+' km</span><span class="immo-pill">Radius '+escapeHTML(number(deepGet(c,['radius_m'])||0))+' m</span></div></div><div>'+renderAssetRows(assets,8)+'</div></div>'+
+    '</div>'+ 
+    '<div class="immo-two-col"><div><div class="lux-small-title">Marine, porti e waterfront</div>'+renderAssetRows(marinaAssets,10)+'</div><div><div class="lux-small-title">Spiagge, lidi e coastal asset principali</div>'+renderAssetRows(top,12)+'</div></div>'+ 
     '<div class="page-footer"><span>IMMONOVA</span><span>Coastal Intelligence · verified engine data</span></div></div></div>';
 }
 function renderLiveHospitalityHardDataPage(){
@@ -5041,35 +5083,56 @@ function renderLiveHeritageHardDataPage(){
   var h = safeObj(immonovaIntelligence && immonovaIntelligence.heritage);
   if(!Object.keys(h).length) return '';
   var counts = safeObj(deepGet(h,['heritage_profile.asset_counts','heritage_profile.category_counts','category_counts','heritage.category_counts']));
-  var assets = collectNamedAssets(h,12);
-  var unesco = Number(counts.unesco || counts.unesco_sites || countValue(h,['heritage_profile.unesco_count','unesco_count','indexes.unesco_count']) || assets.filter(function(a){return /unesco/i.test(JSON.stringify(a));}).length);
-  var museums = Number(counts.museums || counts.museum || assets.filter(function(a){return /museum|museo/i.test(String(a.subtype||a.name||''));}).length);
-  var churches = Number(counts.churches || counts.church || assets.filter(function(a){return /church|chiesa|cathedral|basilica/i.test(String(a.subtype||a.name||''));}).length);
-  var castles = Number(counts.castles || counts.castle || assets.filter(function(a){return /castle|castello/i.test(String(a.subtype||a.name||''));}).length);
-  var squares = Number(counts.historic_squares || counts.squares || counts.piazzas || assets.filter(function(a){return /square|piazza/i.test(String(a.subtype||a.name||''));}).length);
-  var archeo = Number(counts.archaeological_sites || counts.archaeology || counts.archeological || assets.filter(function(a){return /archae/i.test(String(a.subtype||a.name||''));}).length);
-  return '<div class="report-page"><div class="report-page-inner">'+
-    '<div class="immo-section-tag">Heritage Intelligence · hard data</div><h2>Musei, Chiese, Castelli, UNESCO</h2><div class="lux-rule"></div>'+
-    '<div class="immo-hard-kpi-grid">'+renderHardKpi('UNESCO', unesco, 'siti / prossimità')+renderHardKpi('Musei', museums, 'cultural assets')+renderHardKpi('Chiese', churches, 'religious heritage')+renderHardKpi('Castelli', castles, 'fortified assets')+renderHardKpi('Piazze storiche', squares, 'urban heritage')+renderHardKpi('Archeologia', archeo, 'archaeological assets')+'</div>'+
-    '<div class="immo-two-col"><div><div class="lux-small-title">Dove sono e perché contano</div><p class="immo-module-note">Il valore UNESCO e culturale non viene più citato in modo generico: la pagina mostra categorie, quantità e asset principali restituiti dall’Heritage Engine, con distanza quando disponibile.</p></div><div>'+renderAssetRows(assets,8)+'</div></div>'+
+  var allAssets = collectNamedAssets(h,240).filter(function(a){ return !isRejectedHeritageAsset(a); });
+  var urban = sortByRelevance(allAssets.filter(isHeritageUrbanAsset));
+  var unesco = Number(counts.unesco || counts.unesco_sites || countValue(h,['heritage_profile.unesco_count','unesco_count','indexes.unesco_count']) || allAssets.filter(function(a){return /unesco/i.test(JSON.stringify(a));}).length);
+  var museums = Number(counts.museums || counts.museum || allAssets.filter(function(a){return /museum|museo/i.test(itemText(a));}).length);
+  var churches = Number(counts.churches || counts.church || allAssets.filter(function(a){return /church|chiesa|cathedral|cattedrale|duomo|basilica/i.test(itemText(a));}).length);
+  var castles = Number(counts.castles || counts.castle || allAssets.filter(function(a){return /castle|castello|carlo v/i.test(itemText(a));}).length);
+  var squares = Number(counts.historic_squares || counts.squares || counts.piazzas || allAssets.filter(function(a){return /square|piazza/i.test(itemText(a));}).length);
+  var archeo = Number(counts.archaeological_sites || counts.archaeology || counts.archeological || allAssets.filter(function(a){return /archae|anfiteatro|amphithe/i.test(itemText(a));}).length);
+  return '<div class="report-page"><div class="report-page-inner compact-table">'+
+    '<div class="immo-section-tag">Heritage Intelligence · hard data</div><h2>Musei, Chiese, Castelli, Piazze, Porte</h2><div class="lux-rule"></div>'+ 
+    '<div class="asset-context-title">'+escapeHTML(opportunity && opportunity.title || '')+'</div>'+ 
+    '<div class="immo-hard-kpi-grid">'+renderHardKpi('UNESCO', unesco, 'siti / prossimità')+renderHardKpi('Musei', museums, 'cultural assets')+renderHardKpi('Chiese', churches, 'religious heritage')+renderHardKpi('Castelli', castles, 'fortified assets filtrati')+renderHardKpi('Piazze storiche', squares, 'urban heritage')+renderHardKpi('Archeologia', archeo, 'archaeological assets')+'</div>'+ 
+    '<div class="immo-two-col"><div><div class="lux-small-title">Piazze, porte, anfiteatri e icone urbane</div>'+renderAssetRows(urban,12)+'<p class="immo-module-note">Se un asset atteso non compare qui, significa che l’Heritage Engine non lo ha restituito nel payload ricevuto dal viewer. Il viewer non lo inventa.</p></div><div><div class="lux-small-title">Inventario culturale filtrato</div>'+renderAssetRows(allAssets,12)+'</div></div>'+ 
     '<div class="page-footer"><span>IMMONOVA</span><span>Heritage Intelligence · verified engine data</span></div></div></div>';
 }
 function renderLiveAccessibilityHardDataPage(){
   var a = safeObj(immonovaIntelligence && immonovaIntelligence.accessibility);
   if(!Object.keys(a).length) return '';
-  var airports = asArray(deepGet(a,['accessibility.airports','airports','transport.airports']));
-  var rail = asArray(deepGet(a,['accessibility.rail','accessibility.railways','rail','railways','train_stations']));
-  var ports = asArray(deepGet(a,['accessibility.ports','ports','ferry_ports']));
-  var all = uniqAssets([].concat(airports, rail, ports, collectNamedAssets(a,50))).slice(0,12);
+  var allRaw = collectNamedAssets(a,240);
+  var airports = sortByRelevance(uniqAssets([].concat(asArray(deepGet(a,['accessibility.airports','airports','transport.airports','nearest_airports'])), allRaw.filter(isAirportAsset))));
+  var rail = sortByRelevance(uniqAssets([].concat(asArray(deepGet(a,['accessibility.rail','accessibility.railways','rail','railways','train_stations','nearest_train_stations'])), allRaw.filter(isRailAsset))));
+  var ports = sortByRelevance(uniqAssets([].concat(asArray(deepGet(a,['accessibility.ports','ports','ferry_ports','nearest_ports'])), allRaw.filter(isPortAsset).filter(function(x){return !isAirportAsset(x) && !isRailAsset(x);})))) ;
+  var all = sortByRelevance([].concat(airports, rail, ports));
   var score = deepGet(a,['accessibility_profile.score','accessibility_score','score','indexes.accessibility_score']);
-  return '<div class="report-page"><div class="report-page-inner">'+
-    '<div class="immo-section-tag">Accessibility Intelligence · hard data</div><h2>Aeroporti, Treni, Porti</h2><div class="lux-rule"></div>'+
-    '<div class="immo-hard-kpi-grid">'+renderHardKpi('Aeroporti', airports.length, 'commercial / regional')+renderHardKpi('Stazioni', rail.length, 'rail access')+renderHardKpi('Porti', ports.length, 'sea access')+renderHardKpi('Transport assets', airports.length+rail.length+ports.length, 'non deduplicati')+renderHardKpi('Score', formatScoreValue(score), 'accessibility')+renderHardKpi('Fonte', 'Google', 'Accessibility Engine')+'</div>'+
-    '<div class="immo-two-col"><div><div class="lux-small-title">Impatto investimento</div><p class="immo-module-note">L’accessibilità condiziona liquidità, bacino di domanda, operatività hospitality e capacità di attrarre clientela internazionale. Qui sono riportati i collegamenti effettivamente rilevati, non una descrizione generica.</p></div><div>'+renderAssetRows(all,8)+'</div></div>'+
+  return '<div class="report-page"><div class="report-page-inner compact-table">'+
+    '<div class="immo-section-tag">Accessibility Intelligence · hard data</div><h2>Aeroporti, Treni, Porti</h2><div class="lux-rule"></div>'+ 
+    '<div class="asset-context-title">'+escapeHTML(opportunity && opportunity.title || '')+'</div>'+ 
+    '<div class="immo-hard-kpi-grid">'+renderHardKpi('Aeroporti', airports.length, 'commercial / regional')+renderHardKpi('Stazioni', rail.length, 'rail access')+renderHardKpi('Porti', ports.length, 'sea access')+renderHardKpi('Transport assets', all.length, 'deduplicati')+renderHardKpi('Score', formatScoreValue(score), 'accessibility')+renderHardKpi('Fonte', 'Google', 'Accessibility Engine')+'</div>'+ 
+    '<div class="immo-two-col"><div><div class="lux-small-title">Aeroporti e stazioni</div>'+renderAssetRows([].concat(airports,rail),12)+'</div><div><div class="lux-small-title">Porti e marine di accesso</div>'+renderAssetRows(ports,12)+'</div></div>'+ 
     '<div class="page-footer"><span>IMMONOVA</span><span>Accessibility Intelligence · verified engine data</span></div></div></div>';
 }
+function renderLiveTourismHardDataPage(){
+  var t = safeObj(immonovaIntelligence && immonovaIntelligence.tourism);
+  if(!Object.keys(t).length) return '';
+  var metrics = safeObj(deepGet(t,['metrics','tourism.metrics','tourism_profile.metrics','summary']));
+  var arrivals = firstValue(metrics.arrivals, metrics.total_arrivals, deepGet(t,['arrivals_current','tourism.arrivals_current']));
+  var presences = firstValue(metrics.presences, metrics.total_presences, deepGet(t,['presences_current','tourism.presences_current']));
+  var intl = firstValue(metrics.international_share_percent, metrics.international_share, deepGet(t,['international_share_percent','tourism.international_share_percent']));
+  var stay = firstValue(metrics.average_stay_nights, metrics.avg_stay, deepGet(t,['average_stay_nights','tourism.average_stay_nights']));
+  var rows = asArray(deepGet(t,['scenarios','forecast_scenarios','tourism.scenarios','origin_markets']));
+  return '<div class="report-page"><div class="report-page-inner compact-table">'+
+    '<div class="immo-section-tag">Tourism Intelligence · hard data</div><h2>Domanda turistica e scenari</h2><div class="lux-rule"></div>'+ 
+    '<div class="asset-context-title">'+escapeHTML(opportunity && opportunity.title || '')+'</div>'+ 
+    '<div class="immo-hard-kpi-grid">'+renderHardKpi('Arrivi', arrivals ? number(arrivals) : '-', 'tourism engine')+renderHardKpi('Presenze', presences ? number(presences) : '-', 'tourism engine')+renderHardKpi('Quota internazionale', intl ? percent(intl) : '-', 'demand mix')+renderHardKpi('Permanenza media', stay ? number(stay)+' notti' : '-', 'average stay')+renderHardKpi('Fonte', 'Tourism Engine', 'edge dedicata')+'</div>'+ 
+    '<div class="immo-two-col"><div><div class="lux-small-title">Lettura investment</div><p class="immo-module-note">Questa pagina usa solo dati restituiti dalla edge turismo dedicata. Se i campi sono incompleti, non vengono sostituiti da testo generico del vecchio dossier.</p></div><div>'+renderAssetRows(rows,10)+'</div></div>'+ 
+    '<div class="page-footer"><span>IMMONOVA</span><span>Tourism Intelligence · verified engine data</span></div></div></div>';
+}
+
 function renderLiveTerritorialHardDataPages(){
-  return [renderLiveCoastalHardDataPage(),renderLiveHospitalityHardDataPage(),renderLiveHeritageHardDataPage(),renderLiveAccessibilityHardDataPage()].join('');
+  return [renderLiveCoastalHardDataPage(),renderLiveHospitalityHardDataPage(),renderLiveHeritageHardDataPage(),renderLiveAccessibilityHardDataPage(),renderLiveTourismHardDataPage()].join('');
 }
 
 function renderPublishingExecutiveBook(){
@@ -5105,19 +5168,14 @@ function renderReport(){
       <div class="cover-meta">${escapeHTML(opportunity.location || "")}<br>${escapeHTML(opportunity.category || "")}<br>${t("generated")} ${escapeHTML(new Date(report.generated_at).toLocaleDateString("it-IT"))} ${overrideBadge}</div>
     </div>
     ${renderPublishingExecutiveBook()}
-    ${renderSummaryPage()}
     ${renderInvestmentStructurePage()}
     ${renderAssetLocationPage()}
-    ${renderInvestmentThesisPage()}
-    ${renderDestinationAnalysisPage()}
-    ${renderIntelligencePages()}
     ${renderGalleryPremium()}
     ${renderRenovationPotentialPage()}
     ${renderRenovationRenderPages()}
     ${renderEconomicsPage()}
     ${renderRevaluationPage()}
     ${renderMarketPages()}
-    ${renderCommitteeClosingPage()}
     ${renderSourcesPage()}
     ${renderDisclaimerPage()}
     ${renderTechnicalDocumentsPlaceholder()}
