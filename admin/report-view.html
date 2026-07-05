@@ -1,299 +1,92 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IMMONOVA | Investment Dossier</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    :root{
-      --sand:#f4ecdf;
-      --sand2:#fbf7ef;
-      --paper:#fffdf8;
-      --ink:#423b2d;
-      --muted:#7b705e;
-      --gold:#a58139;
-      --gold2:#c8a85a;
-      --line:rgba(165,129,57,.26);
-      --soft:rgba(165,129,57,.08);
-      --danger:#8a3b2e;
-    }
-
-    *{box-sizing:border-box}
-    html,body{margin:0;min-height:100%;background:var(--sand);color:var(--ink);font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif}
-
-    body::before{
-      content:"";
-      position:fixed;
-      inset:0;
-      z-index:-2;
-      background:
-        radial-gradient(circle at 22% 12%,rgba(255,255,255,.75),rgba(255,255,255,.18) 36%,transparent 66%),
-        radial-gradient(circle at 85% 82%,rgba(255,255,255,.55),rgba(255,255,255,.10) 34%,transparent 70%),
-        var(--sand);
-    }
-    body::after{
-      content:"";
-      position:fixed;
-      inset:0;
-      z-index:-1;
-      opacity:.32;
-      background:
-        linear-gradient(60deg,transparent 0 78px,rgba(165,129,57,.18) 79px 80px,transparent 81px 158px),
-        linear-gradient(120deg,transparent 0 78px,rgba(165,129,57,.14) 79px 80px,transparent 81px 158px);
-      background-size:158px 158px;
-      pointer-events:none;
-    }
-
-    .topbar{
-      position:sticky;top:0;z-index:50;
-      display:flex;align-items:center;justify-content:space-between;gap:18px;
-      padding:16px 26px;
-      background:rgba(244,236,223,.88);
-      backdrop-filter:blur(14px);
-      border-bottom:1px solid var(--line);
-    }
-    .brand{letter-spacing:.42em;color:var(--gold);font-weight:300;font-size:18px;text-transform:uppercase}
-    .actions{display:flex;gap:10px;align-items:center}
-    button{border:1px solid var(--gold);background:transparent;color:var(--gold);padding:10px 14px;letter-spacing:.14em;text-transform:uppercase;font-size:11px;cursor:pointer}
-    button:hover{background:rgba(165,129,57,.08)}
-    .status{font-size:12px;color:var(--muted);letter-spacing:.08em}
-
-    #app{padding:28px 0 80px}
-
-    .page{
-      width:297mm;
-      height:210mm;
-      margin:0 auto 28px;
-      position:relative;
-      overflow:hidden;
-      background:rgba(255,253,248,.84);
-      border:1px solid rgba(165,129,57,.14);
-      box-shadow:0 18px 55px rgba(56,45,25,.10);
-      page-break-after:always;
-    }
-    .page.pattern::before{
-      content:"";position:absolute;inset:0;z-index:0;opacity:.28;
-      background:
-        linear-gradient(60deg,transparent 0 82px,rgba(165,129,57,.15) 83px 84px,transparent 85px 166px),
-        linear-gradient(120deg,transparent 0 82px,rgba(165,129,57,.12) 83px 84px,transparent 85px 166px);
-      background-size:166px 166px;
-    }
-    .page > *{position:relative;z-index:1}
-
-    .page-inner{height:100%;padding:28mm 18mm 20mm;display:flex;flex-direction:column}
-    .footer{position:absolute;left:18mm;right:18mm;bottom:13mm;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:5mm;color:rgba(66,59,45,.55);font-size:9px;letter-spacing:.28em;text-transform:uppercase}
-
-    .cover{background:var(--sand);}
-    .cover.has-image{background-size:cover;background-position:center}
-    .cover.has-image::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(20,16,11,.72),rgba(20,16,11,.34),rgba(244,236,223,.10));z-index:0}
-    .cover:not(.has-image)::before{content:"";position:absolute;inset:0;z-index:0;opacity:.38;background:
-      linear-gradient(60deg,transparent 0 82px,rgba(165,129,57,.20) 83px 84px,transparent 85px 166px),
-      linear-gradient(120deg,transparent 0 82px,rgba(165,129,57,.14) 83px 84px,transparent 85px 166px);
-      background-size:166px 166px}
-    .cover .page-inner{padding:25mm 23mm 20mm;justify-content:space-between}
-    .logo{font-size:34px;letter-spacing:.48em;color:var(--gold);font-weight:200;text-transform:uppercase;margin-bottom:11mm}
-    .eyebrow{font-size:11px;letter-spacing:.34em;color:var(--gold);font-weight:700;text-transform:uppercase;margin-bottom:8mm}
-    .cover-title{max-width:190mm;font-size:43px;line-height:1.05;letter-spacing:.17em;color:var(--gold);font-weight:200;text-transform:uppercase}
-    .cover-meta{display:flex;gap:16px;flex-wrap:wrap;color:var(--gold);letter-spacing:.24em;text-transform:uppercase;font-size:12px}
-    .cover.has-image .logo,.cover.has-image .eyebrow,.cover.has-image .cover-title,.cover.has-image .cover-meta{color:#d2b66a;text-shadow:0 2px 20px rgba(0,0,0,.35)}
-
-    h1,h2,h3,p{margin:0}
-    .kicker{font-size:10px;letter-spacing:.32em;color:var(--gold);font-weight:700;text-transform:uppercase;margin-bottom:8px}
-    .title{font-size:28px;letter-spacing:.24em;color:rgba(165,129,57,.58);font-weight:200;text-transform:uppercase;border-bottom:2px solid var(--gold);padding-bottom:12px;margin-bottom:24px}
-    .note{color:var(--muted);font-size:15px;line-height:1.55;max-width:800px}
-    .grid{display:grid;gap:14px}
-    .grid.cols-3{grid-template-columns:repeat(3,1fr)}
-    .grid.cols-4{grid-template-columns:repeat(4,1fr)}
-    .card{border:1px solid rgba(165,129,57,.18);background:rgba(255,255,255,.35);padding:16px;min-height:88px}
-    .card-label{font-size:10px;letter-spacing:.24em;color:var(--gold);font-weight:800;text-transform:uppercase;margin-bottom:10px}
-    .card-value{font-size:30px;line-height:1;color:rgba(66,59,45,.72);font-weight:200}
-    .card-sub{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.35}
-    .error{border:1px solid rgba(138,59,46,.35);background:rgba(138,59,46,.06);padding:18px;color:var(--danger);line-height:1.45}
-    .small{font-size:12px;color:var(--muted);line-height:1.45}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;white-space:pre-wrap;background:rgba(255,255,255,.38);border:1px solid var(--line);padding:12px;max-height:210px;overflow:auto}
-
-    @page{size:A4 landscape;margin:0}
-    @media print{
-      html,body{background:var(--sand)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-      body::before,body::after{display:none}
-      .topbar{display:none!important}
-      #app{padding:0}
-      .page{margin:0;width:297mm;height:210mm;box-shadow:none;border:none;break-after:page;page-break-after:always}
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dossier | IMMONOVA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#735f36}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.30}
+.header{padding:22px 42px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.14);background:rgba(244,236,223,.76);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}
+.logo{font-size:25px;letter-spacing:.18em;color:#a67f34;text-decoration:none;font-weight:300}.logo small{display:block;margin-top:6px;font-size:8px;font-weight:700;letter-spacing:.16em;color:#a58139}
+.header-actions{display:flex;gap:12px;flex-wrap:wrap}.header-actions a,.header-actions button{padding:10px 15px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.26);color:#a67f34;text-decoration:none;cursor:pointer;font-size:10px;letter-spacing:.16em;text-transform:uppercase}
+.container{max-width:1320px;margin:auto;padding:38px 42px 80px}.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px}.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}.title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}.btn.secondary{background:transparent;color:#a67f34}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
+.report-page{position:relative;width:100%;min-height:720px;background:#fffdf8;border-bottom:1px solid rgba(166,127,52,.12);overflow:hidden}.report-page.pattern{background:#f4ecdf}.report-page.pattern::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.30) 42%,rgba(244,236,223,.06) 75%),#f4ecdf;z-index:0}.report-page.pattern::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.34;z-index:0}.page-inner{position:relative;z-index:2;padding:54px}.cover{height:720px;display:flex;flex-direction:column;justify-content:space-between}.cover.with-image{color:white}.cover.with-image::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(31,22,8,.78),rgba(31,22,8,.48),rgba(31,22,8,.10));z-index:1}.cover-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}.brand{font-size:31px;letter-spacing:.20em;color:#a67f34;font-weight:300}.cover.with-image .brand,.cover.with-image .cover-kicker,.cover.with-image .cover-title,.cover.with-image .cover-meta{color:#f1d27a}.brand-sub{margin-top:8px;font-size:9px;letter-spacing:.22em;color:#a58139;text-transform:uppercase}.cover-kicker{font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:#a67f34;margin-bottom:22px}.cover-title{max-width:930px;font-size:54px;line-height:1.08;font-weight:200;letter-spacing:.08em;text-transform:uppercase;color:#a67f34}.cover-meta{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8f7643;line-height:2}.debug-panel{padding:28px;border-top:1px solid rgba(166,127,52,.15);background:rgba(255,255,255,.36)}.debug-title{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#a67f34;margin-bottom:12px}.debug-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.debug-item{border:1px solid rgba(166,127,52,.16);padding:14px;background:rgba(255,255,255,.35)}.debug-label{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#a58139;margin-bottom:8px}.debug-value{font-size:13px;color:#735f36;word-break:break-word}.empty{padding:42px;color:#8f7643}
+@media(max-width:800px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 20px}.topbar{display:block}.actions{margin-top:18px}.cover-title{font-size:34px}.debug-grid{grid-template-columns:1fr}.page-inner{padding:34px}}
+@media print{@page{size:A4 landscape;margin:0}html,body{width:297mm;min-height:210mm;background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}body::before,body::after,.header,.topbar,.actions,.status{display:none!important}.container{width:297mm;max-width:none;margin:0;padding:0}.book{width:297mm;border:0;box-shadow:none;background:white}.report-page{width:297mm;height:210mm;min-height:210mm;page-break-after:always;break-after:page;border-bottom:0}.report-page:last-child{page-break-after:auto;break-after:auto}.page-inner{padding:18mm}.cover{height:210mm}.cover-title{font-size:33pt;max-width:180mm}.brand{font-size:19pt}.brand-sub{font-size:6pt}.cover-kicker{font-size:8pt}.cover-meta{font-size:8pt}.debug-panel{display:none}}
+</style>
 </head>
 <body>
+<header class="header">
+  <a class="logo" href="../index.html">IMMONOVA<small>OFF MARKET • CONSULTING</small></a>
+  <div class="header-actions">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="opportunities.html">Proposte</a>
+    <button id="logoutBtn" type="button">Logout</button>
+  </div>
+</header>
+<main class="container">
   <div class="topbar">
-    <div class="brand">IMMONOVA</div>
+    <div>
+      <div class="kicker">Investment Book · Clean View Step 1</div>
+      <h1 class="title" id="pageTitle">Dossier</h1>
+    </div>
     <div class="actions">
-      <span id="status" class="status">Caricamento dossier...</span>
-      <button onclick="window.print()">Stampa / PDF</button>
+      <button class="btn" id="loadBtn" type="button">Ricarica dati</button>
+      <button class="btn secondary" onclick="window.print()" type="button">Stampa / PDF</button>
+      <a class="btn secondary" id="editLink" href="#">Torna alla proposta</a>
     </div>
   </div>
-  <main id="app"></main>
-
+  <div id="status" class="status"></div>
+  <section id="book" class="book"><div class="empty">Caricamento dossier...</div></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
 <script>
-/* =========================================================
-   IMMONOVA NEW VIEW · STEP 1
-   COS'È: view.html pulito, base dossier, senza vecchio codice.
-   DOVE VA: admin/view.html
-   COSA FA ORA:
-   - carica opportunity da Supabase
-   - renderizza cover coerente IMMONOVA
-   - se cover_image esiste usa foto; altrimenti sfondo beige triangoli
-   - prepara orchestrazione Edge senza ancora stampare tutte le sezioni
-   ========================================================= */
-
-const SUPABASE_URL = window.SUPABASE_URL || "https://YOUR_PROJECT.supabase.co";
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
-const EDGE_BASE = `${SUPABASE_URL}/functions/v1`;
-
-const EDGE_NAMES = {
-  location: "immonova-location-profile",
-  accessibility: "immonova-accessibility-engine",
-  poi: "immonova-poi-engine",
-  heritage: "immonova-heritage-engine",
-  coastal: "immonova-coastal-engine",
-  destination: "immonova-destination-engine",
-  evidence: "immonova-evidence-engine",
-  publishing: "immonova-publishing-engine",
-  blocks: "immonova-block-composer"
-};
-
-let sb = null;
-try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch(e) {}
-
-function qs(name){ return new URLSearchParams(location.search).get(name); }
-function esc(v){ return String(v ?? "").replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-function val(...items){ return items.find(v => v !== undefined && v !== null && String(v).trim() !== "") ?? ""; }
-function fmtDate(d=new Date()){ return d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}); }
-function num(v){ const n = Number(v); return Number.isFinite(n) ? n : null; }
-
-function page(content, cls="pattern"){
-  return `<section class="page ${cls}">${content}</section>`;
-}
-function footer(label="CONFIDENTIAL INVESTMENT INTELLIGENCE"){
-  return `<div class="footer"><span>IMMONOVA</span><span>${esc(label)}</span></div>`;
-}
-
-function opportunityTitle(o){ return val(o?.title, o?.name, "Investment Opportunity"); }
-function opportunityLocation(o){ return val(o?.location, o?.city, o?.municipality, o?.address, ""); }
-function opportunityCategory(o){ return val(o?.category, o?.investment_type, ""); }
-function opportunityCover(o){ return val(o?.cover_image, o?.coverImage, Array.isArray(o?.gallery_images) ? o.gallery_images[0] : ""); }
-function opportunityLat(o){ return num(val(o?.latitude, o?.lat)); }
-function opportunityLng(o){ return num(val(o?.longitude, o?.lng)); }
-
-function renderCover(o){
-  const img = opportunityCover(o);
-  const title = opportunityTitle(o);
-  const loc = opportunityLocation(o);
-  const cat = opportunityCategory(o);
-  const style = img ? `style="background-image:url('${esc(img)}')"` : "";
-  return page(`
-    <div class="page-inner">
-      <div>
-        <div class="logo">IMMONOVA</div>
-        <div class="eyebrow">Confidential Investment Dossier</div>
-      </div>
-      <div>
-        <h1 class="cover-title">${esc(title)}</h1>
-      </div>
-      <div class="cover-meta">
-        ${loc ? `<span>${esc(loc)}</span>` : ""}
-        ${cat ? `<span>${esc(cat)}</span>` : ""}
-        <span>Generato ${fmtDate()}</span>
-      </div>
-    </div>
-  `, `cover ${img ? "has-image" : ""}`.trim()).replace('<section class="page cover', `<section ${style} class="page cover`);
-}
-
-function renderStep1Intro(o, edgeState){
-  const lat = opportunityLat(o), lng = opportunityLng(o);
-  const ready = lat !== null && lng !== null;
-  return page(`
-    <div class="page-inner">
-      <div class="kicker">Nuovo view · step 1</div>
-      <h2 class="title">Base Dossier</h2>
-      <div class="grid cols-4" style="margin-bottom:22px">
-        <div class="card"><div class="card-label">Asset</div><div class="card-value" style="font-size:22px;line-height:1.15">${esc(opportunityTitle(o))}</div></div>
-        <div class="card"><div class="card-label">Location</div><div class="card-value" style="font-size:22px">${esc(opportunityLocation(o) || '-')}</div></div>
-        <div class="card"><div class="card-label">Categoria</div><div class="card-value" style="font-size:22px">${esc(opportunityCategory(o) || '-')}</div></div>
-        <div class="card"><div class="card-label">Coordinate</div><div class="card-value" style="font-size:18px">${ready ? `${lat}, ${lng}` : '-'}</div></div>
-      </div>
-      <p class="note">Questa è la nuova base pulita del dossier. Non contiene pezzi del vecchio view, non usa sfondo nero, non inventa sezioni: da qui aggiungiamo una pagina alla volta, mantenendo coerenza visiva IMMONOVA.</p>
-      ${!ready ? `<div class="error" style="margin-top:20px"><strong>Coordinate mancanti.</strong><br>Le Edge territoriali verranno chiamate solo quando latitude/longitude sono disponibili sull'opportunità.</div>` : ""}
-      <div style="margin-top:24px" class="small"><strong>Edge predisposte:</strong> ${Object.values(EDGE_NAMES).map(esc).join(' · ')}</div>
-      ${edgeState ? `<div style="margin-top:14px" class="mono">${esc(JSON.stringify(edgeState,null,2))}</div>` : ""}
-      ${footer()}
-    </div>
-  `);
-}
-
-async function getSessionToken(){
-  try {
-    const { data } = await sb.auth.getSession();
-    return data?.session?.access_token || SUPABASE_ANON_KEY;
-  } catch(e){ return SUPABASE_ANON_KEY; }
-}
-
-async function invokeEdge(name, payload){
-  const token = await getSessionToken();
-  const res = await fetch(`${EDGE_BASE}/${name}`, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${token}`, 'apikey':SUPABASE_ANON_KEY },
-    body:JSON.stringify(payload)
-  });
-  const text = await res.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch(e) { json = { raw:text }; }
-  if(!res.ok) throw new Error(`${name} ${res.status}: ${text.slice(0,300)}`);
-  return json;
-}
-
-async function loadOpportunity(){
-  const id = qs('id');
-  if(!id) throw new Error('Parametro id mancante nella URL. Esempio: view.html?id=19');
-  if(!sb || SUPABASE_URL.includes('YOUR_PROJECT')) throw new Error('Configura SUPABASE_URL e SUPABASE_ANON_KEY nel file view.html.');
-  const { data, error } = await sb.from('opportunities').select('*').eq('id', id).single();
-  if(error) throw error;
-  return data;
-}
-
-async function orchestrateStep1(o){
-  const lat = opportunityLat(o), lng = opportunityLng(o);
-  if(lat === null || lng === null) return { skipped:true, reason:'missing_coordinates' };
-  // Step 1: solo health/predisposizione leggera. Le chiamate complete saranno abilitate nello Step 2.
-  return {
-    ready:true,
-    payload_base:{ lat, lng, opportunity_id:o.id, title:opportunityTitle(o) },
-    next_step:'Investment Snapshot + Financial Snapshot + Total Project Cost'
-  };
-}
-
-async function main(){
-  const app = document.getElementById('app');
-  const status = document.getElementById('status');
-  try{
-    const opportunity = await loadOpportunity();
-    status.textContent = 'Opportunità caricata';
-    const edgeState = await orchestrateStep1(opportunity);
-    app.innerHTML = renderCover(opportunity) + renderStep1Intro(opportunity, edgeState);
-    status.textContent = 'Step 1 pronto';
-  }catch(err){
-    console.error(err);
-    status.textContent = 'Errore';
-    app.innerHTML = page(`
-      <div class="page-inner">
-        <div class="kicker">Errore caricamento</div>
-        <h2 class="title">Dossier non generato</h2>
-        <div class="error">${esc(err.message || err)}</div>
-        ${footer()}
-      </div>
-    `);
-  }
-}
-main();
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var params = new URLSearchParams(window.location.search);
+var opportunityId = params.get("id");
+var requestId = params.get("request_id");
+var requestedLanguage = (params.get("lang") || "it").toLowerCase();
+var clientName = params.get("client") || "";
+var statusBox = document.getElementById("status");
+var book = document.getElementById("book");
+var pageTitle = document.getElementById("pageTitle");
+var editLink = document.getElementById("editLink");
+var loadBtn = document.getElementById("loadBtn");
+var logoutBtn = document.getElementById("logoutBtn");
+var currentUser = null;
+var opportunity = null;
+var report = null;
+var renovationRenders = [];
+var propertyDocuments = [];
+function escapeHTML(value){return String(value===null||value===undefined?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");}
+function number(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat("it-IT").format(n);}
+function euro(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);}
+function percent(value){var n=Number(value);if(!Number.isFinite(n))return "-";return n.toFixed(1).replace(".",",")+"%";}
+function clean(v){return String(v||"").trim();}
+function setStatus(message,type){statusBox.className="status "+(type||"");statusBox.textContent=message||"";}
+function normalizeGallery(value){if(!value)return[];if(Array.isArray(value))return value.filter(Boolean);try{var p=JSON.parse(value);return Array.isArray(p)?p.filter(Boolean):[]}catch(e){return[]}}
+function getTitle(){return clean(opportunity&&opportunity.title)||clean(report&&report.title)||"Dossier IMMONOVA";}
+function getLocation(){return clean(opportunity&&opportunity.location)||clean(report&&report.location)||clean(opportunity&&opportunity.city)||"";}
+function getCategory(){return clean(opportunity&&opportunity.category)||clean(report&&report.category)||"";}
+function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||clean(report&&report.cover_image)||gallery[0]||"";}
+function getGeneratedDate(){var d=(report&&report.created_at)||(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat("it-IT").format(new Date(d));}catch(e){return "";}}
+async function checkAuth(){var sessionRes=await client.auth.getSession();var session=sessionRes&&sessionRes.data&&sessionRes.data.session;if(!session){window.location.href="login.html";return null;}currentUser=session.user;return session;}
+async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-form.html?id="+encodeURIComponent(opportunityId);}
+async function loadLatestReport(){var res=await client.from("investment_reports").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false}).limit(1).maybeSingle();if(!res.error&&res.data)report=res.data;}
+async function loadRenovationRenders(){var res=await client.from("opportunity_renovation_renders").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false});renovationRenders=(!res.error&&Array.isArray(res.data))?res.data:[];}
+async function loadPropertyDocuments(){var res=await client.from("opportunity_documents").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false});propertyDocuments=(!res.error&&Array.isArray(res.data))?res.data:[];}
+function renderCover(){var cover=getCoverImage();var withImage=!!cover;return '<article class="report-page '+(withImage?'':'pattern')+' cover '+(withImage?'with-image':'')+'">'+(withImage?'<img class="cover-bg" src="'+escapeHTML(cover)+'" alt="">':'')+'<div class="page-inner cover">'+'<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>'+'<div><div class="cover-kicker">Confidential Investment Dossier</div><h1 class="cover-title">'+escapeHTML(getTitle())+'</h1></div>'+'<div class="cover-meta">'+[getLocation(),getCategory(),"Generato "+getGeneratedDate()].filter(Boolean).map(escapeHTML).join('<br>')+'</div>'+'</div></article>';}
+function renderDebugBootstrap(){return '<div class="debug-panel"><div class="debug-title">Step 1 · Bootstrap dati interni</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Render AI</div><div class="debug-value">'+number(renovationRenders.length)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Documenti</div><div class="debug-value">'+number(propertyDocuments.length)+'</div></div>'+'</div></div>';}
+function renderBook(){pageTitle.textContent=getTitle();book.innerHTML=renderCover()+renderDebugBootstrap();}
+async function init(){try{setStatus("Caricamento dati interni IMMONOVA...","");await checkAuth();await loadOpportunity();await Promise.all([loadLatestReport(),loadRenovationRenders(),loadPropertyDocuments()]);renderBook();setStatus("Step 1 completato: configurazione, Supabase e dati interni caricati.","success");}catch(e){console.error(e);book.innerHTML='<div class="empty">Errore: '+escapeHTML(e.message||e)+'</div>';setStatus(String(e.message||e),"error");}}
+if(loadBtn)loadBtn.addEventListener("click",init);
+if(logoutBtn)logoutBtn.addEventListener("click",async function(){await client.auth.signOut();window.location.href="../index.html";});
+init();
 </script>
 </body>
 </html>
