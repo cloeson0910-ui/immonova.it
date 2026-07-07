@@ -35,10 +35,19 @@ function showError(msg){const b=$('errorBox');b.textContent=msg;b.style.display=
 function clearError(){const b=$('errorBox');b.textContent='';b.style.display='none'}
 function toast(msg){const t=$('toast');t.textContent=msg;t.style.display='block';console.log('[IMMONOVA data-sources]',msg);setTimeout(()=>t.style.display='none',6500)}
 function readConfig(){
- // Nel tuo progetto config.js crea già window.supabaseClient.
- // Non cerchiamo SUPABASE_URL / SUPABASE_ANON_KEY perché nel tuo config.js sono const locali.
- if(window.supabaseClient) return window.supabaseClient;
- throw new Error('window.supabaseClient non trovato. Controlla che ../config.js esista e venga caricato dopo supabase-js.');
+  // Usa prima il client già creato dal tuo config.js.
+  if(window.supabaseClient) return window.supabaseClient;
+
+  // Fallback diretto con i valori del tuo config.js, così la pagina funziona anche se il path ../config.js non viene caricato.
+  const DIRECT_SUPABASE_URL = 'https://bpzzmitmbavcmcasswbu.supabase.co';
+  const DIRECT_SUPABASE_ANON_KEY = 'sb_publishable_YySRrYs6VqiGLmP9958PjA_dUM6MDU8';
+
+  if(window.supabase && DIRECT_SUPABASE_URL && DIRECT_SUPABASE_ANON_KEY){
+    window.supabaseClient = window.supabase.createClient(DIRECT_SUPABASE_URL, DIRECT_SUPABASE_ANON_KEY);
+    return window.supabaseClient;
+  }
+
+  throw new Error('Supabase non inizializzato: libreria supabase-js non caricata.');
 }
 function val(id){return ($(id)?.value||'').trim()}function setVal(id,v){const el=$(id);if(el)el.value=v??''}function boolVal(id){return val(id)==='true'}
 async function init(){try{sb=readConfig();bindEvents();await checkAuth();await loadSources();}catch(e){showError('Errore configurazione Fonti Dati\n'+e.message)}}
