@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IMMONOVA Admin | Fonti Dati</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../config.js"></script>
+  <script src="config.js"></script>
+  <script src="../js/supabase.js"></script>
   <style>
     :root{
       --bg:#f4ecdf;
@@ -106,7 +109,7 @@
     <a href="opportunities.html">Opportunità</a>
     <a href="opportunity-form.html">Nuova Proposta</a>
     <a href="users.html" id="usersLink">Users</a>
-    <button class="btn" id="logoutBtn">Logout</button>
+    <button type="button" class="btn" id="logoutBtn">Logout</button>
   </nav>
 </header>
 
@@ -116,7 +119,7 @@
       <h1>Fonti Dati Verificate</h1>
       <p class="subtitle">Catalogo operativo delle fonti IMMONOVA. Ogni fonte può essere assegnata a paese, regione, provincia o città e usata dal Discovery Engine solo se verificata e abilitata all’estrazione.</p>
     </div>
-    <button class="btn primary" id="newBtn">Nuova Fonte</button>
+    <button type="button" class="btn primary" id="newBtn">Nuova Fonte</button>
   </section>
 
   <section class="grid">
@@ -241,9 +244,9 @@
       <textarea id="notes" placeholder="Note admin"></textarea>
 
       <div class="actions">
-        <button class="btn primary" id="saveBtn">Salva fonte</button>
-        <button class="btn" id="testUrlBtn">Test URL</button>
-        <button class="btn" id="resetBtn">Pulisci</button>
+        <button type="button" class="btn primary" id="saveBtn">Salva fonte</button>
+        <button type="button" class="btn" id="testUrlBtn">Test URL</button>
+        <button type="button" class="btn" id="resetBtn">Pulisci</button>
       </div>
     </aside>
 
@@ -258,8 +261,8 @@
         <input id="filterProvince" placeholder="Provincia" />
       </div>
       <div class="actions" style="margin-top:0;margin-bottom:14px">
-        <button class="btn" id="refreshBtn">Aggiorna</button>
-        <button class="btn" id="verifiedOnlyBtn">Solo fonti attive per motore</button>
+        <button type="button" class="btn" id="refreshBtn">Aggiorna</button>
+        <button type="button" class="btn" id="verifiedOnlyBtn">Solo fonti attive per motore</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -279,15 +282,63 @@
 
 <script>
 /***********************
- * CONFIGURAZIONE
- * Se nel tuo progetto hai già /js/supabase.js puoi sostituire questa sezione
- * usando window.supabaseClient. Altrimenti inserisci qui URL e ANON KEY.
+ * CONFIGURAZIONE ROBUSTA
+ * Prova a usare, in ordine:
+ * 1) window.supabaseClient già creato da config/js esistente
+ * 2) window.SUPABASE_URL + window.SUPABASE_ANON_KEY
+ * 3) window.IMMONOVA_CONFIG.supabaseUrl / supabaseAnonKey
+ * 4) window.CONFIG.supabaseUrl / supabaseAnonKey
  ***********************/
-const SUPABASE_URL = window.SUPABASE_URL || "INSERISCI_SUPABASE_URL";
-const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "INSERISCI_SUPABASE_ANON_KEY";
-const sb = window.supabaseClient || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-if(SUPABASE_URL.includes('INSERISCI') || SUPABASE_ANON_KEY.includes('INSERISCI')){
-  console.warn('Supabase URL/ANON KEY non configurati in data-sources.html. Se non usi window.supabaseClient, configura questi valori.');
+function readConfigValue(keys){
+  for(const k of keys){
+    try{
+      const parts = k.split('.');
+      let v = window;
+      for(const p of parts){ v = v?.[p]; }
+      if(typeof v === 'string' && v.trim()) return v.trim();
+    }catch(_){}
+  }
+  return '';
+}
+
+const SUPABASE_URL = readConfigValue([
+  'SUPABASE_URL',
+  'supabaseUrl',
+  'IMMONOVA_CONFIG.SUPABASE_URL',
+  'IMMONOVA_CONFIG.supabaseUrl',
+  'CONFIG.SUPABASE_URL',
+  'CONFIG.supabaseUrl'
+]);
+
+const SUPABASE_ANON_KEY = readConfigValue([
+  'SUPABASE_ANON_KEY',
+  'SUPABASE_KEY',
+  'supabaseAnonKey',
+  'IMMONOVA_CONFIG.SUPABASE_ANON_KEY',
+  'IMMONOVA_CONFIG.supabaseAnonKey',
+  'CONFIG.SUPABASE_ANON_KEY',
+  'CONFIG.supabaseAnonKey'
+]);
+
+let sb = window.supabaseClient || window.sb || null;
+
+function showFatalConfigError(msg){
+  console.error('[IMMONOVA data-sources]', msg);
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:20px;right:20px;top:90px;z-index:9999;background:#9b2f22;color:#fff;padding:16px 18px;border-radius:16px;font-family:Arial;box-shadow:0 12px 40px rgba(0,0,0,.25)';
+  box.innerHTML = '<strong>Errore configurazione Fonti Dati</strong><br>'+msg;
+  document.body.appendChild(box);
+}
+
+try{
+  if(!sb){
+    if(!SUPABASE_URL || !SUPABASE_ANON_KEY){
+      throw new Error('SUPABASE_URL / SUPABASE_ANON_KEY non trovati. Inserisci i valori nel file oppure assicurati che config.js li esponga su window.');
+    }
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+}catch(e){
+  showFatalConfigError(e.message);
 }
 
 const $ = (id)=>document.getElementById(id);
@@ -300,9 +351,12 @@ function setVal(id,v){ $(id).value = v ?? ''; }
 function boolVal(id){ return $(id).value === 'true'; }
 
 async function checkAuth(){
-  const { data:{session} } = await sb.auth.getSession();
-  if(!session){ window.location.href='login.html'; return; }
+  if(!sb){ toast('Supabase non configurato: controlla URL/ANON KEY.'); return false; }
+  const { data:{session}, error } = await sb.auth.getSession();
+  if(error){ toast('Errore sessione: '+error.message); return false; }
+  if(!session){ window.location.href='login.html'; return false; }
   currentUser = session.user;
+  return true;
 }
 
 function resetForm(){
@@ -447,7 +501,15 @@ $('testUrlBtn').addEventListener('click',testUrl);
 $('logoutBtn').addEventListener('click',logout);
 $('verifiedOnlyBtn').addEventListener('click',()=>{ setVal('filterStatus','verified'); renderSources(); });
 
-(async()=>{ await checkAuth(); await loadSources(); })();
+(async()=>{
+  try{
+    const ok = await checkAuth();
+    if(ok) await loadSources();
+  }catch(e){
+    console.error('INIT ERROR', e);
+    toast('Errore inizializzazione: '+e.message);
+  }
+})();
 </script>
 </body>
 </html>
