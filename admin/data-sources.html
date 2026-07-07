@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IMMONOVA Admin | Fonti Dati</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --bg:#f4ecdf;
+      --gold:#a67f34;
+      --gold2:#c3a15f;
+      --ink:#18130b;
+      --muted:#7b6b52;
+      --card:rgba(255,255,255,.56);
+      --line:rgba(166,127,52,.25);
+      --danger:#9b2f22;
+      --ok:#2f6f4e;
+      --warn:#a66c18;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      color:var(--ink);
+      font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+      background:
+        radial-gradient(circle at top,rgba(255,255,255,.75),rgba(244,236,223,.1) 42%),
+        repeating-linear-gradient(60deg,transparent 0 84px,rgba(166,127,52,.10) 85px,transparent 86px),
+        repeating-linear-gradient(120deg,transparent 0 84px,rgba(166,127,52,.08) 85px,transparent 86px),
+        var(--bg);
+      min-height:100vh;
+    }
+    header{
+      position:sticky;top:0;z-index:10;
+      backdrop-filter:blur(18px);
+      background:rgba(244,236,223,.86);
+      border-bottom:1px solid var(--line);
+      padding:18px 28px;
+      display:flex;align-items:center;justify-content:space-between;gap:18px;
+    }
+    .logo{letter-spacing:.34em;color:var(--gold);font-weight:500;font-size:18px;text-transform:uppercase}
+    nav{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    nav a, .btn{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.36);
+      color:var(--ink);
+      text-decoration:none;
+      padding:10px 13px;
+      border-radius:999px;
+      font-size:12px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      cursor:pointer;
+    }
+    .btn.primary{background:var(--gold);color:#fff;border-color:var(--gold)}
+    .btn.danger{border-color:rgba(155,47,34,.4);color:var(--danger)}
+    main{max-width:1440px;margin:0 auto;padding:34px 26px 80px}
+    .hero{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:24px}
+    h1{font-family:Georgia,serif;font-size:46px;line-height:1;margin:0;color:var(--gold);font-weight:400}
+    .subtitle{margin:12px 0 0;color:var(--muted);max-width:760px;line-height:1.55}
+    .grid{display:grid;grid-template-columns:420px 1fr;gap:22px;align-items:start}
+    .card{
+      border:1px solid var(--line);
+      background:var(--card);
+      border-radius:28px;
+      padding:22px;
+      box-shadow:0 24px 70px rgba(60,44,18,.08);
+    }
+    .card h2{margin:0 0 16px;font-size:15px;text-transform:uppercase;letter-spacing:.16em;color:var(--gold)}
+    label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:13px 0 7px}
+    input,select,textarea{
+      width:100%;border:1px solid rgba(166,127,52,.26);border-radius:14px;padding:12px 13px;
+      background:rgba(255,255,255,.58);color:var(--ink);outline:none;font:inherit;
+    }
+    textarea{min-height:80px;resize:vertical}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+    .filters{display:grid;grid-template-columns:1.2fr .9fr .9fr .9fr .9fr .9fr;gap:10px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:12px 10px;border-bottom:1px solid rgba(166,127,52,.18);vertical-align:top;text-align:left}
+    th{font-size:10px;text-transform:uppercase;letter-spacing:.13em;color:var(--muted)}
+    td .url{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;color:var(--gold)}
+    .badge{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:11px;border:1px solid var(--line);background:rgba(255,255,255,.45)}
+    .badge.ok{color:var(--ok);border-color:rgba(47,111,78,.28)}
+    .badge.pending{color:var(--warn);border-color:rgba(166,108,24,.28)}
+    .badge.rejected{color:var(--danger);border-color:rgba(155,47,34,.28)}
+    .muted{color:var(--muted)}
+    .mini{font-size:11px;color:var(--muted);line-height:1.4}
+    .table-wrap{overflow:auto;max-height:72vh;border-radius:18px;border:1px solid rgba(166,127,52,.18)}
+    .empty{padding:28px;text-align:center;color:var(--muted)}
+    .toast{position:fixed;right:24px;bottom:24px;background:#1f170b;color:#fff;padding:14px 16px;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.25);display:none;z-index:99;max-width:420px}
+    .source-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .source-actions button{font-size:11px;padding:7px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.55);cursor:pointer;color:var(--ink)}
+    @media(max-width:1050px){.grid{grid-template-columns:1fr}.filters{grid-template-columns:1fr 1fr}.hero{display:block}h1{font-size:36px}}
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">IMMONOVA</div>
+    <div class="mini">OFF MARKET • CONSULTING</div>
+  </div>
+  <nav>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="opportunities.html">Opportunità</a>
+    <a href="opportunity-form.html">Nuova Proposta</a>
+    <a href="users.html" id="usersLink">Users</a>
+    <button class="btn" id="logoutBtn">Logout</button>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <div>
+      <h1>Fonti Dati Verificate</h1>
+      <p class="subtitle">Catalogo operativo delle fonti IMMONOVA. Ogni fonte può essere assegnata a paese, regione, provincia o città e usata dal Discovery Engine solo se verificata e abilitata all’estrazione.</p>
+    </div>
+    <button class="btn primary" id="newBtn">Nuova Fonte</button>
+  </section>
+
+  <section class="grid">
+    <aside class="card">
+      <h2 id="formTitle">Nuova Fonte</h2>
+      <input type="hidden" id="sourceId" />
+
+      <div class="row">
+        <div>
+          <label>Categoria</label>
+          <select id="category">
+            <option value="tourism">Tourism</option>
+            <option value="transport">Transport</option>
+            <option value="heritage">Heritage</option>
+            <option value="hospitality">Hospitality / Hotel</option>
+            <option value="restaurants">Restaurants</option>
+            <option value="real_estate">Real Estate</option>
+            <option value="demography">Demography</option>
+            <option value="climate">Climate</option>
+            <option value="events">Events</option>
+            <option value="market">Market</option>
+          </select>
+        </div>
+        <div>
+          <label>Tipo Fonte</label>
+          <select id="source_type">
+            <option value="official">Official</option>
+            <option value="institutional">Institutional</option>
+            <option value="market_provider">Market Provider</option>
+            <option value="open_data">Open Data</option>
+            <option value="commercial">Commercial API</option>
+            <option value="secondary">Secondary / Support</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Nome provider / documento</label>
+      <input id="provider_name" placeholder="Es. Regione Puglia - Turismo 2025" />
+
+      <label>URL esatto fonte / pagina / PDF / API</label>
+      <input id="endpoint" placeholder="https://..." />
+
+      <label>URL pubblico fonte/citazione</label>
+      <input id="source_url" placeholder="https://..." />
+
+      <div class="row3">
+        <div>
+          <label>Formato</label>
+          <select id="format">
+            <option value="html">HTML</option>
+            <option value="pdf">PDF</option>
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+            <option value="xlsx">XLSX</option>
+            <option value="sdmx">SDMX</option>
+            <option value="xml">XML</option>
+            <option value="web_download">Web Download</option>
+          </select>
+        </div>
+        <div>
+          <label>Metodo</label>
+          <select id="method"><option>GET</option><option>POST</option></select>
+        </div>
+        <div>
+          <label>Auth</label>
+          <select id="auth_type"><option value="none">None</option><option value="api_key">API Key</option><option value="bearer">Bearer</option></select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Livello geografico</label>
+          <select id="geography_level">
+            <option value="global">Global</option>
+            <option value="country">Country</option>
+            <option value="region">Region</option>
+            <option value="province">Province</option>
+            <option value="city">City</option>
+            <option value="municipality">Municipality</option>
+            <option value="coordinates">Coordinates</option>
+          </select>
+        </div>
+        <div>
+          <label>Nome geografia</label>
+          <input id="geography_name" placeholder="Es. Lecce / Puglia / Italy" />
+        </div>
+      </div>
+
+      <div class="row3">
+        <div><label>Country code</label><input id="country_code" placeholder="IT" /></div>
+        <div><label>Regione</label><input id="region" placeholder="Puglia" /></div>
+        <div><label>Provincia</label><input id="province" placeholder="Lecce" /></div>
+      </div>
+      <div class="row">
+        <div><label>Città / Comune</label><input id="city" placeholder="Lecce" /></div>
+        <div><label>Priorità</label><input id="priority" type="number" value="100" /></div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Stato verifica</label>
+          <select id="verification_status">
+            <option value="pending">Da verificare</option>
+            <option value="verified">Verificata</option>
+            <option value="rejected">Scartata</option>
+            <option value="archived">Archiviata</option>
+          </select>
+        </div>
+        <div>
+          <label>Estrazione</label>
+          <select id="extraction_enabled">
+            <option value="true">Abilitata</option>
+            <option value="false">Disabilitata</option>
+          </select>
+        </div>
+      </div>
+
+      <label>Note estrazione / mapping / cosa contiene</label>
+      <textarea id="extraction_notes" placeholder="Es. contiene arrivi e presenze regionali gennaio-agosto 2025; dati parziali, non usare per rating finale."></textarea>
+
+      <label>Note interne</label>
+      <textarea id="notes" placeholder="Note admin"></textarea>
+
+      <div class="actions">
+        <button class="btn primary" id="saveBtn">Salva fonte</button>
+        <button class="btn" id="testUrlBtn">Test URL</button>
+        <button class="btn" id="resetBtn">Pulisci</button>
+      </div>
+    </aside>
+
+    <section class="card">
+      <h2>Archivio Fonti</h2>
+      <div class="filters">
+        <input id="search" placeholder="Cerca nome, URL, geografia..." />
+        <select id="filterCategory"><option value="">Tutte categorie</option><option value="tourism">Tourism</option><option value="transport">Transport</option><option value="heritage">Heritage</option><option value="hospitality">Hospitality</option><option value="restaurants">Restaurants</option><option value="real_estate">Real Estate</option><option value="market">Market</option></select>
+        <select id="filterStatus"><option value="">Tutti stati</option><option value="verified">Verificate</option><option value="pending">Da verificare</option><option value="rejected">Scartate</option><option value="archived">Archiviate</option></select>
+        <input id="filterCountry" placeholder="Country" />
+        <input id="filterRegion" placeholder="Regione" />
+        <input id="filterProvince" placeholder="Provincia" />
+      </div>
+      <div class="actions" style="margin-top:0;margin-bottom:14px">
+        <button class="btn" id="refreshBtn">Aggiorna</button>
+        <button class="btn" id="verifiedOnlyBtn">Solo fonti attive per motore</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fonte</th><th>Categoria</th><th>Geografia</th><th>Stato</th><th>URL</th><th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="sourcesBody"><tr><td colspan="6" class="empty">Caricamento...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/***********************
+ * CONFIGURAZIONE
+ * Se nel tuo progetto hai già /js/supabase.js puoi sostituire questa sezione
+ * usando window.supabaseClient. Altrimenti inserisci qui URL e ANON KEY.
+ ***********************/
+const SUPABASE_URL = window.SUPABASE_URL || "INSERISCI_SUPABASE_URL";
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "INSERISCI_SUPABASE_ANON_KEY";
+const sb = window.supabaseClient || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const $ = (id)=>document.getElementById(id);
+let currentUser = null;
+let allSources = [];
+
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',3600); }
+function val(id){ return $(id).value.trim(); }
+function setVal(id,v){ $(id).value = v ?? ''; }
+function boolVal(id){ return $(id).value === 'true'; }
+
+async function checkAuth(){
+  const { data:{session} } = await sb.auth.getSession();
+  if(!session){ window.location.href='login.html'; return; }
+  currentUser = session.user;
+}
+
+function resetForm(){
+  $('formTitle').textContent='Nuova Fonte';
+  ['sourceId','provider_name','endpoint','source_url','country_code','region','province','city','geography_name','extraction_notes','notes'].forEach(id=>setVal(id,''));
+  setVal('category','tourism'); setVal('source_type','official'); setVal('format','html'); setVal('method','GET'); setVal('auth_type','none');
+  setVal('geography_level','country'); setVal('priority','100'); setVal('verification_status','pending'); setVal('extraction_enabled','true');
+}
+
+function sourcePayload(){
+  const status = val('verification_status');
+  const payload = {
+    category: val('category'),
+    country_code: val('country_code') || null,
+    region: val('region') || null,
+    province: val('province') || null,
+    city: val('city') || null,
+    provider_name: val('provider_name'),
+    endpoint: val('endpoint'),
+    source_url: val('source_url') || val('endpoint'),
+    format: val('format'),
+    auth_type: val('auth_type'),
+    method: val('method'),
+    enabled: true,
+    priority: Number(val('priority') || 100),
+    official: ['official','institutional','open_data'].includes(val('source_type')),
+    source_type: val('source_type'),
+    geography_level: val('geography_level'),
+    geography_name: val('geography_name') || null,
+    verification_status: status,
+    extraction_enabled: boolVal('extraction_enabled'),
+    extraction_notes: val('extraction_notes') || null,
+    notes: val('notes') || null,
+    updated_at: new Date().toISOString()
+  };
+  if(status === 'verified'){
+    payload.verified_by = currentUser?.id || null;
+    payload.verified_at = new Date().toISOString();
+  }
+  return payload;
+}
+
+async function saveSource(){
+  const payload = sourcePayload();
+  if(!payload.provider_name || !payload.endpoint || !payload.category){ toast('Nome, URL e categoria sono obbligatori.'); return; }
+  const id = val('sourceId');
+  let res;
+  if(id){ res = await sb.from('immonova_data_sources').update(payload).eq('id', id).select().single(); }
+  else { res = await sb.from('immonova_data_sources').insert(payload).select().single(); }
+  if(res.error){ console.error(res.error); toast('Errore salvataggio: '+res.error.message); return; }
+  toast('Fonte salvata.'); resetForm(); await loadSources();
+}
+
+async function loadSources(){
+  let q = sb.from('immonova_data_sources').select('*').order('priority',{ascending:true}).order('created_at',{ascending:false});
+  const { data, error } = await q;
+  if(error){ console.error(error); $('sourcesBody').innerHTML=`<tr><td colspan="6" class="empty">Errore: ${error.message}</td></tr>`; return; }
+  allSources = data || [];
+  renderSources();
+}
+
+function matches(s){
+  const text = [s.provider_name,s.endpoint,s.source_url,s.geography_name,s.country_code,s.region,s.province,s.city,s.category].join(' ').toLowerCase();
+  const search = val('search').toLowerCase();
+  if(search && !text.includes(search)) return false;
+  if(val('filterCategory') && s.category !== val('filterCategory')) return false;
+  if(val('filterStatus') && s.verification_status !== val('filterStatus')) return false;
+  if(val('filterCountry') && String(s.country_code||'').toLowerCase() !== val('filterCountry').toLowerCase()) return false;
+  if(val('filterRegion') && String(s.region||'').toLowerCase() !== val('filterRegion').toLowerCase()) return false;
+  if(val('filterProvince') && String(s.province||'').toLowerCase() !== val('filterProvince').toLowerCase()) return false;
+  return true;
+}
+
+function renderSources(){
+  const rows = allSources.filter(matches);
+  if(!rows.length){ $('sourcesBody').innerHTML='<tr><td colspan="6" class="empty">Nessuna fonte trovata.</td></tr>'; return; }
+  $('sourcesBody').innerHTML = rows.map(s=>{
+    const status = s.verification_status || 'pending';
+    const geo = [s.geography_level, s.geography_name, s.country_code, s.region, s.province, s.city].filter(Boolean).join(' • ');
+    const active = s.extraction_enabled && status==='verified';
+    return `<tr>
+      <td><strong>${escapeHtml(s.provider_name||'')}</strong><div class="mini">ID ${s.id} • priorità ${s.priority ?? 100} ${active?'• Motore attivo':''}</div></td>
+      <td><span class="badge">${escapeHtml(s.category||'')}</span><div class="mini">${escapeHtml(s.source_type||'')}</div></td>
+      <td>${escapeHtml(geo||'-')}</td>
+      <td><span class="badge ${status}">${status}</span><div class="mini">Estrazione: ${s.extraction_enabled?'ON':'OFF'}</div></td>
+      <td><a class="url" href="${escapeAttr(s.source_url||s.endpoint)}" target="_blank">${escapeHtml(s.source_url||s.endpoint||'')}</a></td>
+      <td><div class="source-actions">
+        <button onclick="editSource(${s.id})">Modifica</button>
+        <button onclick="markVerified(${s.id})">Verifica</button>
+        <button onclick="toggleExtraction(${s.id}, ${!s.extraction_enabled})">${s.extraction_enabled?'Disabilita':'Abilita'}</button>
+        <button onclick="deleteSource(${s.id})">Elimina</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function editSource(id){
+  const s = allSources.find(x=>x.id===id); if(!s) return;
+  $('formTitle').textContent='Modifica Fonte';
+  setVal('sourceId',s.id); setVal('category',s.category); setVal('source_type',s.source_type||'official'); setVal('provider_name',s.provider_name);
+  setVal('endpoint',s.endpoint); setVal('source_url',s.source_url); setVal('format',s.format||'html'); setVal('method',s.method||'GET'); setVal('auth_type',s.auth_type||'none');
+  setVal('geography_level',s.geography_level||'country'); setVal('geography_name',s.geography_name); setVal('country_code',s.country_code); setVal('region',s.region); setVal('province',s.province); setVal('city',s.city);
+  setVal('priority',s.priority||100); setVal('verification_status',s.verification_status||'pending'); setVal('extraction_enabled',String(s.extraction_enabled !== false));
+  setVal('extraction_notes',s.extraction_notes); setVal('notes',s.notes);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function markVerified(id){
+  const { error } = await sb.from('immonova_data_sources').update({verification_status:'verified', verified_by: currentUser?.id || null, verified_at:new Date().toISOString(), extraction_enabled:true, updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){ toast(error.message); return; }
+  toast('Fonte verificata e abilitata.'); await loadSources();
+}
+async function toggleExtraction(id, enabled){
+  const { error } = await sb.from('immonova_data_sources').update({extraction_enabled:enabled, updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){ toast(error.message); return; }
+  toast(enabled?'Estrazione abilitata.':'Estrazione disabilitata.'); await loadSources();
+}
+async function deleteSource(id){
+  if(!confirm('Eliminare questa fonte?')) return;
+  const { error } = await sb.from('immonova_data_sources').delete().eq('id',id);
+  if(error){ toast(error.message); return; }
+  toast('Fonte eliminata.'); await loadSources();
+}
+async function testUrl(){
+  const url = val('endpoint');
+  if(!url){ toast('Inserisci URL da testare.'); return; }
+  try{
+    const r = await fetch(url, {method:'GET'});
+    toast(`URL raggiunto: HTTP ${r.status} • ${r.headers.get('content-type') || 'content-type sconosciuto'}`);
+  }catch(e){ toast('URL non raggiungibile dal browser: '+e.message); }
+}
+async function logout(){ await sb.auth.signOut(); window.location.href='../index.html'; }
+function escapeHtml(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function escapeAttr(s){ return escapeHtml(s).replace(/`/g,'&#96;'); }
+
+['search','filterCategory','filterStatus','filterCountry','filterRegion','filterProvince'].forEach(id=>$(id).addEventListener('input',renderSources));
+$('saveBtn').addEventListener('click',saveSource);
+$('resetBtn').addEventListener('click',resetForm);
+$('refreshBtn').addEventListener('click',loadSources);
+$('newBtn').addEventListener('click',resetForm);
+$('testUrlBtn').addEventListener('click',testUrl);
+$('logoutBtn').addEventListener('click',logout);
+$('verifiedOnlyBtn').addEventListener('click',()=>{ setVal('filterStatus','verified'); renderSources(); });
+
+(async()=>{ await checkAuth(); await loadSources(); })();
+</script>
+</body>
+</html>
