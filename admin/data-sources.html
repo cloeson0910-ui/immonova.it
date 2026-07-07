@@ -286,12 +286,15 @@
 const SUPABASE_URL = window.SUPABASE_URL || "INSERISCI_SUPABASE_URL";
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "INSERISCI_SUPABASE_ANON_KEY";
 const sb = window.supabaseClient || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+if(SUPABASE_URL.includes('INSERISCI') || SUPABASE_ANON_KEY.includes('INSERISCI')){
+  console.warn('Supabase URL/ANON KEY non configurati in data-sources.html. Se non usi window.supabaseClient, configura questi valori.');
+}
 
 const $ = (id)=>document.getElementById(id);
 let currentUser = null;
 let allSources = [];
 
-function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',3600); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; console.log('[IMMONOVA data-sources]', msg); setTimeout(()=>t.style.display='none',6500); }
 function val(id){ return $(id).value.trim(); }
 function setVal(id,v){ $(id).value = v ?? ''; }
 function boolVal(id){ return $(id).value === 'true'; }
@@ -349,7 +352,7 @@ async function saveSource(){
   let res;
   if(id){ res = await sb.from('immonova_data_sources').update(payload).eq('id', id).select().single(); }
   else { res = await sb.from('immonova_data_sources').insert(payload).select().single(); }
-  if(res.error){ console.error(res.error); toast('Errore salvataggio: '+res.error.message); return; }
+  if(res.error){ console.error('SAVE ERROR', res.error); toast('Errore salvataggio: '+res.error.message+' | code: '+(res.error.code||'n/a')); return; }
   toast('Fonte salvata.'); resetForm(); await loadSources();
 }
 
