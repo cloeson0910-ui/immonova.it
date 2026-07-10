@@ -22,7 +22,7 @@ h2{font-size:18px;margin:0 0 16px;color:var(--gold);letter-spacing:.06em}h3{font
 <body>
 <header>
   <div><div class="logo">IMMONOVA</div><div class="sub">DISCOVERY TEST VIEWER</div></div>
-  <div class="status"><span id="globalStatus" class="pill">Pronto</span><span class="pill">v1.1 viewer</span></div>
+  <div class="status"><span id="globalStatus" class="pill">Pronto</span><span class="pill">v1.2 viewer</span></div>
 </header>
 <div class="wrap">
   <div class="grid">
@@ -36,6 +36,11 @@ h2{font-size:18px;margin:0 0 16px;color:var(--gold);letter-spacing:.06em}h3{font
         <div><label>Radius km</label><input id="radius" type="number" value="30" /></div>
         <div><label>Anno</label><input id="year" type="number" value="2026" /></div>
       </div>
+      <h3>Località personalizzata</h3>
+      <label>Paese</label><input id="customCountry" placeholder="es. Francia" />
+      <div class="row"><div><label>Codice paese</label><input id="customCountryCode" placeholder="FR" maxlength="3" /></div><div><label>Comune / località</label><input id="customMunicipality" placeholder="es. Annecy" /></div></div>
+      <div class="row"><div><label>Regione</label><input id="customRegion" placeholder="facoltativa" /></div><div><label>Provincia / dipartimento</label><input id="customProvince" placeholder="facoltativa" /></div></div>
+      <div class="btns"><button class="secondary" onclick="generateCustomPayload()">Genera JSON</button><button onclick="generateAndRunCustom()">Genera ed esegui</button></div>
       <h3>Preset</h3>
       <div class="btns">
         <button class="secondary" onclick="loadPreset('paris')">Parigi</button>
@@ -91,6 +96,19 @@ function loadPreset(name){
   p.year = Number(document.getElementById('year').value || p.year || 2026);
   document.getElementById('payload').value = JSON.stringify(p,null,2);
 }
+function generateCustomPayload(){
+  const country=document.getElementById('customCountry').value.trim();
+  const country_code=document.getElementById('customCountryCode').value.trim().toUpperCase();
+  const municipality=document.getElementById('customMunicipality').value.trim();
+  const region=document.getElementById('customRegion').value.trim();
+  const province=document.getElementById('customProvince').value.trim();
+  if(!country && !country_code){alert('Inserisci il paese o il codice paese.');return null;}
+  if(!municipality){alert('Inserisci il comune o la località.');return null;}
+  const p={country_code,country,municipality,radius_km:Number(document.getElementById('radius').value||30),year:Number(document.getElementById('year').value||new Date().getFullYear())};
+  if(region)p.region=region;if(province)p.province=province;
+  document.getElementById('payload').value=JSON.stringify(p,null,2);return p;
+}
+async function generateAndRunCustom(){const p=generateCustomPayload();if(p)await runPayload(p);}
 function setStatus(txt, cls='') { const el=document.getElementById('globalStatus'); el.innerHTML=txt; el.className='pill '+cls; }
 async function callEdge(payload){
   const url = document.getElementById('edgeUrl').value.trim();
@@ -138,16 +156,25 @@ function flatDossier(dossier){
   return rows;
 }
 function collectPoi(json){
-  const out=[]; const d=getDossier(json);
+  const candidates=[]; const d=getDossier(json);
   function scan(node,path=[]){
     if(Array.isArray(node)){
-      for(const it of node){ if(it && typeof it==='object' && (it.place_id||it.distance_km!==undefined||it.name)) out.push({...it,_path:(Array.isArray(path)?path.join('.') : String(path||'poi'))}); }
-    } else if(node && typeof node==='object'){
+      for(const it of node){
+        if(it && typeof it==='object' && (it.place_id||it.id||it.distance_km!==undefined||it.name||it.title||it.displayName?.text)) candidates.push({...it,_path:path.join('.')||'poi'});
+      }
+    }else if(node && typeof node==='object'){
       for(const [k,v] of Object.entries(node)) scan(v,path.concat(k));
     }
   }
-  scan(d); scan(json?.poi,'poi');
-  return out;
+  scan(d); scan(json?.poi,['poi']);
+  const seen=new Set(), out=[];
+  for(const p of candidates){
+    const name=p.name||p.title||p.displayName?.text||'';
+    const lat=Number(p.lat??p.latitude??p.location?.lat), lng=Number(p.lng??p.longitude??p.location?.lng);
+    const key=String(p.place_id||p.id||`${name.toLowerCase().replace(/\s+/g,' ').trim()}|${Number.isFinite(lat)?lat.toFixed(5):''}|${Number.isFinite(lng)?lng.toFixed(5):''}`);
+    if(!key||seen.has(key))continue;seen.add(key);out.push(p);
+  }
+  return out.sort((a,b)=>Number(a.distance_km??999999)-Number(b.distance_km??999999));
 }
 function sectionCounts(json){
   const dossier=getDossier(json); const counts={};
@@ -226,7 +253,9 @@ function renderEvidence(ev){
 }
 function renderDiag(json){
   const ex=json.execution||{}; const errs=json.diagnostics?.document_errors||[];
-  return `<div class="status"><span class="pill">fonti ${ex.verified_sources??'-'}</span><span class="pill">documenti ${ex.documents??'-'}</span><span class="pill">tabelle ${ex.tables??'-'}</span><span class="pill ${errs.length?'bad':'ok'}">errori ${errs.length}</span></div>${errs.length?`<pre>${safe(JSON.stringify(errs.slice(0,10),null,2))}</pre>`:''}`;
+  const engines=json.diagnostics?.specialized_engines||{};
+  const engineHtml=Object.keys(engines).length?`<h3>Edge specializzate</h3><div class="status">${Object.entries(engines).map(([name,v])=>`<span class="pill ${v.ok?'ok':'bad'}">${safe(name)}: ${v.ok?'OK':'ERRORE'} · HTTP ${safe(v.http_status)} · ${safe(v.ms)} ms</span>`).join('')}</div>${Object.values(engines).some(v=>v.error)?`<pre>${safe(JSON.stringify(engines,null,2))}</pre>`:''}`:'';
+  return `<div class="status"><span class="pill">fonti ${ex.verified_sources??'-'}</span><span class="pill">documenti ${ex.documents??'-'}</span><span class="pill">tabelle ${ex.tables??'-'}</span><span class="pill ${errs.length?'bad':'ok'}">errori ${errs.length}</span></div>${engineHtml}${errs.length?`<pre>${safe(JSON.stringify(errs.slice(0,10),null,2))}</pre>`:''}`;
 }
 function copyCompact(){
   const txt=JSON.stringify(runs.map(r=>r.compact),null,2);
