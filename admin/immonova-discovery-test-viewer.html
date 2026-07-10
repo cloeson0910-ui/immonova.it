@@ -21,7 +21,7 @@ h2{font-size:18px;margin:0 0 16px;color:var(--gold);letter-spacing:.06em}h3{font
 <body>
 <header>
   <div><div class="logo">IMMONOVA</div><div class="sub">DISCOVERY TEST VIEWER</div></div>
-  <div class="status"><span id="globalStatus" class="pill">Pronto</span><span class="pill">v1.3 viewer</span></div>
+  <div class="status"><span id="globalStatus" class="pill">Pronto</span><span class="pill">v1.4 viewer</span></div>
 </header>
 <div class="wrap">
   <div class="grid">
@@ -232,7 +232,8 @@ function renderRun(r,i){
     <div class="test-title"><div><strong>${safe(r.payload.municipality||'Test')}</strong><div class="small">${safe(r.payload.region||'')} ${safe(r.payload.country_code||'')} · ${new Date(r.created_at).toLocaleString('it-IT')}</div></div><div><span class="badge">HTTP ${r.http_status}</span><span class="badge">${r.ms} ms</span><span class="badge">v ${safe(json.version||'-')}</span></div></div>
     <h3>Copertura sezioni</h3>${renderCounts(counts)}
     <h3>Dossier data</h3>${renderRows(rows)}
-    <h3>POI distinti per categoria</h3>${renderPoiByCategory(poi)}
+    ${renderInvestmentData(dossier)}
+    <h3>POI distinti per categoria</h3>${renderPoiByCategory(dossier,poi)}
     <h3>Fonti ed evidence</h3>${renderEvidence(json.evidence||[])}
     <h3>Diagnostica</h3>${renderDiag(json)}
     <details><summary class="small">JSON compatto</summary><pre>${safe(JSON.stringify(r.compact,null,2))}</pre></details>
@@ -274,21 +275,82 @@ function groupPoi(poi){
 function renderPoiCard(p){
   return `<div class="poi-card"><b>${safe(p.name||p.displayName?.text||p.title||'POI')}</b> <span class="badge">${safe(poiSubcategory(p))}</span><br><span class="small">${safe(p.address||p.formatted_address||p.vicinity||'')} ${p.distance_km!==undefined?'· '+safe(p.distance_km)+' km':''} · rating ${safe(p.rating??'-')}</span><br><span class="small mono">${safe(p.place_id||p.id||'')}</span></div>`;
 }
-function renderPoiByCategory(poi){
-  if(!poi.length) return '<p class="small warn">Nessun POI trovato nel JSON. Se il test doveva includere Google Places, qui deve apparire qualcosa.</p>';
-  const groups=groupPoi(poi);
-  const order=['hospitality','restaurants','beaches','marinas','transport','heritage','nightlife','other'];
-  const labels={hospitality:'Hotel e ospitalità',restaurants:'Ristoranti, bar e locali',beaches:'Spiagge e lidi',marinas:'Porti e marine',transport:'Trasporti',heritage:'Musei, monumenti e patrimonio',nightlife:'Nightlife',other:'Altri POI'};
-  const active=order.filter(cat=>groups[cat]&&Object.values(groups[cat]).some(a=>a.length));
-  const nav=`<div class="poi-nav no-print">${active.map(cat=>{const total=Object.values(groups[cat]).reduce((n,a)=>n+a.length,0);return `<a href="#poi-${cat}">${safe(labels[cat])} <b>${total}</b></a>`}).join('')}</div>`;
-  const sections=active.map(cat=>{
-    const subgroups=groups[cat];
-    const total=Object.values(subgroups).reduce((n,a)=>n+a.length,0);
-    const body=Object.entries(subgroups).sort((a,b)=>a[0].localeCompare(b[0])).map(([sub,items])=>`<div class="poi-subgroup"><div class="poi-subgroup-title">${safe(sub.replace(/_/g,' '))} · ${items.length}</div>${items.map(renderPoiCard).join('')}</div>`).join('');
-    return `<section class="poi-category" id="poi-${cat}"><div class="poi-category-head"><div class="poi-category-title">${safe(labels[cat])}</div><span class="pill ok">${total} risultati unici</span></div>${body}</section>`;
-  }).join('');
-  return nav+sections;
+function poiKey(p){
+  const name=p.name||p.title||p.displayName?.text||'';
+  const lat=Number(p.lat??p.latitude??p.location?.lat), lng=Number(p.lng??p.longitude??p.location?.lng);
+  return String(p.place_id||p.id||`${name.toLowerCase().replace(/\s+/g,' ').trim()}|${Number.isFinite(lat)?lat.toFixed(5):''}|${Number.isFinite(lng)?lng.toFixed(5):''}`);
 }
+function uniqueGroup(items,path){
+  const seen=new Set(),out=[];
+  for(const raw of (items||[])){
+    if(!raw||typeof raw!=='object')continue;
+    const k=poiKey(raw); if(!k||seen.has(k))continue; seen.add(k);
+    out.push({...raw,_path:path});
+  }
+  return out.sort((a,b)=>{
+    const ma=Number(a.michelin_stars||0),mb=Number(b.michelin_stars||0); if(mb!==ma)return mb-ma;
+    const ra=Number(a.rating),rb=Number(b.rating); if(Number.isFinite(rb)&&Number.isFinite(ra)&&rb!==ra)return rb-ra;
+    return Number(a.distance_km??999999)-Number(b.distance_km??999999);
+  });
+}
+function groupSpec(dossier){
+  const specs={
+    hospitality:{label:'Hotel e ospitalità',groups:[
+      ['hotels_5_star','★★★★★ Hotel 5 stelle'],['hotels_4_star','★★★★ Hotel 4 stelle'],['hotels_3_star','★★★ Hotel 3 stelle'],['hotels_2_star','★★ Hotel 2 stelle'],['hotels_1_star','★ Hotel 1 stella'],['boutique_hotels','Boutique hotel e relais'],['resorts','Resort'],['bed_and_breakfast','B&B e chambres d’hôtes'],['agriturismi','Agriturismi e masserie'],['camping','Camping'],['residences','Residence e aparthotel'],['hotels_unclassified','Hotel non classificati'],['other_accommodation','Altre strutture'],['specialized_items','Specializzati'],['items','Elenco generale']
+    ]},
+    restaurants:{label:'Ristoranti, bar e locali',groups:[
+      ['michelin_3_star','★★★ Michelin 3 stelle'],['michelin_2_star','★★ Michelin 2 stelle'],['michelin_1_star','★ Michelin 1 stella'],['bib_gourmand','Bib Gourmand'],['fine_dining','Fine dining'],['traditional','Tradizionali'],['seafood','Seafood'],['pizzerias','Pizzerie'],['wine_bars','Wine bar'],['bistros','Bistrot e brasserie'],['street_food','Street food'],['fast_food','Fast food'],['bars_and_pubs','Bar e pub'],['other_restaurants','Altri ristoranti'],['items','Elenco generale']
+    ]},
+    beaches:{label:'Spiagge e lidi',groups:[['blue_flags','Bandiere blu'],['public_beaches','Spiagge pubbliche'],['beach_clubs','Lidi e beach club'],['natural_beaches','Spiagge naturali'],['natural_reserves','Riserve naturali'],['items','Elenco generale']]},
+    marinas:{label:'Porti e marine',groups:[['passenger_ports','Porti passeggeri'],['commercial_ports','Porti commerciali'],['ports','Porti'],['marinas','Marine e porti turistici'],['items','Elenco generale']]},
+    transport:{label:'Trasporti',groups:[['commercial_airports','Aeroporti commerciali attivi'],['international_airports','Aeroporti internazionali'],['regional_airports','Aeroporti regionali'],['railway_stations','Stazioni ferroviarie'],['bus_stations','Autostazioni'],['passenger_ports','Porti passeggeri'],['shuttles','Taxi e shuttle'],['items','Elenco generale']]},
+    heritage:{label:'Musei, monumenti e patrimonio',groups:[['unesco_sites','UNESCO'],['castles','Castelli'],['museums','Musei'],['churches','Chiese'],['historic_palaces','Palazzi storici'],['historic_squares','Piazze storiche'],['archaeological_sites','Siti archeologici'],['monuments','Monumenti'],['items','Elenco generale']]},
+    nightlife:{label:'Nightlife',groups:[['clubs','Club'],['bars','Bar'],['items','Elenco generale']]}
+  };
+  return specs;
+}
+function renderPoiByCategory(dossier,fallbackPoi){
+  const specs=groupSpec(dossier),sections=[];
+  for(const [cat,spec] of Object.entries(specs)){
+    const data=dossier?.[cat]||{}; const already=new Set(),groups=[];
+    for(const [key,label] of spec.groups){
+      const arr=uniqueGroup(data?.[key],`${cat}.${key}`).filter(p=>{
+        const k=poiKey(p); if(already.has(k))return false; already.add(k); return true;
+      });
+      if(arr.length)groups.push({key,label,items:arr});
+    }
+    if(!groups.length)continue;
+    const total=groups.reduce((n,g)=>n+g.items.length,0);
+    const body=groups.map(g=>`<div class="poi-subgroup"><div class="poi-subgroup-title">${safe(g.label)} · ${g.items.length}</div>${g.items.map(renderPoiCard).join('')}</div>`).join('');
+    sections.push(`<section class="poi-category" id="poi-${cat}"><div class="poi-category-head"><div class="poi-category-title">${safe(spec.label)}</div><span class="pill ok">${total} risultati classificati</span></div>${body}</section>`);
+  }
+  if(!sections.length && fallbackPoi?.length){
+    return '<p class="small warn">Il JSON non contiene ancora sottocategorie strutturate; visualizzazione fallback.</p>'+renderFallbackPoi(fallbackPoi);
+  }
+  if(!sections.length)return '<p class="small warn">Nessun POI classificato trovato.</p>';
+  return sections.join('');
+}
+function renderFallbackPoi(poi){
+  const groups=groupPoi(poi); return Object.entries(groups).map(([cat,subs])=>`<section class="poi-category"><div class="poi-category-title">${safe(cat)}</div>${Object.entries(subs).map(([sub,items])=>`<div class="poi-subgroup"><div class="poi-subgroup-title">${safe(sub)} · ${items.length}</div>${items.map(renderPoiCard).join('')}</div>`).join('')}</section>`).join('');
+}
+function metricCard(title,obj,unitFallback=''){
+  const metric=obj&&typeof obj==='object'&&'value'in obj?obj:null;
+  if(!metric)return `<div class="metric"><div class="k">${safe(title)}</div><div class="v small">Non disponibile</div></div>`;
+  return `<div class="metric"><div class="k">${safe(title)}</div><div class="v">${safe(formatVal(metric.value))}</div><div class="small">${safe(metric.unit||unitFallback)} · ${safe(metric.quality?.status||'')}</div></div>`;
+}
+function renderInvestmentData(dossier){
+  const adr=dossier?.adr||{}, market=dossier?.real_estate_market||{};
+  const hasAdr=adr.average_daily_rate||adr.summary; const hasMarket=market.summary||market.residential_sale_per_m2||market.luxury_sale_per_m2||market.hospitality_sale_per_m2;
+  if(!hasAdr&&!hasMarket)return '';
+  return `<h3>ADR e mercato immobiliare</h3><div class="grid">
+    ${metricCard('ADR medio',adr.average_daily_rate,'€/camera/notte')}
+    ${metricCard('Vendita residenziale',market.residential_sale_per_m2,'€/m²')}
+    ${metricCard('Vendita luxury',market.luxury_sale_per_m2,'€/m²')}
+    ${metricCard('Vendita hospitality',market.hospitality_sale_per_m2,'€/m²')}
+    ${metricCard('Affitto residenziale',market.residential_rent_per_m2_month,'€/m²/mese')}
+  </div><div class="status"><span class="pill ${adr.summary?.available?'ok':'warn'}">ADR: ${safe(adr.summary?.status||'non disponibile')} · campione ${safe(adr.summary?.sample_size||0)}</span><span class="pill ${market.summary?.available?'ok':'warn'}">Mercato: ${safe(market.summary?.status||'non disponibile')}</span></div>${adr.summary?.warning?`<p class="small warn">${safe(adr.summary.warning)}</p>`:''}${market.summary?.missing?.length?`<p class="small warn">${safe(market.summary.missing.join(' '))}</p>`:''}`;
+}
+
 function renderEvidence(ev){
   if(!ev.length) return '<p class="small warn">Nessuna evidence.</p>';
   return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Dato</th><th>Valore</th><th>Coverage</th><th>Fonte</th><th>Rating</th></tr></thead><tbody>${ev.slice(0,80).map(e=>`<tr><td>${safe(e.field_key)}</td><td>${safe(formatVal(e.value))} ${safe(e.unit||'')}</td><td>${safe(e.coverage||e.coverage_level||'')}<br><span class="small">${safe(e.coverage_name||e.geography_name||'')}</span></td><td>${safe(e.provider_name||'')}<br><span class="small mono">${safe(e.source_url||'')}</span></td><td>${e.used_for_rating?'sì':'no'}<br><span class="small">${safe(e.evidence_role||'')}</span></td></tr>`).join('')}</tbody></table></div>`;
