@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IMMONOVA Admin | Dati Verificati Manualmente</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../config.js"></script>
+<style>
+:root{--bg:#f4ecdf;--gold:#a67f34;--ink:#18130b;--muted:#7b6b52;--card:rgba(255,255,255,.62);--line:rgba(166,127,52,.25);--danger:#9b2f22;--ok:#2f6f4e;--warn:#a66c18}*{box-sizing:border-box}body{margin:0;color:var(--ink);font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;background:radial-gradient(circle at top,rgba(255,255,255,.75),rgba(244,236,223,.1) 42%),repeating-linear-gradient(60deg,transparent 0 84px,rgba(166,127,52,.10) 85px,transparent 86px),repeating-linear-gradient(120deg,transparent 0 84px,rgba(166,127,52,.08) 85px,transparent 86px),var(--bg);min-height:100vh}header{position:sticky;top:0;z-index:10;backdrop-filter:blur(18px);background:rgba(244,236,223,.88);border-bottom:1px solid var(--line);padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:18px}.logo{letter-spacing:.34em;color:var(--gold);font-weight:500;font-size:18px;text-transform:uppercase}.mini{font-size:11px;color:var(--muted);line-height:1.4}nav{display:flex;gap:10px;flex-wrap:wrap;align-items:center}nav a,.btn{border:1px solid var(--line);background:rgba(255,255,255,.45);color:var(--ink);text-decoration:none;padding:10px 13px;border-radius:999px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.btn.primary{background:var(--gold);color:#fff;border-color:var(--gold)}.btn.danger{border-color:rgba(155,47,34,.4);color:var(--danger)}main{max-width:1440px;margin:0 auto;padding:34px 26px 80px}.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:24px}h1{font-family:Georgia,serif;font-size:46px;line-height:1;margin:0;color:var(--gold);font-weight:400}.subtitle{margin:12px 0 0;color:var(--muted);max-width:760px;line-height:1.55}.grid{display:grid;grid-template-columns:420px 1fr;gap:22px;align-items:start}.card{border:1px solid var(--line);background:var(--card);border-radius:28px;padding:22px;box-shadow:0 24px 70px rgba(60,44,18,.08)}.card h2{margin:0 0 16px;font-size:15px;text-transform:uppercase;letter-spacing:.16em;color:var(--gold)}label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:13px 0 7px}input,select,textarea{width:100%;border:1px solid rgba(166,127,52,.26);border-radius:14px;padding:12px 13px;background:rgba(255,255,255,.68);color:var(--ink);outline:none;font:inherit}textarea{min-height:70px;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}.filters{display:grid;grid-template-columns:1.2fr .8fr .8fr .8fr .8fr;gap:10px;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:12px 10px;border-bottom:1px solid rgba(166,127,52,.18);vertical-align:top;text-align:left}th{font-size:10px;text-transform:uppercase;letter-spacing:.13em;color:var(--muted)}.badge{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:11px;border:1px solid var(--line);background:rgba(255,255,255,.45)}.badge.active{color:var(--ok);border-color:rgba(47,111,78,.28)}.badge.inactive{color:var(--danger);border-color:rgba(155,47,34,.28)}.table-wrap{overflow:auto;max-height:72vh;border-radius:18px;border:1px solid rgba(166,127,52,.18)}.empty{padding:28px;text-align:center;color:var(--muted)}.toast{position:fixed;right:24px;bottom:24px;background:#1f170b;color:#fff;padding:14px 16px;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.25);display:none;z-index:99;max-width:520px}.banner{display:none;margin:0 0 18px;background:#9b2f22;color:#fff;padding:16px 18px;border-radius:18px;font-weight:700;line-height:1.35;white-space:pre-wrap}.row-actions{display:flex;gap:6px;flex-wrap:wrap}.row-actions button{font-size:11px;padding:7px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.62);cursor:pointer;color:var(--ink)}.value-cell{font-weight:700;color:var(--gold);font-size:15px}@media(max-width:1050px){.grid{grid-template-columns:1fr}.filters{grid-template-columns:1fr 1fr}.hero{display:block}h1{font-size:36px}}
+</style>
+</head>
+<body>
+<header><div><div class="logo">IMMONOVA</div><div class="mini">OFF MARKET • CONSULTING</div></div><nav><a href="dashboard.html">Dashboard</a><a href="opportunities.html">Opportunità</a><a href="data-sources.html">Fonti Dati</a><a href="manual-overrides.html">Dati Verificati</a><button class="btn" type="button" id="logoutBtn">Logout</button></nav></header>
+<main>
+<div class="banner" id="errorBox"></div>
+<section class="hero"><div><h1>Dati Verificati Manualmente</h1><p class="subtitle">Valori che hai controllato personalmente (OMI, portali, altre fonti non automatizzabili). Hanno sempre priorità sul Discovery Engine e sulle stime automatiche: se presenti, compaiono nel dossier al posto di "Non disponibile".</p></div><button class="btn primary" type="button" id="newBtn">Nuovo Dato</button></section>
+<section class="grid">
+<aside class="card">
+<h2 id="formTitle">Nuovo Dato Verificato</h2>
+<input type="hidden" id="overrideId" />
+
+<label>Ambito</label>
+<select id="scopeType">
+  <option value="geo">Area geografica (comune / provincia / regione / paese)</option>
+  <option value="opportunity">Singola opportunità (per ID)</option>
+</select>
+<div id="opportunityBlock" style="display:none">
+  <label>ID Opportunità</label>
+  <input id="opportunity_id" type="number" placeholder="Es. 128" />
+  <p class="hint">Il dato si applica SOLO a questa opportunità, a prescindere dalla geografia.</p>
+</div>
+<div id="geoBlock">
+  <div class="row3"><div><label>Country code</label><input id="country_code" placeholder="IT" maxlength="3" /></div><div><label>Regione</label><input id="region" placeholder="Puglia" /></div><div><label>Provincia</label><input id="province" placeholder="Lecce" /></div></div>
+  <label>Comune / Città</label><input id="city" placeholder="Gallipoli" />
+  <p class="hint">Più campi geografici compili, più il dato è specifico. Lascia vuoto un campo per un dato più generale (es. valido per tutta la provincia).</p>
+</div>
+
+<label>Categoria</label>
+<select id="category">
+  <option value="adr">ADR / Ospitalità (tourism_pricing)</option>
+  <option value="real_estate_market">Mercato immobiliare</option>
+  <option value="custom">Altra categoria...</option>
+</select>
+<input id="category_custom" placeholder="Nome categoria personalizzata" style="display:none;margin-top:8px" />
+
+<label>Dato specifico</label>
+<select id="field_key"></select>
+<input id="field_key_custom" placeholder="Nome campo personalizzato" style="display:none;margin-top:8px" />
+
+<div class="row"><div><label>Valore</label><input id="value" type="number" step="any" placeholder="Es. 3200" /></div><div><label>Unità</label><input id="unit" placeholder="eur_per_m2" /></div></div>
+<div class="row"><div><label>Anno di riferimento</label><input id="year" type="number" placeholder="2026" /></div><div><label>Periodo (facoltativo)</label><input id="observation_period" placeholder="Es. 2° sem. 2025" /></div></div>
+
+<label>Nota / fonte di verifica</label>
+<textarea id="source_note" placeholder="Es. Verificato su OMI, zona B1, 2° semestre 2025"></textarea>
+
+<label>Stato</label>
+<select id="active"><option value="true">Attivo (in uso nel dossier)</option><option value="false">Disattivato</option></select>
+
+<div class="actions"><button class="btn primary" type="button" id="saveBtn">Salva dato</button><button class="btn" type="button" id="resetBtn">Pulisci</button></div>
+</aside>
+
+<section class="card">
+<h2>Archivio Dati Verificati</h2>
+<div class="filters"><input id="search" placeholder="Cerca nota, geografia, categoria..." /><select id="filterCategory"><option
