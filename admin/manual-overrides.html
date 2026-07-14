@@ -62,4 +62,103 @@
 
 <section class="card">
 <h2>Archivio Dati Verificati</h2>
-<div class="filters"><input id="search" placeholder="Cerca nota, geografia, categoria..." /><select id="filterCategory"><option
+<div class="filters"><input id="search" placeholder="Cerca nota, geografia, categoria..." /><select id="filterCategory"><option value="">Tutte categorie</option><option value="adr">ADR</option><option value="real_estate_market">Mercato immobiliare</option></select><select id="filterStatus"><option value="">Tutti gli stati</option><option value="true">Attivi</option><option value="false">Disattivati</option></select><input id="filterCountry" placeholder="Country" /><input id="filterProvince" placeholder="Provincia" /></div>
+<div class="actions" style="margin-top:0;margin-bottom:14px"><button class="btn" type="button" id="refreshBtn">Aggiorna</button></div>
+<div class="table-wrap"><table><thead><tr><th>Ambito</th><th>Categoria / Campo</th><th>Valore</th><th>Anno</th><th>Nota</th><th>Stato</th><th>Azioni</th></tr></thead><tbody id="overridesBody"><tr><td colspan="7" class="empty">Caricamento...</td></tr></tbody></table></div>
+</section>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $=(id)=>document.getElementById(id);
+let sb=null,currentUser=null,allOverrides=[];
+
+const FIELD_OPTIONS={
+  adr:[{value:'average_daily_rate',label:'ADR medio (average_daily_rate)',unit:'eur_per_room_night'},{value:'revpar',label:'RevPAR',unit:'eur_per_room_night'},{value:'occupancy',label:'Tasso di occupazione',unit:'percent'}],
+  real_estate_market:[{value:'residential_sale_per_m2',label:'Vendita residenziale (€/m²)',unit:'eur_per_m2'},{value:'luxury_sale_per_m2',label:'Vendita luxury (€/m²)',unit:'eur_per_m2'},{value:'hospitality_sale_per_m2',label:'Vendita hospitality (€/m²)',unit:'eur_per_m2'},{value:'residential_rent_per_m2_month',label:'Affitto residenziale (€/m²/mese)',unit:'eur_per_m2_month'}]
+};
+
+const FORM_IDS=['overrideId','opportunity_id','country_code','region','province','city','category','category_custom','field_key','field_key_custom','value','unit','year','observation_period','source_note','active'];
+
+function showError(msg){const b=$('errorBox');b.textContent=msg;b.style.display='block';console.error(msg)}
+function clearError(){const b=$('errorBox');b.textContent='';b.style.display='none'}
+function toast(msg){const t=$('toast');t.textContent=msg;t.style.display='block';console.log('[IMMONOVA manual-overrides]',msg);setTimeout(()=>t.style.display='none',6500)}
+function readConfig(){
+ if(window.supabaseClient) return window.supabaseClient;
+ const url='https://bpzzmitmbavcmcasswbu.supabase.co';
+ const key='sb_publishable_YySRrYs6VqiGLmP9958PjA_dUM6MDU8';
+ if(!window.supabase) throw new Error('Libreria Supabase non caricata.');
+ return window.supabase.createClient(url,key);
+}
+function val(id){return ($(id)?.value||'').trim()}
+function setVal(id,v){const el=$(id);if(el)el.value=v??''}
+
+async function init(){
+  bindEvents();
+  populateFieldKeyOptions();
+  resetForm();
+  try{
+    sb=readConfig();
+    await checkAuth();
+    await loadOverrides();
+  }catch(e){
+    showError('Errore Dati Verificati\n'+e.message);
+  }
+}
+async function checkAuth(){const {data:{session},error}=await sb.auth.getSession();if(error)throw error;if(!session){window.location.href='login.html';return}currentUser=session.user}
+
+function populateFieldKeyOptions(){
+  const cat=val('category');
+  const sel=$('field_key');
+  if(cat==='custom'){
+    sel.innerHTML='<option value="">— usa il campo personalizzato qui sotto —</option>';
+    sel.disabled=true;
+    $('field_key_custom').style.display='block';
+    $('category_custom').style.display='block';
+    return;
+  }
+  $('category_custom').style.display='none';
+  sel.disabled=false;
+  const opts=FIELD_OPTIONS[cat]||[];
+  sel.innerHTML=opts.map(o=>`<option value="${o.value}" data-unit="${o.unit}">${o.label}</option>`).join('')+'<option value="custom">Altro dato...</option>';
+  onFieldKeyChange();
+}
+function onFieldKeyChange(){
+  const sel=$('field_key');
+  const chosen=sel.value;
+  if(chosen==='custom'){
+    $('field_key_custom').style.display='block';
+    setVal('unit','');
+    return;
+  }
+  $('field_key_custom').style.display='none';
+  const opt=sel.selectedOptions[0];
+  if(opt && opt.dataset.unit) setVal('unit',opt.dataset.unit);
+}
+
+function toggleScope(){
+  const isOpportunity=val('scopeType')==='opportunity';
+  $('opportunityBlock').style.display=isOpportunity?'block':'none';
+  $('geoBlock').style.display=isOpportunity?'none':'block';
+}
+
+function resetForm(){
+  clearError();
+  $('formTitle').textContent='Nuovo Dato Verificato';
+  FORM_IDS.forEach(id=>setVal(id,''));
+  setVal('scopeType','geo');
+  setVal('country_code','IT');
+  setVal('category','real_estate_market');
+  setVal('active','true');
+  toggleScope();
+  populateFieldKeyOptions();
+}
+
+function overridePayload(){
+  const isOpportunity=val('scopeType')==='opportunity';
+  const category=val('category')==='custom'?val('category_custom'):val('category');
+  const fieldKeySel=val('field_key');
+  const fieldKey=fieldKeySel==='custom'?val('field_key_custom'):fieldKeySel;
+  const payload={
+    opportunity_id:isOpportunity?(val('opportunity_id')?Number(val('opportunity_id')):null):null,
+    country_code:isOpportunity?null:(val('country_code')||null),
