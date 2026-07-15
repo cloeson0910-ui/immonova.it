@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -338,17 +339,27 @@ function metricCard(title,obj,unitFallback=''){
   if(!metric)return `<div class="metric"><div class="k">${safe(title)}</div><div class="v small">Non disponibile</div></div>`;
   return `<div class="metric"><div class="k">${safe(title)}</div><div class="v">${safe(formatVal(metric.value))}</div><div class="small">${safe(metric.unit||unitFallback)} · ${safe(metric.quality?.status||'')}</div></div>`;
 }
+function rangeCard(title,minObj,maxObj,unitFallback=''){
+  const min=minObj&&typeof minObj==='object'&&'value'in minObj?minObj:null;
+  const max=maxObj&&typeof maxObj==='object'&&'value'in maxObj?maxObj:null;
+  if(!min&&!max)return `<div class="metric"><div class="k">${safe(title)}</div><div class="v small">Non disponibile</div></div>`;
+  const unit=safe((min||max).unit||unitFallback);
+  let valueLine;
+  if(min&&max) valueLine=`${safe(formatVal(min.value))} – ${safe(formatVal(max.value))}`;
+  else if(min) valueLine=`da ${safe(formatVal(min.value))}`;
+  else valueLine=`fino a ${safe(formatVal(max.value))}`;
+  const status=(min||max).quality?.status||'';
+  return `<div class="metric"><div class="k">${safe(title)}</div><div class="v">${valueLine}</div><div class="small">${unit} · ${safe(status)}</div></div>`;
+}
 function renderInvestmentData(dossier){
   const adr=dossier?.adr||{}, market=dossier?.real_estate_market||{};
-  const hasAdr=adr.average_daily_rate||adr.summary; const hasMarket=market.summary||market.residential_sale_per_m2||market.luxury_sale_per_m2||market.hospitality_sale_per_m2;
+  const hasAdr=adr.average_daily_rate_min||adr.average_daily_rate_max||adr.average_daily_rate||adr.summary;
+  const hasMarket=market.summary||market.residential_sale_per_m2_min||market.residential_sale_per_m2_max||market.residential_sale_per_m2;
   if(!hasAdr&&!hasMarket)return '';
   return `<h3>ADR e mercato immobiliare</h3><div class="grid">
-    ${metricCard('ADR medio',adr.average_daily_rate,'€/camera/notte')}
-    ${metricCard('Vendita residenziale',market.residential_sale_per_m2,'€/m²')}
-    ${metricCard('Vendita luxury',market.luxury_sale_per_m2,'€/m²')}
-    ${metricCard('Vendita hospitality',market.hospitality_sale_per_m2,'€/m²')}
-    ${metricCard('Affitto residenziale',market.residential_rent_per_m2_month,'€/m²/mese')}
-  </div><div class="status"><span class="pill ${adr.summary?.available?'ok':'warn'}">ADR: ${safe(adr.summary?.status||'non disponibile')} · campione ${safe(adr.summary?.sample_size||0)}</span><span class="pill ${market.summary?.available?'ok':'warn'}">Mercato: ${safe(market.summary?.status||'non disponibile')}</span></div>${adr.summary?.warning?`<p class="small warn">${safe(adr.summary.warning)}</p>`:''}${market.summary?.missing?.length?`<p class="small warn">${safe(market.summary.missing.join(' '))}</p>`:''}`;
+    ${rangeCard('ADR (min–max)',adr.average_daily_rate_min,adr.average_daily_rate_max,'€/camera/notte')}
+    ${rangeCard('Valore al m² (min–max)',market.residential_sale_per_m2_min,market.residential_sale_per_m2_max,'€/m²')}
+  </div><div class="status"><span class="pill ${adr.summary?.available?'ok':'warn'}">ADR: ${safe(adr.summary?.status||'non disponibile')}</span><span class="pill ${market.summary?.available?'ok':'warn'}">Mercato: ${safe(market.summary?.status||'non disponibile')}</span></div>${adr.summary?.warning?`<p class="small warn">${safe(adr.summary.warning)}</p>`:''}${market.summary?.missing?.length?`<p class="small warn">${safe(market.summary.missing.join(' '))}</p>`:''}`;
 }
 
 function renderEvidence(ev){
