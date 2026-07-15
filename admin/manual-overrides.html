@@ -162,3 +162,158 @@ function overridePayload(){
   const payload={
     opportunity_id:isOpportunity?(val('opportunity_id')?Number(val('opportunity_id')):null):null,
     country_code:isOpportunity?null:(val('country_code')||null),
+    region:isOpportunity?null:(val('region')||null),
+    province:isOpportunity?null:(val('province')||null),
+    city:isOpportunity?null:(val('city')||null),
+    category,
+    field_key:fieldKey,
+    value:val('value')?Number(val('value')):null,
+    unit:val('unit')||null,
+    year:val('year')?Number(val('year')):null,
+    observation_period:val('observation_period')||null,
+    source_note:val('source_note')||null,
+    active:val('active')==='true',
+    updated_at:new Date().toISOString()
+  };
+  return payload;
+}
+
+async function saveOverride(){
+  clearError();
+  const payload=overridePayload();
+  if(!payload.category||!payload.field_key||payload.value===null||Number.isNaN(payload.value)){
+    toast('Categoria, dato specifico e valore sono obbligatori.');
+    return;
+  }
+  if(!payload.opportunity_id && !payload.country_code && !payload.region && !payload.province && !payload.city){
+    toast('Specifica un\'opportunità oppure almeno un ambito geografico (es. Country code).');
+    return;
+  }
+  const id=val('overrideId');
+  if(!id) payload.created_by=currentUser?.id||null;
+  let res;
+  if(id) res=await sb.from('immonova_manual_overrides').update(payload).eq('id',id).select().single();
+  else res=await sb.from('immonova_manual_overrides').insert(payload).select().single();
+  if(res.error){showError('Errore salvataggio: '+res.error.message+'\ncode: '+(res.error.code||'n/a')+'\ndetails: '+(res.error.details||''));return}
+  toast('Dato salvato.');
+  resetForm();
+  await loadOverrides();
+}
+
+async function loadOverrides(){
+  clearError();
+  const {data,error}=await sb.from('immonova_manual_overrides').select('*').order('created_at',{ascending:false});
+  if(error){showError('Errore caricamento: '+error.message);$('overridesBody').innerHTML=`<tr><td colspan="7" class="empty">Errore: ${escapeHtml(error.message)}</td></tr>`;return}
+  allOverrides=data||[];
+  renderOverrides();
+}
+
+function matches(o){
+  const text=[o.source_note,o.country_code,o.region,o.province,o.city,o.category,o.field_key,o.opportunity_id].join(' ').toLowerCase();
+  if(val('search')&&!text.includes(val('search').toLowerCase()))return false;
+  if(val('filterCategory')&&o.category!==val('filterCategory'))return false;
+  if(val('filterStatus')&&String(o.active)!==val('filterStatus'))return false;
+  if(val('filterCountry')&&String(o.country_code||'').toLowerCase()!==val('filterCountry').toLowerCase())return false;
+  if(val('filterProvince')&&String(o.province||'').toLowerCase()!==val('filterProvince').toLowerCase())return false;
+  return true;
+}
+
+function scopeLabel(o){
+  if(o.opportunity_id) return `Opportunità #${o.opportunity_id}`;
+  return [o.city,o.province,o.region,o.country_code].filter(Boolean).join(' • ')||'Globale (nessun filtro)';
+}
+
+function renderOverrides(){
+  const rows=allOverrides.filter(matches);
+  if(!rows.length){$('overridesBody').innerHTML='<tr><td colspan="7" class="empty">Nessun dato inserito.</td></tr>';return}
+  $('overridesBody').innerHTML=rows.map(o=>{
+    return `<tr data-id="${o.id}">
+      <td>${escapeHtml(scopeLabel(o))}</td>
+      <td><span class="badge">${escapeHtml(o.category||'')}</span><div class="mini">${escapeHtml(o.field_key||'')}</div></td>
+      <td class="value-cell">${escapeHtml(formatVal(o.value))} <span class="mini">${escapeHtml(o.unit||'')}</span></td>
+      <td>${escapeHtml(o.year??'-')}${o.observation_period?`<div class="mini">${escapeHtml(o.observation_period)}</div>`:''}</td>
+      <td class="mini">${escapeHtml(o.source_note||'-')}</td>
+      <td><span class="badge ${o.active?'active':'inactive'}">${o.active?'attivo':'disattivato'}</span></td>
+      <td><div class="row-actions">
+        <button type="button" data-action="edit" data-id="${o.id}">Modifica</button>
+        <button type="button" data-action="toggle" data-id="${o.id}" data-active="${!o.active}">${o.active?'Disattiva':'Attiva'}</button>
+        <button type="button" data-action="delete" data-id="${o.id}">Elimina</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function editOverride(id){
+  const o=allOverrides.find(x=>String(x.id)===String(id));
+  if(!o){showError('Dato non trovato in memoria. Premi Aggiorna e riprova.');return}
+  $('formTitle').textContent='Modifica Dato Verificato';
+  setVal('overrideId',o.id);
+  setVal('scopeType',o.opportunity_id?'opportunity':'geo');
+  toggleScope();
+  setVal('opportunity_id',o.opportunity_id||'');
+  setVal('country_code',o.country_code||'');
+  setVal('region',o.region||'');
+  setVal('province',o.province||'');
+  setVal('city',o.city||'');
+  const knownCategory=Object.keys(FIELD_OPTIONS).includes(o.category);
+  setVal('category',knownCategory?o.category:'custom');
+  setVal('category_custom',knownCategory?'':(o.category||''));
+  populateFieldKeyOptions();
+  const knownField=knownCategory && (FIELD_OPTIONS[o.category]||[]).some(f=>f.value===o.field_key);
+  setVal('field_key',knownField?o.field_key:'custom');
+  setVal('field_key_custom',knownField?'':(o.field_key||''));
+  onFieldKeyChange();
+  setVal('value',o.value);
+  setVal('unit',o.unit||'');
+  setVal('year',o.year||'');
+  setVal('observation_period',o.observation_period||'');
+  setVal('source_note',o.source_note||'');
+  setVal('active',String(o.active!==false));
+  clearError();
+  toast('Dato caricato in modifica.');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function toggleActive(id,active){
+  const {error}=await sb.from('immonova_manual_overrides').update({active,updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){showError(error.message);return}
+  toast(active?'Dato riattivato.':'Dato disattivato.');
+  await loadOverrides();
+}
+async function deleteOverride(id){
+  if(!confirm('Eliminare questo dato verificato?'))return;
+  const {error}=await sb.from('immonova_manual_overrides').delete().eq('id',id);
+  if(error){showError(error.message);return}
+  toast('Dato eliminato.');
+  await loadOverrides();
+}
+async function logout(){await sb.auth.signOut();window.location.href='../index.html'}
+
+function bindEvents(){
+  ['search','filterCategory','filterStatus','filterCountry','filterProvince'].forEach(id=>$(id).addEventListener('input',renderOverrides));
+  $('saveBtn').addEventListener('click',saveOverride);
+  $('resetBtn').addEventListener('click',resetForm);
+  $('refreshBtn').addEventListener('click',loadOverrides);
+  $('newBtn').addEventListener('click',resetForm);
+  $('logoutBtn').addEventListener('click',logout);
+  $('scopeType').addEventListener('change',toggleScope);
+  $('category').addEventListener('change',populateFieldKeyOptions);
+  $('field_key').addEventListener('change',onFieldKeyChange);
+  $('overridesBody').addEventListener('click',async(e)=>{
+    const btn=e.target.closest('button[data-action]');
+    if(!btn)return;
+    const id=btn.dataset.id;
+    const action=btn.dataset.action;
+    if(action==='edit')return editOverride(id);
+    if(action==='toggle')return toggleActive(id,btn.dataset.active==='true');
+    if(action==='delete')return deleteOverride(id);
+  });
+}
+
+function formatVal(v){if(typeof v==='number')return v.toLocaleString('it-IT');return v}
+function escapeHtml(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
