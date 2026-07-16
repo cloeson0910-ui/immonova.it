@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -683,6 +684,7 @@ button.danger{
   gap:8px;
   flex-wrap:wrap;
   justify-content:flex-end;
+  align-items:center;
 }
 
 .document-file-actions a,
@@ -701,6 +703,22 @@ button.danger{
 .document-file-actions .danger{
   color:#9c2f2f;
   border-color:rgba(156,47,47,.35);
+}
+
+.document-dossier-check{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:9px;
+  letter-spacing:.10em;
+  text-transform:uppercase;
+  color:#a58139;
+  white-space:nowrap;
+}
+
+.document-dossier-check input{
+  width:auto;
+  accent-color:#a58139;
 }
 
 .document-inline-progress{
@@ -1086,7 +1104,7 @@ button.danger{
           <div>
             <div class="documents-title">Due Diligence Documentale</div>
             <div class="documents-note">
-              Carica i documenti necessari alla verifica dell’immobile. La proposta può essere salvata anche con documenti mancanti: la pubblicazione resta sempre soggetta a validazione admin.
+              Carica i documenti necessari alla verifica dell’immobile. La proposta può essere salvata anche con documenti mancanti: la pubblicazione resta sempre soggetta a validazione admin. Spunta "Includi nel dossier" solo per i documenti che vuoi davvero mandare all'investitore nel libro stampato — di default nessuno è incluso.
             </div>
           </div>
           <div class="documents-counter">
@@ -1593,6 +1611,30 @@ function loadedDocumentTypesCount(){
   }).length;
 }
 
+async function toggleDocumentDossierInclusion(documentId, checked){
+  var doc = opportunityDocuments.find(function(item){
+    return String(item.id) === String(documentId);
+  });
+  if(!doc) return;
+
+  doc.include_in_dossier = checked;
+
+  var result = await client
+    .from("opportunity_documents")
+    .update({ include_in_dossier: checked })
+    .eq("id", documentId);
+
+  if(result.error){
+    console.error(result.error);
+    doc.include_in_dossier = !checked;
+    setDocumentsStatus("Errore aggiornamento inclusione dossier: " + result.error.message, "error");
+    renderDocuments();
+    return;
+  }
+
+  setDocumentsStatus(checked ? "Documento incluso nel dossier stampabile." : "Documento escluso dal dossier stampabile.", "success");
+}
+
 function renderDocumentFileList(item, docs){
   if(!docs || docs.length === 0){
     return '<div class="document-file">' + escapeHTML(item.hint) + '</div>';
@@ -1602,10 +1644,15 @@ function renderDocumentFileList(item, docs){
     var name = doc.file_name || (item.label + ' ' + (index + 1));
     var view = doc.file_url ? '<a href="' + escapeHTML(doc.file_url) + '" target="_blank" rel="noopener">Visualizza</a>' : '';
     var del = '<button type="button" class="danger" onclick="deleteOpportunityDocument(\'' + escapeHTML(doc.id) + '\',\'' + escapeHTML(item.key) + '\')">Elimina</button>';
+    var dossierCheck = '' +
+      '<label class="document-dossier-check">' +
+        '<input type="checkbox" ' + (doc.include_in_dossier ? 'checked' : '') + ' onchange="toggleDocumentDossierInclusion(\'' + escapeHTML(doc.id) + '\', this.checked)">' +
+        'Includi nel dossier' +
+      '</label>';
     return '' +
       '<div class="document-file-item">' +
         '<span>File ' + (index + 1) + ': ' + escapeHTML(name) + '</span>' +
-        '<span class="document-file-actions">' + view + del + '</span>' +
+        '<span class="document-file-actions">' + dossierCheck + view + del + '</span>' +
       '</div>';
   }).join('') + '</div>';
 }
