@@ -39,7 +39,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .cost-row{display:flex;justify-content:space-between;gap:18px;border-bottom:1px solid rgba(166,127,52,.12);padding:8px 0;font-size:13px;color:#735f36}
 .cost-row strong{color:#a67f34;font-weight:600}.cost-row.total{font-size:16px;font-weight:700;border-top:1px solid rgba(166,127,52,.28);border-bottom:0;margin-top:8px;padding-top:14px}
 .info-text{font-size:14px;line-height:1.72;color:#6f603f;margin-top:18px}
-.dest-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:6px}
+.dest-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:6px}
 .dest-card{border:1px solid rgba(166,127,52,.18);background:rgba(255,255,255,.46);padding:14px 16px;min-height:78px}
 .dest-name{font-size:13px;font-weight:600;color:#a67f34;line-height:1.3}
 .dest-meta{font-size:11px;color:#8f7643;margin-top:5px;letter-spacing:.03em}
@@ -182,10 +182,10 @@ function getStoredDossier(){
   if(j && j.dossier_data && typeof j.dossier_data==="object" && Object.keys(j.dossier_data).length) return j.dossier_data;
   return null;
 }
-async function fetchLiveDossier(){
+async function fetchLiveDossier(radiusKm){
   try{
     var url=String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/immonova-discovery-engine";
-    var payload={opportunity_id:Number(opportunityId),radius_km:60,year:new Date().getFullYear()};
+    var payload={opportunity_id:Number(opportunityId),radius_km:radiusKm||30,year:new Date().getFullYear()};
     var res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify(payload)});
     var json=await res.json();
     return (json&&json.dossier_data)?json.dossier_data:null;
@@ -194,11 +194,18 @@ async function fetchLiveDossier(){
     return null;
   }
 }
+function askRadiusKm(){
+  var input=window.prompt("Raggio di ricerca Discovery Engine, in km (aeroporti/porti/marine cercano comunque più lontano se serve). Lascia vuoto per il default di 30 km.","30");
+  if(input===null)return 30;
+  var n=Number(input);
+  return (Number.isFinite(n)&&n>0)?n:30;
+}
 async function ensureDossier(){
   dossierData=getStoredDossier();
   if(dossierData){dossierSource="report";return;}
-  setStatus("Nessun dato territoriale salvato nel report: recupero in tempo reale dal Discovery Engine (può richiedere qualche secondo)...","");
-  dossierData=await fetchLiveDossier();
+  var radius=askRadiusKm();
+  setStatus("Nessun dato territoriale salvato nel report: recupero in tempo reale dal Discovery Engine con raggio "+radius+" km (può richiedere qualche secondo)...","");
+  dossierData=await fetchLiveDossier(radius);
   dossierSource=dossierData?"live":"none";
 }
 function metricFromDossier(section,field){
@@ -269,6 +276,22 @@ function dividerPageHTML(title,kicker){
 }
 
 /* ---- Pagine di contenuto per settore ---- */
+function renderTourismMetricsPage(){
+  var fields=[
+    ["arrivals","Arrivi turistici","persone"],
+    ["overnight_stays","Presenze (pernottamenti)","notti"],
+    ["average_stay","Permanenza media","notti"],
+    ["italian_arrivals","Arrivi italiani","persone"],
+    ["foreign_arrivals","Arrivi stranieri","persone"],
+    ["italian_overnight_stays","Presenze italiani","notti"],
+    ["foreign_overnight_stays","Presenze stranieri","notti"]
+  ];
+  var found=fields.map(function(f){return {label:f[1],unit:f[2],metric:metricFromDossier("tourism",f[0])};}).filter(function(x){return x.metric;});
+  if(!found.length)return "";
+  var src=found[0].metric.source||{};
+  var cards=found.map(function(x){return metricCardHTML(x.label,x.metric,x.unit);}).join("");
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Tourism data</div><h2 class="section-title">Turismo — Dati Attuali</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">Fonte: '+escapeHTML(src.provider_name||"-")+(src.source_url?(" — "+escapeHTML(src.source_url)):"")+'</p></div></article>';
+}
 function renderTerritorialPage(){
   var pop=metricFromDossier("demography","population");
   var surf=metricFromDossier("demography","surface_km2");
@@ -295,17 +318,28 @@ function renderRealEstatePage(){
 function renderPricingPage(){
   var min=metricFromDossier("adr","average_daily_rate_min");
   var max=metricFromDossier("adr","average_daily_rate_max");
-  if(!min&&!max)return "";
-  var src=(min||max).source||{};
+  var single=metricFromDossier("adr","average_daily_rate");
+  if(!min&&!max&&!single)return "";
+  var src=(min||max||single).source||{};
+  if(!min&&!max&&single){
+    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Hospitality pricing</div><h2 class="section-title">ADR di riferimento</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
+      +metricCardHTML("ADR — tariffa media camera/notte",single,"eur_per_room_night")
+      +'<div class="metric-card"><div class="metric-label">Fonte</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+      +'</div></div></article>';
+  }
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Hospitality pricing</div><h2 class="section-title">ADR di riferimento</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
     +rangeCardHTML("ADR — tariffa media camera/notte",min,max,"eur_per_room_night")
     +'<div class="metric-card"><div class="metric-label">Fonte</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div></div></article>';
 }
 function renderCategoryPage(section,title,kicker,limit){
-  var items=sortedItems(section,limit==null?9:limit);
-  if(!items.length)return "";
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(kicker)+'</div><h2 class="section-title">'+escapeHTML(title)+'</h2><div class="lux-rule"></div>'+renderItemGrid(items)+'</div></article>';
+  var safeLimit=limit==null?6:limit;
+  var all=sortedItems(section);
+  var total=all.length;
+  if(!total)return "";
+  var items=all.slice(0,safeLimit);
+  var totalNote='<p class="info-text" style="margin-top:0">'+total+' risultat'+(total===1?"o":"i")+' trovat'+(total===1?"o":"i")+' da Discovery entro il raggio analizzato'+(items.length<total?(" — i "+items.length+" pi\u00f9 vicini stampati di seguito"):"")+'.</p>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(kicker)+'</div><h2 class="section-title">'+escapeHTML(title)+'</h2><div class="lux-rule"></div>'+totalNote+renderItemGrid(items)+'</div></article>';
 }
 function renderSourcesPage(){
   var d=dossierData||{};var rows=[];
@@ -354,8 +388,9 @@ function renderNarrativePage(){
   if(res)bits.push(res+" ristorant"+(res===1?"e censito":"i censiti")+" entro il raggio analizzato.");
   var remin=metricFromDossier("real_estate_market","residential_sale_per_m2_min"),remax=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
   if(remin||remax)bits.push("Valore immobiliare di zona: "+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+" \u20ac/m\u00b2 (fonte: "+((remin||remax).source.provider_name||"-")+").");
-  var adrmin=metricFromDossier("adr","average_daily_rate_min"),adrmax=metricFromDossier("adr","average_daily_rate_max");
+  var adrmin=metricFromDossier("adr","average_daily_rate_min"),adrmax=metricFromDossier("adr","average_daily_rate_max"),adrsingle=metricFromDossier("adr","average_daily_rate");
   if(adrmin||adrmax)bits.push("ADR di riferimento: "+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+" \u20ac/notte (fonte: "+((adrmin||adrmax).source.provider_name||"-")+").");
+  else if(adrsingle)bits.push("ADR di riferimento: "+formatMetricVal(adrsingle.value)+" \u20ac/notte (fonte: "+(adrsingle.source.provider_name||"-")+").");
   var pop=metricFromDossier("demography","population");
   if(pop)bits.push("Popolazione comunale: "+formatMetricVal(pop.value)+" abitanti.");
   if(!bits.length)return "";
@@ -390,8 +425,9 @@ function scoreMarketArea(f){
 function scoreHospitalityArea(){
   var min=metricFromDossier("adr","average_daily_rate_min");
   var max=metricFromDossier("adr","average_daily_rate_max");
-  if(!min&&!max)return null;
-  var mid=(min&&max)?((min.value+max.value)/2):(min?min.value:max.value);
+  var single=metricFromDossier("adr","average_daily_rate");
+  if(!min&&!max&&!single)return null;
+  var mid=(min&&max)?((min.value+max.value)/2):(min?min.value:(max?max.value:single.value));
   var base;
   if(mid<120)base=25;else if(mid<200)base=45;else if(mid<320)base=65;else if(mid<450)base=80;else if(mid<650)base=90;else base=97;
   var richCount=sortedItems("hospitality").filter(function(i){return ["resort","boutique_luxury","masseria"].indexOf(i.subcategory)>=0;}).length;
@@ -741,6 +777,7 @@ function renderBook(){
   push("Territorio & mercato", dividerPageHTML("Territorio & Mercato","Location intelligence"), true);
   push("Territorio & mercato", renderLocationPage());
   push("Territorio & mercato", renderTerritorialPage());
+  push("Territorio & mercato", renderTourismMetricsPage());
   push("Territorio & mercato", renderRealEstatePage());
   push("Territorio & mercato", renderPricingPage());
   push("Territorio & mercato", renderTourismSeriesPage());
