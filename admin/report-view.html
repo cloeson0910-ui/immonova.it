@@ -403,11 +403,14 @@ function getAssetSurfaceM2(){
   var o=opportunity||{};
   return firstFiniteOpp(o.internal_size,o.land_size);
 }
-function scoreFinancialArea(f){
-  if(!(f.net>0&&f.total>0))return null;
+function scoreFinancialArea(f,proj){
+  var roi,breakEven;
+  if(f.net>0&&f.total>0){ roi=f.roi; breakEven=f.breakEven; }
+  else if(proj){ roi=proj.total>0?((proj.rows[0].net/proj.total)*100):0; breakEven=proj.breakEventYear; }
+  else return null;
   var s;
-  if(f.roi<3)s=20;else if(f.roi<6)s=45;else if(f.roi<9)s=65;else if(f.roi<12)s=80;else s=95;
-  if(f.breakEven>15)s-=15;else if(f.breakEven>0&&f.breakEven<=6)s+=5;
+  if(roi<3)s=20;else if(roi<6)s=45;else if(roi<9)s=65;else if(roi<12)s=80;else s=95;
+  if(breakEven>15)s-=15;else if(breakEven>0&&breakEven<=6)s+=5;
   return Math.max(0,Math.min(100,s));
 }
 function scoreMarketArea(f){
@@ -456,8 +459,9 @@ function gradeLabel(total){
 }
 function computeScore(){
   var f=buildFinance();
+  var proj=buildCashflowProjection();
   var comps=[
-    {key:"financial",label:"Performance finanziaria",weight:SCORE_WEIGHTS.financial,score:scoreFinancialArea(f)},
+    {key:"financial",label:"Performance finanziaria",weight:SCORE_WEIGHTS.financial,score:scoreFinancialArea(f,proj)},
     {key:"market",label:"Posizionamento di mercato",weight:SCORE_WEIGHTS.market,score:scoreMarketArea(f)},
     {key:"hospitality",label:"Domanda hospitality",weight:SCORE_WEIGHTS.hospitality,score:scoreHospitalityArea()},
     {key:"access",label:"Accessibilità",weight:SCORE_WEIGHTS.access,score:scoreAccessArea()},
@@ -550,8 +554,28 @@ function renderInternalFacts(){
 }
 function renderFinancialSnapshot(){
   var f=buildFinance();
-  var hasOperating=f.net>0&&f.total>0;
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income</div><div class="metric-value">'+(f.net?escapeHTML(euro(f.net)):'Non disponibile')+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI</div><div class="metric-value">'+(hasOperating?escapeHTML(percent(f.roi)):'Non disponibile')+'</div><div class="metric-note">Calcolato solo se esiste NOI reale.</div></div><div class="metric-card"><div class="metric-label">Break-even</div><div class="metric-value">'+(hasOperating&&f.breakEven?escapeHTML(String(Math.round(f.breakEven*10)/10))+' anni':'Non disponibile')+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow.</div></div></div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">Se il report interno non contiene reddito netto, ROI e break-even restano esplicitamente non disponibili: non vengono mai stimati.</p></div></div></div></div></article>';
+  var proj=buildCashflowProjection();
+  var net,roi,breakEven,ruleNote,tag;
+  if(proj){
+    net=proj.rows[0].net;
+    roi=proj.total>0?(net/proj.total*100):0;
+    breakEven=proj.breakEventYear;
+    if(proj.adrVerified){
+      tag=" (da ADR verificato)";
+      ruleNote="Net Income, ROI e Break-even calcolati sull\u2019ADR verificato dall\u2019analista, con priorit\u00e0 su qualunque altro dato disponibile. Occupazione e costi operativi restano ipotesi dichiarate.";
+    }else if(proj.revenueSource==="dato reale da report interno"){
+      tag="";
+      ruleNote="Net Income, ROI e Break-even calcolati su dati reali dal report interno.";
+    }else{
+      tag=" (stimato)";
+      ruleNote="Nessun ADR verificato dall\u2019analista n\u00e9 reddito netto reale nel report: stima da ADR di mercato automatico \u00d7 occupazione assunta.";
+    }
+  }else{
+    tag="";
+    ruleNote="Questa pagina non inventa scenari. Senza reddito netto reale nel report e senza alcun ADR (verificato o automatico), Net Income, ROI e Break-even restano esplicitamente non disponibili.";
+  }
+  var hasAny=!!proj;
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(euro(net)):'Non disponibile')+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(percent(roi)):'Non disponibile')+'</div><div class="metric-note">Net Income / Total Project Cost.</div></div><div class="metric-card"><div class="metric-label">Break-even'+tag+'</div><div class="metric-value">'+(hasAny&&breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+' anni':'Non disponibile')+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow.</div></div></div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
 }
 function renderInvestmentStructure(){var f=buildFinance();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div></div></article>';}
 function renderDebugBootstrap(){return '<div class="debug-panel"><div class="debug-title">Edizione stampabile · dati interni + territoriali + punteggio</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Dati territoriali</div><div class="debug-value">'+escapeHTML(dossierSource==="report"?"da report salvato":dossierSource==="live"?"Discovery Engine (live)":"non disponibili")+'</div></div>'+'<div class="debug-item"><div class="debug-label">Foto destinazione</div><div class="debug-value">'+(destinationPhoto?'trovata':'non caricata')+'</div></div>'+'</div></div>';}
@@ -674,14 +698,18 @@ function buildCashflowProjection(){
   var adrMin=metricFromDossier("adr","average_daily_rate_min");
   var adrMax=metricFromDossier("adr","average_daily_rate_max");
   var adrSingle=metricFromDossier("adr","average_daily_rate");
+  var adrMetric=adrMin||adrMax||adrSingle;
   var adrMid = (adrMin&&adrMax)?((adrMin.value+adrMax.value)/2):(adrMin?adrMin.value:(adrMax?adrMax.value:(adrSingle?adrSingle.value:null)));
   var units=getAssetUnits();
   var occ=getOccupancyAssumption();
-  var baseRevenue;
-  var revenueSource;
-  if(f.revenue>0){ baseRevenue=f.revenue; revenueSource="dato reale da report interno"; }
-  else if(adrMid&&units){ baseRevenue=adrMid*occ.value*365*units; revenueSource="stimato da ADR di mercato \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" \u00d7 "+units+" unit\u00e0"; }
-  else return null;
+  var baseRevenue,revenueSource,adrVerified=false;
+  if(adrMid){
+    adrVerified=!!(adrMetric&&adrMetric.source&&String(adrMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+    baseRevenue=adrMid*occ.value*365*units;
+    revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMid)+" \u20ac/notte) \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" \u00d7 "+units+" unit\u00e0";
+  } else if(f.revenue>0){
+    baseRevenue=f.revenue; revenueSource="dato reale da report interno";
+  } else return null;
   var rows=[];
   var cum=0;
   for(var y=1;y<=15;y++){
@@ -691,7 +719,7 @@ function buildCashflowProjection(){
     cum+=net;
     rows.push({year:y,revenue:revenue,costs:costs,net:net,cum:cum});
   }
-  return {rows:rows,revenueSource:revenueSource,total:f.total,breakEvenYear:(function(){for(var i=0;i<rows.length;i++){if(rows[i].cum>=f.total)return rows[i].year;}return null;})()};
+  return {rows:rows,revenueSource:revenueSource,adrVerified:adrVerified,total:f.total,breakEvenYear:(function(){for(var i=0;i<rows.length;i++){if(rows[i].cum>=f.total)return rows[i].year;}return null;})()};
 }
 function renderCashflowPage(){
   var proj=buildCashflowProjection();
