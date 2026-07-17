@@ -48,7 +48,7 @@
   <label>File locale</label>
   <div class="upload-drop" id="uploadDrop">
     <input type="file" id="photo_file" accept="image/png,image/jpeg,image/webp,image/gif" />
-    <div class="upload-label" id="uploadLabel">Clicca per scegliere un'immagine, oppure trascinala qui<br>JPG, PNG, WEBP o GIF · max 8 MB</div>
+    <div class="upload-label" id="uploadLabel">Clicca per scegliere un'immagine, oppure trascinala qui<br>JPG, PNG, WEBP o GIF · max 40 MB (alta risoluzione da stampa)</div>
   </div>
   <div class="progress-bar" id="progressBar"><div class="fill" id="progressFill"></div></div>
   <p class="hint">Il file viene caricato nello storage IMMONOVA e l'URL pubblico viene compilato automaticamente qui sotto.</p>
@@ -81,7 +81,9 @@ const FORM_IDS=['photoId','country_code','region','province','city','photo_url',
    Il dossier stampabile carica queste foto via <img src> senza autenticazione, quindi il bucket
    deve restare pubblico o le pagine divisorie risulteranno vuote. */
 const STORAGE_BUCKET='destination-photos';
-const MAX_UPLOAD_BYTES=8*1024*1024;
+const MAX_UPLOAD_BYTES=40*1024*1024; /* pensato per foto ad alta risoluzione da stampa (300 DPI, A4/A3). Ricorda di alzare
+   anche il "Global file size limit" nelle Storage Settings del progetto Supabase: sul piano Free non puo' superare i
+   50 MB, quindi resta comunque sotto quella soglia; sul piano Pro puoi alzarlo molto di piu' se servono file ancora piu' grandi. */
 const ALLOWED_MIME=['image/png','image/jpeg','image/webp','image/gif'];
 
 function showError(msg){const b=$('errorBox');b.textContent=msg;b.style.display='block';console.error(msg)}
@@ -117,7 +119,7 @@ function resetForm(){
   setVal('country_code','IT');
   setVal('active','true');
   $('photo_file').value='';
-  setUploadLabel('Clicca per scegliere un\u2019immagine, oppure trascinala qui<br>JPG, PNG, WEBP o GIF · max 8 MB');
+  setUploadLabel('Clicca per scegliere un\u2019immagine, oppure trascinala qui<br>JPG, PNG, WEBP o GIF · max 40 MB');
   hideProgress();
   setSourceMode('url');
   updatePreview();
@@ -150,7 +152,7 @@ async function uploadPhotoFile(file){
     return;
   }
   if(file.size>MAX_UPLOAD_BYTES){
-    toast('File troppo grande (max 8 MB).');
+    toast('File troppo grande (max 40 MB).');
     return;
   }
   setUploadLabel('Caricamento in corso: '+escapeHtml(file.name)+'...');
@@ -172,7 +174,7 @@ async function uploadPhotoFile(file){
     setTimeout(hideProgress,900);
   }catch(e){
     hideProgress();
-    setUploadLabel('Clicca per scegliere un\u2019immagine, oppure trascinala qui<br>JPG, PNG, WEBP o GIF · max 8 MB');
+    setUploadLabel('Clicca per scegliere un\u2019immagine, oppure trascinala qui<br>JPG, PNG, WEBP o GIF · max 40 MB');
     showError('Errore upload file: '+e.message+(String(e.message||'').toLowerCase().indexOf('bucket')>=0?'\nVerifica che il bucket Storage "'+STORAGE_BUCKET+'" esista e sia pubblico su Supabase.':''));
   }
 }
