@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -128,7 +127,8 @@ var report = null;
 var propertyDocuments = [];
 var dossierData = null;
 var dossierSource = "";
-var destinationPhoto = null;
+var destinationPhotos = [];
+var destinationPhotoIndex = 0;
 
 /* ---- Pesi del punteggio sintetico: modificabili qui, un solo posto ---- */
 var SCORE_WEIGHTS = { financial:30, market:20, hospitality:20, access:15, territory:15 };
@@ -163,17 +163,21 @@ function geoScore(row){
   if(row.city){ if(clean(row.city).toLowerCase()!==ocity) return -1; score+=40; }
   return score;
 }
-async function loadDestinationPhoto(){
+/* Restituisce TUTTE le foto compatibili con la geografia dell'immobile (non solo la migliore), ordinate
+   dalla più pertinente alla meno pertinente. Usate a rotazione tra le pagine divisorie del dossier, così
+   capitoli diversi mostrano foto diverse della stessa zona invece di ripetere sempre la stessa immagine.
+   La scelta manuale di "quale foto in quale sezione" è prevista come sviluppo successivo: per ora la
+   rotazione è automatica, in ordine di pertinenza geografica. */
+async function loadDestinationPhotos(){
   try{
     var res=await client.from("immonova_destination_photos").select("*").eq("active",true);
-    if(res.error || !Array.isArray(res.data)) return null;
-    var best=null,bestScore=-1;
-    res.data.forEach(function(row){
-      var s=geoScore(row);
-      if(s>bestScore){bestScore=s;best=row;}
-    });
-    return bestScore>=0?best:null;
-  }catch(e){ return null; }
+    if(res.error || !Array.isArray(res.data)) return [];
+    return res.data
+      .map(function(row){ return {row:row, score:geoScore(row)}; })
+      .filter(function(x){ return x.score>=0; })
+      .sort(function(a,b){ return b.score-a.score; })
+      .map(function(x){ return x.row; });
+  }catch(e){ return []; }
 }
 
 /* ---- Territorial / market / hospitality data (Discovery Engine) ---- */
@@ -251,6 +255,21 @@ function distLabel(item){
   if(Number.isFinite(min))parts.push(min+" min in auto");
   return parts.join(" · ");
 }
+/* Aeroporto più vicino: priorità al dato verificato a mano in opportunity-edit.html
+   (campi nearest_airport / distance_to_airport_km sulla scheda immobile), perché un valore
+   inserito da un analista che conosce la zona è più affidabile di una ricerca automatica.
+   Se non è stato compilato, si scende sull'aeroporto commerciale trovato dal Discovery Engine. */
+function getNearestAirportInfo(){
+  var manualName=clean(opportunity&&opportunity.nearest_airport);
+  if(manualName){
+    var manualDist=Number(opportunity&&opportunity.distance_to_airport_km);
+    var driveEstimate=Number.isFinite(manualDist)?Math.max(1,Math.round((manualDist/75)*60)):null;
+    return {name:manualName,distance_km:Number.isFinite(manualDist)?manualDist:null,drive_minutes_estimate:driveEstimate,manual:true};
+  }
+  var auto=nearestOfSubcategory("transport","commercial_airport");
+  if(auto)return {name:auto.name,distance_km:auto.distance_km,drive_minutes_estimate:auto.drive_minutes_estimate,manual:false};
+  return null;
+}
 function destCardHTML(item){
   var sub=clean(item.subcategory).replace(/_/g," ");
   return '<div class="dest-card"><div class="dest-name">'+escapeHTML(item.name||"-")+'</div>'
@@ -264,12 +283,23 @@ function renderItemGrid(items){
   return '<div class="dest-grid">'+items.map(destCardHTML).join("")+'</div>';
 }
 
-/* ---- Pagine divisorie di capitolo (foto + titolo) ---- */
+/* ---- Pagine divisorie di capitolo (foto + titolo) ----
+   Ogni chiamata pesca la foto successiva dall'array destinationPhotos (rotazione), così capitoli diversi
+   dello stesso dossier mostrano foto diverse invece di ripetere sempre la stessa. Se c'è una sola foto
+   compatibile con la geografia, si ripete comunque su tutte le pagine (comportamento identico a prima
+   in quel caso). Se non ce n'è nessuna, resta il pattern grafico IMMONOVA senza foto, come sempre. */
+function nextDestinationPhoto(){
+  if(!destinationPhotos.length) return null;
+  var photo=destinationPhotos[destinationPhotoIndex % destinationPhotos.length];
+  destinationPhotoIndex++;
+  return photo;
+}
 function dividerPageHTML(title,kicker){
-  var withImage=!!(destinationPhoto&&destinationPhoto.photo_url);
-  var credit=withImage?clean(destinationPhoto.credit):"";
+  var photo=nextDestinationPhoto();
+  var withImage=!!(photo&&photo.photo_url);
+  var credit=withImage?clean(photo.credit):"";
   return '<article class="report-page '+(withImage?'':'pattern')+' cover '+(withImage?'with-image':'')+'">'
-    +(withImage?'<img class="cover-bg" src="'+escapeHTML(destinationPhoto.photo_url)+'" alt="">':'')
+    +(withImage?'<img class="cover-bg" src="'+escapeHTML(photo.photo_url)+'" alt="">':'')
     +'<div class="page-inner cover" style="justify-content:flex-end">'
     +'<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>'
     +'<div><div class="cover-kicker">'+escapeHTML(kicker)+'</div><h1 class="cover-title divider-title">'+escapeHTML(title)+'</h1></div>'
@@ -397,9 +427,9 @@ function renderTOCPage(chapters){
 /* ---- Narrativa fattuale: solo numeri reali, citati con fonte, nessun testo generato liberamente ---- */
 function renderNarrativePage(){
   var bits=[];
-  var airport=nearestOfSubcategory("transport","commercial_airport");
+  var airport=getNearestAirportInfo();
   var rail=nearestOfSubcategory("transport","railway_station");
-  if(airport)bits.push("Aeroporto più vicino: "+airport.name+", "+distLabel(airport)+".");
+  if(airport)bits.push("Aeroporto più vicino: "+airport.name+(airport.distance_km!=null?(", "+distLabel(airport)):"")+(airport.manual?" (dato verificato in scheda)":"")+".");
   if(rail)bits.push("Stazione ferroviaria più vicina: "+rail.name+", "+distLabel(rail)+".");
   var her=sortedItems("heritage").length,bea=sortedItems("beaches").length,res=sortedItems("restaurants").length,hos=sortedItems("hospitality").length,mar=sortedItems("marinas").length;
   if(hos)bits.push(hos+" struttur"+(hos===1?"a ricettiva comparabile censita":"e ricettive comparabili censite")+" entro il raggio analizzato.");
@@ -460,7 +490,7 @@ function scoreHospitalityArea(){
   return Math.max(0,Math.min(100,base+bonus));
 }
 function scoreAccessArea(){
-  var airport=nearestOfSubcategory("transport","commercial_airport");
+  var airport=getNearestAirportInfo();
   var rail=nearestOfSubcategory("transport","railway_station");
   if(!airport&&!rail)return null;
   function timeScore(min){ if(min==null||!Number.isFinite(min))return null; if(min<=30)return 100;if(min<=45)return 85;if(min<=60)return 70;if(min<=90)return 50;if(min<=150)return 30;return 15; }
@@ -532,12 +562,17 @@ function deepFind(obj, keys){
   return walk(obj);
 }
 function getRenovationAvg(){
-  var j=getReportJson();var a=getAsset();
+  var j=getReportJson();var a=getAsset();var o=opportunity||{};
   var scenarios=(report&&report.renovation_scenarios)||j.renovation_scenarios||j.renovation||j.economics||{};
-  var selected=(report&&report.renovation_selected_style)||a.renovation_style||a.renovation_selected_style||"normale";
+  var selected=(report&&report.renovation_selected_style)||a.renovation_style||a.renovation_selected_style||o.renovation_style||"normale";
   if(selected==="standard")selected="normale";
   var sc=scenarios[selected]||scenarios.normale||scenarios.standard||scenarios.base||{};
+  /* o.renovation_cost_avg ha priorità: è il campo che opportunity-edit.html scrive davvero sulla
+     tabella opportunities (renovation_required/level/style/area_sqm/cost_min/max/avg). Se l'immobile
+     non è marcato "da ristrutturare" quel campo è null nel database e questa riga viene saltata senza
+     rischio: firstFinite() prosegue naturalmente sui fallback successivi. */
   return firstFinite(
+    o.renovation_cost_avg,
     report&&report.renovation_cost_avg,
     report&&report.renovation_cost,
     a.renovation_cost_avg,
@@ -546,6 +581,14 @@ function getRenovationAvg(){
     sc.total,
     deepFind(j,["renovation_cost_avg","renovation_cost","ristrutturazione_media","ristrutturazione","renovation_average","average_renovation_cost"])
   );
+}
+/* Costo minimo/massimo di ristrutturazione: stessa fonte primaria (tabella opportunities),
+   usati per mostrare il range accanto alla media nella pagina Investment Structure. */
+function getRenovationRange(){
+  var o=opportunity||{};
+  var min=firstFinite(o.renovation_cost_min);
+  var max=firstFinite(o.renovation_cost_max);
+  return {min:min||0, max:max||0};
 }
 function buildFinance(){
   var j=getReportJson();var a=getAsset();var sr=(report&&report.short_rental_data)||j.short_rental_data||j.short_rental||j.economics||{};
@@ -599,8 +642,8 @@ function renderFinancialSnapshot(){
   var hasAny=!!proj;
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(euro(net)):'Non disponibile')+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(percent(roi)):'Non disponibile')+'</div><div class="metric-note">Net Income / Total Project Cost.</div></div><div class="metric-card"><div class="metric-label">Break-even'+tag+'</div><div class="metric-value">'+(hasAny&&breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+' anni':'Non disponibile')+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow.</div></div></div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
 }
-function renderInvestmentStructure(){var f=buildFinance();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div></div></article>';}
-function renderDebugBootstrap(){return '<div class="debug-panel"><div class="debug-title">Edizione stampabile · dati interni + territoriali + punteggio</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Dati territoriali</div><div class="debug-value">'+escapeHTML(dossierSource==="report"?"da report salvato":dossierSource==="live"?"Discovery Engine (live)":"non disponibili")+'</div></div>'+'<div class="debug-item"><div class="debug-label">Foto destinazione</div><div class="debug-value">'+(destinationPhoto?'trovata':'non caricata')+'</div></div>'+'</div></div>';}
+function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">Range dichiarato in scheda</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+renovationRangeNote+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div></div></article>';}
+function renderDebugBootstrap(){return '<div class="debug-panel"><div class="debug-title">Edizione stampabile · dati interni + territoriali + punteggio</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Dati territoriali</div><div class="debug-value">'+escapeHTML(dossierSource==="report"?"da report salvato":dossierSource==="live"?"Discovery Engine (live)":"non disponibili")+'</div></div>'+'<div class="debug-item"><div class="debug-label">Foto destinazione</div><div class="debug-value">'+(destinationPhotos.length?(destinationPhotos.length+' trovate, a rotazione tra le sezioni'):'non caricate')+'</div></div>'+'</div></div>';}
 
 /* ---- Numerazione pagine (folio), applicata SOLO alle pagine effettivamente stampate ---- */
 function injectFolio(html,n,total,onImage){
@@ -875,11 +918,13 @@ async function init(){
     await checkAuth();
     await loadOpportunity();
     await Promise.all([loadLatestReport(),loadPropertyDocuments()]);
-    destinationPhoto = await loadDestinationPhoto();
+    destinationPhotos = await loadDestinationPhotos();
+    destinationPhotoIndex = 0;
     await ensureDossier();
     renderBook();
     var srcNote=dossierSource==="report"?"dati territoriali dal report salvato":dossierSource==="live"?"dati territoriali recuperati in tempo reale dal Discovery Engine":"nessun dato territoriale disponibile";
-    var photoNote=destinationPhoto?"foto destinazione trovata":"nessuna foto destinazione caricata per questa zona — pagine divisorie mostrate con il pattern grafico IMMONOVA";
+    var photoNote=destinationPhotos.length?(destinationPhotos.length+" foto destinazione trovat"+(destinationPhotos.length===1?"a":"e")+(destinationPhotos.length>1?", mostrate a rotazione tra le pagine divisorie":""))
+      :"nessuna foto destinazione caricata per questa zona — pagine divisorie mostrate con il pattern grafico IMMONOVA";
     setStatus("Dossier generato: "+srcNote+"; "+photoNote+". Nessun rating o testo inventato: solo dati reali e calcoli espliciti.","success");
   }catch(e){
     console.error(e);
