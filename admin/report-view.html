@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -706,7 +707,53 @@ function renderFinancialSnapshot(){
   var hasAny=!!proj;
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(euro(net)):'Non disponibile')+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(percent(roi)):'Non disponibile')+'</div><div class="metric-note">Net Income / Total Project Cost.</div></div><div class="metric-card"><div class="metric-label">Break-even'+tag+'</div><div class="metric-value">'+(hasAny&&breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+' anni':'Non disponibile')+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow.</div></div></div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
 }
-function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">Range dichiarato in scheda</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+renovationRangeNote+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div></div></article>';}
+/* ---- Tre scenari di ristrutturazione: ricalcolati con la stessa formula di renovationRates()
+   in opportunity-edit.html, usando renovation_area_sqm e renovation_level già salvati sulla scheda.
+   Il dossier mostrava solo lo stile selezionato/salvato (renovation_cost_avg/min/max): qui si
+   ricostruiscono anche gli altri due, evidenziando quale sia effettivamente quello selezionato. ---- */
+function renovationRatesJs(style, level){
+  var rates = {
+    conservativo:{ min:400, max:700 },
+    normale:{ min:800, max:1400 },
+    standard:{ min:800, max:1400 },
+    lusso:{ min:1500, max:3000 }
+  };
+  var multiplier = 1;
+  if(level === "leggero") multiplier = 0.90;
+  if(level === "medio") multiplier = 1.00;
+  if(level === "pesante") multiplier = 1.18;
+  var selected = rates[style] || rates.normale;
+  return { min: selected.min * multiplier, max: selected.max * multiplier };
+}
+function computeRenovationScenarios(){
+  var o = opportunity || {};
+  if(o.renovation_required !== true) return null;
+  var sqm = Number(o.renovation_area_sqm) || Number(o.internal_size) || 0;
+  if(!sqm) return null;
+  var level = clean(o.renovation_level) || "medio";
+  var selectedStyle = clean(o.renovation_style) || "normale";
+  if(selectedStyle === "standard") selectedStyle = "normale";
+  var styles = ["conservativo","normale","lusso"];
+  return styles.map(function(style){
+    var rates = renovationRatesJs(style, level);
+    var min = Math.round(sqm * rates.min);
+    var max = Math.round(sqm * rates.max);
+    var avg = Math.round((min + max) / 2);
+    return { style:style, min:min, max:max, avg:avg, selected: style === selectedStyle };
+  });
+}
+function renderRenovationScenariosBlock(){
+  var scenarios = computeRenovationScenarios();
+  if(!scenarios) return "";
+  var labels = { conservativo:"Conservativo", normale:"Normale", lusso:"Lusso" };
+  var rows = scenarios.map(function(s){
+    var tag = s.selected ? ' <span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#4f7f45">\u2014 selezionato</span>' : '';
+    return '<div class="cost-row"><span>' + escapeHTML(labels[s.style] || s.style) + tag + '</span><strong>' + escapeHTML(euro(s.min)) + ' \u2013 ' + escapeHTML(euro(s.max)) + ' (media ' + escapeHTML(euro(s.avg)) + ')</strong></div>';
+  }).join("");
+  return '<div class="cost-box" style="margin-top:24px"><div class="cost-title">Scenari di ristrutturazione a confronto</div>' + rows
+    + '<p class="info-text" style="margin-top:14px;font-size:12px">Ricalcolati con le stesse tariffe usate in scheda: conservativo 400\u2013700 \u20ac/mq, normale 800\u20131400 \u20ac/mq, lusso 1500\u20133000 \u20ac/mq, moltiplicatore per livello degrado leggero 0,90 / medio 1,00 / pesante 1,18. Il costo medio dello scenario selezionato \u00e8 quello usato nel Total Project Cost qui sopra.</p></div>';
+}
+function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">Range dichiarato in scheda</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+renovationRangeNote+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div>'+renderRenovationScenariosBlock()+'</div></article>';}
 function renderDebugBootstrap(){return '<div class="debug-panel"><div class="debug-title">Edizione stampabile · dati interni + territoriali + punteggio</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Dati territoriali</div><div class="debug-value">'+escapeHTML(dossierSource==="report"?"da report salvato":dossierSource==="live"?"Discovery Engine (live)":"non disponibili")+'</div></div>'+'<div class="debug-item"><div class="debug-label">Foto destinazione</div><div class="debug-value">'+(destinationPhotos.length?(destinationPhotos.length+' trovate, a rotazione tra le sezioni'):'non caricate')+'</div></div>'+'</div></div>';}
 
 /* ---- Numerazione pagine (folio), applicata SOLO alle pagine effettivamente stampate ---- */
