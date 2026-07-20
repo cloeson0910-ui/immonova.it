@@ -145,6 +145,9 @@ var dossierData = null;
 var dossierSource = "";
 var destinationPhotos = [];
 var destinationPhotoIndex = 0;
+var lastDiscoveryDiagnostics = null;
+var lastDiscoveryEngines = null;
+var debugDocumentsInfo = null;
 
 /* ---- Pesi del punteggio sintetico: modificabili qui, un solo posto ---- */
 var SCORE_WEIGHTS = { financial:30, market:20, hospitality:20, access:15, territory:15 };
@@ -212,9 +215,13 @@ async function fetchLiveDossier(radiusKm){
     var payload={opportunity_id:Number(opportunityId),radius_km:radiusKm||30,year:new Date().getFullYear()};
     var res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify(payload)});
     var json=await res.json();
+    lastDiscoveryDiagnostics=(json&&json.diagnostics)?json.diagnostics:null;
+    lastDiscoveryEngines=(json&&json.engines)?json.engines:null;
     return (json&&json.dossier_data)?json.dossier_data:null;
   }catch(e){
     console.error("Discovery live fetch failed",e);
+    lastDiscoveryDiagnostics=null;
+    lastDiscoveryEngines=null;
     return null;
   }
 }
@@ -768,7 +775,38 @@ function renderRenovationScenariosBlock(){
     + '<p class="info-text" style="margin-top:14px;font-size:12px">Ricalcolati con le stesse tariffe usate in scheda: conservativo 400\u2013700 \u20ac/mq, normale 800\u20131400 \u20ac/mq, lusso 1500\u20133000 \u20ac/mq, moltiplicatore per livello degrado leggero 0,90 / medio 1,00 / pesante 1,18. Il costo medio dello scenario selezionato \u00e8 quello usato nel Total Project Cost qui sopra.</p></div>';
 }
 function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">Range dichiarato in scheda</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+renovationRangeNote+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div>'+renderRenovationScenariosBlock()+'</div></article>';}
-function renderDebugBootstrap(){return '<div class="debug-panel"><div class="debug-title">Edizione stampabile · dati interni + territoriali + punteggio</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Dati territoriali</div><div class="debug-value">'+escapeHTML(dossierSource==="report"?"da report salvato":dossierSource==="live"?"Discovery Engine (live)":"non disponibili")+'</div></div>'+'<div class="debug-item"><div class="debug-label">Foto destinazione</div><div class="debug-value">'+(destinationPhotos.length?(destinationPhotos.length+' trovate, a rotazione tra le sezioni'):'non caricate')+'</div></div>'+'</div></div>';}
+function renderDebugBootstrap(){
+  var airportInfo=getNearestAirportInfo();
+  var transportSummary=(dossierData&&dossierData.transport&&dossierData.transport.summary)||null;
+  var extraRows='';
+  extraRows+='<div class="debug-item"><div class="debug-label">Aeroporto nel dossier</div><div class="debug-value">'+(airportInfo?escapeHTML(airportInfo.name+" — "+distLabel(airportInfo)+(airportInfo.manual?" (dato manuale)":" (Discovery)")):'nessuno — sezione vuota')+'</div></div>';
+  extraRows+='<div class="debug-item"><div class="debug-label">Aeroporti commerciali (dato salvato/cache)</div><div class="debug-value">'+escapeHTML(String((transportSummary&&transportSummary.commercial_airports)||0))+'</div></div>';
+  if(lastDiscoveryDiagnostics){
+    var af=lastDiscoveryDiagnostics.semantic_filters&&lastDiscoveryDiagnostics.semantic_filters.accessibility&&lastDiscoveryDiagnostics.semantic_filters.accessibility.airports;
+    if(af){
+      extraRows+='<div class="debug-item"><div class="debug-label">Ultimo fetch live — candidati/accettati/scartati</div><div class="debug-value">'+escapeHTML(String(af.candidates||0))+' / '+escapeHTML(String(af.accepted||0))+' / '+escapeHTML(String(af.rejected||0))+(af.rejected_sample&&af.rejected_sample.length?(' — scartati: '+escapeHTML(af.rejected_sample.filter(Boolean).join(", "))):'')+'</div></div>';
+      var cb=af.cross_border_fallback;
+      if(cb){
+        extraRows+='<div class="debug-item"><div class="debug-label">Fallback Google cross-border (300km)</div><div class="debug-value">'+(cb.ok?('candidati '+escapeHTML(String(cb.candidates||0))+', accettati '+escapeHTML(String(cb.accepted||0))):('errore: '+escapeHTML(cb.error||'sconosciuto')))+'</div></div>';
+      }
+    }
+  }
+  if(lastDiscoveryEngines){
+    var loc=lastDiscoveryEngines.location_profile, acc=lastDiscoveryEngines.accessibility;
+    if(loc)extraRows+='<div class="debug-item"><div class="debug-label">Motore location-profile</div><div class="debug-value">'+(loc.ok?'ok':'errore: '+escapeHTML(loc.error||'sconosciuto'))+'</div></div>';
+    if(acc)extraRows+='<div class="debug-item"><div class="debug-label">Motore accessibility</div><div class="debug-value">'+(acc.ok?'ok':'errore: '+escapeHTML(acc.error||'sconosciuto'))+'</div></div>';
+  }
+  if(!lastDiscoveryDiagnostics&&!lastDiscoveryEngines){
+    extraRows+='<div class="debug-item"><div class="debug-label">Diagnostica aeroporto</div><div class="debug-value">Disponibile solo dopo un fetch live: usa "Aggiorna dati territoriali" in questa sessione per vederla.</div></div>';
+  }
+  extraRows+='<div class="debug-item"><div class="debug-label">Documenti — totale caricati</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.total)||0))+'</div></div>';
+  extraRows+='<div class="debug-item"><div class="debug-label">Documenti — spuntati "Includi nel dossier"</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.included)||0))+'</div></div>';
+  extraRows+='<div class="debug-item"><div class="debug-label">Documenti — pagine effettivamente renderizzate</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.rendered_pages)||0))+'</div></div>';
+  if(debugDocumentsInfo&&debugDocumentsInfo.missing_url&&debugDocumentsInfo.missing_url.length){
+    extraRows+='<div class="debug-item"><div class="debug-label">Documenti spuntati ma senza file_url (scartati in silenzio — BUG)</div><div class="debug-value">'+escapeHTML(debugDocumentsInfo.missing_url.join(", "))+'</div></div>';
+  }
+  return '<div class="debug-panel"><div class="debug-title">Edizione stampabile · dati interni + territoriali + punteggio</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Dati territoriali</div><div class="debug-value">'+escapeHTML(dossierSource==="report"?"da report salvato":dossierSource==="live"?"Discovery Engine (live)":"non disponibili")+'</div></div>'+'<div class="debug-item"><div class="debug-label">Foto destinazione</div><div class="debug-value">'+(destinationPhotos.length?(destinationPhotos.length+' trovate, a rotazione tra le sezioni'):'non caricate')+'</div></div>'+extraRows+'</div></div>';
+}
 
 /* ---- Numerazione pagine (folio), applicata SOLO alle pagine effettivamente stampate ---- */
 function injectFolio(html,n,total,onImage){
@@ -931,14 +969,23 @@ function renderDocumentFullPage(d,index,total){
 }
 function renderDocumentsPages(){
   var included=propertyDocuments.filter(function(d){return d.include_in_dossier===true;});
+  var missingUrl=included.filter(function(d){ return !docUrl(d); });
+  debugDocumentsInfo={
+    total:propertyDocuments.length,
+    included:included.length,
+    missing_url:missingUrl.map(function(d){ return docLabel(d)+" ("+(docFileName(d)||"senza nome file")+")"; }),
+    rendered_pages:0
+  };
   if(!included.length) return [];
   var byType={};
   included.forEach(function(d){ var t=d.document_type||"other"; (byType[t]=byType[t]||[]).push(d); });
-  return included.map(function(d){
+  var pages=included.map(function(d){
     var siblings=byType[d.document_type||"other"];
     var idx=siblings.indexOf(d)+1;
     return renderDocumentFullPage(d, idx, siblings.length);
   }).filter(Boolean);
+  debugDocumentsInfo.rendered_pages=pages.length;
+  return pages;
 }
 
 /* ---- Rendita & proiezione 15 anni: solo da input reali, ipotesi sempre dichiarate ---- */
