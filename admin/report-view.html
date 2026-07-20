@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -159,7 +158,7 @@ function getCategory(){return clean(opportunity&&opportunity.category)||clean(re
 function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||gallery[0]||"";}
 function getGeneratedDate(){var d=(report&&report.created_at)||(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat("it-IT").format(new Date(d));}catch(e){return "";}}
 async function checkAuth(){var sessionRes=await client.auth.getSession();var session=sessionRes&&sessionRes.data&&sessionRes.data.session;if(!session){window.location.href="login.html";return null;}currentUser=session.user;return session;}
-async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-form.html?id="+encodeURIComponent(opportunityId);}
+async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-edit.html?id="+encodeURIComponent(opportunityId);}
 async function loadLatestReport(){var res=await client.from("investment_reports").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false}).limit(1).maybeSingle();if(!res.error&&res.data)report=res.data;}
 async function loadPropertyDocuments(){var res=await client.from("opportunity_documents").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false});propertyDocuments=(!res.error&&Array.isArray(res.data))?res.data:[];}
 async function loadRenovationImagesData(){var res=await client.from("renovation_images").select("*").eq("opportunity_id",opportunityId);renovationImagesData=(!res.error&&Array.isArray(res.data))?res.data:[];}
@@ -323,13 +322,24 @@ function distLabel(item){
 /* Aeroporto più vicino: priorità al dato verificato a mano in opportunity-edit.html
    (campi nearest_airport / distance_to_airport_km sulla scheda immobile), perché un valore
    inserito da un analista che conosce la zona è più affidabile di una ricerca automatica.
-   Se non è stato compilato, si scende sull'aeroporto commerciale trovato dal Discovery Engine. */
+   Ma un campo compilato con un placeholder (es. "to be verified") e distanza 0 NON è un dato
+   verificato: va scartato, altrimenti vince sempre sull'aeroporto reale trovato da Discovery. */
+function isPlaceholderAirportName(name){
+  var n = String(name || "").toLowerCase().trim();
+  if(!n) return true;
+  var placeholders = ["to be verified","da verificare","verificare","tbd","n/a","non disponibile","-"];
+  for(var i = 0; i < placeholders.length; i++){
+    if(n.indexOf(placeholders[i]) >= 0) return true;
+  }
+  return false;
+}
 function getNearestAirportInfo(){
   var manualName=clean(opportunity&&opportunity.nearest_airport);
-  if(manualName){
-    var manualDist=Number(opportunity&&opportunity.distance_to_airport_km);
-    var driveEstimate=Number.isFinite(manualDist)?Math.max(1,Math.round((manualDist/75)*60)):null;
-    return {name:manualName,distance_km:Number.isFinite(manualDist)?manualDist:null,drive_minutes_estimate:driveEstimate,manual:true};
+  var manualDist=Number(opportunity&&opportunity.distance_to_airport_km);
+  var manualValid = manualName && !isPlaceholderAirportName(manualName) && Number.isFinite(manualDist) && manualDist > 0;
+  if(manualValid){
+    var driveEstimate=Math.max(1,Math.round((manualDist/75)*60));
+    return {name:manualName,distance_km:manualDist,drive_minutes_estimate:driveEstimate,manual:true};
   }
   var auto=nearestOfSubcategory("transport","commercial_airport");
   if(auto)return {name:auto.name,distance_km:auto.distance_km,drive_minutes_estimate:auto.drive_minutes_estimate,manual:false};
