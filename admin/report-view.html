@@ -169,7 +169,7 @@ async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportuni
 async function loadLatestReport(){var res=await client.from("investment_reports").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false}).limit(1).maybeSingle();if(!res.error&&res.data)report=res.data;}
 async function loadPropertyDocuments(){
   lastDocumentsLoadError=null;
-  var res=await client.from("opportunity_documents").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false});
+  var res=await client.from("opportunity_documents").select("*").eq("opportunity_id",opportunityId).order("uploaded_at",{ascending:false});
   if(res.error){
     lastDocumentsLoadError=(res.error.message||String(res.error))+(res.error.code?(" [codice "+res.error.code+"]"):"")+(res.error.hint?(" — suggerimento: "+res.error.hint):"")+(res.error.details?(" — dettagli: "+res.error.details):"");
     console.error("Errore caricamento opportunity_documents:",res.error);
@@ -181,7 +181,13 @@ async function loadRenovationRendersData(){var res=await client.from("renovation
 
 /* ---- Foto destinazione per le pagine divisorie (mai da internet: solo materiale caricato dall'analista) ---- */
 function geoScore(row){
-  var oc=clean(opportunity&&opportunity.country_code).toLowerCase();
+  // opportunity.country_code non è un campo del form in opportunity-edit.html: è quasi sempre
+  // vuoto/null. Prima, se una riga in immonova_destination_photos aveva country_code impostato
+  // (es. "IT"), il confronto con stringa vuota falliva sempre e la foto veniva scartata a priori,
+  // indipendentemente da regione/provincia/città — di fatto azzerando i risultati per qualunque
+  // opportunità italiana con foto già categorizzate per paese. Stesso default "IT" già usato altrove
+  // nella piattaforma (es. immonova-discovery-engine.ts) quando il campo non è valorizzato.
+  var oc=clean(opportunity&&opportunity.country_code).toLowerCase() || "it";
   var or_=clean(opportunity&&opportunity.region).toLowerCase();
   var op=clean(opportunity&&opportunity.province).toLowerCase();
   var ocity=clean(opportunity&&(opportunity.city||opportunity.municipality)).toLowerCase();
@@ -197,16 +203,21 @@ function geoScore(row){
    capitoli diversi mostrano foto diverse della stessa zona invece di ripetere sempre la stessa immagine.
    La scelta manuale di "quale foto in quale sezione" è prevista come sviluppo successivo: per ora la
    rotazione è automatica, in ordine di pertinenza geografica. */
+var destinationPhotosDebug = null;
 async function loadDestinationPhotos(){
   try{
     var res=await client.from("immonova_destination_photos").select("*").eq("active",true);
-    if(res.error || !Array.isArray(res.data)) return [];
-    return res.data
-      .map(function(row){ return {row:row, score:geoScore(row)}; })
-      .filter(function(x){ return x.score>=0; })
+    if(res.error || !Array.isArray(res.data)){
+      destinationPhotosDebug={total_active:0,matched:0,error:res.error?(res.error.message||String(res.error)):null};
+      return [];
+    }
+    var scored = res.data.map(function(row){ return {row:row, score:geoScore(row)}; });
+    var matched = scored.filter(function(x){ return x.score>=0; });
+    destinationPhotosDebug={total_active:res.data.length,matched:matched.length,error:null};
+    return matched
       .sort(function(a,b){ return b.score-a.score; })
       .map(function(x){ return x.row; });
-  }catch(e){ return []; }
+  }catch(e){ destinationPhotosDebug={total_active:0,matched:0,error:String(e&&e.message||e)}; return []; }
 }
 
 /* ---- Territorial / market / hospitality data (Discovery Engine) ---- */
@@ -477,6 +488,18 @@ function renderMarketAndADRPage(){
     +(adr?'<div class="merge-block">'+adr+'</div>':'')
     +'</div></article>';
 }
+function itemsBySubcategories(section,subcats){
+  return sortedItems(section).filter(function(it){ return subcats.indexOf(it && it.subcategory)>=0; });
+}
+function renderCategoryPageFiltered(section,subcats,title,kicker,limit){
+  var safeLimit=limit==null?6:limit;
+  var all=itemsBySubcategories(section,subcats);
+  var total=all.length;
+  if(!total)return "";
+  var items=all.slice(0,safeLimit);
+  var totalNote='<p class="info-text" style="margin-top:0">'+total+' risultat'+(total===1?"o":"i")+' trovat'+(total===1?"o":"i")+' da Discovery entro il raggio analizzato'+(items.length<total?(" — i "+items.length+" pi\u00f9 vicini stampati di seguito"):"")+'.</p>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(kicker)+'</div><h2 class="section-title">'+escapeHTML(title)+'</h2><div class="lux-rule"></div>'+totalNote+renderItemGrid(items)+'</div></article>';
+}
 function renderCategoryPage(section,title,kicker,limit){
   var safeLimit=limit==null?6:limit;
   var all=sortedItems(section);
@@ -714,27 +737,28 @@ function renderInternalFacts(){
 function renderFinancialSnapshot(){
   var f=buildFinance();
   var proj=buildCashflowProjection();
-  var net,roi,breakEven,ruleNote,tag;
+  var net,roi,breakEven,ruleNote,tag,breakEvenNote;
   if(proj){
     net=proj.rows[0].net;
     roi=proj.total>0?(net/proj.total*100):0;
     breakEven=proj.breakEvenYear;
+    breakEvenNote = proj.breakEvenExtrapolated ? " (proiezione estesa oltre i 15 anni mostrati in tabella)" : "";
     if(proj.adrVerified){
       tag=" (da ADR verificato)";
-      ruleNote="Net Income, ROI e Break-even calcolati sull\u2019ADR verificato dall\u2019analista, con priorit\u00e0 su qualunque altro dato disponibile. Occupazione e costi operativi restano ipotesi dichiarate.";
+      ruleNote="Net Income e ROI calcolati sull\u2019ADR verificato dall\u2019analista (media min\u2013max), con priorit\u00e0 su qualunque altro dato disponibile. Occupazione e costi operativi restano ipotesi dichiarate. Break-even calcolato su "+proj.breakEvenBasis+".";
     }else if(proj.revenueSource==="dato reale da report interno"){
       tag="";
-      ruleNote="Net Income, ROI e Break-even calcolati su dati reali dal report interno.";
+      ruleNote="Net Income e ROI calcolati su dati reali dal report interno. Break-even calcolato su "+proj.breakEvenBasis+".";
     }else{
       tag=" (stimato)";
-      ruleNote="Nessun ADR verificato dall\u2019analista n\u00e9 reddito netto reale nel report: stima da ADR di mercato automatico \u00d7 occupazione assunta.";
+      ruleNote="Nessun ADR verificato dall\u2019analista n\u00e9 reddito netto reale nel report: stima da ADR di mercato automatico \u00d7 occupazione assunta. Break-even calcolato su "+proj.breakEvenBasis+".";
     }
   }else{
     tag="";
     ruleNote="Questa pagina non inventa scenari. Senza reddito netto reale nel report e senza alcun ADR (verificato o automatico), Net Income, ROI e Break-even restano esplicitamente non disponibili.";
   }
   var hasAny=!!proj;
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(euro(net)):'Non disponibile')+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(percent(roi)):'Non disponibile')+'</div><div class="metric-note">Net Income / Total Project Cost.</div></div><div class="metric-card"><div class="metric-label">Break-even'+tag+'</div><div class="metric-value">'+(hasAny&&breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+' anni':'Non disponibile')+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow.</div></div></div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(euro(net)):'Non disponibile')+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI'+tag+'</div><div class="metric-value">'+(hasAny?escapeHTML(percent(roi)):'Non disponibile')+'</div><div class="metric-note">Net Income / Total Project Cost.</div></div><div class="metric-card"><div class="metric-label">Break-even</div><div class="metric-value">'+(hasAny&&breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+' anni':(hasAny?'Oltre 60 anni (non rientra in un orizzonte ragionevole)':'Non disponibile'))+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow'+escapeHTML(breakEvenNote||"")+'.</div></div></div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
 }
 /* ---- Tre scenari di ristrutturazione: ricalcolati con la stessa formula di renovationRates()
    in opportunity-edit.html, usando renovation_area_sqm e renovation_level già salvati sulla scheda.
@@ -811,6 +835,7 @@ function renderDebugBootstrap(){
   if(!lastDiscoveryDiagnostics&&!lastDiscoveryEngines){
     extraRows+='<div class="debug-item"><div class="debug-label">Diagnostica aeroporto</div><div class="debug-value">Disponibile solo dopo un fetch live: usa "Aggiorna dati territoriali" in questa sessione per vederla.</div></div>';
   }
+  extraRows+='<div class="debug-item"><div class="debug-label">Foto destinazione — dettaglio</div><div class="debug-value">'+(destinationPhotosDebug?(destinationPhotosDebug.error?('errore: '+escapeHTML(destinationPhotosDebug.error)):(escapeHTML(String(destinationPhotosDebug.total_active))+' attive in tabella, '+escapeHTML(String(destinationPhotosDebug.matched))+' compatibili con questa geografia')):'non disponibile')+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Documenti — totale caricati</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.total)||0))+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Documenti — spuntati "Includi nel dossier"</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.included)||0))+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Documenti — pagine effettivamente renderizzate</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.rendered_pages)||0))+'</div></div>';
@@ -1016,6 +1041,26 @@ function getOccupancyAssumption(){
 }
 var CASHFLOW_ANNUAL_GROWTH = 0.02; /* ipotesi prudenziale unica e dichiarata: nessuna crescita "a scalare" inventata */
 var CASHFLOW_OPEX_RATIO = 0.32;    /* ipotesi prudenziale unica e dichiarata sui costi operativi */
+var BREAK_EVEN_EXTRAPOLATION_CAP_YEARS = 60; /* limite di buon senso per non proiettare all'infinito un investimento che non rientra mai */
+/* Anno di break-even a partire da un ricavo anno 1 dato: prima prova sulle 15 righe già calcolate
+   (stesso oggetto "rows" mostrato in tabella, per restare coerenti); se il cumulato non raggiunge
+   il Total Project Cost entro il 15° anno, la proiezione continua con la stessa formula di crescita
+   oltre i 15 anni invece di dichiarare "non disponibile" — fino a un tetto di buon senso, oltre il
+   quale l'investimento va considerato onestamente a rischio di non rientrare mai. */
+function computeBreakEvenYear(rows, total, baseRevenue){
+  for(var i=0;i<rows.length;i++){ if(rows[i].cum>=total) return {year:rows[i].year, extrapolated:false}; }
+  var lastRow = rows[rows.length-1];
+  var cum = lastRow ? lastRow.cum : 0;
+  var startYear = lastRow ? lastRow.year : 0;
+  for(var y=startYear+1; y<=BREAK_EVEN_EXTRAPOLATION_CAP_YEARS; y++){
+    var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
+    var costs = revenue*CASHFLOW_OPEX_RATIO;
+    var net = revenue-costs;
+    cum += net;
+    if(cum>=total) return {year:y, extrapolated:true};
+  }
+  return {year:null, extrapolated:true};
+}
 function buildCashflowProjection(){
   var f=buildFinance();
   var adrMin=metricFromDossier("adr","average_daily_rate_min");
@@ -1029,7 +1074,7 @@ function buildCashflowProjection(){
   if(adrMid){
     adrVerified=!!(adrMetric&&adrMetric.source&&String(adrMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
     baseRevenue=adrMid*occ.value*365*units;
-    revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMid)+" \u20ac/notte) \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" \u00d7 "+units+" unit\u00e0";
+    revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMid)+" \u20ac/notte, media min\u2013max) \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" \u00d7 "+units+" unit\u00e0";
   } else if(f.revenue>0){
     baseRevenue=f.revenue; revenueSource="dato reale da report interno";
   } else return null;
@@ -1042,17 +1087,55 @@ function buildCashflowProjection(){
     cum+=net;
     rows.push({year:y,revenue:revenue,costs:costs,net:net,cum:cum});
   }
-  return {rows:rows,revenueSource:revenueSource,adrVerified:adrVerified,total:f.total,breakEvenYear:(function(){for(var i=0;i<rows.length;i++){if(rows[i].cum>=f.total)return rows[i].year;}return null;})()};
+
+  /* Break-even: di norma calcolato sullo stesso ricavo medio (ADR min-max) usato per il resto della
+     proiezione. Ma se l'immobile ha una ristrutturazione lusso selezionata ed esiste un ADR massimo
+     verificato, il break-even viene ricalcolato sullo scenario a ADR massimo — la finitura lusso è
+     pensata per intercettare la fascia alta della tariffa, quindi il rientro dell'investimento va
+     misurato su quello scenario, non sulla media. Net Income e ROI mostrati restano invece sullo
+     scenario medio: solo il break-even cambia base di calcolo. */
+  var oppRenovationStyle = clean(opportunity && opportunity.renovation_style);
+  if(oppRenovationStyle === "standard") oppRenovationStyle = "normale";
+  var isLuxuryRenovation = !!(opportunity && opportunity.renovation_required === true && oppRenovationStyle === "lusso");
+  var breakEvenBasis = "media ADR min\u2013max";
+  var breakEvenBaseRevenue = baseRevenue;
+  if(isLuxuryRenovation && adrMax && adrMax.value){
+    breakEvenBaseRevenue = adrMax.value*occ.value*365*units;
+    breakEvenBasis = "ADR massimo ("+formatMetricVal(adrMax.value)+" \u20ac/notte, per ristrutturazione lusso selezionata)";
+  }
+  var breakEvenRows = rows;
+  if(breakEvenBaseRevenue !== baseRevenue){
+    breakEvenRows = [];
+    var beCum = 0;
+    for(var by=1;by<=15;by++){
+      var beRevenue = breakEvenBaseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,by-1);
+      var beCosts = beRevenue*CASHFLOW_OPEX_RATIO;
+      var beNet = beRevenue-beCosts;
+      beCum += beNet;
+      breakEvenRows.push({year:by,revenue:beRevenue,costs:beCosts,net:beNet,cum:beCum});
+    }
+  }
+  var breakEven = computeBreakEvenYear(breakEvenRows, f.total, breakEvenBaseRevenue);
+
+  return {rows:rows,revenueSource:revenueSource,adrVerified:adrVerified,total:f.total,breakEvenYear:breakEven.year,breakEvenExtrapolated:breakEven.extrapolated,breakEvenBasis:breakEvenBasis};
 }
 function renderCashflowPage(){
   var proj=buildCashflowProjection();
   if(!proj)return "";
   var rows=proj.rows.map(function(r){
-    var isBE = proj.breakEvenYear!=null && r.year===proj.breakEvenYear;
+    var isBE = proj.breakEvenYear!=null && !proj.breakEvenExtrapolated && r.year===proj.breakEvenYear;
     return '<tr'+(isBE?' class="be-row"':'')+'><td>'+r.year+(isBE?' \u2605':'')+'</td><td>'+escapeHTML(euro(r.revenue))+'</td><td>'+escapeHTML(euro(r.costs))+'</td><td>'+escapeHTML(euro(r.net))+'</td><td>'+escapeHTML(euro(r.cum))+'</td></tr>';
   }).join("");
+  var breakEvenSentence;
+  if(proj.breakEvenYear && proj.breakEvenExtrapolated){
+    breakEvenSentence = 'Rientro del Total Project Cost ('+escapeHTML(euro(proj.total))+') stimato all\u2019anno '+proj.breakEvenYear+' — oltre l\u2019orizzonte di 15 anni mostrato in tabella, calcolato su '+escapeHTML(proj.breakEvenBasis)+' con la stessa formula di crescita.';
+  }else if(proj.breakEvenYear){
+    breakEvenSentence = 'Rientro del Total Project Cost ('+escapeHTML(euro(proj.total))+') stimato all\u2019anno '+proj.breakEvenYear+', evidenziato in tabella, calcolato su '+escapeHTML(proj.breakEvenBasis)+'.';
+  }else{
+    breakEvenSentence = 'Total Project Cost ('+escapeHTML(euro(proj.total))+') non rientrato nemmeno in una proiezione estesa a 60 anni su '+escapeHTML(proj.breakEvenBasis)+'.';
+  }
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Cash-flow projection</div><h2 class="section-title">Rendita &amp; Proiezione 15 Anni</h2><div class="lux-rule"></div>'
-    +'<p class="info-text">Ricavo anno 1: '+escapeHTML(proj.revenueSource)+'. Ipotesi dichiarate: crescita ricavi '+escapeHTML(percent(CASHFLOW_ANNUAL_GROWTH*100))+'/anno (prudenziale, non derivata da serie storica), costi operativi '+escapeHTML(percent(CASHFLOW_OPEX_RATIO*100))+' dei ricavi. '+(proj.breakEvenYear?('Rientro del Total Project Cost ('+escapeHTML(euro(proj.total))+') stimato all\u2019anno '+proj.breakEvenYear+', evidenziato in tabella.'):('Total Project Cost ('+escapeHTML(euro(proj.total))+') non rientrato nei 15 anni proiettati.'))+'</p>'
+    +'<p class="info-text">Ricavo anno 1: '+escapeHTML(proj.revenueSource)+'. Ipotesi dichiarate: crescita ricavi '+escapeHTML(percent(CASHFLOW_ANNUAL_GROWTH*100))+'/anno (prudenziale, non derivata da serie storica), costi operativi '+escapeHTML(percent(CASHFLOW_OPEX_RATIO*100))+' dei ricavi. '+breakEvenSentence+'</p>'
     +'<table class="cf-table"><thead><tr><th>Anno</th><th>Ricavi</th><th>Costi</th><th>Utile</th><th>Cumulato</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'</div></article>';
 }
@@ -1134,8 +1217,17 @@ function renderBook(){
   push("Territorio & mercato", renderTourismSeriesPage());
   push("Territorio & mercato", renderTourismForecastPage());
 
-  var ecoSections=[["hospitality","Hospitality nelle vicinanze","Accommodation landscape"],["restaurants","Ristoranti nelle vicinanze","Food & dining"],["beaches","Spiagge e costa","Coast & beaches"],["marinas","Porti e marine","Marinas & ports"],["transport","Accessibilità e trasporti","Destination access"],["heritage","Cultura e patrimonio","Heritage & culture"],["nightlife","Vita notturna","Nightlife"]];
-  var ecoPages=ecoSections.map(function(s){return renderCategoryPage(s[0],s[1],s[2]);}).filter(Boolean);
+  var ecoSections=[["hospitality","Hospitality nelle vicinanze","Accommodation landscape"],["restaurants","Ristoranti nelle vicinanze","Food & dining"],["beaches","Spiagge e costa","Coast & beaches"],["marinas","Porti e marine","Marinas & ports"],["heritage","Cultura e patrimonio","Heritage & culture"],["nightlife","Vita notturna","Nightlife"]];
+  var ecoPages=[];
+  /* Aeroporti commerciali: pagina dedicata, TUTTI quelli trovati entro 300km (passeggeri, non
+     militari/cargo/collaudo), ordinati per distanza — prima venivano mescolati con le stazioni
+     ferroviarie nella stessa lista troncata a 6 risultati, e le stazioni (molto più vicine)
+     riempivano sempre tutti gli slot lasciando fuori gli aeroporti. */
+  var airportsPage=renderCategoryPageFiltered("transport",["commercial_airport"],"Aeroporti Commerciali","Airports · 300km radius",20);
+  if(airportsPage) ecoPages.push(airportsPage);
+  var groundTransportPage=renderCategoryPageFiltered("transport",["railway_station","passenger_port","bus_station","taxi_shuttle","transport_node"],"Accessibilità e Trasporti","Destination access",6);
+  if(groundTransportPage) ecoPages.push(groundTransportPage);
+  ecoSections.forEach(function(s){ var p=renderCategoryPage(s[0],s[1],s[2]); if(p) ecoPages.push(p); });
   if(ecoPages.length){
     push("Ecosistema & accessibilità", dividerPageHTML("Ecosistema & Accessibilità","Territorial ecosystem"), true);
     ecoPages.forEach(function(p){push("Ecosistema & accessibilità",p);});
