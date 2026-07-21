@@ -147,6 +147,7 @@ var destinationPhotoIndex = 0;
 var lastDiscoveryDiagnostics = null;
 var lastDiscoveryEngines = null;
 var debugDocumentsInfo = null;
+var lastDocumentsLoadError = null;
 
 /* ---- Pesi del punteggio sintetico: modificabili qui, un solo posto ---- */
 var SCORE_WEIGHTS = { financial:30, market:20, hospitality:20, access:15, territory:15 };
@@ -166,7 +167,15 @@ function getGeneratedDate(){var d=(report&&report.created_at)||(opportunity&&opp
 async function checkAuth(){var sessionRes=await client.auth.getSession();var session=sessionRes&&sessionRes.data&&sessionRes.data.session;if(!session){window.location.href="login.html";return null;}currentUser=session.user;return session;}
 async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-edit.html?id="+encodeURIComponent(opportunityId);}
 async function loadLatestReport(){var res=await client.from("investment_reports").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false}).limit(1).maybeSingle();if(!res.error&&res.data)report=res.data;}
-async function loadPropertyDocuments(){var res=await client.from("opportunity_documents").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false});propertyDocuments=(!res.error&&Array.isArray(res.data))?res.data:[];}
+async function loadPropertyDocuments(){
+  lastDocumentsLoadError=null;
+  var res=await client.from("opportunity_documents").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false});
+  if(res.error){
+    lastDocumentsLoadError=(res.error.message||String(res.error))+(res.error.code?(" [codice "+res.error.code+"]"):"")+(res.error.hint?(" — suggerimento: "+res.error.hint):"")+(res.error.details?(" — dettagli: "+res.error.details):"");
+    console.error("Errore caricamento opportunity_documents:",res.error);
+  }
+  propertyDocuments=(!res.error&&Array.isArray(res.data))?res.data:[];
+}
 async function loadRenovationImagesData(){var res=await client.from("renovation_images").select("*").eq("opportunity_id",opportunityId);renovationImagesData=(!res.error&&Array.isArray(res.data))?res.data:[];}
 async function loadRenovationRendersData(){var res=await client.from("renovation_renders").select("*").eq("opportunity_id",opportunityId);renovationRendersData=(!res.error&&Array.isArray(res.data))?res.data:[];}
 
@@ -783,7 +792,11 @@ function renderDebugBootstrap(){
   if(lastDiscoveryDiagnostics){
     var af=lastDiscoveryDiagnostics.semantic_filters&&lastDiscoveryDiagnostics.semantic_filters.accessibility&&lastDiscoveryDiagnostics.semantic_filters.accessibility.airports;
     if(af){
-      extraRows+='<div class="debug-item"><div class="debug-label">Ultimo fetch live — candidati/accettati/scartati</div><div class="debug-value">'+escapeHTML(String(af.candidates||0))+' / '+escapeHTML(String(af.accepted||0))+' / '+escapeHTML(String(af.rejected||0))+(af.rejected_sample&&af.rejected_sample.length?(' — scartati: '+escapeHTML(af.rejected_sample.filter(Boolean).join(", "))):'')+'</div></div>';
+      extraRows+='<div class="debug-item"><div class="debug-label">Dataset OurAirports (scheduled_service=true, 300km)</div><div class="debug-value">'+escapeHTML(String(af.dataset_airports_count||0))+' trovati</div></div>';
+      extraRows+='<div class="debug-item"><div class="debug-label">Motore accessibility — candidati grezzi/accettati/scartati</div><div class="debug-value">'+escapeHTML(String(af.candidates||0))+' / '+escapeHTML(String(af.accepted||0))+' (totale dopo unione fonti) / '+escapeHTML(String(af.rejected||0))+(af.rejected_sample&&af.rejected_sample.length?(' — scartati dal filtro semantico: '+escapeHTML(af.rejected_sample.filter(Boolean).join(", "))):'')+'</div></div>';
+      if(af.excluded_known_non_commercial&&af.excluded_known_non_commercial.length){
+        extraRows+='<div class="debug-item"><div class="debug-label">Esclusi dalla lista di sicurezza (noti non commerciali)</div><div class="debug-value">'+escapeHTML(af.excluded_known_non_commercial.filter(Boolean).join(", "))+'</div></div>';
+      }
       var cb=af.cross_border_fallback;
       if(cb){
         extraRows+='<div class="debug-item"><div class="debug-label">Fallback Google cross-border (300km)</div><div class="debug-value">'+(cb.ok?('candidati '+escapeHTML(String(cb.candidates||0))+', accettati '+escapeHTML(String(cb.accepted||0))):('errore: '+escapeHTML(cb.error||'sconosciuto')))+'</div></div>';
@@ -801,6 +814,9 @@ function renderDebugBootstrap(){
   extraRows+='<div class="debug-item"><div class="debug-label">Documenti — totale caricati</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.total)||0))+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Documenti — spuntati "Includi nel dossier"</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.included)||0))+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Documenti — pagine effettivamente renderizzate</div><div class="debug-value">'+escapeHTML(String((debugDocumentsInfo&&debugDocumentsInfo.rendered_pages)||0))+'</div></div>';
+  if(lastDocumentsLoadError){
+    extraRows+='<div class="debug-item" style="border-color:rgba(156,47,47,.45)"><div class="debug-label" style="color:#9c2f2f">Documenti — ERRORE query Supabase</div><div class="debug-value" style="color:#9c2f2f">'+escapeHTML(lastDocumentsLoadError)+'</div></div>';
+  }
   if(debugDocumentsInfo&&debugDocumentsInfo.missing_url&&debugDocumentsInfo.missing_url.length){
     extraRows+='<div class="debug-item"><div class="debug-label">Documenti spuntati ma senza file_url (scartati in silenzio — BUG)</div><div class="debug-value">'+escapeHTML(debugDocumentsInfo.missing_url.join(", "))+'</div></div>';
   }
