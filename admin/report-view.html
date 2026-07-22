@@ -179,10 +179,10 @@ async function checkAuth(){var sessionRes=await client.auth.getSession();var ses
 async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-edit.html?id="+encodeURIComponent(opportunityId);}
 async function loadLatestReport(){
   lastReportLoadError=null;
-  var res=await client.from("investment_reports").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false}).limit(1).maybeSingle();
+  var res=await client.from("opportunity_reports").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false}).limit(1).maybeSingle();
   if(res.error){
-    console.error("Errore ordinamento per created_at su investment_reports, tento fallback su id:",res.error);
-    var fallback=await client.from("investment_reports").select("*").eq("opportunity_id",opportunityId).order("id",{ascending:false}).limit(1).maybeSingle();
+    console.error("Errore ordinamento per created_at su opportunity_reports, tento fallback su id:",res.error);
+    var fallback=await client.from("opportunity_reports").select("*").eq("opportunity_id",opportunityId).order("id",{ascending:false}).limit(1).maybeSingle();
     if(fallback.error){
       lastReportLoadError=(fallback.error.message||String(fallback.error));
       console.error("Errore anche nel fallback su id:",fallback.error);
@@ -270,7 +270,7 @@ async function persistDossierData(data){
     if(report && report.id){
       var j = getReportJson();
       j.dossier_data = data;
-      var res = await client.from("investment_reports").update({report_json:j}).eq("id",report.id);
+      var res = await client.from("opportunity_reports").update({report_json:j}).eq("id",report.id);
       if(res.error) throw res.error;
       report.report_json = j;
     }else{
@@ -279,7 +279,7 @@ async function persistDossierData(data){
         title: getTitle(),
         report_json: { dossier_data: data }
       };
-      var insertRes = await client.from("investment_reports").insert(payload).select("*").single();
+      var insertRes = await client.from("opportunity_reports").insert(payload).select("*").single();
       if(insertRes.error) throw insertRes.error;
       report = insertRes.data;
     }
