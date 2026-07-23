@@ -111,7 +111,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 <main class="container">
   <div class="topbar">
     <div>
-      <div class="kicker">Investment Book · Edizione stampabile · <strong style="color:#9c2f2f">BUILD 2026-07-23-02 (fix: libreria pdf.js — 4.0.379 non esiste più come script classico, causava fallback iframe su tutti i PDF)</strong></div>
+      <div class="kicker">Investment Book · Edizione stampabile · <strong style="color:#9c2f2f">BUILD 2026-07-23-03 (aggiunta diagnostica fonti dati XLSX nel pannello debug)</strong></div>
       <h1 class="title" id="pageTitle">Dossier</h1>
     </div>
     <div class="actions">
@@ -821,6 +821,38 @@ function renderRenovationScenariosBlock(){
     + '<p class="info-text" style="margin-top:14px;font-size:12px">Ricalcolati con le stesse tariffe usate in scheda: conservativo 400\u2013700 \u20ac/mq, normale 800\u20131400 \u20ac/mq, lusso 1500\u20133000 \u20ac/mq, moltiplicatore per livello degrado leggero 0,90 / medio 1,00 / pesante 1,18. Il costo medio dello scenario selezionato \u00e8 quello usato nel Total Project Cost qui sopra.</p></div>';
 }
 function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">Range dichiarato in scheda</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+renovationRangeNote+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div>'+renderRenovationScenariosBlock()+'</div></article>';}
+/* ---- Diagnostica fonti dati XLSX: legge diagnostics.documents_sample / tables_sample /
+   source_logs dell'ultimo fetch live del Discovery Engine (lastDiscoveryDiagnostics), filtrata
+   ai soli documenti di tipo xlsx, per capire in quale dei tre punti si ferma una fonte XLSX
+   (fetch fallito, tabelle non trovate, tabelle scartate dalla classificazione) senza dover
+   leggere il JSON grezzo. ---- */
+function renderXlsxSourceDiagnosticsHTML(){
+  if(!lastDiscoveryDiagnostics){
+    return '<div class="debug-item"><div class="debug-label">Fonti dati XLSX — diagnostica</div><div class="debug-value">Disponibile solo dopo un fetch live: usa "Aggiorna dati territoriali" in questa sessione per vederla.</div></div>';
+  }
+  var docs=(lastDiscoveryDiagnostics.documents_sample||[]).filter(function(d){ return d && d.kind==="xlsx"; });
+  if(!docs.length){
+    return '<div class="debug-item"><div class="debug-label">Fonti dati XLSX — diagnostica</div><div class="debug-value">Nessun documento XLSX incontrato nell\u2019ultimo fetch live.</div></div>';
+  }
+  var tablesSample=lastDiscoveryDiagnostics.tables_sample||[];
+  var lines=docs.map(function(d){
+    var refUrl=d.final_url||d.requested_url||"";
+    var shortName=refUrl.split("/").pop()||refUrl;
+    if(d.skipped){
+      return escapeHTML(shortName)+": SCARTATO — "+escapeHTML(d.skip_reason||"motivo sconosciuto");
+    }
+    var tablesCount=Number(d.tables_count)||0;
+    if(!tablesCount){
+      return escapeHTML(shortName)+": fetch ok, 0 tabelle trovate nel parsing XLSX";
+    }
+    var related=tablesSample.filter(function(t){ return t && t.url && (t.url===d.final_url||t.url===d.requested_url); });
+    var classifText=related.length
+      ? related.map(function(t){ return escapeHTML((t.category||"unknown")+" ("+Math.round((t.confidence||0)*100)+"%)"); }).join(", ")
+      : "classificazione non nel campione (oltre il limite di 12 tabelle mostrate)";
+    return escapeHTML(shortName)+": "+tablesCount+" tabell"+(tablesCount===1?"a":"e")+" trovat"+(tablesCount===1?"a":"e")+" \u2192 "+classifText;
+  });
+  return '<div class="debug-item"><div class="debug-label">Fonti dati XLSX — diagnostica</div><div class="debug-value">'+lines.join("<br>")+'</div></div>';
+}
 function renderDebugBootstrap(){
   var airportInfo=getNearestAirportInfo();
   var transportSummary=(dossierData&&dossierData.transport&&dossierData.transport.summary)||null;
@@ -865,6 +897,7 @@ function renderDebugBootstrap(){
   if(debugDocumentsInfo&&debugDocumentsInfo.missing_url&&debugDocumentsInfo.missing_url.length){
     extraRows+='<div class="debug-item"><div class="debug-label">Documenti spuntati ma senza file_url (scartati in silenzio — BUG)</div><div class="debug-value">'+escapeHTML(debugDocumentsInfo.missing_url.join(", "))+'</div></div>';
   }
+  extraRows+=renderXlsxSourceDiagnosticsHTML();
   return '<div class="debug-panel"><div class="debug-title">Edizione stampabile · dati interni + territoriali + punteggio</div><div class="debug-grid">'+'<div class="debug-item"><div class="debug-label">Opportunity ID</div><div class="debug-value">'+escapeHTML(opportunityId)+'</div></div>'+'<div class="debug-item"><div class="debug-label">Report</div><div class="debug-value">'+(report?'presente':'non presente')+'</div></div>'+'<div class="debug-item"><div class="debug-label">Dati territoriali</div><div class="debug-value">'+escapeHTML(dossierSource==="report"?"da report salvato":dossierSource==="live"?"Discovery Engine (live)":"non disponibili")+'</div></div>'+'<div class="debug-item"><div class="debug-label">Foto destinazione</div><div class="debug-value">'+(destinationPhotos.length?(destinationPhotos.length+' trovate, a rotazione tra le sezioni'):'non caricate')+'</div></div>'+extraRows+'</div></div>';
 }
 
