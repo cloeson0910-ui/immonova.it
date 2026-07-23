@@ -408,45 +408,45 @@ width:100%;
 </a>
 
 <div class="header-actions">
-<a href="dashboard.html">Dashboard</a>
-<a href="opportunity-form.html">Nuova Proposta</a>
-<a href="inquiries.html" class="admin-only">Richieste</a>
-<a href="users.html" class="admin-only">Utenti</a>
-<button class="logout" id="logoutBtn">Logout</button>
+<a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+<a href="opportunity-form.html" data-i18n="nav_new_proposal">Nuova Proposta</a>
+<a href="inquiries.html" class="admin-only" data-i18n="nav_inquiries">Richieste</a>
+<a href="users.html" class="admin-only" data-i18n="nav_users">Utenti</a>
+<button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
 </div>
 
 </header>
 
 <div class="container">
 
-<div class="kicker" id="roleLabel">Area Riservata</div>
+<div class="kicker" id="roleLabel" data-i18n="role_reserved">Area Riservata</div>
 
-<h1 class="title">Proposte</h1>
+<h1 class="title" data-i18n="title">Proposte</h1>
 
-<p class="subtitle" id="subtitle">
+<p class="subtitle" id="subtitle" data-i18n="loading_area">
 Caricamento area riservata...
 </p>
 
 <div id="status" class="status"></div>
 
 <div class="toolbar">
-<input type="text" id="searchInput" class="search" placeholder="Cerca per titolo, categoria, location o stato...">
+<input type="text" id="searchInput" class="search" data-i18n="search_placeholder" placeholder="Cerca per titolo, categoria, location o stato...">
 
 <select id="statusFilter" class="filter">
-<option value="">Tutti gli stati revisione</option>
-<option value="da_verificare">Da verificare</option>
-<option value="da_revisionare">Da revisionare</option>
-<option value="approvato">Approvato</option>
-<option value="rifiutato">Rifiutato</option>
+<option value="" data-i18n="filter_all_review">Tutti gli stati revisione</option>
+<option value="da_verificare" data-i18n="status_da_verificare">Da verificare</option>
+<option value="da_revisionare" data-i18n="status_da_revisionare">Da revisionare</option>
+<option value="approvato" data-i18n="status_approvato">Approvato</option>
+<option value="rifiutato" data-i18n="status_rifiutato">Rifiutato</option>
 </select>
 
 <select id="commercialFilter" class="filter">
-<option value="">Tutti gli stati commerciali</option>
-<option value="available">Disponibile</option>
-<option value="under_negotiation">In trattativa</option>
-<option value="reserved">Riservata</option>
-<option value="sold">Venduta</option>
-<option value="withdrawn">Ritirata</option>
+<option value="" data-i18n="filter_all_commercial">Tutti gli stati commerciali</option>
+<option value="available" data-i18n="commercial_available">Disponibile</option>
+<option value="under_negotiation" data-i18n="commercial_negotiation">In trattativa</option>
+<option value="reserved" data-i18n="commercial_reserved">Riservata</option>
+<option value="sold" data-i18n="commercial_sold">Venduta</option>
+<option value="withdrawn" data-i18n="commercial_withdrawn">Ritirata</option>
 </select>
 </div>
 
@@ -455,21 +455,21 @@ Caricamento area riservata...
 <table>
 <thead>
 <tr>
-<th>Titolo</th>
-<th>Categoria</th>
-<th>Location</th>
-<th>Prezzo</th>
-<th>Stato Revisione</th>
-<th>Commerciale</th>
-<th>Pubblicata</th>
-<th>Documenti</th>
-<th>Azioni</th>
+<th data-i18n="th_title">Titolo</th>
+<th data-i18n="th_category">Categoria</th>
+<th data-i18n="th_location">Location</th>
+<th data-i18n="th_price">Prezzo</th>
+<th data-i18n="th_review_status">Stato Revisione</th>
+<th data-i18n="th_commercial">Commerciale</th>
+<th data-i18n="th_published">Pubblicata</th>
+<th data-i18n="th_documents">Documenti</th>
+<th data-i18n="th_actions">Azioni</th>
 </tr>
 </thead>
 
 <tbody id="opportunitiesTable">
 <tr>
-<td colspan="9" class="empty">Caricamento...</td>
+<td colspan="9" class="empty" data-i18n="loading">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -499,6 +499,7 @@ let currentUser = null;
 let currentProfile = null;
 let isAdmin = false;
 let allOpportunities = [];
+let currentUserLanguage = "it";
 
 
 const REQUIRED_DOCUMENT_TYPES = [
@@ -514,18 +515,112 @@ const REQUIRED_DOCUMENT_TYPES = [
   "systems_certifications"
 ];
 
-const REQUIRED_DOCUMENT_LABELS = {
-  owner_identity:"Identità",
-  owner_tax_code:"Codice fiscale",
-  deed_of_origin:"Atto provenienza",
-  cadastral_report:"Visura catastale",
-  cadastral_plan:"Planimetria",
-  ape:"APE",
-  urban_planning:"Titoli edilizi",
-  technical_conformity:"Conformità",
-  habitability:"Agibilità",
-  systems_certifications:"Impianti"
+/* ---- i18n: stesso meccanismo di users.html/dashboard.html. REQUIRED_DOCUMENT_LABELS resta
+   fuori dal dizionario tradotto e viene ricostruito da T dopo che la traduzione arriva, così
+   il conteggio documenti mancanti parla nella lingua corretta. ---- */
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_new_proposal:"Nuova Proposta", nav_inquiries:"Richieste", nav_users:"Utenti", logout:"Logout",
+  role_reserved:"Area Riservata", role_admin:"Area Admin", role_user_area:"Area Utente",
+  title:"Proposte",
+  loading_area:"Caricamento area riservata...",
+  subtitle_admin:"Gestisci tutte le proposte ricevute. Puoi valutarle, approvarle, rifiutarle, pubblicarle o sospenderle.",
+  subtitle_user:"Qui puoi vedere e gestire solo le tue proposte. La pubblicazione è riservata agli admin IMMONOVA.",
+  search_placeholder:"Cerca per titolo, categoria, location o stato...",
+  filter_all_review:"Tutti gli stati revisione", filter_all_commercial:"Tutti gli stati commerciali",
+  status_da_verificare:"Da verificare", status_da_revisionare:"Da revisionare", status_approvato:"Approvato", status_rifiutato:"Rifiutato",
+  commercial_available:"Disponibile", commercial_negotiation:"In trattativa", commercial_reserved:"Riservata",
+  commercial_sold:"Venduta", commercial_withdrawn:"Ritirata",
+  th_title:"Titolo", th_category:"Categoria", th_location:"Location", th_price:"Prezzo",
+  th_review_status:"Stato Revisione", th_commercial:"Commerciale", th_published:"Pubblicata",
+  th_documents:"Documenti", th_actions:"Azioni",
+  loading:"Caricamento...", loading_error:"Errore nel caricamento.", empty_none:"Nessuna proposta presente.",
+  price_reserved:"Valore riservato",
+  docs_complete:"Documenti completi", docs_missing_prefix:"Mancano: ",
+  sold_on_prefix:"Venduta il ", no_linked_events:"Nessun evento collegato", view_event:"Visualizza evento",
+  no_such_link:"", action_view:"Vedi", action_evaluate:"Valuta", action_open:"Apri",
+  select_change_review:"Cambia revisione", select_change_commercial:"Cambia commerciale",
+  btn_suspend:"Sospendi", btn_publish:"Pubblica", btn_selling_party:"Selling Party", btn_delete:"Elimina",
+  msg_updating_review:"Aggiornamento stato revisione...", msg_review_updated:"Stato revisione aggiornato correttamente.",
+  msg_updating_commercial:"Aggiornamento stato commerciale...", msg_commercial_updated:"Stato commerciale aggiornato correttamente.",
+  confirm_sold:"Confermi che questa opportunità è venduta? Verrà sospesa dalle opportunità pubbliche e comparirà nelle Success Stories.",
+  msg_updating_publish:"Aggiornamento pubblicazione...", msg_publish_updated:"Pubblicazione aggiornata correttamente.",
+  err_only_admin_publish:"Solo un admin può pubblicare o sospendere una proposta.",
+  err_only_approved:"Puoi pubblicare solo una proposta approvata.",
+  err_sold_withdrawn_no_publish:"Una proposta venduta o ritirata non può essere pubblicata tra le opportunità disponibili.",
+  err_only_admin_delete:"Solo un admin può eliminare una proposta.",
+  confirm_delete:"Vuoi eliminare definitivamente questa proposta?",
+  msg_deleting:"Eliminazione in corso...", msg_deleted:"Proposta eliminata correttamente.",
+  doc_identity:"Identità", doc_tax_code:"Codice fiscale", doc_deed:"Atto provenienza", doc_cadastral_report:"Visura catastale",
+  doc_cadastral_plan:"Planimetria", doc_ape:"APE", doc_urban_planning:"Titoli edilizi", doc_technical_conformity:"Conformità",
+  doc_habitability:"Agibilità", doc_systems:"Impianti",
+  event_selling_party:"Selling Party", event_closing_party:"Closing Party", event_welcome_party:"Welcome Party",
+  event_past_party:"Party avvenuto", event_upcoming_party:"Party in programma", event_investor_tour:"Investor Tour",
+  event_site_visit:"Site Visit", event_private_dinner:"Private Dinner", event_generic:"Evento"
 };
+
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_opportunities_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. This is the admin opportunities/proposals management table: navigation, filters, table headers, status badges, action buttons, document checklist labels.",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione opportunities non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+  buildDocumentLabels();
+  subtitle.textContent = isAdmin ? T.subtitle_admin : T.subtitle_user;
+}
+
+var REQUIRED_DOCUMENT_LABELS = {};
+function buildDocumentLabels(){
+  REQUIRED_DOCUMENT_LABELS = {
+    owner_identity:T.doc_identity, owner_tax_code:T.doc_tax_code, deed_of_origin:T.doc_deed,
+    cadastral_report:T.doc_cadastral_report, cadastral_plan:T.doc_cadastral_plan, ape:T.doc_ape,
+    urban_planning:T.doc_urban_planning, technical_conformity:T.doc_technical_conformity,
+    habitability:T.doc_habitability, systems_certifications:T.doc_systems
+  };
+}
+buildDocumentLabels();
 
 
 function escapeHTML(value){
@@ -544,45 +639,45 @@ function setStatus(message, type){
 
 function statusLabel(status){
   const labels = {
-    da_verificare:"Da verificare",
-    da_revisionare:"Da revisionare",
-    approvato:"Approvato",
-    rifiutato:"Rifiutato"
+    da_verificare:T.status_da_verificare,
+    da_revisionare:T.status_da_revisionare,
+    approvato:T.status_approvato,
+    rifiutato:T.status_rifiutato
   };
 
-  return labels[status] || "Da verificare";
+  return labels[status] || T.status_da_verificare;
 }
 
 function commercialStatusLabel(status){
   const labels = {
-    available:"Disponibile",
-    under_negotiation:"In trattativa",
-    reserved:"Riservata",
-    sold:"Venduta",
-    withdrawn:"Ritirata"
+    available:T.commercial_available,
+    under_negotiation:T.commercial_negotiation,
+    reserved:T.commercial_reserved,
+    sold:T.commercial_sold,
+    withdrawn:T.commercial_withdrawn
   };
 
-  return labels[status] || "Disponibile";
+  return labels[status] || T.commercial_available;
 }
 
 function eventTypeLabel(type){
   const labels = {
-    selling_party:"Selling Party",
-    closing_party:"Closing Party",
-    welcome_party:"Welcome Party",
-    past_party:"Party avvenuto",
-    upcoming_party:"Party in programma",
-    investor_tour:"Investor Tour",
-    site_visit:"Site Visit",
-    private_dinner:"Private Dinner"
+    selling_party:T.event_selling_party,
+    closing_party:T.event_closing_party,
+    welcome_party:T.event_welcome_party,
+    past_party:T.event_past_party,
+    upcoming_party:T.event_upcoming_party,
+    investor_tour:T.event_investor_tour,
+    site_visit:T.event_site_visit,
+    private_dinner:T.event_private_dinner
   };
 
-  return labels[type] || type || "Evento";
+  return labels[type] || type || T.event_generic;
 }
 
 function formatPrice(value){
   if(!value){
-    return "Valore riservato";
+    return T.price_reserved;
   }
 
   const number = Number(value);
@@ -591,7 +686,7 @@ function formatPrice(value){
     return value;
   }
 
-  return new Intl.NumberFormat("it-IT", {
+  return new Intl.NumberFormat(currentUserLanguage === "it" ? "it-IT" : currentUserLanguage, {
     style:"currency",
     currency:"EUR",
     maximumFractionDigits:0
@@ -611,26 +706,34 @@ async function checkAuth(){
 }
 
 async function loadProfile(){
-  const { data, error } = await client
+  var result = await client
     .from("profiles")
-    .select("id,email,full_name,role")
+    .select("id,email,full_name,role,language")
     .eq("id", currentUser.id)
     .single();
 
-  if(error){
-    console.error(error);
-    setStatus("Profilo utente non trovato.", "error");
+  if(result.error){
+    /* Stesso fix di users.html/dashboard.html: se la colonna "language" non è stata ancora
+       migrata su Supabase, non trattare l'errore come fatale -- riprova senza quella colonna. */
+    var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
+    if(looksLikeMissingLanguageColumn){
+      console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL. Interfaccia mostrata in italiano nel frattempo.");
+      result = await client.from("profiles").select("id,email,full_name,role").eq("id", currentUser.id).single();
+    }
+  }
+
+  if(result.error){
+    console.error(result.error);
+    setStatus(T.loading_error, "error");
     return;
   }
 
-  currentProfile = data;
+  currentProfile = result.data;
   isAdmin = currentProfile.role === "admin";
 
-  roleLabel.textContent = isAdmin ? "Area Admin" : "Area Utente";
+  await applyLanguage(currentProfile.language || "it");
 
-  subtitle.textContent = isAdmin
-    ? "Gestisci tutte le proposte ricevute. Puoi valutarle, approvarle, rifiutarle, pubblicarle o sospenderle."
-    : "Qui puoi vedere e gestire solo le tue proposte. La pubblicazione è riservata agli admin IMMONOVA.";
+  roleLabel.textContent = isAdmin ? T.role_admin : T.role_user_area;
 
   document.querySelectorAll(".admin-only").forEach(el => {
     el.style.display = isAdmin ? "inline-block" : "none";
@@ -647,7 +750,7 @@ async function loadOpportunities(){
     console.error(error);
     table.innerHTML = `
       <tr>
-        <td colspan="9" class="empty">Errore nel caricamento.</td>
+        <td colspan="9" class="empty">${escapeHTML(T.loading_error)}</td>
       </tr>
     `;
     return;
@@ -749,7 +852,7 @@ function renderDocumentSummary(item){
   const loaded = item.documents_loaded_count || 0;
   const cls = loaded === total ? "complete" : (loaded <= 3 ? "low" : "");
   const missing = item.documents_missing_labels || [];
-  const missingText = missing.length === 0 ? "Documenti completi" : "Mancano: " + missing.slice(0,3).join(", ") + (missing.length > 3 ? "..." : "");
+  const missingText = missing.length === 0 ? T.docs_complete : T.docs_missing_prefix + missing.slice(0,3).join(", ") + (missing.length > 3 ? "..." : "");
 
   return `
     <span class="docs-pill ${cls}">${loaded}/${total}</span>
@@ -760,11 +863,11 @@ function renderDocumentSummary(item){
 function renderCommercialStatus(item){
   const commercialStatus = item.commercial_status || "available";
   const label = commercialStatusLabel(commercialStatus);
-  const soldDate = item.sold_at ? new Date(item.sold_at).toLocaleDateString("it-IT") : "";
+  const soldDate = item.sold_at ? new Date(item.sold_at).toLocaleDateString(currentUserLanguage === "it" ? "it-IT" : currentUserLanguage) : "";
 
   return `
     <span class="commercial-badge ${escapeHTML(commercialStatus)}">${escapeHTML(label)}</span>
-    ${soldDate ? `<div class="docs-mini">Venduta il ${escapeHTML(soldDate)}</div>` : ""}
+    ${soldDate ? `<div class="docs-mini">${escapeHTML(T.sold_on_prefix)}${escapeHTML(soldDate)}</div>` : ""}
   `;
 }
 
@@ -772,7 +875,7 @@ function renderLinkedEvents(item){
   const events = item.linked_events || [];
 
   if(events.length === 0){
-    return `<div class="docs-mini">Nessun evento collegato</div>`;
+    return `<div class="docs-mini">${escapeHTML(T.no_linked_events)}</div>`;
   }
 
   const chips = events.slice(0,4).map(event => `
@@ -787,7 +890,7 @@ function renderLinkedEvents(item){
     <div class="linked-events">
       ${chips}
       ${events.length > 4 ? `<span class="event-chip">+${events.length - 4}</span>` : ""}
-      ${firstEvent ? `<br><a class="event-link" href="event-edit.html?id=${encodeURIComponent(firstEvent.id)}">Visualizza evento</a>` : ""}
+      ${firstEvent ? `<br><a class="event-link" href="event-edit.html?id=${encodeURIComponent(firstEvent.id)}">${escapeHTML(T.view_event)}</a>` : ""}
     </div>
   `;
 }
@@ -831,7 +934,7 @@ function renderTable(data){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="9" class="empty">Nessuna proposta presente.</td>
+        <td colspan="9" class="empty">${escapeHTML(T.empty_none)}</td>
       </tr>
     `;
     return;
@@ -860,7 +963,7 @@ function renderTable(data){
         </td>
 
         <td class="${item.published ? "published" : "not-published"}">
-          ${item.published ? "Sì" : "No"}
+          ${item.published ? "S\u00ec" : "No"}
         </td>
 
         <td>
@@ -872,42 +975,42 @@ function renderTable(data){
 
             ${item.published ? `
               <a href="../opportunity.html?id=${encodeURIComponent(item.id)}" target="_blank">
-                Vedi
+                ${escapeHTML(T.action_view)}
               </a>
             ` : ""}
 
             <a href="opportunity-edit.html?id=${encodeURIComponent(item.id)}">
-              ${isAdmin ? "Valuta" : "Apri"}
+              ${isAdmin ? escapeHTML(T.action_evaluate) : escapeHTML(T.action_open)}
             </a>
 
             ${isAdmin ? `
               <select onchange="changeReviewStatus('${item.id}', this.value)">
-                <option value="">Cambia revisione</option>
-                <option value="da_verificare">Da verificare</option>
-                <option value="da_revisionare">Da revisionare</option>
-                <option value="approvato">Approvato</option>
-                <option value="rifiutato">Rifiutato</option>
+                <option value="">${escapeHTML(T.select_change_review)}</option>
+                <option value="da_verificare">${escapeHTML(T.status_da_verificare)}</option>
+                <option value="da_revisionare">${escapeHTML(T.status_da_revisionare)}</option>
+                <option value="approvato">${escapeHTML(T.status_approvato)}</option>
+                <option value="rifiutato">${escapeHTML(T.status_rifiutato)}</option>
               </select>
 
               <select onchange="changeCommercialStatus('${item.id}', this.value)">
-                <option value="">Cambia commerciale</option>
-                <option value="available">Disponibile</option>
-                <option value="under_negotiation">In trattativa</option>
-                <option value="reserved">Riservata</option>
-                <option value="sold">Venduta</option>
-                <option value="withdrawn">Ritirata</option>
+                <option value="">${escapeHTML(T.select_change_commercial)}</option>
+                <option value="available">${escapeHTML(T.commercial_available)}</option>
+                <option value="under_negotiation">${escapeHTML(T.commercial_negotiation)}</option>
+                <option value="reserved">${escapeHTML(T.commercial_reserved)}</option>
+                <option value="sold">${escapeHTML(T.commercial_sold)}</option>
+                <option value="withdrawn">${escapeHTML(T.commercial_withdrawn)}</option>
               </select>
 
               <button onclick="togglePublished('${item.id}', ${item.published}, '${reviewStatus}', '${commercialStatus}')" ${!canPublish && !item.published ? "disabled" : ""}>
-                ${item.published ? "Sospendi" : "Pubblica"}
+                ${item.published ? escapeHTML(T.btn_suspend) : escapeHTML(T.btn_publish)}
               </button>
 
               <a href="event-form.html?opportunity_id=${encodeURIComponent(item.id)}&event_type=selling_party">
-                Selling Party
+                ${escapeHTML(T.btn_selling_party)}
               </a>
 
               <button class="danger" onclick="deleteOpportunity('${item.id}')">
-                Elimina
+                ${escapeHTML(T.btn_delete)}
               </button>
             ` : ""}
 
@@ -923,7 +1026,7 @@ async function changeReviewStatus(id, newStatus){
     return;
   }
 
-  setStatus("Aggiornamento stato revisione...", "");
+  setStatus(T.msg_updating_review, "");
 
   const updateData = {
     review_status:newStatus,
@@ -945,7 +1048,7 @@ async function changeReviewStatus(id, newStatus){
     return;
   }
 
-  setStatus("Stato revisione aggiornato correttamente.", "success");
+  setStatus(T.msg_review_updated, "success");
   await loadOpportunities();
 }
 
@@ -955,14 +1058,14 @@ async function changeCommercialStatus(id, newStatus){
   }
 
   const confirmSold = newStatus === "sold"
-    ? confirm("Confermi che questa opportunità è venduta? Verrà sospesa dalle opportunità pubbliche e comparirà nelle Success Stories.")
+    ? confirm(T.confirm_sold)
     : true;
 
   if(!confirmSold){
     return;
   }
 
-  setStatus("Aggiornamento stato commerciale...", "");
+  setStatus(T.msg_updating_commercial, "");
 
   const now = new Date().toISOString();
 
@@ -1010,27 +1113,27 @@ async function changeCommercialStatus(id, newStatus){
     });
   }
 
-  setStatus("Stato commerciale aggiornato correttamente.", "success");
+  setStatus(T.msg_commercial_updated, "success");
   await loadOpportunities();
 }
 
 async function togglePublished(id, currentStatus, reviewStatus, commercialStatus){
   if(!isAdmin){
-    setStatus("Solo un admin può pubblicare o sospendere una proposta.", "error");
+    setStatus(T.err_only_admin_publish, "error");
     return;
   }
 
   if(!currentStatus && reviewStatus !== "approvato"){
-    setStatus("Puoi pubblicare solo una proposta approvata.", "error");
+    setStatus(T.err_only_approved, "error");
     return;
   }
 
   if(!currentStatus && (commercialStatus === "sold" || commercialStatus === "withdrawn")){
-    setStatus("Una proposta venduta o ritirata non può essere pubblicata tra le opportunità disponibili.", "error");
+    setStatus(T.err_sold_withdrawn_no_publish, "error");
     return;
   }
 
-  setStatus("Aggiornamento pubblicazione...", "");
+  setStatus(T.msg_updating_publish, "");
 
   const { error } = await client
     .from("opportunities")
@@ -1045,23 +1148,23 @@ async function togglePublished(id, currentStatus, reviewStatus, commercialStatus
     return;
   }
 
-  setStatus("Pubblicazione aggiornata correttamente.", "success");
+  setStatus(T.msg_publish_updated, "success");
   await loadOpportunities();
 }
 
 async function deleteOpportunity(id){
   if(!isAdmin){
-    setStatus("Solo un admin può eliminare una proposta.", "error");
+    setStatus(T.err_only_admin_delete, "error");
     return;
   }
 
-  const confirmDelete = confirm("Vuoi eliminare definitivamente questa proposta?");
+  const confirmDelete = confirm(T.confirm_delete);
 
   if(!confirmDelete){
     return;
   }
 
-  setStatus("Eliminazione in corso...", "");
+  setStatus(T.msg_deleting, "");
 
   const { error } = await client
     .from("opportunities")
@@ -1073,7 +1176,7 @@ async function deleteOpportunity(id){
     return;
   }
 
-  setStatus("Proposta eliminata correttamente.", "success");
+  setStatus(T.msg_deleted, "success");
   await loadOpportunities();
 }
 
