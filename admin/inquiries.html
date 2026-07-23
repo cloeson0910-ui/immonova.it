@@ -184,18 +184,18 @@ min-height:18px;
 <div class="logo">IMMONOVA</div>
 
 <div class="header-actions">
-<a href="dashboard.html">Dashboard</a>
-<a href="opportunity-form.html">Nuova Opportunità</a>
-<a href="opportunities.html">Opportunità</a>
-<button class="logout" id="logoutBtn">Logout</button>
+<a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+<a href="opportunity-form.html" data-i18n="nav_new_opportunity">Nuova Opportunità</a>
+<a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
+<button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
 </div>
 </header>
 
 <div class="container">
 
-<h1 class="title">Richieste</h1>
+<h1 class="title" data-i18n="title">Richieste</h1>
 
-<p class="subtitle">
+<p class="subtitle" data-i18n="subtitle">
 Gestisci tutte le richieste ricevute dai clienti e aggiorna lo stato commerciale.
 </p>
 
@@ -205,20 +205,20 @@ Gestisci tutte le richieste ricevute dai clienti e aggiorna lo stato commerciale
 <table>
 <thead>
 <tr>
-<th>Data</th>
-<th>Cliente</th>
-<th>Email</th>
-<th>Telefono</th>
-<th>Opportunità</th>
-<th>Categoria</th>
-<th>Messaggio</th>
-<th>Stato</th>
+<th data-i18n="th_date">Data</th>
+<th data-i18n="th_client">Cliente</th>
+<th data-i18n="th_email">Email</th>
+<th data-i18n="th_phone">Telefono</th>
+<th data-i18n="th_opportunity">Opportunità</th>
+<th data-i18n="th_category">Categoria</th>
+<th data-i18n="th_message">Messaggio</th>
+<th data-i18n="th_status">Stato</th>
 </tr>
 </thead>
 
 <tbody id="inquiriesTable">
 <tr>
-<td colspan="8" class="empty">Caricamento...</td>
+<td colspan="8" class="empty" data-i18n="loading">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -237,6 +237,91 @@ const client = window.supabase.createClient(
 
 const table = document.getElementById("inquiriesTable");
 const statusMessage = document.getElementById("statusMessage");
+let currentUser = null;
+let currentUserLanguage = "it";
+
+/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). checkAuth() qui
+   non caricava un profilo (solo verifica sessione); ora salva anche currentUser cosi
+   loadUserLanguage() puo' leggere profiles.language dopo il login. ---- */
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_new_opportunity:"Nuova Opportunità", nav_opportunities:"Opportunità", logout:"Logout",
+  title:"Richieste",
+  subtitle:"Gestisci tutte le richieste ricevute dai clienti e aggiorna lo stato commerciale.",
+  th_date:"Data", th_client:"Cliente", th_email:"Email", th_phone:"Telefono",
+  th_opportunity:"Opportunità", th_category:"Categoria", th_message:"Messaggio", th_status:"Stato",
+  loading:"Caricamento...", loading_error:"Errore nel caricamento delle richieste.",
+  empty_none:"Nessuna richiesta presente.",
+  status_pending:"Pending", status_evasa:"Evasa", status_trattativa:"Trattativa",
+  msg_updating:"Aggiornamento stato...", msg_updated:"Stato aggiornato correttamente."
+};
+
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_inquiries_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Admin page listing customer inquiries: table headers, status dropdown, status messages.",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione inquiries non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+}
+
+async function loadUserLanguage(){
+  if(!currentUser) return;
+  var result = await client.from("profiles").select("id,language").eq("id", currentUser.id).single();
+
+  if(result.error){
+    var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
+    if(looksLikeMissingLanguageColumn){
+      console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
+    }
+    await applyLanguage("it");
+    return;
+  }
+
+  await applyLanguage((result.data && result.data.language) || "it");
+}
+
 
 async function checkAuth(){
   const { data:{ session } } = await client.auth.getSession();
@@ -246,6 +331,7 @@ async function checkAuth(){
     return false;
   }
 
+  currentUser = session.user;
   return true;
 }
 
@@ -253,7 +339,7 @@ function formatDate(value){
   if(!value) return "";
   const date = new Date(value);
 
-  return date.toLocaleDateString("it-IT", {
+  return date.toLocaleDateString(currentUserLanguage === "it" ? "it-IT" : currentUserLanguage, {
     day:"2-digit",
     month:"2-digit",
     year:"numeric",
@@ -295,7 +381,7 @@ async function loadInquiries(){
     table.innerHTML = `
       <tr>
         <td colspan="8" class="empty">
-          Errore nel caricamento delle richieste.
+          ${T.loading_error}
         </td>
       </tr>
     `;
@@ -306,7 +392,7 @@ async function loadInquiries(){
     table.innerHTML = `
       <tr>
         <td colspan="8" class="empty">
-          Nessuna richiesta presente.
+          ${T.empty_none}
         </td>
       </tr>
     `;
@@ -330,9 +416,9 @@ async function loadInquiries(){
         <td class="message">${message || ""}</td>
         <td>
           <select onchange="updateInquiryStatus(${i.id}, this.value)">
-            <option value="pending" ${currentStatus === "pending" ? "selected" : ""}>Pending</option>
-            <option value="evasa" ${currentStatus === "evasa" ? "selected" : ""}>Evasa</option>
-            <option value="trattativa" ${currentStatus === "trattativa" ? "selected" : ""}>Trattativa</option>
+            <option value="pending" ${currentStatus === "pending" ? "selected" : ""}>${T.status_pending}</option>
+            <option value="evasa" ${currentStatus === "evasa" ? "selected" : ""}>${T.status_evasa}</option>
+            <option value="trattativa" ${currentStatus === "trattativa" ? "selected" : ""}>${T.status_trattativa}</option>
           </select>
         </td>
       </tr>
@@ -342,7 +428,7 @@ async function loadInquiries(){
 
 async function updateInquiryStatus(id, status){
   statusMessage.className = "status-message";
-  statusMessage.textContent = "Aggiornamento stato...";
+  statusMessage.textContent = T.msg_updating;
 
   const { error } = await client
     .from("inquiries")
@@ -356,7 +442,7 @@ async function updateInquiryStatus(id, status){
   }
 
   statusMessage.className = "status-message success";
-  statusMessage.textContent = "Stato aggiornato correttamente.";
+  statusMessage.textContent = T.msg_updated;
 }
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
@@ -368,6 +454,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   const isLogged = await checkAuth();
 
   if(isLogged){
+    await loadUserLanguage();
     await loadInquiries();
   }
 })();

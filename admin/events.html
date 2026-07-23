@@ -30,13 +30,115 @@
 
     <div class="logo-line"></div>
     <span class="logo-sub">OFF MARKET • CONSULTING</span>
-  </a><nav class="nav"><a href="dashboard.html">Dashboard</a><a href="opportunities.html">Opportunità</a><a href="event-form.html">Nuovo Evento</a><button id="logoutBtn">Logout</button></nav></header>
-<main class="container"><div class="kicker">Area Admin</div><h1 class="title">Eventi</h1><p class="subtitle">Gestisci eventi conclusi, opportunità vendute, selling party e party in programma con foto, video e collegamento alle opportunità.</p><div id="status" class="status"></div><div class="toolbar"><input id="searchInput" class="search" placeholder="Cerca per titolo, location, tipo evento..."><select id="typeFilter" class="filter"><option value="">Tutti i tipi</option><option value="sold_party">Sold Party</option><option value="past_party">Party avvenuti</option><option value="upcoming_party">Party in programma</option><option value="selling_party">Selling Party</option></select><select id="publishedFilter" class="filter"><option value="">Pubblicati e bozze</option><option value="true">Pubblicati</option><option value="false">Bozze</option></select><a class="btn" href="event-form.html">Nuovo Evento</a><a class="btn secondary" href="../events.html" target="_blank">Vedi Pubblico</a></div><div class="table-wrapper"><table><thead><tr><th>Media</th><th>Titolo</th><th>Tipo</th><th>Data</th><th>Location</th><th>Pubblicato</th><th>Azioni</th></tr></thead><tbody id="eventsTable"><tr><td colspan="7" class="empty">Caricamento...</td></tr></tbody></table></div></main>
+  </a><nav class="nav"><a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a><a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a><a href="event-form.html" data-i18n="nav_new_event">Nuovo Evento</a><button id="logoutBtn" data-i18n="logout">Logout</button></nav></header>
+<main class="container"><div class="kicker" data-i18n="kicker">Area Admin</div><h1 class="title" data-i18n="title">Eventi</h1><p class="subtitle" data-i18n="subtitle">Gestisci eventi conclusi, opportunità vendute, selling party e party in programma con foto, video e collegamento alle opportunità.</p><div id="status" class="status"></div><div class="toolbar"><input id="searchInput" class="search" data-i18n-placeholder="ph_search" placeholder="Cerca per titolo, location, tipo evento..."><select id="typeFilter" class="filter"><option value="" data-i18n="filter_all_types">Tutti i tipi</option><option value="sold_party" data-i18n="type_sold_party">Sold Party</option><option value="past_party" data-i18n="type_past_party_plural">Party avvenuti</option><option value="upcoming_party" data-i18n="type_upcoming_party_plural">Party in programma</option><option value="selling_party" data-i18n="type_selling_party">Selling Party</option></select><select id="publishedFilter" class="filter"><option value="" data-i18n="filter_all_published">Pubblicati e bozze</option><option value="true" data-i18n="filter_published">Pubblicati</option><option value="false" data-i18n="filter_drafts">Bozze</option></select><a class="btn" href="event-form.html" data-i18n="btn_new_event">Nuovo Evento</a><a class="btn secondary" href="../events.html" target="_blank" data-i18n="btn_view_public">Vedi Pubblico</a></div><div class="table-wrapper"><table><thead><tr><th data-i18n="th_media">Media</th><th data-i18n="th_title">Titolo</th><th data-i18n="th_type">Tipo</th><th data-i18n="th_date">Data</th><th data-i18n="th_location">Location</th><th data-i18n="th_published">Pubblicato</th><th data-i18n="th_actions">Azioni</th></tr></thead><tbody id="eventsTable"><tr><td colspan="7" class="empty" data-i18n="loading">Caricamento...</td></tr></tbody></table></div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="../js/config.js"></script><script>
-const client=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);const table=document.getElementById('eventsTable');const statusBox=document.getElementById('status');let allEvents=[];const labels={sold_party:'Sold Party',sold_event:'Sold Party',past_party:'Party avvenuto',upcoming_party:'Party in programma',selling_party:'Selling Party'};
-function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}function setStatus(m,t){statusBox.className='status '+(t||'');statusBox.textContent=m||''}function fmtDate(v){if(!v)return '-';return new Date(v+'T12:00:00').toLocaleDateString('it-IT')}async function checkAuth(){const {data:{session},error}=await client.auth.getSession();if(error||!session){location.href='login.html';return false}return true}
-async function load(){const {data,error}=await client.from('immonova_events').select('*, immonova_event_media(*)').order('created_at',{ascending:false});if(error){console.error(error);table.innerHTML='<tr><td colspan="7" class="empty">Errore caricamento.</td></tr>';setStatus(error.message,'error');return}allEvents=data||[];render()}
-function render(){const q=document.getElementById('searchInput').value.trim().toLowerCase();const type=document.getElementById('typeFilter').value;const pub=document.getElementById('publishedFilter').value;let rows=allEvents.filter(e=>{const m=[e.title,e.location,e.venue,e.event_type,labels[e.event_type]].some(v=>String(v||'').toLowerCase().includes(q));const mt=!type||e.event_type===type||(type==='sold_party'&&e.event_type==='sold_event');const mp=pub===''||String(e.published)===pub;return m&&mt&&mp});if(!rows.length){table.innerHTML='<tr><td colspan="7" class="empty">Nessun evento presente.</td></tr>';return}table.innerHTML=rows.map(e=>'<tr><td>'+(e.cover_image?'<img class="thumb" src="'+esc(e.cover_image)+'">':'<div class="thumb"></div>')+'</td><td><strong>'+esc(e.title)+'</strong><br><small>'+esc(e.short_description||'')+'</small></td><td><span class="badge '+esc(e.event_type)+'">'+esc(labels[e.event_type]||e.event_type)+'</span></td><td>'+esc(fmtDate(e.event_date))+'</td><td>'+esc(e.location||e.venue||'')+'</td><td>'+(e.published?'Sì':'No')+'</td><td><div class="actions"><a href="event-edit.html?id='+encodeURIComponent(e.id)+'">Modifica</a><button onclick="togglePublish('+Number(e.id)+','+(!e.published)+')">'+(e.published?'Sospendi':'Pubblica')+'</button><button class="danger" onclick="deleteEvent('+Number(e.id)+')">Elimina</button></div></td></tr>').join('')}
-window.togglePublish=async(id,value)=>{const {error}=await client.from('immonova_events').update({published:value}).eq('id',id);if(error){alert(error.message);return}await load()};window.deleteEvent=async(id)=>{if(!confirm('Eliminare evento?'))return;const {error}=await client.from('immonova_events').delete().eq('id',id);if(error){alert(error.message);return}await load()};
-document.getElementById('searchInput').addEventListener('input',render);document.getElementById('typeFilter').addEventListener('change',render);document.getElementById('publishedFilter').addEventListener('change',render);document.getElementById('logoutBtn').addEventListener('click',async()=>{await client.auth.signOut();location.href='../index.html'});(async()=>{if(await checkAuth())await load()})();
+const client=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);const table=document.getElementById('eventsTable');const statusBox=document.getElementById('status');let allEvents=[];let currentUser=null;let currentUserLanguage="it";
+
+/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). Client Supabase
+   "client" come nelle altre pagine "nav style". checkAuth() qui non caricava un profilo (solo
+   verifica sessione), quindi loadUserLanguage() e' una chiamata dedicata separata, invocata
+   dopo checkAuth() nell'IIFE finale. labels{} (mappa tipo evento -> etichetta) e' ricostruita
+   da T ad ogni cambio lingua invece di restare hardcoded in italiano. ---- */
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_new_event:"Nuovo Evento", logout:"Logout",
+  kicker:"Area Admin", title:"Eventi",
+  subtitle:"Gestisci eventi conclusi, opportunità vendute, selling party e party in programma con foto, video e collegamento alle opportunità.",
+  ph_search:"Cerca per titolo, location, tipo evento...",
+  filter_all_types:"Tutti i tipi", type_sold_party:"Sold Party", type_past_party_plural:"Party avvenuti",
+  type_upcoming_party_plural:"Party in programma", type_selling_party:"Selling Party",
+  filter_all_published:"Pubblicati e bozze", filter_published:"Pubblicati", filter_drafts:"Bozze",
+  btn_new_event:"Nuovo Evento", btn_view_public:"Vedi Pubblico",
+  th_media:"Media", th_title:"Titolo", th_type:"Tipo", th_date:"Data", th_location:"Location",
+  th_published:"Pubblicato", th_actions:"Azioni",
+  loading:"Caricamento...", loading_error:"Errore caricamento.", empty_none:"Nessun evento presente.",
+  label_sold_party:"Sold Party", label_past_party:"Party avvenuto", label_upcoming_party:"Party in programma",
+  label_selling_party:"Selling Party",
+  yes:"Sì", no:"No",
+  action_edit:"Modifica", action_suspend:"Sospendi", action_publish:"Pubblica", action_delete:"Elimina",
+  confirm_delete_event:"Eliminare evento?"
+};
+
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var T = UI_STRINGS;
+var labels = {};
+function buildLabels(){
+  labels = {sold_party:T.label_sold_party, sold_event:T.label_sold_party, past_party:T.label_past_party, upcoming_party:T.label_upcoming_party, selling_party:T.label_selling_party};
+}
+buildLabels();
+
+function i18nCacheKey(lang){ return "immonova_i18n_events_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Admin page listing events (parties, closings): table, filters, status badges, action buttons.",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione events non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(function(el){
+    var key = el.getAttribute("data-i18n-placeholder");
+    if(T[key]) el.setAttribute("placeholder", T[key]);
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+  buildLabels();
+}
+
+async function loadUserLanguage(){
+  var result = await client.from("profiles").select("id,language").eq("id", currentUser.id).single();
+
+  if(result.error){
+    var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
+    if(looksLikeMissingLanguageColumn){
+      console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
+    }
+    await applyLanguage("it");
+    return;
+  }
+
+  await applyLanguage((result.data && result.data.language) || "it");
+}
+
+
+function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}function setStatus(m,t){statusBox.className='status '+(t||'');statusBox.textContent=m||''}function fmtDate(v){if(!v)return '-';return new Date(v+'T12:00:00').toLocaleDateString(currentUserLanguage==='it'?'it-IT':currentUserLanguage)}async function checkAuth(){const {data:{session},error}=await client.auth.getSession();if(error||!session){location.href='login.html';return false}currentUser=session.user;return true}
+async function load(){const {data,error}=await client.from('immonova_events').select('*, immonova_event_media(*)').order('created_at',{ascending:false});if(error){console.error(error);table.innerHTML='<tr><td colspan="7" class="empty">'+esc(T.loading_error)+'</td></tr>';setStatus(error.message,'error');return}allEvents=data||[];render()}
+function render(){const q=document.getElementById('searchInput').value.trim().toLowerCase();const type=document.getElementById('typeFilter').value;const pub=document.getElementById('publishedFilter').value;let rows=allEvents.filter(e=>{const m=[e.title,e.location,e.venue,e.event_type,labels[e.event_type]].some(v=>String(v||'').toLowerCase().includes(q));const mt=!type||e.event_type===type||(type==='sold_party'&&e.event_type==='sold_event');const mp=pub===''||String(e.published)===pub;return m&&mt&&mp});if(!rows.length){table.innerHTML='<tr><td colspan="7" class="empty">'+esc(T.empty_none)+'</td></tr>';return}table.innerHTML=rows.map(e=>'<tr><td>'+(e.cover_image?'<img class="thumb" src="'+esc(e.cover_image)+'">':'<div class="thumb"></div>')+'</td><td><strong>'+esc(e.title)+'</strong><br><small>'+esc(e.short_description||'')+'</small></td><td><span class="badge '+esc(e.event_type)+'">'+esc(labels[e.event_type]||e.event_type)+'</span></td><td>'+esc(fmtDate(e.event_date))+'</td><td>'+esc(e.location||e.venue||'')+'</td><td>'+(e.published?esc(T.yes):esc(T.no))+'</td><td><div class="actions"><a href="event-edit.html?id='+encodeURIComponent(e.id)+'">'+esc(T.action_edit)+'</a><button onclick="togglePublish('+Number(e.id)+','+(!e.published)+')">'+(e.published?esc(T.action_suspend):esc(T.action_publish))+'</button><button class="danger" onclick="deleteEvent('+Number(e.id)+')">'+esc(T.action_delete)+'</button></div></td></tr>').join('')}
+window.togglePublish=async(id,value)=>{const {error}=await client.from('immonova_events').update({published:value}).eq('id',id);if(error){alert(error.message);return}await load()};window.deleteEvent=async(id)=>{if(!confirm(T.confirm_delete_event))return;const {error}=await client.from('immonova_events').delete().eq('id',id);if(error){alert(error.message);return}await load()};
+document.getElementById('searchInput').addEventListener('input',render);document.getElementById('typeFilter').addEventListener('change',render);document.getElementById('publishedFilter').addEventListener('change',render);document.getElementById('logoutBtn').addEventListener('click',async()=>{await client.auth.signOut();location.href='../index.html'});(async()=>{if(await checkAuth()){await loadUserLanguage();await load()}})();
 </script></body></html>

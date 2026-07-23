@@ -106,9 +106,9 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 <header class="header">
   <a class="logo" href="../index.html">IMMONOVA<small>OFF MARKET • CONSULTING</small></a>
   <div class="header-actions">
-    <a href="dashboard.html">Dashboard</a>
-    <a href="opportunities.html">Proposte</a>
-    <button id="logoutBtn" type="button">Logout</button>
+    <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="opportunities.html" data-i18n="nav_opportunities">Proposte</a>
+    <button id="logoutBtn" type="button" data-i18n="logout">Logout</button>
   </div>
 </header>
 <main class="container">
@@ -118,14 +118,14 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
       <h1 class="title" id="pageTitle">Dossier</h1>
     </div>
     <div class="actions">
-      <button class="btn" id="loadBtn" type="button">Ricarica dati</button>
-      <button class="btn secondary" id="refreshDossierBtn" type="button">Aggiorna dati territoriali</button>
-      <button class="btn secondary" onclick="window.print()" type="button">Stampa / PDF</button>
-      <a class="btn secondary" id="editLink" href="#">Torna alla proposta</a>
+      <button class="btn" id="loadBtn" type="button" data-i18n="btn_reload_data">Ricarica dati</button>
+      <button class="btn secondary" id="refreshDossierBtn" type="button" data-i18n="btn_refresh_territorial">Aggiorna dati territoriali</button>
+      <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
+      <a class="btn secondary" id="editLink" href="#" data-i18n="btn_back_to_proposal">Torna alla proposta</a>
     </div>
   </div>
   <div id="status" class="status"></div>
-  <section id="book" class="book"><div class="empty">Caricamento dossier...</div></section>
+  <section id="book" class="book"><div class="empty" data-i18n="loading_dossier">Caricamento dossier...</div></section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -165,18 +165,249 @@ if(window["pdfjsLib"]){
 /* ---- Pesi del punteggio sintetico: modificabili qui, un solo posto ---- */
 var SCORE_WEIGHTS = { financial:30, market:20, hospitality:20, access:15, territory:15 };
 
+/* ---- i18n: dossier tradotto nella lingua di CHI LO RICEVE (investitore), non dell'admin
+   loggato -- diverso dal meccanismo usato nelle altre pagine admin. Lingua letta dal parametro
+   URL "lang" (già passato da dashboard.html quando apre il dossier per un investitore, es.
+   report-view.html?id=...&lang=en), default "it" se assente. Copre TUTTO il contenuto stampato
+   (copertina, sommario, tutte le pagine del libro, disclaimer legale) più l'interfaccia a
+   schermo (nav, pulsanti, messaggi di stato) visibile se il dossier viene aperto nel browser.
+   NON copre il pannello diagnostico interno (renderDebugBootstrap/renderXlsxSourceDiagnosticsHTML):
+   ha display:none in stampa ed è visibile solo all'admin nel browser, mai a un investitore in
+   nessun formato -- resta sempre in italiano, come strumento di debug interno. */
+var CURRENT_LANG = "it";
+var T = {};
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_opportunities:"Proposte", logout:"Logout",
+  btn_reload_data:"Ricarica dati", btn_refresh_territorial:"Aggiorna dati territoriali",
+  btn_print_pdf:"Stampa / PDF", btn_back_to_proposal:"Torna alla proposta",
+  loading_dossier:"Caricamento dossier...",
+  min_by_car:" min in auto",
+  cover_kicker:"Confidential Investment Dossier",
+  generated_prefix:"Generato ",
+  toc_kicker:"Contents", toc_title:"Sommario",
+  chapter_financial:"Analisi finanziaria", chapter_property:"Immobile", chapter_territory:"Territorio & mercato",
+  chapter_ecosystem:"Ecosistema & accessibilità", chapter_evaluation:"Valutazione IMMONOVA", chapter_sources:"Fonti & note",
+  divider_financial_title:"Analisi Finanziaria", divider_financial_kicker:"Executive summary",
+  divider_property_title:"L'Immobile", divider_property_kicker:"Property overview",
+  divider_territory_title:"Territorio & Mercato", divider_territory_kicker:"Location intelligence",
+  divider_ecosystem_title:"Ecosistema & Accessibilità", divider_ecosystem_kicker:"Territorial ecosystem",
+  divider_evaluation_title:"Valutazione IMMONOVA", divider_evaluation_kicker:"Analytical assessment",
+  divider_sources_title:"Fonti & Note", divider_sources_kicker:"Sources & disclaimer",
+  kicker_internal_financial:"Internal financial base", title_internal_financial:"Dati economici interni",
+  label_purchase_price:"Prezzo acquisto", note_purchase_price:"Dato opportunità / report interno.",
+  label_total_acquisition:"Totale acquisizione", note_total_acquisition:"Prezzo + imposte + notaio + agenzia + due diligence.",
+  label_total_development:"Totale sviluppo", note_total_development:"Ristrutturazione + tecnici + FF&E + marketing + contingency.",
+  label_total_project_cost:"Total Project Cost", note_total_project_cost:"Base economica reale per i KPI successivi.",
+  not_available:"Non disponibile", not_available_long:"Oltre 60 anni (non rientra in un orizzonte ragionevole)",
+  over_60_years:"Oltre 60 anni", range_from:"da ", range_to:"fino a ",
+  kicker_financial_core:"Financial core", title_roi_breakeven:"ROI & Break-even",
+  label_net_income:"Net Income", label_roi:"ROI", label_breakeven:"Break-even",
+  note_net_income:"Reddito netto operativo annuo.", note_roi:"Net Income / Total Project Cost.",
+  note_breakeven:"Total Project Cost / Net Operating Cash Flow",
+  tag_verified_adr:" (da ADR verificato)", tag_estimated:" (stimato)",
+  years_suffix:" anni", extrapolated_note:" (proiezione estesa oltre i 15 anni in tabella)",
+  extrapolated_note2:" (proiezione estesa oltre i 15 anni mostrati in tabella)",
+  scenario_min:"Scenario ADR minimo", scenario_max:"Scenario ADR massimo", scenario_real_data:"Scenario da dati reali", scenario_adr:"Scenario ADR",
+  rule_range_note_verified:"Net Income, ROI e Break-even sono mostrati per entrambi gli scenari ADR verificati dall\u2019analista (minimo e massimo), qui sopra, senza dover scorrere fino alla tabella di proiezione 15 anni. Occupazione e costi operativi restano ipotesi dichiarate.",
+  rule_range_note_market:"Net Income, ROI e Break-even sono mostrati per entrambi gli scenari ADR di mercato automatico (minimo e massimo), qui sopra, senza dover scorrere fino alla tabella di proiezione 15 anni. Occupazione e costi operativi restano ipotesi dichiarate.",
+  rule_real_note:"Net Income e ROI calcolati su dati reali dal report interno.",
+  rule_single_note_verified:"Net Income e ROI calcolati sull\u2019unico ADR disponibile (verificato dall\u2019analista). Occupazione e costi operativi restano ipotesi dichiarate.",
+  rule_single_note_market:"Net Income e ROI calcolati sull\u2019unico ADR disponibile (di mercato automatico). Occupazione e costi operativi restano ipotesi dichiarate.",
+  rule_none_note:"Questa pagina non inventa scenari. Senza reddito netto reale nel report e senza alcun ADR (verificato o automatico), Net Income, ROI e Break-even restano esplicitamente non disponibili.",
+  calc_rule_title:"Regola di calcolo",
+  kicker_investment_structure:"Investment structure", title_total_project_cost:"Total Project Cost",
+  cost_acquisition_title:"Costi acquisizione", cost_development_title:"Costi sviluppo",
+  row_purchase_price:"Prezzo acquisto", row_taxes:"Imposte / tasse", row_notary:"Notaio",
+  row_agency:"Agenzia / brokerage", row_due_diligence:"Due diligence tecnica / legale", row_total_acquisition:"Totale acquisizione",
+  row_renovation_avg:"Ristrutturazione media", declared_range_scheda:"Range dichiarato in scheda",
+  row_technical_fees:"Spese tecniche / progettazione", row_ffe:"FF&E / arredi", row_marketing:"Marketing apertura",
+  row_contingency:"Contingency / imprevisti", row_total_development:"Totale sviluppo",
+  row_total_project_cost:"Total Project Cost",
+  renovation_scenarios_title:"Scenari di ristrutturazione a confronto",
+  renovation_scenarios_note:"Ricalcolati con le stesse tariffe usate in scheda: conservativo 400\u2013700 \u20ac/mq, normale 800\u20131400 \u20ac/mq, lusso 1500\u20133000 \u20ac/mq, moltiplicatore per livello degrado leggero 0,90 / medio 1,00 / pesante 1,18. Il costo medio dello scenario selezionato \u00e8 quello usato nel Total Project Cost qui sopra.",
+  label_conservative:"Conservativo", label_normal:"Normale", label_luxury:"Lusso", label_selected:"\u2014 selezionato",
+  media_dash:" \u2013 ", avg_label:"media ",
+  kicker_cashflow:"Cash-flow projection", title_cashflow:"Rendita & Proiezione 15 Anni",
+  cashflow_intro:"Ipotesi dichiarate per ogni scenario: crescita ricavi {growth}/anno (prudenziale, non derivata da serie storica), costi operativi {opex} dei ricavi. Total Project Cost di riferimento: {total}.",
+  revenue_year1_prefix:"Ricavo anno 1: ",
+  breakeven_estimated_extrapolated:"Rientro stimato all\u2019anno {year} \u2014 oltre l\u2019orizzonte di 15 anni mostrato in tabella, stessa formula di crescita.",
+  breakeven_estimated:"Rientro stimato all\u2019anno {year}, evidenziato in tabella.",
+  breakeven_not_reached:"Non rientrato nemmeno in una proiezione estesa a 60 anni.",
+  th_year:"Anno", th_revenue:"Ricavi", th_costs:"Costi", th_profit:"Utile", th_cumulative:"Cumulato",
+  adr_verified_label:"ADR verificato dall\u2019analista", adr_market_label:"ADR di mercato",
+  occupancy_verified:"verificata", occupancy_assumed:"assunta",
+  units_label:" unit\u00e0", adr_min_label:"ADR minimo", adr_max_label:"ADR massimo", adr_single_label:"ADR unico",
+  real_data_source:"dato reale da report interno",
+  kicker_property:"Property documents", kicker_media_gallery:"Media gallery", title_media_gallery:"Immagini dell\u2019Immobile",
+  kicker_asset_location:"Asset location", title_location:"Posizione e Localizzazione",
+  label_address_row:"Indirizzo", label_locality_row:"Località / Contrada", label_zip_row:"CAP",
+  label_city_row:"Comune", label_province_row:"Provincia", label_region_row:"Regione",
+  kicker_territorial_profile:"Territorial profile", title_territorial_profile:"Profilo territoriale",
+  label_population:"Popolazione", label_surface:"Superficie", label_density:"Densità", label_altitude:"Altitudine",
+  note_territorial:"Dati demografici e territoriali del comune, raccolti automaticamente dal Discovery Engine su fonti pubbliche verificate.",
+  kicker_tourism_data:"Tourism data", title_tourism_current:"Turismo \u2014 Dati Attuali",
+  field_arrivals:"Arrivi turistici", unit_people:"persone",
+  field_overnight_stays:"Presenze (pernottamenti)", unit_nights:"notti",
+  field_average_stay:"Permanenza media",
+  field_italian_arrivals:"Arrivi italiani", field_foreign_arrivals:"Arrivi stranieri",
+  field_italian_overnight:"Presenze italiani", field_foreign_overnight:"Presenze stranieri",
+  source_prefix:"Fonte: ",
+  kicker_real_estate:"Real estate market", title_real_estate:"Valore immobiliare di riferimento",
+  label_market_value_m2:"Valore di mercato al m²", label_source_card:"Fonte",
+  kicker_hospitality_pricing:"Hospitality pricing", title_adr:"ADR di riferimento",
+  label_adr_room_night:"ADR \u2014 tariffa media camera/notte",
+  kicker_tourism_history:"Tourism history", title_tourism_history:"Turismo \u2014 Serie Storica",
+  presences_arrivals_label:"Presenze/arrivi per anno · livello: ", th_value:"Valore", th_yoy:"Crescita YoY",
+  cagr_calculated:"CAGR calcolato sul periodo disponibile: ", per_year:" /anno.",
+  cagr_insufficient:"Serie insufficiente per calcolare un CAGR.",
+  no_interpolation_note:" Nessun dato interpolato: la serie riporta solo gli anni realmente trovati dal Discovery Engine.",
+  kicker_tourism_forecast:"Tourism forecast", title_tourism_forecast:"Turismo \u2014 Proiezione 5 Anni",
+  constant_rate_projection:"Proiezione a tasso costante ", th_projected_value:"Valore proiettato",
+  linear_projection_note:"Proiezione lineare al tasso di crescita storico reale (CAGR {cagr}{cap}), applicato costante sui 5 anni. Non è una previsione garantita: è l\u2019estensione matematica del trend osservato, non un modello econometrico.",
+  limited_for_caution:", limitato a {rate} per prudenza",
+  kicker_data_sources:"Data sources", title_data_sources:"Fonti dei dati",
+  sources_list_note:"Elenco delle fonti \u2014 automatiche (Discovery Engine) o verificate manualmente dall\u2019analista \u2014 usate per i dati economici e territoriali di questo dossier.",
+  kicker_disclaimer:"Disclaimer & risk notice", title_legal_notes:"Note legali",
+  disclaimer_p1:"Il presente dossier è un documento riservato e confidenziale predisposto da IMMONOVA a fini esclusivamente informativi e preliminari.",
+  disclaimer_p2:"Le analisi contenute nel documento si basano su dati disponibili, fonti pubbliche verificate, override analitici manuali e modelli di calcolo espliciti. Tutti i valori indicati, inclusi ADR, valore al m², punteggio sintetico, ROI e break-even, hanno natura indicativa e non costituiscono garanzia di rendimento, promessa di risultato o previsione certa.",
+  disclaimer_p3:"Il presente documento non costituisce offerta al pubblico, sollecitazione all\u2019investimento, consulenza finanziaria, legale, fiscale o immobiliare regolamentata.",
+  disclaimer_p4:"Ogni decisione dovrà essere assunta autonomamente dal destinatario, previa verifica indipendente della documentazione immobiliare, urbanistica, catastale, tecnica, fiscale e legale.",
+  disclaimer_p5:"IMMONOVA non assume responsabilità per decisioni di investimento adottate sulla base del presente documento, né per scostamenti tra le stime contenute nel dossier e i risultati effettivi futuri.",
+  disclaimer_p6:"Documento strettamente riservato. Vietata la riproduzione, distribuzione o condivisione a terzi senza autorizzazione scritta di IMMONOVA.",
+  kicker_analytical_assessment:"Analytical assessment", title_immonova_evaluation:"Valutazione IMMONOVA",
+  synthetic_score_label:"Punteggio sintetico",
+  grade_solid:"Solido", grade_average:"Nella media", grade_fragile:"Fragile", grade_weak:"Debole",
+  composition_prefix:"Composizione (", composition_mid:"/", composition_suffix:" aree con dati verificati)",
+  score_disclaimer:"Il punteggio è calcolato esclusivamente sulle aree per cui esistono dati verificati (Discovery Engine o override manuale dell\u2019analista). Le aree senza dati non vengono stimate: i pesi si ridistribuiscono solo su quelle disponibili. Questo punteggio non è una raccomandazione di investimento né una garanzia di rendimento \u2014 è uno strumento di lettura, non un consiglio.",
+  comp_financial:"Performance finanziaria", comp_market:"Posizionamento di mercato",
+  comp_hospitality:"Domanda hospitality", comp_access:"Accessibilità", comp_territory:"Attrattività territoriale",
+  kicker_destination_facts:"Destination facts", title_territorial_reading:"Lettura territoriale",
+  narrative_disclaimer:"Ogni affermazione in questa pagina è tracciabile a un dato verificato nella sezione \u201cFonti dei dati\u201d. Nessun contenuto è generato liberamente: dove il dato manca, l\u2019informazione viene semplicemente omessa.",
+  nearest_airport_prefix:"Aeroporto più vicino: ", verified_in_sheet:" (dato verificato in scheda)",
+  nearest_station_prefix:"Stazione ferroviaria più vicina: ",
+  hospitality_singular:" struttura ricettiva comparabile censita entro il raggio analizzato.",
+  hospitality_plural:" strutture ricettive comparabili censite entro il raggio analizzato.",
+  heritage_singular:" bene storico-culturale censito entro il raggio analizzato.",
+  heritage_plural:" beni storico-culturali censiti entro il raggio analizzato.",
+  beaches_singular:" spiaggia censita entro il raggio analizzato.",
+  beaches_plural:" spiagge censite entro il raggio analizzato.",
+  marinas_singular:" approdo censito entro il raggio analizzato.",
+  marinas_plural:" approdi censiti entro il raggio analizzato.",
+  restaurants_singular:" ristorante censito entro il raggio analizzato.",
+  restaurants_plural:" ristoranti censiti entro il raggio analizzato.",
+  real_estate_value_prefix:"Valore immobiliare di zona: ", real_estate_value_suffix:" \u20ac/m\u00b2 (fonte: ",
+  adr_reference_prefix:"ADR di riferimento: ", adr_reference_suffix:" \u20ac/notte (fonte: ",
+  population_prefix:"Popolazione comunale: ", population_suffix:" abitanti.",
+  results_found_singular:" risultato trovato da Discovery entro il raggio analizzato",
+  results_found_plural:" risultati trovati da Discovery entro il raggio analizzato",
+  nearest_shown_suffix:" \u2014 i {n} più vicini stampati di seguito", period_end:".",
+  no_verified_data:"Nessun dato verificato disponibile per questa categoria entro il raggio analizzato.",
+  kicker_renovation_preview:"Renovation preview", tag_before:"Prima", tag_after_dash:"Dopo \u2014 ", label_current_state:"Stato attuale",
+  caption_current_state_room:"Stato attuale di questo ambiente.",
+  caption_render_style:"Render generato per la finitura {style}.",
+  caption_render_other_style:"Render generato con stile di finitura aggiuntivo.",
+  other_style_label:"Altro stile",
+  room_kitchen:"Cucina", room_living_room:"Soggiorno", room_bedroom:"Camera", room_bathroom:"Bagno",
+  room_facade:"Facciata / Esterni", room_garden:"Giardino", room_pool:"Piscina", room_other:"Altro", room_default:"Ambiente",
+  doc_owner_identity:"Documento identità proprietario", doc_owner_tax_code:"Codice fiscale proprietario",
+  doc_deed_of_origin:"Atto di provenienza", doc_cadastral_report:"Visura catastale",
+  doc_cadastral_plan:"Planimetria catastale", doc_ape:"APE",
+  doc_urban_planning:"Permesso edilizio / sanatoria", doc_technical_conformity:"Conformità urbanistica e catastale",
+  doc_habitability:"Agibilità / abitabilità", doc_systems_certifications:"Certificazione impianti", doc_default:"Documento",
+  doc_page_suffix:" \u2014 pag. ",
+  doc_unavailable_format:"Documento \"{name}\" in un formato non incorporabile a piena pagina (es. Word/Excel). Disponibile nella versione digitale del dossier.",
+  airport_category:"Airports · 300km radius", airport_title:"Aeroporti Commerciali",
+  transport_category:"Destination access", transport_title:"Accessibilità e Trasporti",
+  eco_hospitality:"Hospitality nelle vicinanze", eco_hospitality_kicker:"Accommodation landscape",
+  eco_restaurants:"Ristoranti nelle vicinanze", eco_restaurants_kicker:"Food & dining",
+  eco_beaches:"Spiagge e costa", eco_beaches_kicker:"Coast & beaches",
+  eco_marinas:"Porti e marine", eco_marinas_kicker:"Marinas & ports",
+  eco_heritage:"Cultura e patrimonio", eco_heritage_kicker:"Heritage & culture",
+  eco_nightlife:"Vita notturna", eco_nightlife_kicker:"Nightlife",
+  default_dossier_title:"Dossier IMMONOVA"
+};
+
+function i18nCacheKey(lang){ return "immonova_i18n_report_view_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = null;
+  try{
+    var url = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/translate-public-content";
+    var res = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify({
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment dossier delivered to an international investor: cover, table of contents, financial analysis, property section, territorial/market data, ecosystem listings, evaluation score, sources, legal disclaimer.",
+      texts: texts
+    })});
+    result = await res.json();
+  }catch(e){
+    console.error("Traduzione dossier non riuscita (rete), uso italiano come fallback:", e);
+    return UI_STRINGS;
+  }
+
+  if(!result || !result.success || !Array.isArray(result.translations)){
+    console.error("Traduzione dossier non riuscita, uso italiano come fallback:", result);
+    return UI_STRINGS;
+  }
+
+  var translations = result.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  CURRENT_LANG = lang || "it";
+  document.documentElement.lang = CURRENT_LANG;
+  T = await loadTranslatedStrings(CURRENT_LANG);
+  renderTranslatedStaticText();
+  buildRoomTypeLabels();
+  buildRenovationStyleLabels();
+  buildDocumentTypeLabels();
+}
+
+/* Sceglie tra due forme (singolare/plurale) di una frase gia' tradotta -- serve perche' le
+   frasi narrative si costruiscono con "N " + frase, e la scelta singolare/plurale va fatta
+   ANCHE nella lingua di destinazione, non solo in italiano. */
+function pluralPick(count, singularKey, pluralKey){
+  return String(count) + (T[count===1?singularKey:pluralKey] || UI_STRINGS[count===1?singularKey:pluralKey]);
+}
+function fmt(template, vars){
+  var out = template;
+  Object.keys(vars||{}).forEach(function(k){ out = out.split("{"+k+"}").join(vars[k]); });
+  return out;
+}
+
 function escapeHTML(value){return String(value===null||value===undefined?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");}
-function number(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat("it-IT").format(n);}
-function euro(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);}
-function percent(value){var n=Number(value);if(!Number.isFinite(n))return "-";return n.toFixed(1).replace(".",",")+"%";}
+function number(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG).format(n);}
+function euro(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG,{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);}
+function percent(value){var n=Number(value);if(!Number.isFinite(n))return "-";return n.toFixed(1).replace(".",CURRENT_LANG==="it"?",":".")+"%";}
 function clean(v){return String(v||"").trim();}
 function setStatus(message,type){statusBox.className="status "+(type||"");statusBox.textContent=message||"";}
 function normalizeGallery(value){if(!value)return[];if(Array.isArray(value))return value.filter(Boolean);try{var p=JSON.parse(value);return Array.isArray(p)?p.filter(Boolean):[]}catch(e){return[]}}
-function getTitle(){return clean(opportunity&&opportunity.title)||clean(report&&report.title)||"Dossier IMMONOVA";}
+function getTitle(){return clean(opportunity&&opportunity.title)||clean(report&&report.title)||T.default_dossier_title||"Dossier IMMONOVA";}
 function getLocation(){return clean(opportunity&&opportunity.location)||clean(report&&report.location)||clean(opportunity&&opportunity.municipality)||"";}
 function getCategory(){return clean(opportunity&&opportunity.category)||clean(report&&report.category)||"";}
 function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||gallery[0]||"";}
-function getGeneratedDate(){var d=(report&&report.created_at)||(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat("it-IT").format(new Date(d));}catch(e){return "";}}
+function getGeneratedDate(){var d=(report&&report.created_at)||(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG).format(new Date(d));}catch(e){return "";}}
 async function checkAuth(){var sessionRes=await client.auth.getSession();var session=sessionRes&&sessionRes.data&&sessionRes.data.session;if(!session){window.location.href="login.html";return null;}currentUser=session.user;return session;}
 async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-edit.html?id="+encodeURIComponent(opportunityId);}
 async function loadLatestReport(){
@@ -325,18 +556,18 @@ function metricFromDossier(section,field){
   var f=bucket[field];if(!f||typeof f!=="object"||!("value" in f))return null;
   return f;
 }
-function formatMetricVal(v){var n=Number(v);return Number.isFinite(n)?n.toLocaleString("it-IT"):String(v==null?"-":v);}
+function formatMetricVal(v){var n=Number(v);return Number.isFinite(n)?n.toLocaleString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG):String(v==null?"-":v);}
 function metricCardHTML(label,metric,unitFallback){
-  if(!metric)return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value" style="font-size:17px">Non disponibile</div></div>';
+  if(!metric)return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(T.not_available)+'</div></div>';
   return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+escapeHTML(formatMetricVal(metric.value))+'</div><div class="metric-note">'+escapeHTML(metric.unit||unitFallback||"")+'</div></div>';
 }
 function rangeCardHTML(label,minMetric,maxMetric,unitFallback){
-  if(!minMetric&&!maxMetric)return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value" style="font-size:17px">Non disponibile</div></div>';
+  if(!minMetric&&!maxMetric)return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(T.not_available)+'</div></div>';
   var unit=(minMetric||maxMetric).unit||unitFallback||"";
   var valueLine;
   if(minMetric&&maxMetric)valueLine=formatMetricVal(minMetric.value)+" – "+formatMetricVal(maxMetric.value);
-  else if(minMetric)valueLine="da "+formatMetricVal(minMetric.value);
-  else valueLine="fino a "+formatMetricVal(maxMetric.value);
+  else if(minMetric)valueLine=(T.range_from||"da ")+formatMetricVal(minMetric.value);
+  else valueLine=(T.range_to||"fino a ")+formatMetricVal(maxMetric.value);
   return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+escapeHTML(valueLine)+'</div><div class="metric-note">'+escapeHTML(unit)+'</div></div>';
 }
 function sortedItems(section,limit){
@@ -358,7 +589,7 @@ function distLabel(item){
   var km=Number(item.distance_km),min=Number(item.drive_minutes_estimate);
   var parts=[];
   if(Number.isFinite(km))parts.push(km.toLocaleString("it-IT",{maximumFractionDigits:1})+" km");
-  if(Number.isFinite(min))parts.push(min+" min in auto");
+  if(Number.isFinite(min))parts.push(min+(T.min_by_car||" min in auto"));
   return parts.join(" · ");
 }
 function isPlaceholderAirportName(name){
@@ -391,7 +622,7 @@ function destCardHTML(item){
     +'</div>';
 }
 function renderItemGrid(items){
-  if(!items.length)return '<p class="info-text">Nessun dato verificato disponibile per questa categoria entro il raggio analizzato.</p>';
+  if(!items.length)return '<p class="info-text">'+escapeHTML(T.no_verified_data)+'</p>';
   return '<div class="dest-grid">'+items.map(destCardHTML).join("")+'</div>';
 }
 
@@ -417,19 +648,19 @@ function dividerPageHTML(title,kicker){
 /* ---- Pagine di contenuto per settore ---- */
 function renderTourismMetricsPage(){
   var fields=[
-    ["arrivals","Arrivi turistici","persone"],
-    ["overnight_stays","Presenze (pernottamenti)","notti"],
-    ["average_stay","Permanenza media","notti"],
-    ["italian_arrivals","Arrivi italiani","persone"],
-    ["foreign_arrivals","Arrivi stranieri","persone"],
-    ["italian_overnight_stays","Presenze italiani","notti"],
-    ["foreign_overnight_stays","Presenze stranieri","notti"]
+    ["arrivals",T.field_arrivals,T.unit_people],
+    ["overnight_stays",T.field_overnight_stays,T.unit_nights],
+    ["average_stay",T.field_average_stay,T.unit_nights],
+    ["italian_arrivals",T.field_italian_arrivals,T.unit_people],
+    ["foreign_arrivals",T.field_foreign_arrivals,T.unit_people],
+    ["italian_overnight_stays",T.field_italian_overnight,T.unit_nights],
+    ["foreign_overnight_stays",T.field_foreign_overnight,T.unit_nights]
   ];
   var found=fields.map(function(f){return {label:f[1],unit:f[2],metric:metricFromDossier("tourism",f[0])};}).filter(function(x){return x.metric;});
   if(!found.length)return "";
   var src=found[0].metric.source||{};
   var cards=found.map(function(x){return metricCardHTML(x.label,x.metric,x.unit);}).join("");
-  return '<div class="section-kicker">Tourism data</div><h2 class="section-title">Turismo — Dati Attuali</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">Fonte: '+escapeHTML(src.provider_name||"-")+(src.source_url?(" — "+escapeHTML(src.source_url)):"")+'</p>';
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_tourism_data)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_current)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(src.provider_name||"-")+(src.source_url?(" — "+escapeHTML(src.source_url)):"")+'</p>';
 }
 function renderTerritorialPage(){
   var pop=metricFromDossier("demography","population");
@@ -437,21 +668,21 @@ function renderTerritorialPage(){
   var dens=metricFromDossier("demography","population_density_km2");
   var alt=metricFromDossier("demography","altitude_m");
   if(!pop&&!surf&&!dens&&!alt)return "";
-  return '<div class="section-kicker">Territorial profile</div><h2 class="section-title">Profilo territoriale</h2><div class="lux-rule"></div><div class="metric-grid">'
-    +metricCardHTML("Popolazione",pop,"ab.")
-    +metricCardHTML("Superficie",surf,"km²")
-    +metricCardHTML("Densità",dens,"ab./km²")
-    +metricCardHTML("Altitudine",alt,"m s.l.m.")
-    +'</div><p class="info-text">Dati demografici e territoriali del comune, raccolti automaticamente dal Discovery Engine su fonti pubbliche verificate.</p>';
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_territorial_profile)+'</div><h2 class="section-title">'+escapeHTML(T.title_territorial_profile)+'</h2><div class="lux-rule"></div><div class="metric-grid">'
+    +metricCardHTML(T.label_population,pop,"ab.")
+    +metricCardHTML(T.label_surface,surf,"km²")
+    +metricCardHTML(T.label_density,dens,"ab./km²")
+    +metricCardHTML(T.label_altitude,alt,"m s.l.m.")
+    +'</div><p class="info-text">'+escapeHTML(T.note_territorial)+'</p>';
 }
 function renderRealEstatePage(){
   var min=metricFromDossier("real_estate_market","residential_sale_per_m2_min");
   var max=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
   if(!min&&!max)return "";
   var src=(min||max).source||{};
-  return '<div class="section-kicker">Real estate market</div><h2 class="section-title">Valore immobiliare di riferimento</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
-    +rangeCardHTML("Valore di mercato al m²",min,max,"eur_per_m2")
-    +'<div class="metric-card"><div class="metric-label">Fonte</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_real_estate)+'</div><h2 class="section-title">'+escapeHTML(T.title_real_estate)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
+    +rangeCardHTML(T.label_market_value_m2,min,max,"eur_per_m2")
+    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>';
 }
 function renderPricingPage(){
@@ -461,14 +692,14 @@ function renderPricingPage(){
   if(!min&&!max&&!single)return "";
   var src=(min||max||single).source||{};
   if(!min&&!max&&single){
-    return '<div class="section-kicker">Hospitality pricing</div><h2 class="section-title">ADR di riferimento</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
-      +metricCardHTML("ADR — tariffa media camera/notte",single,"eur_per_room_night")
-      +'<div class="metric-card"><div class="metric-label">Fonte</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+    return '<div class="section-kicker">'+escapeHTML(T.kicker_hospitality_pricing)+'</div><h2 class="section-title">'+escapeHTML(T.title_adr)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
+      +metricCardHTML(T.label_adr_room_night,single,"eur_per_room_night")
+      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
       +'</div>';
   }
-  return '<div class="section-kicker">Hospitality pricing</div><h2 class="section-title">ADR di riferimento</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
-    +rangeCardHTML("ADR — tariffa media camera/notte",min,max,"eur_per_room_night")
-    +'<div class="metric-card"><div class="metric-label">Fonte</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_hospitality_pricing)+'</div><h2 class="section-title">'+escapeHTML(T.title_adr)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
+    +rangeCardHTML(T.label_adr_room_night,min,max,"eur_per_room_night")
+    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>';
 }
 function renderTerritorialAndTourismPage(){
@@ -493,12 +724,17 @@ function itemsBySubcategories(section,subcats){
   return sortedItems(section).filter(function(it){ return subcats.indexOf(it && it.subcategory)>=0; });
 }
 var ITEMS_PER_PAGE = 6;
+function buildResultsNote(total, shownCount){
+  var base = pluralPick(total, "results_found_singular", "results_found_plural");
+  var suffix = shownCount<total ? fmt(T.nearest_shown_suffix||UI_STRINGS.nearest_shown_suffix, {n:shownCount}) : "";
+  return base + suffix + (T.period_end||".");
+}
 function renderCategoryPageFiltered(section,subcats,title,kicker){
   var all=itemsBySubcategories(section,subcats);
   var total=all.length;
   if(!total)return "";
   var items=all.slice(0,ITEMS_PER_PAGE);
-  var totalNote='<p class="info-text" style="margin-top:0">'+total+' risultat'+(total===1?"o":"i")+' trovat'+(total===1?"o":"i")+' da Discovery entro il raggio analizzato'+(items.length<total?(" — i "+items.length+" pi\u00f9 vicini stampati di seguito"):"")+'.</p>';
+  var totalNote='<p class="info-text" style="margin-top:0">'+escapeHTML(buildResultsNote(total, items.length))+'</p>';
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(kicker)+'</div><h2 class="section-title">'+escapeHTML(title)+'</h2><div class="lux-rule"></div>'+totalNote+renderItemGrid(items)+'</div></article>';
 }
 function renderCategoryPage(section,title,kicker){
@@ -506,7 +742,7 @@ function renderCategoryPage(section,title,kicker){
   var total=all.length;
   if(!total)return "";
   var items=all.slice(0,ITEMS_PER_PAGE);
-  var totalNote='<p class="info-text" style="margin-top:0">'+total+' risultat'+(total===1?"o":"i")+' trovat'+(total===1?"o":"i")+' da Discovery entro il raggio analizzato'+(items.length<total?(" — i "+items.length+" pi\u00f9 vicini stampati di seguito"):"")+'.</p>';
+  var totalNote='<p class="info-text" style="margin-top:0">'+escapeHTML(buildResultsNote(total, items.length))+'</p>';
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(kicker)+'</div><h2 class="section-title">'+escapeHTML(title)+'</h2><div class="lux-rule"></div>'+totalNote+renderItemGrid(items)+'</div></article>';
 }
 
@@ -523,22 +759,22 @@ function renderSourcesPage(){
     });
   });
   if(!rows.length)return "";
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Data sources</div><h2 class="section-title">Fonti dei dati</h2><div class="lux-rule"></div><div class="source-list">'
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_data_sources)+'</div><h2 class="section-title">'+escapeHTML(T.title_data_sources)+'</h2><div class="lux-rule"></div><div class="source-list">'
     +rows.map(function(r){return '<div class="source-row"><span>'+escapeHTML(r.label)+'</span><span>'+escapeHTML(r.provider)+(r.url?" — "+r.url:"")+'</span></div>';}).join("")
-    +'</div><p class="info-text">Elenco delle fonti — automatiche (Discovery Engine) o verificate manualmente dall\u2019analista — usate per i dati economici e territoriali di questo dossier.</p></div></article>';
+    +'</div><p class="info-text">'+escapeHTML(T.sources_list_note)+'</p></div></article>';
 }
 function renderClosingPage(){
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Disclaimer & risk notice</div><h2 class="section-title">Note legali</h2><div class="lux-rule"></div><div class="disclaimer-text">'
-  +'<p>Il presente dossier è un documento riservato e confidenziale predisposto da IMMONOVA a fini esclusivamente informativi e preliminari.</p>'
-  +'<p>Le analisi contenute nel documento si basano su dati disponibili, fonti pubbliche verificate, override analitici manuali e modelli di calcolo espliciti. Tutti i valori indicati, inclusi ADR, valore al m², punteggio sintetico, ROI e break-even, hanno natura indicativa e non costituiscono garanzia di rendimento, promessa di risultato o previsione certa.</p>'
-  +'<p>Il presente documento non costituisce offerta al pubblico, sollecitazione all\u2019investimento, consulenza finanziaria, legale, fiscale o immobiliare regolamentata.</p>'
-  +'<p>Ogni decisione dovrà essere assunta autonomamente dal destinatario, previa verifica indipendente della documentazione immobiliare, urbanistica, catastale, tecnica, fiscale e legale.</p>'
-  +'<p>IMMONOVA non assume responsabilità per decisioni di investimento adottate sulla base del presente documento, né per scostamenti tra le stime contenute nel dossier e i risultati effettivi futuri.</p>'
-  +'<p>Documento strettamente riservato. Vietata la riproduzione, distribuzione o condivisione a terzi senza autorizzazione scritta di IMMONOVA.</p>'
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_disclaimer)+'</div><h2 class="section-title">'+escapeHTML(T.title_legal_notes)+'</h2><div class="lux-rule"></div><div class="disclaimer-text">'
+  +'<p>'+escapeHTML(T.disclaimer_p1)+'</p>'
+  +'<p>'+escapeHTML(T.disclaimer_p2)+'</p>'
+  +'<p>'+escapeHTML(T.disclaimer_p3)+'</p>'
+  +'<p>'+escapeHTML(T.disclaimer_p4)+'</p>'
+  +'<p>'+escapeHTML(T.disclaimer_p5)+'</p>'
+  +'<p>'+escapeHTML(T.disclaimer_p6)+'</p>'
   +'</div></div></article>';
 }
 function renderTOCPage(chapters){
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Contents</div><h2 class="section-title">Sommario</h2><div class="lux-rule"></div><div class="toc-list">'
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.toc_kicker)+'</div><h2 class="section-title">'+escapeHTML(T.toc_title)+'</h2><div class="lux-rule"></div><div class="toc-list">'
     +chapters.map(function(c){return '<div class="toc-row"><span>'+escapeHTML(c.label)+'</span><strong>'+c.page+'</strong></div>';}).join("")
     +'</div></div></article>';
 }
@@ -548,24 +784,24 @@ function renderNarrativePage(){
   var bits=[];
   var airport=getNearestAirportInfo();
   var rail=nearestOfSubcategory("transport","railway_station");
-  if(airport)bits.push("Aeroporto più vicino: "+airport.name+(airport.distance_km!=null?(", "+distLabel(airport)):"")+(airport.manual?" (dato verificato in scheda)":"")+".");
-  if(rail)bits.push("Stazione ferroviaria più vicina: "+rail.name+", "+distLabel(rail)+".");
+  if(airport)bits.push(T.nearest_airport_prefix+airport.name+(airport.distance_km!=null?(", "+distLabel(airport)):"")+(airport.manual?T.verified_in_sheet:"")+".");
+  if(rail)bits.push(T.nearest_station_prefix+rail.name+", "+distLabel(rail)+".");
   var her=sortedItems("heritage").length,bea=sortedItems("beaches").length,res=sortedItems("restaurants").length,hos=sortedItems("hospitality").length,mar=sortedItems("marinas").length;
-  if(hos)bits.push(hos+" struttur"+(hos===1?"a ricettiva comparabile censita":"e ricettive comparabili censite")+" entro il raggio analizzato.");
-  if(her)bits.push(her+" ben"+(her===1?"e storico-culturale censito":"i storico-culturali censiti")+" entro il raggio analizzato.");
-  if(bea)bits.push(bea+" spiagg"+(bea===1?"ia censita":"e censite")+" entro il raggio analizzato.");
-  if(mar)bits.push(mar+" approd"+(mar===1?"o censito":"i censiti")+" entro il raggio analizzato.");
-  if(res)bits.push(res+" ristorant"+(res===1?"e censito":"i censiti")+" entro il raggio analizzato.");
+  if(hos)bits.push(pluralPick(hos,"hospitality_singular","hospitality_plural"));
+  if(her)bits.push(pluralPick(her,"heritage_singular","heritage_plural"));
+  if(bea)bits.push(pluralPick(bea,"beaches_singular","beaches_plural"));
+  if(mar)bits.push(pluralPick(mar,"marinas_singular","marinas_plural"));
+  if(res)bits.push(pluralPick(res,"restaurants_singular","restaurants_plural"));
   var remin=metricFromDossier("real_estate_market","residential_sale_per_m2_min"),remax=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
-  if(remin||remax)bits.push("Valore immobiliare di zona: "+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+" \u20ac/m\u00b2 (fonte: "+((remin||remax).source.provider_name||"-")+").");
+  if(remin||remax)bits.push(T.real_estate_value_prefix+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+T.real_estate_value_suffix+((remin||remax).source.provider_name||"-")+").");
   var adrmin=metricFromDossier("adr","average_daily_rate_min"),adrmax=metricFromDossier("adr","average_daily_rate_max"),adrsingle=metricFromDossier("adr","average_daily_rate");
-  if(adrmin||adrmax)bits.push("ADR di riferimento: "+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+" \u20ac/notte (fonte: "+((adrmin||adrmax).source.provider_name||"-")+").");
-  else if(adrsingle)bits.push("ADR di riferimento: "+formatMetricVal(adrsingle.value)+" \u20ac/notte (fonte: "+(adrsingle.source.provider_name||"-")+").");
+  if(adrmin||adrmax)bits.push(T.adr_reference_prefix+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+T.adr_reference_suffix+((adrmin||adrmax).source.provider_name||"-")+").");
+  else if(adrsingle)bits.push(T.adr_reference_prefix+formatMetricVal(adrsingle.value)+T.adr_reference_suffix+(adrsingle.source.provider_name||"-")+").");
   var pop=metricFromDossier("demography","population");
-  if(pop)bits.push("Popolazione comunale: "+formatMetricVal(pop.value)+" abitanti.");
+  if(pop)bits.push(T.population_prefix+formatMetricVal(pop.value)+T.population_suffix);
   if(!bits.length)return "";
   var cards=bits.map(function(b){return '<div class="dest-card" style="min-height:auto;display:flex;align-items:center"><div class="dest-meta" style="font-size:12.5px;color:#6f603f;line-height:1.5;margin-top:0">'+escapeHTML(b)+'</div></div>';}).join("");
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Destination facts</div><h2 class="section-title">Lettura territoriale</h2><div class="lux-rule"></div><div class="dest-grid">'+cards+'</div><p class="info-text" style="margin-top:24px;font-style:italic">Ogni affermazione in questa pagina è tracciabile a un dato verificato nella sezione \u201cFonti dei dati\u201d. Nessun contenuto è generato liberamente: dove il dato manca, l\u2019informazione viene semplicemente omessa.</p></div></article>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_destination_facts)+'</div><h2 class="section-title">'+escapeHTML(T.title_territorial_reading)+'</h2><div class="lux-rule"></div><div class="dest-grid">'+cards+'</div><p class="info-text" style="margin-top:24px;font-style:italic">'+escapeHTML(T.narrative_disclaimer)+'</p></div></article>';
 }
 
 /* ---- Punteggio sintetico: solo su aree con dati reali, pesi ridistribuiti sulle aree disponibili ---- */
@@ -623,10 +859,10 @@ function scoreTerritoryArea(){
   if(total>=15)return 95;if(total>=10)return 80;if(total>=6)return 65;if(total>=3)return 45;return 25;
 }
 function gradeLabel(total){
-  if(total>=75)return "Solido";
-  if(total>=55)return "Nella media";
-  if(total>=35)return "Fragile";
-  return "Debole";
+  if(total>=75)return T.grade_solid;
+  if(total>=55)return T.grade_average;
+  if(total>=35)return T.grade_fragile;
+  return T.grade_weak;
 }
 function computeScore(){
   var f=buildFinance();
@@ -643,11 +879,11 @@ function computeScore(){
     }
   }
   var comps=[
-    {key:"financial",label:"Performance finanziaria",weight:SCORE_WEIGHTS.financial,score:scoreFinancialArea(f,proj)},
-    {key:"market",label:"Posizionamento di mercato",weight:SCORE_WEIGHTS.market,score:scoreMarketArea(f)},
-    {key:"hospitality",label:"Domanda hospitality",weight:SCORE_WEIGHTS.hospitality,score:scoreHospitalityArea()},
-    {key:"access",label:"Accessibilità",weight:SCORE_WEIGHTS.access,score:scoreAccessArea()},
-    {key:"territory",label:"Attrattività territoriale",weight:SCORE_WEIGHTS.territory,score:scoreTerritoryArea()}
+    {key:"financial",label:T.comp_financial,weight:SCORE_WEIGHTS.financial,score:scoreFinancialArea(f,proj)},
+    {key:"market",label:T.comp_market,weight:SCORE_WEIGHTS.market,score:scoreMarketArea(f)},
+    {key:"hospitality",label:T.comp_hospitality,weight:SCORE_WEIGHTS.hospitality,score:scoreHospitalityArea()},
+    {key:"access",label:T.comp_access,weight:SCORE_WEIGHTS.access,score:scoreAccessArea()},
+    {key:"territory",label:T.comp_territory,weight:SCORE_WEIGHTS.territory,score:scoreTerritoryArea()}
   ];
   var available=comps.filter(function(c){return c.score!=null;});
   if(!available.length)return null;
@@ -661,7 +897,7 @@ function renderScorePage(){
   var rows=res.components.map(function(c){
     return '<div class="cost-row"><span>'+escapeHTML(c.label)+' ('+c.weight+'%)</span><strong>'+(c.score==null?'N/D':Math.round(c.score))+'</strong></div>';
   }).join("");
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Analytical assessment</div><h2 class="section-title">Valutazione IMMONOVA</h2><div class="lux-rule"></div><div class="grade-layout"><div class="grade-box"><div class="grade-label">Punteggio sintetico</div><div class="grade-value">'+res.total+'</div><div class="grade-sub">'+escapeHTML(gradeLabel(res.total))+'</div><div class="score-bar"><div class="score-fill" style="width:'+res.total+'%"></div></div></div><div class="cost-box"><div class="cost-title">Composizione ('+res.available+'/'+res.totalAreas+' aree con dati verificati)</div>'+rows+'</div></div><p class="info-text">Il punteggio è calcolato esclusivamente sulle aree per cui esistono dati verificati (Discovery Engine o override manuale dell\u2019analista). Le aree senza dati non vengono stimate: i pesi si ridistribuiscono solo su quelle disponibili. Questo punteggio non è una raccomandazione di investimento né una garanzia di rendimento — è uno strumento di lettura, non un consiglio.</p></div></article>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_analytical_assessment)+'</div><h2 class="section-title">'+escapeHTML(T.title_immonova_evaluation)+'</h2><div class="lux-rule"></div><div class="grade-layout"><div class="grade-box"><div class="grade-label">'+escapeHTML(T.synthetic_score_label)+'</div><div class="grade-value">'+res.total+'</div><div class="grade-sub">'+escapeHTML(gradeLabel(res.total))+'</div><div class="score-bar"><div class="score-fill" style="width:'+res.total+'%"></div></div></div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.composition_prefix)+res.available+escapeHTML(T.composition_mid)+res.totalAreas+escapeHTML(T.composition_suffix)+'</div>'+rows+'</div></div><p class="info-text">'+escapeHTML(T.score_disclaimer)+'</p></div></article>';
 }
 
 /* ---- Dati economici interni (invariati) ---- */
@@ -736,25 +972,25 @@ function buildFinance(){
   var breakEven=firstFinite(report&&report.break_even_years,sr.break_even_years,a.break_even_years,deepFind(j,["break_even_years","break_even","breakeven"]),(total>0&&net>0)?total/net:0);
   return {purchase:purchase,taxes:taxes,notary:notary,agency:agency,dueDiligence:dueDiligence,acquisition:acquisition,renovation:renovation,tech:tech,ffe:ffe,marketing:marketing,contingency:contingency,development:development,total:total,revenue:revenue,costs:costs,net:net,roi:roi,breakEven:breakEven};
 }
-function renderCover(){var cover=getCoverImage();var withImage=!!cover;return '<article class="report-page '+(withImage?'':'pattern')+' cover '+(withImage?'with-image':'')+'">'+(withImage?'<img class="cover-bg" src="'+escapeHTML(cover)+'" alt="">':'')+'<div class="page-inner cover">'+'<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>'+'<div><div class="cover-kicker">Confidential Investment Dossier</div><h1 class="cover-title">'+escapeHTML(getTitle())+'</h1></div>'+'<div class="cover-meta">'+[getLocation(),getCategory(),"Generato "+getGeneratedDate()].filter(Boolean).map(escapeHTML).join('<br>')+'</div>'+'</div></article>';}
+function renderCover(){var cover=getCoverImage();var withImage=!!cover;return '<article class="report-page '+(withImage?'':'pattern')+' cover '+(withImage?'with-image':'')+'">'+(withImage?'<img class="cover-bg" src="'+escapeHTML(cover)+'" alt="">':'')+'<div class="page-inner cover">'+'<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>'+'<div><div class="cover-kicker">'+escapeHTML(T.cover_kicker)+'</div><h1 class="cover-title">'+escapeHTML(getTitle())+'</h1></div>'+'<div class="cover-meta">'+[getLocation(),getCategory(),T.generated_prefix+getGeneratedDate()].filter(Boolean).map(escapeHTML).join('<br>')+'</div>'+'</div></article>';}
 function renderInternalFacts(){
   var f=buildFinance();
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Internal financial base</div><h2 class="section-title">Dati economici interni</h2><div class="lux-rule"></div><div class="metric-grid"><div class="metric-card"><div class="metric-label">Prezzo acquisto</div><div class="metric-value">'+escapeHTML(euro(f.purchase))+'</div><div class="metric-note">Dato opportunità / report interno.</div></div><div class="metric-card"><div class="metric-label">Totale acquisizione</div><div class="metric-value">'+escapeHTML(euro(f.acquisition))+'</div><div class="metric-note">Prezzo + imposte + notaio + agenzia + due diligence.</div></div><div class="metric-card"><div class="metric-label">Totale sviluppo</div><div class="metric-value">'+escapeHTML(euro(f.development))+'</div><div class="metric-note">Ristrutturazione + tecnici + FF&E + marketing + contingency.</div></div><div class="metric-card"><div class="metric-label">Total Project Cost</div><div class="metric-value">'+escapeHTML(euro(f.total))+'</div><div class="metric-note">Base economica reale per i KPI successivi.</div></div></div></div></article>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_internal_financial)+'</div><h2 class="section-title">'+escapeHTML(T.title_internal_financial)+'</h2><div class="lux-rule"></div><div class="metric-grid"><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_purchase_price)+'</div><div class="metric-value">'+escapeHTML(euro(f.purchase))+'</div><div class="metric-note">'+escapeHTML(T.note_purchase_price)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_total_acquisition)+'</div><div class="metric-value">'+escapeHTML(euro(f.acquisition))+'</div><div class="metric-note">'+escapeHTML(T.note_total_acquisition)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_total_development)+'</div><div class="metric-value">'+escapeHTML(euro(f.development))+'</div><div class="metric-note">'+escapeHTML(T.note_total_development)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_total_project_cost)+'</div><div class="metric-value">'+escapeHTML(euro(f.total))+'</div><div class="metric-note">'+escapeHTML(T.note_total_project_cost)+'</div></div></div></div></article>';
 }
 function scenarioBoxHTML(proj,label){
-  if(!proj)return '<div class="cost-box" style="margin-bottom:16px"><div class="cost-title">'+escapeHTML(label)+'</div><p class="info-text" style="margin-top:0">Non disponibile.</p></div>';
+  if(!proj)return '<div class="cost-box" style="margin-bottom:16px"><div class="cost-title">'+escapeHTML(label)+'</div><p class="info-text" style="margin-top:0">'+escapeHTML(T.not_available)+'.</p></div>';
   var net=proj.rows[0].net;
   var roi=proj.total>0?(net/proj.total*100):0;
   var beText;
   if(proj.breakEvenYear){
-    beText=(Math.round(proj.breakEvenYear*10)/10)+' anni'+(proj.breakEvenExtrapolated?' (proiezione estesa oltre i 15 anni in tabella)':'');
+    beText=(Math.round(proj.breakEvenYear*10)/10)+T.years_suffix+(proj.breakEvenExtrapolated?T.extrapolated_note:'');
   }else{
-    beText='Oltre 60 anni';
+    beText=T.over_60_years;
   }
   return '<div class="cost-box" style="margin-bottom:16px"><div class="cost-title">'+escapeHTML(label)+'</div>'
-    +'<div class="cost-row"><span>Net Income</span><strong>'+escapeHTML(euro(net))+'</strong></div>'
-    +'<div class="cost-row"><span>ROI</span><strong>'+escapeHTML(percent(roi))+'</strong></div>'
-    +'<div class="cost-row" style="border-bottom:0"><span>Break-even</span><strong>'+escapeHTML(beText)+'</strong></div>'
+    +'<div class="cost-row"><span>'+escapeHTML(T.label_net_income)+'</span><strong>'+escapeHTML(euro(net))+'</strong></div>'
+    +'<div class="cost-row"><span>'+escapeHTML(T.label_roi)+'</span><strong>'+escapeHTML(percent(roi))+'</strong></div>'
+    +'<div class="cost-row" style="border-bottom:0"><span>'+escapeHTML(T.label_breakeven)+'</span><strong>'+escapeHTML(beText)+'</strong></div>'
     +'</div>';
 }
 function renderFinancialSnapshot(){
@@ -764,9 +1000,9 @@ function renderFinancialSnapshot(){
 
   if(projs && projs.mode==="range" && (projs.min || projs.max)){
     hasAny=true;
-    leftColumn = scenarioBoxHTML(projs.min,"Scenario ADR minimo") + scenarioBoxHTML(projs.max,"Scenario ADR massimo");
+    leftColumn = scenarioBoxHTML(projs.min,T.scenario_min) + scenarioBoxHTML(projs.max,T.scenario_max);
     var minAdrVerified = projs.min && projs.min.adrVerified;
-    ruleNote="Net Income, ROI e Break-even sono mostrati per entrambi gli scenari ADR "+(minAdrVerified?"verificati dall\u2019analista":"di mercato automatico")+" (minimo e massimo), qui sopra, senza dover scorrere fino alla tabella di proiezione 15 anni. Occupazione e costi operativi restano ipotesi dichiarate.";
+    ruleNote = minAdrVerified ? T.rule_range_note_verified : T.rule_range_note_market;
   }else{
     var headline=projs?(projs.mode==="range"?(projs.min||projs.max):projs.single):null;
     hasAny=!!headline;
@@ -774,23 +1010,23 @@ function renderFinancialSnapshot(){
       var net=headline.rows[0].net;
       var roi=projs.total>0?(net/projs.total*100):0;
       var breakEven=headline.breakEvenYear;
-      var breakEvenNote = headline.breakEvenExtrapolated ? " (proiezione estesa oltre i 15 anni mostrati in tabella)" : "";
+      var breakEvenNote = headline.breakEvenExtrapolated ? T.extrapolated_note2 : "";
       var tag;
       if(projs.mode==="real"){
         tag="";
-        ruleNote="Net Income e ROI calcolati su dati reali dal report interno.";
+        ruleNote=T.rule_real_note;
       }else{
-        tag=headline.adrVerified?" (da ADR verificato)":" (stimato)";
-        ruleNote="Net Income e ROI calcolati sull\u2019unico ADR disponibile"+(headline.adrVerified?" (verificato dall\u2019analista)":" (di mercato automatico)")+". Occupazione e costi operativi restano ipotesi dichiarate.";
+        tag=headline.adrVerified?T.tag_verified_adr:T.tag_estimated;
+        ruleNote = headline.adrVerified ? T.rule_single_note_verified : T.rule_single_note_market;
       }
-      leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income'+tag+'</div><div class="metric-value">'+escapeHTML(euro(net))+'</div><div class="metric-note">Reddito netto operativo annuo.</div></div><div class="metric-card"><div class="metric-label">ROI'+tag+'</div><div class="metric-value">'+escapeHTML(percent(roi))+'</div><div class="metric-note">Net Income / Total Project Cost.</div></div><div class="metric-card"><div class="metric-label">Break-even'+tag+'</div><div class="metric-value">'+(breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+' anni':'Oltre 60 anni (non rientra in un orizzonte ragionevole)')+'</div><div class="metric-note">Total Project Cost / Net Operating Cash Flow'+escapeHTML(breakEvenNote||"")+'.</div></div></div>';
+      leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_net_income)+tag+'</div><div class="metric-value">'+escapeHTML(euro(net))+'</div><div class="metric-note">'+escapeHTML(T.note_net_income)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_roi)+tag+'</div><div class="metric-value">'+escapeHTML(percent(roi))+'</div><div class="metric-note">'+escapeHTML(T.note_roi)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_breakeven)+tag+'</div><div class="metric-value">'+(breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+escapeHTML(T.years_suffix):escapeHTML(T.not_available_long))+'</div><div class="metric-note">'+escapeHTML(T.note_breakeven)+escapeHTML(breakEvenNote||"")+'.</div></div></div>';
     }else{
-      ruleNote="Questa pagina non inventa scenari. Senza reddito netto reale nel report e senza alcun ADR (verificato o automatico), Net Income, ROI e Break-even restano esplicitamente non disponibili.";
-      leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">Net Income</div><div class="metric-value" style="font-size:17px">Non disponibile</div></div></div>';
+      ruleNote=T.rule_none_note;
+      leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_net_income)+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(T.not_available)+'</div></div></div>';
     }
   }
 
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Financial core</div><h2 class="section-title">ROI & Break-even</h2><div class="lux-rule"></div><div class="financial-layout"><div>'+leftColumn+'</div><div><div class="cost-box"><div class="cost-title">Regola di calcolo</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_financial_core)+'</div><h2 class="section-title">'+escapeHTML(T.title_roi_breakeven)+'</h2><div class="lux-rule"></div><div class="financial-layout"><div>'+leftColumn+'</div><div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.calc_rule_title)+'</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
 }
 function renovationRatesJs(style, level){
   var rates = {
@@ -826,15 +1062,15 @@ function computeRenovationScenarios(){
 function renderRenovationScenariosBlock(){
   var scenarios = computeRenovationScenarios();
   if(!scenarios) return "";
-  var labels = { conservativo:"Conservativo", normale:"Normale", lusso:"Lusso" };
+  var labels = { conservativo:T.label_conservative, normale:T.label_normal, lusso:T.label_luxury };
   var rows = scenarios.map(function(s){
-    var tag = s.selected ? ' <span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#4f7f45">\u2014 selezionato</span>' : '';
-    return '<div class="cost-row"><span>' + escapeHTML(labels[s.style] || s.style) + tag + '</span><strong>' + escapeHTML(euro(s.min)) + ' \u2013 ' + escapeHTML(euro(s.max)) + ' (media ' + escapeHTML(euro(s.avg)) + ')</strong></div>';
+    var tag = s.selected ? ' <span style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#4f7f45">'+escapeHTML(T.label_selected)+'</span>' : '';
+    return '<div class="cost-row"><span>' + escapeHTML(labels[s.style] || s.style) + tag + '</span><strong>' + escapeHTML(euro(s.min)) + T.media_dash + escapeHTML(euro(s.max)) + ' (' + escapeHTML(T.avg_label) + escapeHTML(euro(s.avg)) + ')</strong></div>';
   }).join("");
-  return '<div class="cost-box" style="margin-top:24px"><div class="cost-title">Scenari di ristrutturazione a confronto</div>' + rows
-    + '<p class="info-text" style="margin-top:14px;font-size:12px">Ricalcolati con le stesse tariffe usate in scheda: conservativo 400\u2013700 \u20ac/mq, normale 800\u20131400 \u20ac/mq, lusso 1500\u20133000 \u20ac/mq, moltiplicatore per livello degrado leggero 0,90 / medio 1,00 / pesante 1,18. Il costo medio dello scenario selezionato \u00e8 quello usato nel Total Project Cost qui sopra.</p></div>';
+  return '<div class="cost-box" style="margin-top:24px"><div class="cost-title">'+escapeHTML(T.renovation_scenarios_title)+'</div>' + rows
+    + '<p class="info-text" style="margin-top:14px;font-size:12px">'+escapeHTML(T.renovation_scenarios_note)+'</p></div>';
 }
-function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">Range dichiarato in scheda</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Investment structure</div><h2 class="section-title">Total Project Cost</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">Costi acquisizione</div>'+row('Prezzo acquisto',f.purchase)+row('Imposte / tasse',f.taxes)+row('Notaio',f.notary)+row('Agenzia / brokerage',f.agency)+row('Due diligence tecnica / legale',f.dueDiligence)+row('Totale acquisizione',f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">Costi sviluppo</div>'+row('Ristrutturazione media',f.renovation)+renovationRangeNote+row('Spese tecniche / progettazione',f.tech)+row('FF&E / arredi',f.ffe)+row('Marketing apertura',f.marketing)+row('Contingency / imprevisti',f.contingency)+row('Totale sviluppo',f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row('Total Project Cost',f.total,'total')+'</div>'+renderRenovationScenariosBlock()+'</div></article>';}
+function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">'+escapeHTML(T.declared_range_scheda)+'</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_investment_structure)+'</div><h2 class="section-title">'+escapeHTML(T.title_total_project_cost)+'</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_acquisition_title)+'</div>'+row(T.row_purchase_price,f.purchase)+row(T.row_taxes,f.taxes)+row(T.row_notary,f.notary)+row(T.row_agency,f.agency)+row(T.row_due_diligence,f.dueDiligence)+row(T.row_total_acquisition,f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_development_title)+'</div>'+row(T.row_renovation_avg,f.renovation)+renovationRangeNote+row(T.row_technical_fees,f.tech)+row(T.row_ffe,f.ffe)+row(T.row_marketing,f.marketing)+row(T.row_contingency,f.contingency)+row(T.row_total_development,f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row(T.row_total_project_cost,f.total,'total')+'</div>'+renderRenovationScenariosBlock()+'</div></article>';}
 /* ---- Diagnostica fonti dati XLSX: legge diagnostics.documents_sample / tables_sample /
    source_logs dell'ultimo fetch live del Discovery Engine (lastDiscoveryDiagnostics), filtrata
    ai soli documenti di tipo xlsx, per capire in quale dei tre punti si ferma una fonte XLSX
@@ -977,13 +1213,13 @@ function renderLocationPage(){
   if(!q)return "";
   var mapSrc="https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
   function row(label,val){ return val?'<div class="addr-row"><strong>'+escapeHTML(label)+'</strong><span>'+escapeHTML(val)+'</span></div>':''; }
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Asset location</div><h2 class="section-title">Posizione e Localizzazione</h2><div class="lux-rule"></div><div class="location-layout"><div>'
-    +row("Indirizzo",a.address||"-")
-    +row("Località / Contrada",a.locality||"-")
-    +row("CAP",a.zip||"-")
-    +row("Comune",a.city||"-")
-    +row("Provincia",a.province||"-")
-    +row("Regione",a.region||"-")
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_asset_location)+'</div><h2 class="section-title">'+escapeHTML(T.title_location)+'</h2><div class="lux-rule"></div><div class="location-layout"><div>'
+    +row(T.label_address_row,a.address||"-")
+    +row(T.label_locality_row,a.locality||"-")
+    +row(T.label_zip_row,a.zip||"-")
+    +row(T.label_city_row,a.city||"-")
+    +row(T.label_province_row,a.province||"-")
+    +row(T.label_region_row,a.region||"-")
     +'</div><iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div></div></article>';
 }
 
@@ -998,18 +1234,24 @@ function renderMediaGalleryPage(){
   var main=all[0];
   var rest=all.slice(1,5);
   var cells='<img class="g-main" src="'+escapeHTML(main)+'" alt="">'+rest.map(function(u){return '<img src="'+escapeHTML(u)+'" alt="">';}).join("");
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Media gallery</div><h2 class="section-title">Immagini dell\u2019Immobile</h2><div class="lux-rule"></div><div class="gallery-grid">'+cells+'</div></div></article>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_media_gallery)+'</div><h2 class="section-title">'+escapeHTML(T.title_media_gallery)+'</h2><div class="lux-rule"></div><div class="gallery-grid">'+cells+'</div></div></article>';
 }
 
 /* ---- Ristrutturazione: una pagina per ambiente, con TUTTE le classi di finitura disponibili
    (conservativo/normale/lusso), non solo lo stile selezionato in scheda. ---- */
-var ROOM_TYPE_LABELS = {
-  kitchen:"Cucina", living_room:"Soggiorno", bedroom:"Camera", bathroom:"Bagno",
-  facade:"Facciata / Esterni", garden:"Giardino", pool:"Piscina", other:"Altro"
-};
-var RENOVATION_STYLE_LABELS = { conservativo:"Conservativo", normale:"Normale", standard:"Normale", lusso:"Lusso" };
+var ROOM_TYPE_LABELS = {};
+function buildRoomTypeLabels(){
+  ROOM_TYPE_LABELS = {
+    kitchen:T.room_kitchen, living_room:T.room_living_room, bedroom:T.room_bedroom, bathroom:T.room_bathroom,
+    facade:T.room_facade, garden:T.room_garden, pool:T.room_pool, other:T.room_other
+  };
+}
+var RENOVATION_STYLE_LABELS = {};
+function buildRenovationStyleLabels(){
+  RENOVATION_STYLE_LABELS = { conservativo:T.label_conservative, normale:T.label_normal, standard:T.label_normal, lusso:T.label_luxury };
+}
 var RENOVATION_STYLE_ORDER = ["conservativo","normale","lusso"];
-function roomTypeLabel(rt){ return ROOM_TYPE_LABELS[rt] || rt || "Ambiente"; }
+function roomTypeLabel(rt){ return ROOM_TYPE_LABELS[rt] || rt || T.room_default; }
 function renderUrlOf(render){
   return clean(render.generated_image_url || render.image_url || render.render_url || render.public_url);
 }
@@ -1030,7 +1272,7 @@ function renderRenovationBeforeAfterPages(){
 
   function photoPage(rt, kicker, imgUrl, altText, tag, caption){
     return '<article class="report-page"><div class="page-inner ba-full-page">'
-      + '<div class="section-kicker">Renovation preview</div>'
+      + '<div class="section-kicker">'+escapeHTML(T.kicker_renovation_preview)+'</div>'
       + '<h2 class="section-title">' + escapeHTML(roomTypeLabel(rt)) + (kicker ? ' \u2014 ' + escapeHTML(kicker) : '') + '</h2>'
       + '<div class="lux-rule"></div>'
       + (caption ? '<p class="info-text" style="margin-top:0">' + escapeHTML(caption) + '</p>' : '')
@@ -1047,7 +1289,7 @@ function renderRenovationBeforeAfterPages(){
     /* v2: one photo fills one whole page (instead of sharing a grid with others), per explicit
        request -- photos were "too small". */
     beforePhotos.forEach(function(img){
-      roomPages.push(photoPage(rt, "Stato attuale", img.original_image, "Prima - " + roomTypeLabel(rt), "Prima", "Stato attuale di questo ambiente."));
+      roomPages.push(photoPage(rt, T.label_current_state, img.original_image, "Prima - " + roomTypeLabel(rt), T.tag_before, T.caption_current_state_room));
     });
 
     RENOVATION_STYLE_ORDER.forEach(function(style){
@@ -1059,7 +1301,7 @@ function renderRenovationBeforeAfterPages(){
       renders.forEach(function(r){
         var url = renderUrlOf(r);
         if(!url) return;
-        roomPages.push(photoPage(rt, "Dopo \u2014 " + RENOVATION_STYLE_LABELS[style], url, "Dopo - " + roomTypeLabel(rt) + " - " + RENOVATION_STYLE_LABELS[style], "Dopo \u2014 " + escapeHTML(RENOVATION_STYLE_LABELS[style]), "Render generato per la finitura " + RENOVATION_STYLE_LABELS[style].toLowerCase() + "."));
+        roomPages.push(photoPage(rt, T.tag_after_dash + RENOVATION_STYLE_LABELS[style], url, "Dopo - " + roomTypeLabel(rt) + " - " + RENOVATION_STYLE_LABELS[style], T.tag_after_dash + escapeHTML(RENOVATION_STYLE_LABELS[style]), fmt(T.caption_render_style,{style:RENOVATION_STYLE_LABELS[style].toLowerCase()})));
       });
     });
 
@@ -1071,8 +1313,8 @@ function renderRenovationBeforeAfterPages(){
     otherStyleRenders.forEach(function(r){
       var url = renderUrlOf(r);
       if(!url) return;
-      var label = r.style ? r.style : "Altro stile";
-      roomPages.push(photoPage(rt, "Altro stile", url, "Dopo - " + roomTypeLabel(rt), "Dopo \u2014 " + escapeHTML(label), "Render generato con stile di finitura aggiuntivo."));
+      var label = r.style ? r.style : T.other_style_label;
+      roomPages.push(photoPage(rt, T.other_style_label, url, "Dopo - " + roomTypeLabel(rt), T.tag_after_dash + escapeHTML(label), T.caption_render_other_style));
     });
 
     allPages = allPages.concat(roomPages);
@@ -1085,14 +1327,17 @@ function renderRenovationBeforeAfterPages(){
    mai la toolbar/miniature del visualizzatore nativo del browser — ogni pagina del PDF diventa una
    pagina del dossier. Se la rasterizzazione fallisce (CORS, file protetto, libreria non caricata),
    si ricade sull'iframe col toolbar disattivato via query string come ultima risorsa. ---- */
-var DOCUMENT_TYPE_LABELS = {
-  owner_identity:"Documento identità proprietario", owner_tax_code:"Codice fiscale proprietario",
-  deed_of_origin:"Atto di provenienza", cadastral_report:"Visura catastale",
-  cadastral_plan:"Planimetria catastale", ape:"APE",
-  urban_planning:"Permesso edilizio / sanatoria", technical_conformity:"Conformità urbanistica e catastale",
-  habitability:"Agibilità / abitabilità", systems_certifications:"Certificazione impianti"
-};
-function docLabel(d){ return DOCUMENT_TYPE_LABELS[d.document_type] || d.document_type || "Documento"; }
+var DOCUMENT_TYPE_LABELS = {};
+function buildDocumentTypeLabels(){
+  DOCUMENT_TYPE_LABELS = {
+    owner_identity:T.doc_owner_identity, owner_tax_code:T.doc_owner_tax_code,
+    deed_of_origin:T.doc_deed_of_origin, cadastral_report:T.doc_cadastral_report,
+    cadastral_plan:T.doc_cadastral_plan, ape:T.doc_ape,
+    urban_planning:T.doc_urban_planning, technical_conformity:T.doc_technical_conformity,
+    habitability:T.doc_habitability, systems_certifications:T.doc_systems_certifications
+  };
+}
+function docLabel(d){ return DOCUMENT_TYPE_LABELS[d.document_type] || d.document_type || T.doc_default; }
 function docFileName(d){ return clean(d.file_name); }
 function docUrl(d){ return clean(d.file_url); }
 function docKind(d){
@@ -1132,7 +1377,7 @@ async function renderDocumentFullPage(d,index,total){
   var kind=docKind(d);
   var title=docLabel(d)+(total>1?(" ("+index+"/"+total+")"):"");
   function titleBarFor(pageNum,pageTotal){
-    var suffix = pageTotal>1 ? (" — pag. "+pageNum+"/"+pageTotal) : "";
+    var suffix = pageTotal>1 ? (T.doc_page_suffix+pageNum+"/"+pageTotal) : "";
     return '<div class="doc-page-title"><span>'+escapeHTML(title+suffix)+'</span><span>'+escapeHTML(docFileName(d))+'</span></div>';
   }
   if(kind==="image"){
@@ -1149,7 +1394,7 @@ async function renderDocumentFullPage(d,index,total){
     if(debugDocumentsInfo) debugDocumentsInfo.pdf_rasterization_failures.push(docLabel(d)+" ("+(docFileName(d)||"senza nome file")+") — causa: "+((rasterResult&&rasterResult.error)||"sconosciuta")+" — url: "+url);
     return ['<article class="report-page pattern">'+titleBarFor(1,1)+'<iframe class="doc-full-frame" src="'+escapeHTML(url)+'#toolbar=0&navpane=0&view=FitH"></iframe></article>'];
   }
-  return ['<article class="report-page"><div class="page-inner"><div class="section-kicker">Property documents</div><h2 class="section-title">'+escapeHTML(title)+'</h2><div class="lux-rule"></div><p class="info-text">Documento "'+escapeHTML(docFileName(d))+'" in un formato non incorporabile a piena pagina (es. Word/Excel). Disponibile nella versione digitale del dossier.</p></div></article>'];
+  return ['<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_property)+'</div><h2 class="section-title">'+escapeHTML(title)+'</h2><div class="lux-rule"></div><p class="info-text">'+fmt(T.doc_unavailable_format,{name:escapeHTML(docFileName(d))})+'</p></div></article>'];
 }
 async function renderDocumentsPages(){
   var included=propertyDocuments.filter(function(d){return d.include_in_dossier===true;});
@@ -1258,20 +1503,20 @@ function renderCashflowPage(){
     }).join("");
     var breakEvenSentence;
     if(proj.breakEvenYear && proj.breakEvenExtrapolated){
-      breakEvenSentence = 'Rientro stimato all\u2019anno '+proj.breakEvenYear+' \u2014 oltre l\u2019orizzonte di 15 anni mostrato in tabella, stessa formula di crescita.';
+      breakEvenSentence = fmt(T.breakeven_estimated_extrapolated,{year:proj.breakEvenYear});
     }else if(proj.breakEvenYear){
-      breakEvenSentence = 'Rientro stimato all\u2019anno '+proj.breakEvenYear+', evidenziato in tabella.';
+      breakEvenSentence = fmt(T.breakeven_estimated,{year:proj.breakEvenYear});
     }else{
-      breakEvenSentence = 'Non rientrato nemmeno in una proiezione estesa a 60 anni.';
+      breakEvenSentence = T.breakeven_not_reached;
     }
     return '<div class="merge-block"><div class="cost-title" style="margin-bottom:10px">'+escapeHTML(heading)+'</div>'
-      +'<p class="info-text" style="margin-top:0">Ricavo anno 1: '+escapeHTML(proj.revenueSource)+'. '+breakEvenSentence+'</p>'
-      +'<table class="cf-table"><thead><tr><th>Anno</th><th>Ricavi</th><th>Costi</th><th>Utile</th><th>Cumulato</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+      +'<p class="info-text" style="margin-top:0">'+escapeHTML(T.revenue_year1_prefix)+escapeHTML(proj.revenueSource)+'. '+escapeHTML(breakEvenSentence)+'</p>'
+      +'<table class="cf-table"><thead><tr><th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_revenue)+'</th><th>'+escapeHTML(T.th_costs)+'</th><th>'+escapeHTML(T.th_profit)+'</th><th>'+escapeHTML(T.th_cumulative)+'</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
 
-  var intro='<p class="info-text">Ipotesi dichiarate per ogni scenario: crescita ricavi '+escapeHTML(percent(CASHFLOW_ANNUAL_GROWTH*100))+'/anno (prudenziale, non derivata da serie storica), costi operativi '+escapeHTML(percent(CASHFLOW_OPEX_RATIO*100))+' dei ricavi. Total Project Cost di riferimento: '+escapeHTML(euro(projs.total))+'.</p>';
+  var intro='<p class="info-text">'+escapeHTML(fmt(T.cashflow_intro,{growth:percent(CASHFLOW_ANNUAL_GROWTH*100),opex:percent(CASHFLOW_OPEX_RATIO*100),total:euro(projs.total)}))+'</p>';
   function page(heading,blockHtml,showIntro){
-    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Cash-flow projection</div><h2 class="section-title">Rendita &amp; Proiezione 15 Anni'+(heading?' \u2014 '+escapeHTML(heading):'')+'</h2><div class="lux-rule"></div>'
+    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_cashflow)+'</div><h2 class="section-title">'+escapeHTML(T.title_cashflow)+(heading?' \u2014 '+escapeHTML(heading):'')+'</h2><div class="lux-rule"></div>'
       +(showIntro?intro:'')
       +blockHtml
       +'</div></article>';
@@ -1282,10 +1527,10 @@ function renderCashflowPage(){
     /* Two 15-row tables (one per scenario) never share a page: each one, plus its heading and
        intro paragraph, comfortably fits a single A4-landscape print page on its own, while both
        together routinely overflowed it. */
-    if(projs.min) pages.push(page("Scenario ADR minimo", tableBlock(projs.min,"Scenario ADR minimo"), true));
-    if(projs.max) pages.push(page("Scenario ADR massimo", tableBlock(projs.max,"Scenario ADR massimo"), !projs.min));
+    if(projs.min) pages.push(page(T.scenario_min, tableBlock(projs.min,T.scenario_min), true));
+    if(projs.max) pages.push(page(T.scenario_max, tableBlock(projs.max,T.scenario_max), !projs.min));
   }else{
-    pages.push(page("", tableBlock(projs.single, projs.mode==="real" ? "Scenario da dati reali" : "Scenario ADR"), true));
+    pages.push(page("", tableBlock(projs.single, projs.mode==="real" ? T.scenario_real_data : T.scenario_adr), true));
   }
   return pages;
 }
@@ -1308,10 +1553,10 @@ function renderTourismSeriesPage(){
     return '<tr><td>'+escapeHTML(s.year)+'</td><td>'+escapeHTML(formatMetricVal(s.value))+'</td><td>'+(yoy?escapeHTML(percent(yoy.growth_pct)):'-')+'</td></tr>';
   }).join("");
   var src=series.series[series.series.length-1].source||{};
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Tourism history</div><h2 class="section-title">Turismo — Serie Storica</h2><div class="lux-rule"></div>'
-    +barChartHTML(series.series,"Presenze/arrivi per anno · livello: "+escapeHTML(series.geography_name||series.geography_level||"-"))
-    +'<table class="trend-table"><thead><tr><th>Anno</th><th>Valore</th><th>Crescita YoY</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +'<p class="info-text">'+(series.cagr_pct!=null?('CAGR calcolato sul periodo disponibile: '+escapeHTML(percent(series.cagr_pct))+' /anno.'):'Serie insufficiente per calcolare un CAGR.')+' Fonte: '+escapeHTML(src.provider_name||"-")+'. Nessun dato interpolato: la serie riporta solo gli anni realmente trovati dal Discovery Engine.</p>'
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_history)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_history)+'</h2><div class="lux-rule"></div>'
+    +barChartHTML(series.series,T.presences_arrivals_label+escapeHTML(series.geography_name||series.geography_level||"-"))
+    +'<table class="trend-table"><thead><tr><th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_value)+'</th><th>'+escapeHTML(T.th_yoy)+'</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<p class="info-text">'+(series.cagr_pct!=null?(escapeHTML(T.cagr_calculated)+escapeHTML(percent(series.cagr_pct))+escapeHTML(T.per_year)):escapeHTML(T.cagr_insufficient))+' '+escapeHTML(T.source_prefix)+escapeHTML(src.provider_name||"-")+'.'+escapeHTML(T.no_interpolation_note)+'</p>'
     +'</div></article>';
 }
 function renderTourismForecastPage(){
@@ -1327,10 +1572,10 @@ function renderTourismForecastPage(){
     v=v*(1+rate/100);
     rows.push({year:lastYear+i, value:Math.round(v)});
   }
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Tourism forecast</div><h2 class="section-title">Turismo — Proiezione 5 Anni</h2><div class="lux-rule"></div>'
-    +barChartHTML(rows,"Proiezione a tasso costante "+escapeHTML(percent(rate))+"/anno")
-    +'<table class="trend-table"><thead><tr><th>Anno</th><th>Valore proiettato</th></tr></thead><tbody>'+rows.map(function(r){return '<tr><td>'+r.year+'</td><td>'+escapeHTML(formatMetricVal(r.value))+'</td></tr>';}).join("")+'</tbody></table>'
-    +'<p class="info-text">Proiezione lineare al tasso di crescita storico reale (CAGR '+escapeHTML(percent(series.cagr_pct))+(capped?', limitato a '+escapeHTML(percent(rate))+' per prudenza':'')+'), applicato costante sui 5 anni. Non è una previsione garantita: è l\u2019estensione matematica del trend osservato, non un modello econometrico.</p>'
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_forecast)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_forecast)+'</h2><div class="lux-rule"></div>'
+    +barChartHTML(rows,T.constant_rate_projection+escapeHTML(percent(rate))+"/anno")
+    +'<table class="trend-table"><thead><tr><th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_projected_value)+'</th></tr></thead><tbody>'+rows.map(function(r){return '<tr><td>'+r.year+'</td><td>'+escapeHTML(formatMetricVal(r.value))+'</td></tr>';}).join("")+'</tbody></table>'
+    +'<p class="info-text">'+escapeHTML(fmt(T.linear_projection_note,{cagr:percent(series.cagr_pct),cap:capped?fmt(T.limited_for_caution,{rate:percent(rate)}):""}))+'</p>'
     +'</div></article>';
 }
 function metricSeriesFromDossier(section,field){
@@ -1345,52 +1590,52 @@ function renderBook(){
   var chapters=[];
   function push(chapterLabel,html,isDivider){ if(html) chapters.push({label:chapterLabel,html:html,divider:!!isDivider}); }
 
-  push("Analisi finanziaria", dividerPageHTML("Analisi Finanziaria","Executive summary"), true);
-  push("Analisi finanziaria", renderInternalFacts());
-  push("Analisi finanziaria", renderFinancialSnapshot());
-  push("Analisi finanziaria", renderInvestmentStructure());
-  renderCashflowPage().forEach(function(p){ push("Analisi finanziaria", p); });
+  push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
+  push(T.chapter_financial, renderInternalFacts());
+  push(T.chapter_financial, renderFinancialSnapshot());
+  push(T.chapter_financial, renderInvestmentStructure());
+  renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
 
   var docPages = preparedDocumentPages;
   var renovationPages = renderRenovationBeforeAfterPages();
   var hasMedia = normalizeGallery(opportunity&&opportunity.gallery_images).length || clean(opportunity&&opportunity.cover_image) || docPages.length || renovationPages.length;
   if(hasMedia){
-    push("Immobile", dividerPageHTML("L'Immobile","Property overview"), true);
-    push("Immobile", renderMediaGalleryPage());
-    renovationPages.forEach(function(p){ push("Immobile", p); });
-    docPages.forEach(function(p){ push("Immobile", p); });
+    push(T.chapter_property, dividerPageHTML(T.divider_property_title,T.divider_property_kicker), true);
+    push(T.chapter_property, renderMediaGalleryPage());
+    renovationPages.forEach(function(p){ push(T.chapter_property, p); });
+    docPages.forEach(function(p){ push(T.chapter_property, p); });
   }
 
-  push("Territorio & mercato", dividerPageHTML("Territorio & Mercato","Location intelligence"), true);
-  push("Territorio & mercato", renderLocationPage());
-  push("Territorio & mercato", renderTerritorialAndTourismPage());
-  push("Territorio & mercato", renderMarketAndADRPage());
-  push("Territorio & mercato", renderTourismSeriesPage());
-  push("Territorio & mercato", renderTourismForecastPage());
+  push(T.chapter_territory, dividerPageHTML(T.divider_territory_title,T.divider_territory_kicker), true);
+  push(T.chapter_territory, renderLocationPage());
+  push(T.chapter_territory, renderTerritorialAndTourismPage());
+  push(T.chapter_territory, renderMarketAndADRPage());
+  push(T.chapter_territory, renderTourismSeriesPage());
+  push(T.chapter_territory, renderTourismForecastPage());
 
-  var ecoSections=[["hospitality","Hospitality nelle vicinanze","Accommodation landscape"],["restaurants","Ristoranti nelle vicinanze","Food & dining"],["beaches","Spiagge e costa","Coast & beaches"],["marinas","Porti e marine","Marinas & ports"],["heritage","Cultura e patrimonio","Heritage & culture"],["nightlife","Vita notturna","Nightlife"]];
+  var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
   var ecoPages=[];
-  var airportsPage=renderCategoryPageFiltered("transport",["commercial_airport"],"Aeroporti Commerciali","Airports · 300km radius");
+  var airportsPage=renderCategoryPageFiltered("transport",["commercial_airport"],T.airport_title,T.airport_category);
   if(airportsPage) ecoPages.push(airportsPage);
-  var groundTransportPage=renderCategoryPageFiltered("transport",["railway_station","passenger_port","bus_station","taxi_shuttle","transport_node"],"Accessibilità e Trasporti","Destination access");
+  var groundTransportPage=renderCategoryPageFiltered("transport",["railway_station","passenger_port","bus_station","taxi_shuttle","transport_node"],T.transport_title,T.transport_category);
   if(groundTransportPage) ecoPages.push(groundTransportPage);
   ecoSections.forEach(function(s){ var p=renderCategoryPage(s[0],s[1],s[2]); if(p) ecoPages.push(p); });
   if(ecoPages.length){
-    push("Ecosistema & accessibilità", dividerPageHTML("Ecosistema & Accessibilità","Territorial ecosystem"), true);
-    ecoPages.forEach(function(p){push("Ecosistema & accessibilità",p);});
+    push(T.chapter_ecosystem, dividerPageHTML(T.divider_ecosystem_title,T.divider_ecosystem_kicker), true);
+    ecoPages.forEach(function(p){push(T.chapter_ecosystem,p);});
   }
 
   var narrHtml=renderNarrativePage();
   var scoreHtml=renderScorePage();
   if(narrHtml||scoreHtml){
-    push("Valutazione IMMONOVA", dividerPageHTML("Valutazione IMMONOVA","Analytical assessment"), true);
-    push("Valutazione IMMONOVA", narrHtml);
-    push("Valutazione IMMONOVA", scoreHtml);
+    push(T.chapter_evaluation, dividerPageHTML(T.divider_evaluation_title,T.divider_evaluation_kicker), true);
+    push(T.chapter_evaluation, narrHtml);
+    push(T.chapter_evaluation, scoreHtml);
   }
 
-  push("Fonti & note", dividerPageHTML("Fonti & Note","Sources & disclaimer"), true);
-  push("Fonti & note", renderSourcesPage());
-  push("Fonti & note", renderClosingPage());
+  push(T.chapter_sources, dividerPageHTML(T.divider_sources_title,T.divider_sources_kicker), true);
+  push(T.chapter_sources, renderSourcesPage());
+  push(T.chapter_sources, renderClosingPage());
 
   var tocEntries=[];
   var seenChapters={};
@@ -1411,6 +1656,7 @@ function renderBook(){
 
 async function init(){
   try{
+    await applyLanguage(params.get("lang") || "it");
     setStatus("Caricamento dati interni IMMONOVA...","");
     await checkAuth();
     await loadOpportunity();
