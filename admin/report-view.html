@@ -849,9 +849,23 @@ function renderXlsxSourceDiagnosticsHTML(){
     var classifText=related.length
       ? related.map(function(t){ return escapeHTML((t.category||"unknown")+" ("+Math.round((t.confidence||0)*100)+"%)"); }).join(", ")
       : "classificazione non nel campione (oltre il limite di 12 tabelle mostrate)";
-    return escapeHTML(shortName)+": "+tablesCount+" tabell"+(tablesCount===1?"a":"e")+" trovat"+(tablesCount===1?"a":"e")+" \u2192 "+classifText;
+    var summary=escapeHTML(shortName)+": "+tablesCount+" tabell"+(tablesCount===1?"a":"e")+" trovat"+(tablesCount===1?"a":"e")+" \u2192 "+classifText;
+    if(related.length){
+      var rawBlocks=related.map(function(t){
+        var rows=Array.isArray(t.sample)?t.sample.slice(0,3):[];
+        if(!rows.length) return "";
+        var rowsText=rows.map(function(r){
+          var cells=Array.isArray(r)?r:[];
+          var joined=cells.map(function(c){ var s=String(c==null?"":c); return s.length>18?(s.slice(0,18)+"\u2026"):s; }).join(" | ");
+          return joined.length>90?(joined.slice(0,90)+"\u2026"):joined;
+        });
+        return '<div style="margin-top:6px;font-family:monospace;font-size:10px;color:#8f7643;white-space:pre-wrap">'+rowsText.map(escapeHTML).join("<br>")+'</div>';
+      }).filter(Boolean).join("");
+      if(rawBlocks) summary+=rawBlocks;
+    }
+    return summary;
   });
-  return '<div class="debug-item"><div class="debug-label">Fonti dati XLSX — diagnostica</div><div class="debug-value">'+lines.join("<br>")+'</div></div>';
+  return '<div class="debug-item"><div class="debug-label">Fonti dati XLSX — diagnostica</div><div class="debug-value">'+lines.join("<hr style=\"border:none;border-top:1px solid rgba(166,127,52,.18);margin:10px 0\">")+'</div></div>';
 }
 function renderDebugBootstrap(){
   var airportInfo=getNearestAirportInfo();
