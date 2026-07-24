@@ -162,6 +162,31 @@ document.addEventListener("DOMContentLoaded", () => {
   const errorBox = document.getElementById("error");
   const loginBtn = document.getElementById("loginBtn");
 
+  /* Registra l'accesso in immonova_access_logs. Non deve MAI bloccare il login: se la
+     tabella non esiste ancora (migrazione SQL non eseguita) o la scrittura fallisce per
+     qualsiasi motivo, l'errore viene solo loggato in console e l'utente entra comunque. */
+  async function logAccess(user){
+    try{
+      var profileResult = await client
+        .from("profiles")
+        .select("full_name,role")
+        .eq("id", user.id)
+        .single();
+
+      var profile = profileResult.data || {};
+
+      await client.from("immonova_access_logs").insert({
+        user_id: user.id,
+        email: user.email || null,
+        full_name: profile.full_name || null,
+        role: profile.role || null,
+        user_agent: navigator.userAgent || null
+      });
+    }catch(e){
+      console.warn("Registrazione accesso non riuscita (non bloccante):", e);
+    }
+  }
+
   form.addEventListener("submit", async function(e) {
     e.preventDefault();
 
@@ -180,6 +205,10 @@ document.addEventListener("DOMContentLoaded", () => {
       loginBtn.textContent = "Login";
       errorBox.textContent = error.message;
       return;
+    }
+
+    if (data && data.user) {
+      await logAccess(data.user);
     }
 
     window.location.href = "dashboard.html";
