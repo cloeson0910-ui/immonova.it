@@ -145,6 +145,8 @@ button:hover{
 
     <div id="error" class="error"></div>
 
+    <a href="#" id="recoverLink" style="display:block;margin-top:22px;font-size:11px;letter-spacing:.12em;color:#a58139;text-decoration:underline;cursor:pointer">Recupera credenziali</a>
+
   </div>
 </div>
 
@@ -161,31 +163,56 @@ document.addEventListener("DOMContentLoaded", () => {
   const form = document.getElementById("loginForm");
   const errorBox = document.getElementById("error");
   const loginBtn = document.getElementById("loginBtn");
+  const recoverLink = document.getElementById("recoverLink");
 
   /* Registra l'accesso in immonova_access_logs. Non deve MAI bloccare il login: se la
      tabella non esiste ancora (migrazione SQL non eseguita) o la scrittura fallisce per
      qualsiasi motivo, l'errore viene solo loggato in console e l'utente entra comunque. */
-  async function logAccess(user){
+  async function logAccess(user, profile){
     try{
-      var profileResult = await client
-        .from("profiles")
-        .select("full_name,role")
-        .eq("id", user.id)
-        .single();
-
-      var profile = profileResult.data || {};
-
       await client.from("immonova_access_logs").insert({
         user_id: user.id,
         email: user.email || null,
-        full_name: profile.full_name || null,
-        role: profile.role || null,
+        full_name: (profile && profile.full_name) || null,
+        role: (profile && profile.role) || null,
         user_agent: navigator.userAgent || null
       });
     }catch(e){
       console.warn("Registrazione accesso non riuscita (non bloccante):", e);
     }
   }
+
+  /* "Recupera credenziali": usa il sistema di reset password nativo di Supabase (invia
+     un'email con un link sicuro, senza far girare password in chiaro). L'utente arriva su
+     set-password.html già con una sessione di recovery valida grazie al link ricevuto. */
+  recoverLink.addEventListener("click", async function(e){
+    e.preventDefault();
+    errorBox.style.color = "#9c2f2f";
+    errorBox.textContent = "";
+
+    const email = document.getElementById("email").value.trim();
+
+    if(!email){
+      errorBox.textContent = "Inserisci la tua email nel campo qui sopra, poi clicca di nuovo su \u201cRecupera credenziali\u201d.";
+      return;
+    }
+
+    recoverLink.textContent = "Invio in corso...";
+
+    const redirectTo = window.location.origin + window.location.pathname.replace(/login\.html$/, "set-password.html");
+
+    const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+
+    recoverLink.textContent = "Recupera credenziali";
+
+    if(error){
+      errorBox.textContent = error.message;
+      return;
+    }
+
+    errorBox.style.color = "#4f7f45";
+    errorBox.textContent = "Ti abbiamo inviato una email con il link per impostare una nuova password.";
+  });
 
   form.addEventListener("submit", async function(e) {
     e.preventDefault();
@@ -207,8 +234,30 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    let profile = null;
+
     if (data && data.user) {
-      await logAccess(data.user);
+      try{
+        const profileResult = await client
+          .from("profiles")
+          .select("full_name,role,must_change_password")
+          .eq("id", data.user.id)
+          .single();
+        profile = profileResult.data || null;
+      }catch(e){
+        console.warn("Lettura profilo non riuscita (non bloccante):", e);
+      }
+
+      await logAccess(data.user, profile);
+    }
+
+    /* Se l'admin ha creato questo account con una password temporanea (must_change_password
+       = true), l'utente viene forzato a impostarne una propria prima di poter usare il
+       pannello. Se la colonna non esiste ancora (migrazione non eseguita), profile.must_change_password
+       è undefined e si va normalmente in dashboard. */
+    if(profile && profile.must_change_password === true){
+      window.location.href = "set-password.html?forced=1";
+      return;
     }
 
     window.location.href = "dashboard.html";
