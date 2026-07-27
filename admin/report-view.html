@@ -153,6 +153,7 @@ var destinationPhotos = [];
 var destinationPhotoIndex = 0;
 var lastDiscoveryDiagnostics = null;
 var lastDiscoveryEngines = null;
+var lastDiscoveryFetchError = null;
 var debugDocumentsInfo = null;
 var lastDocumentsLoadError = null;
 var lastReportLoadError = null;
@@ -478,15 +479,32 @@ function getStoredDossier(){
   return null;
 }
 async function fetchLiveDossier(radiusKm){
+  lastDiscoveryFetchError=null;
   try{
     var url=String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/immonova-discovery-engine";
     var payload={opportunity_id:Number(opportunityId),radius_km:radiusKm||30,year:new Date().getFullYear()};
     var res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify(payload)});
-    var json=await res.json();
+    var rawText=await res.text();
+    var json=null;
+    try{ json=rawText?JSON.parse(rawText):null; }catch(parseErr){
+      lastDiscoveryFetchError="Risposta del Discovery Engine non è JSON valido (HTTP "+res.status+"): "+rawText.slice(0,300);
+      lastDiscoveryDiagnostics=null;
+      lastDiscoveryEngines=null;
+      return null;
+    }
     lastDiscoveryDiagnostics=(json&&json.diagnostics)?json.diagnostics:null;
     lastDiscoveryEngines=(json&&json.engines)?json.engines:null;
-    return (json&&json.dossier_data)?json.dossier_data:null;
+    if(!res.ok || (json&&json.ok===false)){
+      lastDiscoveryFetchError="Discovery Engine ha risposto con errore (HTTP "+res.status+"): "+((json&&json.error)||rawText.slice(0,300)||"nessun dettaglio");
+      return null;
+    }
+    if(!json || !json.dossier_data){
+      lastDiscoveryFetchError="Discovery Engine ha risposto HTTP "+res.status+" ma senza dossier_data nel corpo della risposta.";
+      return null;
+    }
+    return json.dossier_data;
   }catch(e){
+    lastDiscoveryFetchError="Chiamata al Discovery Engine fallita prima di ricevere risposta: "+(e.message||e);
     console.error("Discovery live fetch failed",e);
     lastDiscoveryDiagnostics=null;
     lastDiscoveryEngines=null;
@@ -535,6 +553,7 @@ async function ensureDossier(){
     await persistDossierData(dossierData);
   }else{
     dossierSource="none";
+    setStatus("Discovery Engine non ha restituito dati territoriali, quindi NON è stato salvato nulla (è normale: senza dati non c'è nulla da salvare). Causa: "+(lastDiscoveryFetchError||"sconosciuta, controlla i log della edge function su Supabase.")+" — il dossier verrà comunque generato con le sole sezioni disponibili (dati interni, immobile, documenti).","error");
   }
 }
 async function forceRefreshDossier(){
