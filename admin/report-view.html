@@ -48,6 +48,15 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .structure-grid{display:grid;grid-template-columns:1fr 1fr;gap:26px}
 .cost-box{border:1px solid rgba(166,127,52,.18);background:rgba(255,255,255,.46);padding:22px}
 .cost-title{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#a67f34;margin-bottom:14px}
+.aqi-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:2px;font-size:11px;letter-spacing:.06em}
+.aqi-badge .aqi-dot{width:9px;height:9px;border-radius:50%;flex:none}
+.aqi-good{background:rgba(79,127,69,.10);color:#3f7043}.aqi-good .aqi-dot{background:#4f9f52}
+.aqi-moderate{background:rgba(166,127,52,.12);color:#8a682c}.aqi-moderate .aqi-dot{background:#c9a23c}
+.aqi-unhealthy-sensitive{background:rgba(184,120,40,.12);color:#a1671f}.aqi-unhealthy-sensitive .aqi-dot{background:#d98a2b}
+.aqi-unhealthy{background:rgba(156,47,47,.10);color:#9c2f2f}.aqi-unhealthy .aqi-dot{background:#c2453f}
+.aqi-very-unhealthy{background:rgba(120,40,110,.10);color:#7a2a6e}.aqi-very-unhealthy .aqi-dot{background:#9a4a8c}
+.aqi-hazardous{background:rgba(90,20,20,.12);color:#5a1414}.aqi-hazardous .aqi-dot{background:#7a1f1f}
+.wave-icon{width:34px;height:22px;display:inline-block;vertical-align:middle;flex:none}
 .cost-row{display:flex;justify-content:space-between;gap:18px;border-bottom:1px solid rgba(166,127,52,.12);padding:8px 0;font-size:13px;color:#735f36}
 .cost-row strong{color:#a67f34;font-weight:600}.cost-row.total{font-size:16px;font-weight:700;border-top:1px solid rgba(166,127,52,.28);border-bottom:0;margin-top:8px;padding-top:14px}
 .info-text{font-size:14px;line-height:1.72;color:#6f603f;margin-top:18px}
@@ -156,7 +165,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
       <h1 class="title" id="pageTitle">Dossier</h1>
     </div>
     <div class="actions">
-      <span class="version-badge" id="versionBadge" title="Versione del file report-view.html attualmente in esecuzione">v2026-07-28.5</span>
+      <span class="version-badge" id="versionBadge" title="Versione del file report-view.html attualmente in esecuzione">v2026-07-28.7</span>
       <select id="quickLangSwitch" class="lang-switch" title="Traduci a schermo il dossier già generato — nessuna chiamata al Discovery Engine, nessun costo">
         <option value="it">IT · Italiano</option>
         <option value="en">EN · English</option>
@@ -294,6 +303,18 @@ var UI_STRINGS = {
   kicker_territorial_profile:"Territorial profile", title_territorial_profile:"Profilo territoriale",
   label_population:"Popolazione", label_surface:"Superficie", label_density:"Densità", label_altitude:"Altitudine",
   note_territorial:"Dati demografici e territoriali del comune, raccolti automaticamente dal Discovery Engine su fonti pubbliche verificate.",
+  kicker_environment:"Environment", title_environment:"Ambiente",
+  label_air_quality_index:"Indice qualità dell\u2019aria (AQI)",
+  label_air_quality_pm25:"PM2.5", label_air_quality_pm10:"PM10", label_air_quality_no2:"NO\u2082", label_air_quality_o3:"O\u2083",
+  air_quality_station_prefix:"Stazione di rilevamento: ",
+  air_quality_scale_good:"Buona", air_quality_scale_moderate:"Moderata", air_quality_scale_unhealthy_sensitive:"Non salubre per gruppi sensibili",
+  air_quality_scale_unhealthy:"Non salubre", air_quality_scale_very_unhealthy:"Molto scarsa", air_quality_scale_hazardous:"Pericolosa",
+  note_air_quality:"Dato rilevato dalla stazione di monitoraggio pubblica più vicina alle coordinate dell\u2019immobile (World Air Quality Index). In comuni piccoli la stazione più vicina può trovarsi ad alcuni km di distanza.",
+  label_sea_water_quality:"Qualità acque di balneazione", sea_water_point_prefix:"Punto di monitoraggio: ",
+  sea_water_distance_suffix:" km dall\u2019immobile",
+  sea_water_status_excellent:"Eccellente", sea_water_status_good:"Buona", sea_water_status_sufficient:"Sufficiente", sea_water_status_poor:"Scarsa",
+  note_sea_water:"Classificazione ufficiale UE (European Environment Agency) del punto di balneazione monitorato più vicino. Disponibile solo per località europee: fuori dall\u2019Unione Europea questo dato non è disponibile da nessuna fonte pubblica equivalente.",
+  no_sea_water_data:"Nessun punto di balneazione monitorato ufficialmente entro il raggio di ricerca (25 km) — normale per immobili non costieri o fuori Europa.",
   kicker_tourism_data:"Tourism data", title_tourism_current:"Turismo \u2014 Dati Attuali",
   field_arrivals:"Arrivi turistici", unit_people:"persone",
   field_overnight_stays:"Presenze (pernottamenti)", unit_nights:"notti",
@@ -801,6 +822,95 @@ function renderTerritorialPage(){
     +metricCardHTML(T.label_density,dens,"ab./km²")
     +metricCardHTML(T.label_altitude,alt,"m s.l.m.")
     +'</div><p class="info-text">'+escapeHTML(T.note_territorial)+'</p>';
+}
+function airQualityScaleLabel(aqi){
+  var n=Number(aqi);
+  if(!Number.isFinite(n))return "";
+  if(n<=50)return T.air_quality_scale_good;
+  if(n<=100)return T.air_quality_scale_moderate;
+  if(n<=150)return T.air_quality_scale_unhealthy_sensitive;
+  if(n<=200)return T.air_quality_scale_unhealthy;
+  if(n<=300)return T.air_quality_scale_very_unhealthy;
+  return T.air_quality_scale_hazardous;
+}
+function airQualityScaleClass(aqi){
+  var n=Number(aqi);
+  if(!Number.isFinite(n))return "aqi-moderate";
+  if(n<=50)return "aqi-good";
+  if(n<=100)return "aqi-moderate";
+  if(n<=150)return "aqi-unhealthy-sensitive";
+  if(n<=200)return "aqi-unhealthy";
+  if(n<=300)return "aqi-very-unhealthy";
+  return "aqi-hazardous";
+}
+function aqiBadgeHTML(aqiValue){
+  var cls=airQualityScaleClass(aqiValue);
+  var label=airQualityScaleLabel(aqiValue);
+  return '<span class="aqi-badge '+cls+'"><span class="aqi-dot"></span>'+escapeHTML(String(Math.round(Number(aqiValue))))+' — '+escapeHTML(label)+'</span>';
+}
+function waveIconSVG(){
+  return '<svg class="wave-icon" viewBox="0 0 60 36" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    +'<path d="M0 26 C8 18, 14 18, 22 26 C30 34, 36 34, 44 26 C50 20, 55 20, 60 26" fill="none" stroke="#a67f34" stroke-width="2" stroke-linecap="round" opacity="0.55"/>'
+    +'<path d="M0 14 C8 6, 14 6, 22 14 C30 22, 36 22, 44 14 C50 8, 55 8, 60 14" fill="none" stroke="#a67f34" stroke-width="2" stroke-linecap="round" opacity="0.85"/>'
+    +'</svg>';
+}
+function seaWaterStatusLabel(status){
+  var s=String(status||"").toLowerCase();
+  if(s.indexOf("excellent")>=0)return T.sea_water_status_excellent;
+  if(s.indexOf("good")>=0)return T.sea_water_status_good;
+  if(s.indexOf("sufficient")>=0)return T.sea_water_status_sufficient;
+  if(s.indexOf("poor")>=0)return T.sea_water_status_poor;
+  return status||"-";
+}
+function seaWaterStatusClass(status){
+  var s=String(status||"").toLowerCase();
+  if(s.indexOf("excellent")>=0)return "aqi-good";
+  if(s.indexOf("good")>=0)return "aqi-good";
+  if(s.indexOf("sufficient")>=0)return "aqi-moderate";
+  if(s.indexOf("poor")>=0)return "aqi-unhealthy";
+  return "aqi-moderate";
+}
+function renderEnvironmentPage(){
+  var aqi=metricFromDossier("environment","air_quality_index");
+  var pm25=metricFromDossier("environment","air_quality_pm25");
+  var pm10=metricFromDossier("environment","air_quality_pm10");
+  var no2=metricFromDossier("environment","air_quality_no2");
+  var o3=metricFromDossier("environment","air_quality_o3");
+  var swq=metricFromDossier("environment","sea_water_quality_status");
+
+  if(!aqi&&!pm25&&!pm10&&!no2&&!o3&&!swq)return "";
+
+  var d=dossierData||{};
+  var envBucket=d.environment||{};
+  var aqiField=envBucket.air_quality_index;
+  var stationName=aqiField&&aqiField.coverage&&aqiField.coverage.used_name?aqiField.coverage.used_name:"";
+
+  var airBlock="";
+  if(aqi){
+    airBlock='<div style="margin-bottom:16px">'+aqiBadgeHTML(aqi.value)+'</div>'
+      +'<div class="metric-grid">'
+      +metricCardHTML(T.label_air_quality_pm25,pm25,"µg/m³")
+      +metricCardHTML(T.label_air_quality_pm10,pm10,"µg/m³")
+      +metricCardHTML(T.label_air_quality_no2,no2,"µg/m³")
+      +'</div>'
+      +(stationName?'<p class="info-text" style="margin-top:12px">'+escapeHTML(T.air_quality_station_prefix)+escapeHTML(stationName)+'</p>':'')
+      +'<p class="info-text">'+escapeHTML(T.note_air_quality)+'</p>';
+  }
+
+  var seaBlock="";
+  if(swq){
+    var swqField=envBucket.sea_water_quality_status;
+    var pointName=swqField&&swqField.coverage?swqField.coverage.used_name:"";
+    var distKm=swqField&&swqField.coverage?swqField.coverage.distance_km:null;
+    var swCls=seaWaterStatusClass(swq.value);
+    seaBlock='<div class="cost-box" style="margin-top:'+(airBlock?'24px':'0')+'"><div class="cost-title" style="display:flex;align-items:center;gap:10px">'+waveIconSVG()+'<span>'+escapeHTML(T.label_sea_water_quality)+'</span></div>'
+      +'<div class="cost-row" style="border-bottom:0;align-items:center"><span class="aqi-badge '+swCls+'"><span class="aqi-dot"></span>'+escapeHTML(seaWaterStatusLabel(swq.value))+'</span><strong style="font-weight:400;font-size:13px;color:#8f7643">'+(pointName?escapeHTML(pointName):'')+(distKm!=null?' — '+escapeHTML(String(distKm))+escapeHTML(T.sea_water_distance_suffix):'')+'</strong></div>'
+      +'</div><p class="info-text" style="margin-top:12px">'+escapeHTML(T.note_sea_water)+'</p>';
+  }else if(airBlock){
+    seaBlock='<p class="info-text" style="margin-top:16px;font-style:italic">'+escapeHTML(T.no_sea_water_data)+'</p>';
+  }
+
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_environment)+'</div><h2 class="section-title">'+escapeHTML(T.title_environment)+'</h2><div class="lux-rule"></div>'+airBlock+seaBlock+'</div></article>';
 }
 function renderRealEstatePage(){
   var min=metricFromDossier("real_estate_market","residential_sale_per_m2_min");
@@ -1739,6 +1849,7 @@ function renderBook(){
   push(T.chapter_territory, renderMarketAndADRPage());
   push(T.chapter_territory, renderTourismSeriesPage());
   push(T.chapter_territory, renderTourismForecastPage());
+  push(T.chapter_territory, renderEnvironmentPage());
 
   var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["shopping",T.eco_shopping,T.eco_shopping_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
   var ecoPages=[];
