@@ -118,7 +118,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
       <h1 class="title" id="pageTitle">Dossier</h1>
     </div>
     <div class="actions">
-      <span class="version-badge" id="versionBadge" title="Versione del file report-view.html attualmente in esecuzione">v2026-07-28.2</span>
+      <span class="version-badge" id="versionBadge" title="Versione del file report-view.html attualmente in esecuzione">v2026-07-28.3</span>
       <button class="btn" id="loadBtn" type="button" data-i18n="btn_reload_data">Ricarica dati</button>
       <button class="btn secondary" id="refreshDossierBtn" type="button" data-i18n="btn_refresh_territorial">Aggiorna dati territoriali</button>
       <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
@@ -155,6 +155,7 @@ var destinationPhotoIndex = 0;
 var lastDiscoveryDiagnostics = null;
 var lastDiscoveryEngines = null;
 var lastDiscoveryFetchError = null;
+var dossierCancelledByUser = false;
 var debugDocumentsInfo = null;
 var lastDocumentsLoadError = null;
 var lastReportLoadError = null;
@@ -514,7 +515,7 @@ async function fetchLiveDossier(radiusKm){
 }
 function askRadiusKm(){
   var input=window.prompt("Raggio di ricerca Discovery Engine, in km (aeroporti/porti/marine cercano comunque più lontano se serve). Lascia vuoto per il default di 30 km.","30");
-  if(input===null)return 30;
+  if(input===null)return null; // Annulla premuto: NON deve proseguire con un default silenzioso.
   var n=Number(input);
   return (Number.isFinite(n)&&n>0)?n:30;
 }
@@ -531,7 +532,6 @@ async function persistDossierData(data){
     }else{
       var payload = {
         opportunity_id: Number(opportunityId),
-        title: getTitle(),
         report_json: { dossier_data: data },
         generated_at: new Date().toISOString()
       };
@@ -548,6 +548,12 @@ async function ensureDossier(){
   dossierData=getStoredDossier();
   if(dossierData){dossierSource="report";return;}
   var radius=askRadiusKm();
+  if(radius===null){
+    // Annulla premuto: NON deve chiamare il Discovery Engine (che ha un costo). Torna alla proposta.
+    dossierCancelledByUser=true;
+    window.location.href="opportunity-edit.html?id="+encodeURIComponent(opportunityId);
+    return;
+  }
   setStatus("Nessun dato territoriale salvato nel report: recupero in tempo reale dal Discovery Engine con raggio "+radius+" km (può richiedere qualche secondo)...","");
   dossierData=await fetchLiveDossier(radius);
   if(dossierData){
@@ -563,6 +569,7 @@ async function forceRefreshDossier(){
   var confirmed=confirm("Questo richiama il Discovery Engine (Google Places e le altre fonti a pagamento) e sovrascrive i dati territoriali già salvati per questo dossier. Da fare solo se necessario (es. verifica di un fix). Procedere?");
   if(!confirmed) return;
   var radius=askRadiusKm();
+  if(radius===null) return; // Annulla premuto: NON deve chiamare il Discovery Engine.
   setStatus("Aggiornamento forzato dei dati territoriali dal Discovery Engine in corso...","");
   var fresh=await fetchLiveDossier(radius);
   if(!fresh){
@@ -1688,6 +1695,7 @@ async function init(){
     destinationPhotos = await loadDestinationPhotos();
     destinationPhotoIndex = 0;
     await ensureDossier();
+    if(dossierCancelledByUser) return; // Annulla premuto: redirect già in corso, non disegnare nulla.
     setStatus("Preparazione documenti per la stampa (rasterizzazione PDF in corso se presenti)...","");
     preparedDocumentPages = await renderDocumentsPages();
     renderBook();
