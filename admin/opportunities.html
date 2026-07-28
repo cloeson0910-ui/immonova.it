@@ -371,6 +371,31 @@ font-size:13px;
   text-decoration:none;
 }
 
+.cover-thumb{
+  width:64px;
+  height:64px;
+  object-fit:cover;
+  border:1px solid rgba(166,127,52,.25);
+  display:block;
+  background:rgba(166,127,52,.08);
+}
+
+.cover-thumb-placeholder{
+  width:64px;
+  height:64px;
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(166,127,52,.06);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:8px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#8f7643;
+  text-align:center;
+  line-height:1.3;
+}
+
 
 @media(max-width:900px){
 .header{
@@ -455,6 +480,7 @@ Caricamento area riservata...
 <table>
 <thead>
 <tr>
+<th data-i18n="th_cover">Copertina</th>
 <th data-i18n="th_title">Titolo</th>
 <th data-i18n="th_category">Categoria</th>
 <th data-i18n="th_location">Location</th>
@@ -469,7 +495,7 @@ Caricamento area riservata...
 
 <tbody id="opportunitiesTable">
 <tr>
-<td colspan="9" class="empty" data-i18n="loading">Caricamento...</td>
+<td colspan="10" class="empty" data-i18n="loading">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -530,7 +556,7 @@ var UI_STRINGS = {
   status_da_verificare:"Da verificare", status_da_revisionare:"Da revisionare", status_approvato:"Approvato", status_rifiutato:"Rifiutato",
   commercial_available:"Disponibile", commercial_negotiation:"In trattativa", commercial_reserved:"Riservata",
   commercial_sold:"Venduta", commercial_withdrawn:"Ritirata",
-  th_title:"Titolo", th_category:"Categoria", th_location:"Location", th_price:"Prezzo",
+  th_cover:"Copertina", th_title:"Titolo", th_category:"Categoria", th_location:"Location", th_price:"Prezzo",
   th_review_status:"Stato Revisione", th_commercial:"Commerciale", th_published:"Pubblicata",
   th_documents:"Documenti", th_actions:"Azioni",
   loading:"Caricamento...", loading_error:"Errore nel caricamento.", empty_none:"Nessuna proposta presente.",
@@ -555,7 +581,8 @@ var UI_STRINGS = {
   doc_habitability:"Agibilità", doc_systems:"Impianti",
   event_selling_party:"Selling Party", event_closing_party:"Closing Party", event_welcome_party:"Welcome Party",
   event_past_party:"Party avvenuto", event_upcoming_party:"Party in programma", event_investor_tour:"Investor Tour",
-  event_site_visit:"Site Visit", event_private_dinner:"Private Dinner", event_generic:"Evento"
+  event_site_visit:"Site Visit", event_private_dinner:"Private Dinner", event_generic:"Evento",
+  no_cover:"Nessuna foto"
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
@@ -693,6 +720,15 @@ function formatPrice(value){
   }).format(number);
 }
 
+function renderCoverCell(item){
+  const url = item.cover_image;
+  const label = escapeHTML(T.no_cover);
+  if(url){
+    return `<img class="cover-thumb" src="${escapeHTML(url)}" alt="${escapeHTML(item.title || "")}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="cover-thumb-placeholder" style="display:none">${label}</div>`;
+  }
+  return `<div class="cover-thumb-placeholder">${label}</div>`;
+}
+
 async function checkAuth(){
   const { data:{ session }, error } = await client.auth.getSession();
 
@@ -750,7 +786,7 @@ async function loadOpportunities(){
     console.error(error);
     table.innerHTML = `
       <tr>
-        <td colspan="9" class="empty">${escapeHTML(T.loading_error)}</td>
+        <td colspan="10" class="empty">${escapeHTML(T.loading_error)}</td>
       </tr>
     `;
     return;
@@ -934,7 +970,7 @@ function renderTable(data){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="9" class="empty">${escapeHTML(T.empty_none)}</td>
+        <td colspan="10" class="empty">${escapeHTML(T.empty_none)}</td>
       </tr>
     `;
     return;
@@ -947,6 +983,7 @@ function renderTable(data){
 
     return `
       <tr>
+        <td>${renderCoverCell(item)}</td>
         <td>${escapeHTML(item.title || "")}${renderLinkedEvents(item)}</td>
         <td><span class="badge">${escapeHTML(item.category || "")}</span></td>
         <td>${escapeHTML(item.location || "")}</td>
