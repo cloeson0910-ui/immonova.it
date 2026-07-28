@@ -13,7 +13,9 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .header{padding:22px 42px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.14);background:rgba(244,236,223,.76);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}
 .logo{font-size:25px;letter-spacing:.18em;color:#a67f34;text-decoration:none;font-weight:300}.logo small{display:block;margin-top:6px;font-size:8px;font-weight:700;letter-spacing:.16em;color:#a58139}
 .header-actions{display:flex;gap:12px;flex-wrap:wrap}.header-actions a,.header-actions button{padding:10px 15px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.26);color:#a67f34;text-decoration:none;cursor:pointer;font-size:10px;letter-spacing:.16em;text-transform:uppercase}
-.container{max-width:1320px;margin:auto;padding:38px 42px 80px}.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px}.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}.title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}.btn.secondary{background:transparent;color:#a67f34}.version-badge{display:inline-flex;align-items:center;padding:6px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#8f7643;letter-spacing:.08em;text-transform:none;font-size:10px;font-family:monospace;border-radius:3px}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
+.container{max-width:1320px;margin:auto;padding:38px 42px 80px}.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px}.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}.title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}.btn.secondary{background:transparent;color:#a67f34}.version-badge{display:inline-flex;align-items:center;padding:6px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#8f7643;letter-spacing:.08em;text-transform:none;font-size:10px;font-family:monospace;border-radius:3px}
+.lang-switch{padding:8px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#a67f34;font-size:11px;font-family:inherit;cursor:pointer;border-radius:3px}
+@media print{.lang-switch{display:none!important}}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
 .dossier-options-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(30,22,10,.45);align-items:center;justify-content:center}
 .dossier-options-overlay.active{display:flex}
 .dossier-options-box{width:420px;max-width:92vw;background:#f4ecdf;border:1px solid rgba(166,127,52,.35);box-shadow:0 30px 90px rgba(30,22,10,.35);padding:32px}
@@ -154,7 +156,15 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
       <h1 class="title" id="pageTitle">Dossier</h1>
     </div>
     <div class="actions">
-      <span class="version-badge" id="versionBadge" title="Versione del file report-view.html attualmente in esecuzione">v2026-07-28.4</span>
+      <span class="version-badge" id="versionBadge" title="Versione del file report-view.html attualmente in esecuzione">v2026-07-28.5</span>
+      <select id="quickLangSwitch" class="lang-switch" title="Traduci a schermo il dossier già generato — nessuna chiamata al Discovery Engine, nessun costo">
+        <option value="it">IT · Italiano</option>
+        <option value="en">EN · English</option>
+        <option value="fr">FR · Français</option>
+        <option value="de">DE · Deutsch</option>
+        <option value="es">ES · Español</option>
+        <option value="ar">AR · العربية</option>
+      </select>
       <button class="btn" id="loadBtn" type="button" data-i18n="btn_reload_data">Ricarica dati</button>
       <button class="btn secondary" id="refreshDossierBtn" type="button" data-i18n="btn_refresh_territorial">Aggiorna dati territoriali</button>
       <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
@@ -631,6 +641,8 @@ async function ensureDossier(){
     await applyLanguage(options.lang);
   }
   setLangInUrl(options.lang);
+  var qls=document.getElementById("quickLangSwitch");
+  if(qls) qls.value=options.lang;
   setStatus("Nessun dato territoriale salvato nel report: recupero in tempo reale dal Discovery Engine con raggio "+radius+" km (può richiedere qualche secondo)...","");
   dossierData=await fetchLiveDossier(radius);
   if(dossierData){
@@ -652,6 +664,8 @@ async function forceRefreshDossier(){
     await applyLanguage(options.lang);
   }
   setLangInUrl(options.lang);
+  var qls=document.getElementById("quickLangSwitch");
+  if(qls) qls.value=options.lang;
   setStatus("Aggiornamento forzato dei dati territoriali dal Discovery Engine in corso...","");
   var fresh=await fetchLiveDossier(radius);
   if(!fresh){
@@ -1770,6 +1784,23 @@ function renderBook(){
 async function init(){
   try{
     await applyLanguage(params.get("lang") || "it");
+    var quickLangSwitch=document.getElementById("quickLangSwitch");
+    if(quickLangSwitch){
+      quickLangSwitch.value=CURRENT_LANG;
+      quickLangSwitch.addEventListener("change",async function(){
+        var chosen=quickLangSwitch.value;
+        if(!dossierData && dossierSource!=="none"){
+          setStatus("Il dossier non ha ancora finito di caricare: attendi il completamento prima di cambiare lingua.","error");
+          quickLangSwitch.value=CURRENT_LANG;
+          return;
+        }
+        setStatus("Traduzione a schermo in corso (nessuna chiamata al Discovery Engine, nessun costo)...","");
+        await applyLanguage(chosen);
+        setLangInUrl(chosen);
+        renderBook();
+        setStatus("Dossier mostrato in "+quickLangSwitch.options[quickLangSwitch.selectedIndex].text+". Pronto per Stampa / PDF.","success");
+      });
+    }
     setStatus("Caricamento dati interni IMMONOVA...","");
     await checkAuth();
     await loadOpportunity();
