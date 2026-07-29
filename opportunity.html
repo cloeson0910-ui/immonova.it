@@ -635,7 +635,12 @@ const UI_TRANSLATIONS = {
     nda_error:"Devi accettare l'NDA per richiedere il dossier.",
     privacy_error:"Devi accettare il trattamento dei dati.",
     success:"Richiesta inviata correttamente. IMMONOVA verificherà il profilo e invierà il dossier dopo approvazione manuale.",
-    send_error:"Errore durante l'invio della richiesta."
+    send_error:"Errore durante l'invio della richiesta.",
+    market_teaser_with_data:"Analisi di mercato basata su fonti verificate. Comparabili completi e assumptions nel dossier riservato.",
+    market_teaser_generic:"Posizionamento di mercato preliminare disponibile. Comparabili completi e assumptions nel dossier.",
+    tourism_teaser_with_arrivals:"Flusso turistico verificato: {arrivals} arrivi rilevati. Stagionalità e profilo della domanda nel dossier riservato.",
+    tourism_teaser_generic:"Flusso turistico, stagionalità e profilo della domanda disponibili dopo qualificazione.",
+    roi_teaser:"ROI, cash flow, break-even e scenari restano riservati."
   },
   en:{
     nav_opportunities:"Opportunities",
@@ -704,7 +709,12 @@ const UI_TRANSLATIONS = {
     nda_error:"You must accept the NDA to request the dossier.",
     privacy_error:"You must accept data processing.",
     success:"Request sent successfully. IMMONOVA will review the profile and send the dossier after manual approval.",
-    send_error:"Error while sending the request."
+    send_error:"Error while sending the request.",
+    market_teaser_with_data:"Market positioning based on verified sources. Full comparables and assumptions in the reserved dossier.",
+    market_teaser_generic:"Preliminary market positioning available. Full comparables and assumptions in dossier.",
+    tourism_teaser_with_arrivals:"Verified tourism flow: {arrivals} arrivals recorded. Seasonality and demand profile in the reserved dossier.",
+    tourism_teaser_generic:"Tourism flow, seasonality and demand profile are available after qualification.",
+    roi_teaser:"ROI, cash flow, break-even and scenarios remain reserved."
   }
 };
 
@@ -816,6 +826,23 @@ function teaserText(data){
   return "L’analisi preliminare evidenzia un potenziale interessante in termini di posizionamento, valorizzazione e domanda qualificata. La versione completa è disponibile nel Dossier Riservato.";
 }
 
+/* Market/Tourism teaser: usano SOLO metriche non finanziarie dal dossier verificato
+   (__dossier_data, popolato da loadSafeDossierMetrics -- niente real_estate_market/adr).
+   Se il dossier non è ancora disponibile per questa opportunità, restano i testi generici
+   di sempre: non promettono mai un dato che non c'è davvero. */
+function marketTeaserText(data){
+  const dossier = data.__dossier_data;
+  if(dossier && dossier.sources_count) return dict("market_teaser_with_data");
+  return dict("market_teaser_generic");
+}
+function tourismTeaserText(data){
+  const dossier = data.__dossier_data;
+  if(dossier && dossier.tourism_arrivals){
+    return dict("tourism_teaser_with_arrivals").replace("{arrivals}", new Intl.NumberFormat(currentLanguage === "it" ? "it-IT" : currentLanguage).format(dossier.tourism_arrivals));
+  }
+  return dict("tourism_teaser_generic");
+}
+
 function timelineFor(data){
   const timeline = data.opportunity_timeline || [];
   const events = (data.immonova_events || []).map(function(e){
@@ -911,9 +938,9 @@ async function renderOpportunity(data){
         <div class="panel">
           <h2 class="section-title">${escapeHTML(dict("ai_analysis"))}</h2>
           <div class="teaser-grid">
-            <div class="teaser-card"><div class="teaser-title">Market</div><div class="teaser-text">Preliminary market positioning available. Full comparables and assumptions in dossier.</div></div>
-            <div class="teaser-card"><div class="teaser-title">Tourism</div><div class="teaser-text">Tourism flow, seasonality and demand profile are available after qualification.</div></div>
-            <div class="teaser-card"><div class="teaser-title">ROI</div><div class="teaser-text">ROI, cash flow, break-even and scenarios remain reserved.</div></div>
+            <div class="teaser-card"><div class="teaser-title">Market</div><div class="teaser-text">${escapeHTML(marketTeaserText(data))}</div></div>
+            <div class="teaser-card"><div class="teaser-title">Tourism</div><div class="teaser-text">${escapeHTML(tourismTeaserText(data))}</div></div>
+            <div class="teaser-card"><div class="teaser-title">ROI</div><div class="teaser-text">${escapeHTML(dict("roi_teaser"))}</div></div>
           </div>
           <div class="lock-box">${escapeHTML(dict("ai_locked"))}</div>
         </div>
@@ -1088,7 +1115,66 @@ async function loadOpportunity(){
   }
 
   currentOpportunity = data;
+  data.__dossier_data = await loadSafeDossierMetrics(id);
   await renderOpportunity(data);
+}
+
+/* Recupera SOLO le metriche del dossier che non sono cifre di prezzo/investimento (arrivi
+   turistici, popolazione, conteggi di punti d'interesse verificati) -- MAI real_estate_market
+   (valore al m²) o adr/tourism_pricing (tariffe), che restano riservate al dossier completo.
+   Se il report non esiste ancora, o la query fallisce, la pagina pubblica funziona comunque
+   con le card generiche di fallback: questa funzione non deve mai bloccare il caricamento. */
+async function loadSafeDossierMetrics(opportunityId){
+  try{
+    const { data, error } = await client
+      .from("opportunity_reports")
+      .select("report_json")
+      .eq("opportunity_id", opportunityId)
+      .order("generated_at", { ascending:false })
+      .limit(1)
+      .maybeSingle();
+
+    if(error || !data || !data.report_json || !data.report_json.dossier_data) return null;
+
+    const d = data.report_json.dossier_data;
+    const metricValue = (section, field) => {
+      const bucket = d[section];
+      if(!bucket) return null;
+      const f = bucket[field];
+      if(!f || typeof f !== "object" || !("value" in f)) return null;
+      const n = Number(f.value);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    return {
+      tourism_arrivals: metricValue("tourism","arrivals"),
+      population: metricValue("demography","population"),
+      hospitality_count: (d.hospitality && Array.isArray(d.hospitality.items)) ? d.hospitality.items.length : null,
+      sources_count: countVerifiedSources(d)
+    };
+  }catch(e){
+    console.warn("Dossier metrics non disponibili (non bloccante):", e);
+    return null;
+  }
+}
+
+/* Conta le fonti verificate PRESENTI nel dossier, ignorando esplicitamente le sezioni
+   finanziarie -- usato solo per dire "basato su N fonti verificate", mai per mostrare i valori
+   veri e propri di quelle sezioni. */
+function countVerifiedSources(dossierData){
+  const EXCLUDED_FINANCIAL_SECTIONS = ["real_estate_market","adr","tourism_pricing"];
+  let count = 0;
+  Object.keys(dossierData || {}).forEach(section => {
+    if(EXCLUDED_FINANCIAL_SECTIONS.includes(section)) return;
+    const bucket = dossierData[section];
+    if(!bucket || typeof bucket !== "object") return;
+    Object.keys(bucket).forEach(field => {
+      if(field === "summary" || field === "items" || field === "count") return;
+      const f = bucket[field];
+      if(f && typeof f === "object" && "value" in f) count++;
+    });
+  });
+  return count;
 }
 
 async function rerenderCurrentOpportunity(){
