@@ -526,12 +526,12 @@ html[dir="rtl"] .data-grid{direction:rtl}
 <header class="header">
   <a href="index.html" class="logo">IMMONOVA</a>
   <nav class="nav">
-    <a href="index.html">Home</a>
+    <a href="index.html" data-i18n="nav_home">Home</a>
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunities</a>
-    <a href="success-stories.html">Success Stories</a>
-    <a href="events.html">Events</a>
-    <a href="off-market.html">Off Market</a>
-    <a href="contact.html">Contact</a>
+    <a href="success-stories.html" data-i18n="nav_success_stories">Success Stories</a>
+    <a href="events.html" data-i18n="nav_events">Events</a>
+    <a href="off-market.html" data-i18n="nav_off_market">Off Market</a>
+    <a href="contact.html" data-i18n="nav_contact">Contact</a>
   </nav>
 </header>
 
@@ -569,7 +569,7 @@ let currentRequestTemplate = "";
 
 const UI_TRANSLATIONS = {
   it:{
-    nav_opportunities:"Opportunità",
+    nav_home:"Home", nav_opportunities:"Opportunità", nav_success_stories:"Success Stories", nav_events:"Eventi", nav_off_market:"Off Market", nav_contact:"Contatti",
     loading_opportunity:"Caricamento opportunità...",
     no_opportunity:"Opportunità non selezionata.",
     unavailable:"Opportunità non disponibile.",
@@ -640,10 +640,16 @@ const UI_TRANSLATIONS = {
     market_teaser_generic:"Posizionamento di mercato preliminare disponibile. Comparabili completi e assumptions nel dossier.",
     tourism_teaser_with_arrivals:"Flusso turistico verificato: {arrivals} arrivi rilevati. Stagionalità e profilo della domanda nel dossier riservato.",
     tourism_teaser_generic:"Flusso turistico, stagionalità e profilo della domanda disponibili dopo qualificazione.",
-    roi_teaser:"ROI, cash flow, break-even e scenari restano riservati."
+    roi_teaser:"ROI, cash flow, break-even e scenari restano riservati.",
+    reserved_dossier_small:"Dossier Riservato", full_details_by_request:"Dettagli completi su richiesta",
+    gallery_preview_placeholder:"Anteprima Gallery",
+    timeline_empty:"Timeline riservata in aggiornamento.",
+    events_empty:"Eventi pubblici collegati disponibili dopo selezione IMMONOVA.",
+    timeline_step_fallback:"Passaggio", event_fallback_title:"Evento IMMONOVA",
+    investment_completed:"Investment Completed", investment_completed_desc:"Operazione conclusa e archiviata come IMMONOVA Success Story."
   },
   en:{
-    nav_opportunities:"Opportunities",
+    nav_home:"Home", nav_opportunities:"Opportunities", nav_success_stories:"Success Stories", nav_events:"Events", nav_off_market:"Off Market", nav_contact:"Contact",
     loading_opportunity:"Loading opportunity...",
     no_opportunity:"Opportunity not selected.",
     unavailable:"Opportunity unavailable.",
@@ -714,7 +720,13 @@ const UI_TRANSLATIONS = {
     market_teaser_generic:"Preliminary market positioning available. Full comparables and assumptions in dossier.",
     tourism_teaser_with_arrivals:"Verified tourism flow: {arrivals} arrivals recorded. Seasonality and demand profile in the reserved dossier.",
     tourism_teaser_generic:"Tourism flow, seasonality and demand profile are available after qualification.",
-    roi_teaser:"ROI, cash flow, break-even and scenarios remain reserved."
+    roi_teaser:"ROI, cash flow, break-even and scenarios remain reserved.",
+    reserved_dossier_small:"Reserved Dossier", full_details_by_request:"Full details by request",
+    gallery_preview_placeholder:"Gallery Preview",
+    timeline_empty:"Reserved timeline being updated.",
+    events_empty:"Public linked events available after IMMONOVA selection.",
+    timeline_step_fallback:"Step", event_fallback_title:"IMMONOVA Event",
+    investment_completed:"Investment Completed", investment_completed_desc:"Transaction completed and archived as an IMMONOVA Success Story."
   }
 };
 
@@ -858,8 +870,8 @@ function timelineFor(data){
   const soldStep = isSold(data) && data.sold_at ? [{
     created_at:data.sold_at,
     timeline_type:"sold",
-    title:"Investment Completed",
-    description:"Operazione conclusa e archiviata come IMMONOVA Success Story.",
+    title:dict("investment_completed"),
+    description:dict("investment_completed_desc"),
     visibility:"public"
   }] : [];
 
@@ -868,7 +880,77 @@ function timelineFor(data){
     .sort((a,b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
 }
 
+/* Traduce il CONTENUTO specifico di questa scheda (titolo, categoria, tipologia,
+   descrizioni, titoli/descrizioni degli eventi collegati) -- diverso dal dizionario fisso
+   dell'interfaccia: qui il testo cambia per ogni opportunità, quindi la cache è per
+   scheda+lingua, non globale. Location/indirizzi/venue NON vengono mai tradotti: sono nomi
+   di luogo, tradurli li renderebbe sbagliati. Se la traduzione fallisce per qualsiasi motivo,
+   la pagina mostra semplicemente il testo originale in italiano -- non deve mai bloccarsi. */
+async function getRenderData(data){
+  if(!data || currentLanguage === "it") return data;
+
+  const cacheKey = "immonova_public_content_" + data.id + "_" + currentLanguage + "_v1";
+  try{
+    const cached = localStorage.getItem(cacheKey);
+    if(cached){ const parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  const events = (data.immonova_events || []).slice(0,6);
+  const eventTexts = events.map(e => [e.title || "", e.short_description || "", e.description || ""]);
+
+  const texts = [
+    data.title || "", data.category || "", data.investment_type || "",
+    data.short_description || "", data.full_description || "",
+    ...eventTexts.flat()
+  ];
+
+  try{
+    const result = await client.functions.invoke("translate-public-content", {
+      body:{
+        language: currentLanguage,
+        source_language: "it",
+        context: "IMMONOVA luxury real estate investment opportunity page: property title, category, investment type, short and full description, and linked event titles/descriptions. Preserve property names and place names as-is, do not translate them.",
+        texts: texts
+      }
+    });
+
+    if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+      console.warn("Traduzione contenuto scheda non riuscita, mostro italiano:", result.error || result.data);
+      return data;
+    }
+
+    const t = result.data.translations;
+    const allEvents = data.immonova_events || [];
+    const translatedEvents = allEvents.map(function(e, i){
+      if(i >= 6) return e;
+      const base = 5 + i * 3;
+      return Object.assign({}, e, {
+        title: t[base] != null ? t[base] : e.title,
+        short_description: t[base + 1] != null ? t[base + 1] : e.short_description,
+        description: t[base + 2] != null ? t[base + 2] : e.description
+      });
+    });
+
+    const translated = Object.assign({}, data, {
+      title: t[0] != null ? t[0] : data.title,
+      category: t[1] != null ? t[1] : data.category,
+      investment_type: t[2] != null ? t[2] : data.investment_type,
+      short_description: t[3] != null ? t[3] : data.short_description,
+      full_description: t[4] != null ? t[4] : data.full_description,
+      immonova_events: translatedEvents
+    });
+
+    try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+    return translated;
+  }catch(e){
+    console.warn("Traduzione contenuto scheda fallita (non bloccante), mostro italiano:", e);
+    return data;
+  }
+}
+
 async function renderOpportunity(data){
+  data = await getRenderData(data);
+
   const category = data.category || "";
   const title = data.title || "";
   const location = data.location || "";
@@ -896,8 +978,8 @@ async function renderOpportunity(data){
       <div class="hero-media">
         ${mainImage ? `<img src="${escapeHTML(mainImage)}" alt="${escapeHTML(title)}">` : `<div class="media-placeholder">IMMONOVA<br>Opportunity</div>`}
         <div class="lock-marker">
-          <small>Reserved Dossier</small>
-          <strong>Full details by request</strong>
+          <small>${escapeHTML(dict("reserved_dossier_small"))}</small>
+          <strong>${escapeHTML(dict("full_details_by_request"))}</strong>
         </div>
       </div>
     </section>
@@ -929,7 +1011,7 @@ async function renderOpportunity(data){
             ${
               gallery.length
               ? gallery.map(url => `<div class="gallery-item"><img src="${escapeHTML(url)}" alt="${escapeHTML(title)}"></div>`).join("")
-              : `<div class="gallery-item"><div class="gallery-locked">Gallery Preview</div></div>`
+              : `<div class="gallery-item"><div class="gallery-locked">${escapeHTML(dict("gallery_preview_placeholder"))}</div></div>`
             }
             <div class="gallery-item"><div class="gallery-locked">${lockedCount > 0 ? "+" + lockedCount + " " : ""}${escapeHTML(dict("gallery_locked"))}</div></div>
           </div>
@@ -953,12 +1035,12 @@ async function renderOpportunity(data){
               <div class="timeline-item">
                 <div class="timeline-date">${escapeHTML(fmtDate(item.created_at))}</div>
                 <div>
-                  <div class="timeline-title">${escapeHTML(item.title || item.timeline_type || "Step")}</div>
+                  <div class="timeline-title">${escapeHTML(item.title || item.timeline_type || dict("timeline_step_fallback"))}</div>
                   <div class="timeline-desc">${escapeHTML(item.description || "")}</div>
                 </div>
               </div>
             `).join("")
-            : `<div class="text">Timeline riservata in aggiornamento.</div>`
+            : `<div class="text">${escapeHTML(dict("timeline_empty"))}</div>`
           }
         </div>
 
@@ -971,12 +1053,12 @@ async function renderOpportunity(data){
                 ${event.cover_image ? `<img src="${escapeHTML(event.cover_image)}" alt="${escapeHTML(event.title || "")}">` : ""}
                 <div class="event-body">
                   <div class="event-type">${escapeHTML(eventTypeLabel(event.event_type))}</div>
-                  <div class="event-title">${escapeHTML(event.title || "IMMONOVA Event")}</div>
+                  <div class="event-title">${escapeHTML(event.title || dict("event_fallback_title"))}</div>
                   <div class="event-desc">${escapeHTML([fmtDate(event.event_date), event.location, event.venue].filter(Boolean).join(" · "))}</div>
                 </div>
               </article>
             `).join("") + `</div>`
-            : `<div class="text">Eventi pubblici collegati disponibili dopo selezione IMMONOVA.</div>`
+            : `<div class="text">${escapeHTML(dict("events_empty"))}</div>`
           }
         </div>
 
