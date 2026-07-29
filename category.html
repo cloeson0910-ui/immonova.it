@@ -312,8 +312,8 @@ h1{
     <nav class="nav">
       <a href="index.html" data-i18n="nav_home">Home</a>
       <a href="opportunities.html" data-i18n="nav_categories">Categories</a>
-      <a href="events.html">Events</a>
-      <a href="success-stories.html">Success Stories</a>
+      <a href="events.html" data-i18n="nav_events">Events</a>
+      <a href="success-stories.html" data-i18n="nav_success_stories">Success Stories</a>
       <div class="lang-wrap">
         <button type="button" class="lang-toggle" id="langToggle">EN</button>
         <div class="lang-menu" id="langMenu">
@@ -359,12 +359,13 @@ const SUPPORTED_LANGS = ["it","en","fr","de","es","ar"];
 
 let currentLang = normalizeLang(langParam || localStorage.getItem(I18N_STORAGE_KEY) || "en");
 let loadedItems = [];
-let translatedItemsCache = {};
 
 const STATIC_I18N = {
   it:{
     nav_categories:"Categorie",
     nav_home:"Home",
+    nav_events:"Eventi",
+    nav_success_stories:"Success Stories",
     kicker:"Segmento d'investimento",
     hero_text:"Opportunità di investimento selezionate e riservate a investitori privati, family office e partner strategici.",
     default_title:"Opportunità",
@@ -379,6 +380,8 @@ const STATIC_I18N = {
   en:{
     nav_categories:"Categories",
     nav_home:"Home",
+    nav_events:"Events",
+    nav_success_stories:"Success Stories",
     kicker:"Investment Segment",
     hero_text:"Selected investment opportunities reserved for private investors, family offices and strategic partners.",
     default_title:"Opportunities",
@@ -393,6 +396,8 @@ const STATIC_I18N = {
   fr:{
     nav_categories:"Catégories",
     nav_home:"Accueil",
+    nav_events:"Événements",
+    nav_success_stories:"Success Stories",
     kicker:"Segment d'investissement",
     hero_text:"Opportunités d'investissement sélectionnées et réservées aux investisseurs privés, family offices et partenaires stratégiques.",
     default_title:"Opportunités",
@@ -407,6 +412,8 @@ const STATIC_I18N = {
   de:{
     nav_categories:"Kategorien",
     nav_home:"Home",
+    nav_events:"Veranstaltungen",
+    nav_success_stories:"Success Stories",
     kicker:"Investmentsegment",
     hero_text:"Ausgewählte Investmentmöglichkeiten für private Investoren, Family Offices und strategische Partner.",
     default_title:"Opportunities",
@@ -421,6 +428,8 @@ const STATIC_I18N = {
   es:{
     nav_categories:"Categorías",
     nav_home:"Inicio",
+    nav_events:"Eventos",
+    nav_success_stories:"Success Stories",
     kicker:"Segmento de inversión",
     hero_text:"Oportunidades de inversión seleccionadas y reservadas para inversores privados, family offices y socios estratégicos.",
     default_title:"Oportunidades",
@@ -435,6 +444,8 @@ const STATIC_I18N = {
   ar:{
     nav_categories:"الفئات",
     nav_home:"الرئيسية",
+    nav_events:"الفعاليات",
+    nav_success_stories:"قصص النجاح",
     kicker:"قطاع الاستثمار",
     hero_text:"فرص استثمارية مختارة ومخصصة للمستثمرين الخاصين والمكاتب العائلية والشركاء الاستراتيجيين.",
     default_title:"الفرص",
@@ -519,52 +530,74 @@ function renderCover(item){
   `;
 }
 
-async function translateText(text, targetLang){
-  const original = String(text || "").trim();
-  if(!original || targetLang === "it") return original;
+/* Traduce titolo + descrizione breve di TUTTI gli immobili della categoria in UNA sola
+   chiamata (invece delle 3 chiamate-per-immobile di prima, che oltretutto usavano parametri
+   sbagliati verso translate-public-content e quindi non funzionavano mai). La location NON
+   viene tradotta: è un nome di luogo, tradurlo lo renderebbe sbagliato. Cache per singolo
+   immobile+lingua in localStorage (persiste tra le visite, a differenza della sessionStorage
+   di prima): se un nuovo immobile viene aggiunto alla categoria, solo quello richiede una
+   nuova traduzione, non l'intera lista. */
+async function translateCategoryItems(items, targetLang){
+  if(targetLang === "it" || !items || !items.length) return items;
 
-  const cacheKey = targetLang + "::" + original;
-  const localCached = sessionStorage.getItem("imn_translate_" + cacheKey);
-  if(localCached) return localCached;
+  const results = new Array(items.length);
+  const missingItems = [];
+  const missingIndexes = [];
 
-  try{
-    const result = await client.functions.invoke("translate-public-content", {
-      body:{
-        text:original,
-        target_language:targetLang,
-        source_language:"it",
-        context:"IMMONOVA luxury real estate investment website"
+  items.forEach((item, idx) => {
+    const cacheKey = "immonova_category_item_" + item.id + "_" + targetLang + "_v1";
+    try{
+      const cached = localStorage.getItem(cacheKey);
+      if(cached){
+        const parsed = JSON.parse(cached);
+        if(parsed && typeof parsed === "object"){
+          results[idx] = Object.assign({}, item, parsed);
+          return;
+        }
       }
-    });
+    }catch(e){}
+    missingItems.push(item);
+    missingIndexes.push(idx);
+  });
 
-    if(result.error) throw result.error;
+  if(missingItems.length){
+    const texts = [];
+    missingItems.forEach(item => { texts.push(item.title || "", item.short_description || ""); });
 
-    const translated = result.data && (result.data.translated_text || result.data.translation || result.data.text);
-    if(translated){
-      sessionStorage.setItem("imn_translate_" + cacheKey, translated);
-      return translated;
+    try{
+      const result = await client.functions.invoke("translate-public-content", {
+        body:{
+          language: targetLang,
+          source_language: "it",
+          context: "IMMONOVA luxury real estate investment website: opportunity listing titles and short descriptions shown on a category page.",
+          texts: texts
+        }
+      });
+
+      if(!result.error && result.data && result.data.success && Array.isArray(result.data.translations)){
+        const t = result.data.translations;
+        missingItems.forEach((item, i) => {
+          const base = i * 2;
+          const translatedFields = {
+            title: t[base] != null ? t[base] : item.title,
+            short_description: t[base + 1] != null ? t[base + 1] : item.short_description
+          };
+          results[missingIndexes[i]] = Object.assign({}, item, translatedFields);
+          try{
+            localStorage.setItem("immonova_category_item_" + item.id + "_" + targetLang + "_v1", JSON.stringify(translatedFields));
+          }catch(e){}
+        });
+      }else{
+        console.warn("Traduzione lista categoria non riuscita, mostro italiano:", result.error || result.data);
+        missingItems.forEach((item, i) => { results[missingIndexes[i]] = item; });
+      }
+    }catch(e){
+      console.warn("Traduzione lista categoria fallita (non bloccante), mostro italiano:", e);
+      missingItems.forEach((item, i) => { results[missingIndexes[i]] = item; });
     }
-  }catch(error){
-    console.warn("Traduzione dinamica non disponibile:", error.message || error);
   }
 
-  return original;
-}
-
-async function translateItem(item){
-  if(currentLang === "it") return item;
-
-  const key = currentLang + "::" + item.id;
-  if(translatedItemsCache[key]) return translatedItemsCache[key];
-
-  const translated = {...item};
-  translated.title = await translateText(item.title || "", currentLang);
-  translated.short_description = await translateText(item.short_description || "", currentLang);
-  translated.location = await translateText(item.location || "", currentLang);
-  translated.price = item.price || "";
-
-  translatedItemsCache[key] = translated;
-  return translated;
+  return results;
 }
 
 async function renderResults(){
@@ -594,10 +627,7 @@ async function renderResults(){
     </div>
   `;
 
-  const translatedItems = [];
-  for(let i = 0; i < loadedItems.length; i++){
-    translatedItems.push(await translateItem(loadedItems[i]));
-  }
+  const translatedItems = await translateCategoryItems(loadedItems, currentLang);
 
   results.innerHTML = translatedItems.map(item => {
     const isOffMarket = String(item.category || "").toLowerCase() === "off market";
