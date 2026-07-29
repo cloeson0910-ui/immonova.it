@@ -1267,6 +1267,16 @@ button.danger{
           </div>
 
           <div class="field full">
+            <label>Stili da generare</label>
+            <div class="checks" style="margin-top:4px">
+              <label class="check"><input type="checkbox" id="renderStyleConservativo" checked> <span>Conservativo</span></label>
+              <label class="check"><input type="checkbox" id="renderStyleNormale" checked> <span>Normale</span></label>
+              <label class="check"><input type="checkbox" id="renderStyleLusso" checked> <span>Lusso</span></label>
+            </div>
+            <div class="file-note">Deseleziona gli stili che non ti servono per questo giro: risparmi tempo e costo di generazione IA.</div>
+          </div>
+
+          <div class="field full">
             <button type="button" class="primary" id="generateRenderBtn" data-i18n="btn_generate_render">Genera Render IA</button>
             <div class="file-note" data-i18n="render_note">
               Genera render conservativo, normale/standard e lusso usando le foto ambiente caricate.
@@ -2845,14 +2855,24 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
       throw new Error("Carica almeno una foto ambiente prima di generare i render.");
     }
 
-    setRenovationStatus("Generazione render IA in corso. Può richiedere tempo...", "");
+    var selectedStyles = [];
+    if(document.getElementById("renderStyleConservativo").checked) selectedStyles.push("conservativo");
+    if(document.getElementById("renderStyleNormale").checked) selectedStyles.push("normale");
+    if(document.getElementById("renderStyleLusso").checked) selectedStyles.push("lusso");
+
+    if(selectedStyles.length === 0){
+      throw new Error("Seleziona almeno uno stile da generare.");
+    }
+
+    setRenovationStatus("Generazione render IA in corso ("+selectedStyles.join(", ")+"). Può richiedere tempo...", "");
     btn.disabled = true;
     btn.textContent = "Generazione...";
 
     var result = await client.functions.invoke("generate-renovation-renders", {
       body:{
         opportunity_id:Number(id),
-        max_images:50
+        max_images:50,
+        styles:selectedStyles
       }
     });
 
@@ -2863,7 +2883,7 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
     await loadRenovationRenders();
 
     setRenovationStatus(
-      "Render IA generati correttamente. Anteprima aggiornata.",
+      "Render IA generati correttamente ("+selectedStyles.join(", ")+"). Anteprima aggiornata.",
       "success"
     );
 
