@@ -54,6 +54,12 @@ color:#a67f34;
 text-decoration:none;
 }
 
+.logo-row{
+display:flex;
+align-items:center;
+gap:22px;
+}
+
 .back{
 text-decoration:none;
 color:#a67f34;
@@ -244,6 +250,34 @@ text-transform:uppercase;
 color:#a67f34;
 }
 
+.social-badges{
+display:flex;
+align-items:center;
+gap:14px;
+}
+
+.social-badge{
+display:inline-flex;
+align-items:center;
+justify-content:center;
+color:#a67f34;
+opacity:.75;
+transition:.25s ease;
+}
+
+.social-badge svg{
+width:26px;
+height:26px;
+fill:none;
+stroke:currentColor;
+stroke-width:1.2;
+}
+
+.social-badge:hover{
+opacity:1;
+transform:translateY(-1px);
+}
+
 body[dir="rtl"] .hero,
 body[dir="rtl"] .footer{
 direction:rtl;
@@ -267,7 +301,20 @@ text-align:right;
 <body>
 
 <header class="header">
+<div class="logo-row">
 <a href="index.html" class="logo">IMMONOVA</a>
+<div class="social-badges">
+<a class="social-badge" data-social="instagram" href="https://instagram.com/immonova" target="_blank" rel="noopener" aria-label="Instagram">
+<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1"/></svg>
+</a>
+<a class="social-badge" data-social="facebook" href="https://facebook.com/immonova" target="_blank" rel="noopener" aria-label="Facebook">
+<svg viewBox="0 0 24 24"><path d="M15 8h2V4h-2c-2.2 0-4 1.8-4 4v2H9v4h2v6h4v-6h2.5l.5-4H15V8c0-.3.2-1 1-1z"/></svg>
+</a>
+<a class="social-badge" data-social="linkedin" href="https://linkedin.com/company/immonova" target="_blank" rel="noopener" aria-label="LinkedIn">
+<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="7.5" y1="10" x2="7.5" y2="17"/><circle cx="7.5" cy="6.8" r="0.9" fill="currentColor" stroke="none"/><path d="M11.5 17v-4.5c0-1.4 1-2.5 2.4-2.5s2.1 1 2.1 2.5V17"/><line x1="11.5" y1="10" x2="11.5" y2="17"/></svg>
+</a>
+</div>
+</div>
 <div class="header-right">
 <a href="index.html" class="back" data-i18n="nav.home">Home</a>
 <a href="events.html" class="back" data-i18n="nav.events">Events</a>
@@ -477,7 +524,7 @@ var I18N = {
   }
 };
 
-var currentLang = localStorage.getItem("immonova_public_lang") || "en";
+var currentLang = sessionStorage.getItem("immonova_public_language") || "en";
 var lastTotal = null;
 
 function getDict(){
@@ -492,7 +539,7 @@ function getNested(obj,path){
 
 function applyLanguage(lang){
   currentLang = I18N[lang] ? lang : "en";
-  localStorage.setItem("immonova_public_lang", currentLang);
+  sessionStorage.setItem("immonova_public_language", currentLang);
 
   var dict = getDict();
   document.documentElement.lang = currentLang;
@@ -612,17 +659,48 @@ function setupLanguageMenu(){
 }
 
 function detectInitialLanguage(){
-  var saved = localStorage.getItem("immonova_public_lang");
+  var saved = sessionStorage.getItem("immonova_public_language");
   if(saved && I18N[saved]) return saved;
 
   var browser = (navigator.language || "en").slice(0,2).toLowerCase();
   return I18N[browser] ? browser : "en";
 }
 
+/* Legge i link social da Supabase invece di averli fissi nel codice -- se una riga non è
+   compilata (admin non l'ha ancora impostata), quel badge resta nascosto invece di puntare a
+   un link vuoto/segnaposto. Se la tabella non esiste ancora (migrazione non eseguita), i badge
+   restano semplicemente nascosti: non deve mai bloccare il resto della pagina. */
+async function loadSocialLinks(){
+  try{
+    var result = await client.from("site_settings").select("*").eq("id", 1).maybeSingle();
+    if(result.error || !result.data) return;
+
+    var links = {
+      instagram: result.data.instagram_url,
+      facebook: result.data.facebook_url,
+      linkedin: result.data.linkedin_url
+    };
+
+    Object.keys(links).forEach(function(key){
+      var el = document.querySelector('.social-badge[data-social="' + key + '"]');
+      if(!el) return;
+      if(links[key]){
+        el.href = links[key];
+        el.style.display = "";
+      }else{
+        el.style.display = "none";
+      }
+    });
+  }catch(e){
+    console.warn("Link social non disponibili (non bloccante):", e);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", function(){
   setupLanguageMenu();
   applyLanguage(detectInitialLanguage());
   loadPublishedCounts();
+  loadSocialLinks();
 });
 </script>
 
