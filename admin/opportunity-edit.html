@@ -1293,6 +1293,7 @@ button.danger{
 
           <div class="field full">
             <label data-i18n="label_generated_renders">Render generati</label>
+            <button type="button" class="soft" id="downloadAllRendersBtn" style="margin-bottom:10px">Scarica tutti i render (.zip)</button>
             <div id="renderGallery" class="render-grid"></div>
             <div id="noRenderText" class="file-note" data-i18n="no_renders">Nessun render generato.</div>
           </div>
@@ -1489,6 +1490,7 @@ button.danger{
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="../js/config.js"></script>
 
 <script>
@@ -2413,6 +2415,96 @@ function renderRenderGallery(){
   box.innerHTML = html || "";
   empty.style.display = box.innerHTML ? "none" : "block";
 }
+
+/* Scarica TUTTI i render generati per questa opportunità in un unico file .zip, invece di
+   dover salvare ogni immagine singolarmente a mano. Ogni file viene rinominato in modo
+   leggibile (ambiente-stile-N.jpg) cosi' e' chiaro cosa contiene senza doverlo aprire. Se il
+   download di una singola immagine fallisce (link scaduto, rete), viene saltata e segnalata
+   alla fine invece di far fallire tutto lo zip. */
+async function downloadAllRenders(){
+  var btn = document.getElementById("downloadAllRendersBtn");
+
+  if(!renderImages || renderImages.length === 0){
+    setRenovationStatus("Nessun render generato da scaricare.", "error");
+    return;
+  }
+
+  if(!window.JSZip){
+    setRenovationStatus("Libreria di compressione non caricata: ricarica la pagina e riprova.", "error");
+    return;
+  }
+
+  var originalText = btn.textContent;
+  btn.disabled = true;
+
+  try{
+    var zip = new JSZip();
+    var failed = [];
+    var usedNames = {};
+
+    for(var i = 0; i < renderImages.length; i++){
+      var item = renderImages[i];
+      var url = item.generated_image_url || item.image_url || item.render_url || item.public_url || "";
+      if(!url) continue;
+
+      btn.textContent = "Scaricamento " + (i + 1) + "/" + renderImages.length + "...";
+
+      try{
+        var res = await fetch(url);
+        if(!res.ok) throw new Error("HTTP " + res.status);
+        var blob = await res.blob();
+
+        var ext = (url.split("?")[0].split(".").pop() || "jpg").toLowerCase();
+        if(ext.length > 4) ext = "jpg";
+
+        var baseName = (roomLabel(item.room_type) + "-" + (item.style || "render"))
+          .toLowerCase()
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "");
+
+        var fileName = baseName + "." + ext;
+        var counter = 2;
+        while(usedNames[fileName]){
+          fileName = baseName + "-" + counter + "." + ext;
+          counter++;
+        }
+        usedNames[fileName] = true;
+
+        zip.file(fileName, blob);
+      }catch(imgError){
+        console.warn("Render non scaricato:", url, imgError);
+        failed.push(roomLabel(item.room_type) + " " + (item.style || ""));
+      }
+    }
+
+    btn.textContent = "Creazione archivio...";
+
+    var content = await zip.generateAsync({ type:"blob" });
+    var downloadUrl = URL.createObjectURL(content);
+    var a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = "render-" + (id || "opportunita") + ".zip";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(downloadUrl); }, 4000);
+
+    if(failed.length){
+      setRenovationStatus("Zip scaricato, ma " + failed.length + " render non sono stati inclusi (link non raggiungibile): " + failed.join(", "), "error");
+    }else{
+      setRenovationStatus("Zip con " + renderImages.length + " render scaricato correttamente.", "success");
+    }
+  }catch(error){
+    console.error(error);
+    setRenovationStatus("Errore nella creazione dello zip: " + (error.message || error), "error");
+  }
+
+  btn.disabled = false;
+  btn.textContent = originalText;
+}
+
+document.getElementById("downloadAllRendersBtn").addEventListener("click", downloadAllRenders);
 
 async function loadRenovationImages(){
   if(!id) return;
