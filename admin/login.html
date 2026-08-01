@@ -240,12 +240,24 @@ document.addEventListener("DOMContentLoaded", () => {
       try{
         const profileResult = await client
           .from("profiles")
-          .select("full_name,role,must_change_password")
+          .select("full_name,role,must_change_password,active")
           .eq("id", data.user.id)
           .single();
         profile = profileResult.data || null;
       }catch(e){
         console.warn("Lettura profilo non riuscita (non bloccante):", e);
+      }
+
+      /* Se l'admin ha disattivato questo utente (colonna "active" = false su profiles), la
+         password è comunque corretta -- il blocco va fatto qui esplicitamente, subito dopo il
+         login riuscito, altrimenti "Non attivo" in users.html resta solo un'etichetta senza
+         nessun effetto reale sull'accesso. Se la colonna non esiste ancora (migrazione non
+         eseguita), profile.active è undefined e l'accesso resta consentito come prima. */
+      if(profile && profile.active === false){
+        await client.auth.signOut();
+        loginBtn.textContent = "Login";
+        errorBox.textContent = "Questo account è stato disattivato. Contatta un amministratore.";
+        return;
       }
 
       await logAccess(data.user, profile);

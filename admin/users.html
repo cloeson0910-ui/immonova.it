@@ -467,12 +467,13 @@ td{
               <th data-i18n="th_status">Stato</th>
               <th data-i18n="th_password">Password</th>
               <th data-i18n="th_created">Creato</th>
+              <th data-i18n="th_actions">Azioni</th>
             </tr>
           </thead>
 
           <tbody id="usersTable">
             <tr>
-              <td colspan="9" class="empty" data-i18n="empty_loading">Caricamento...</td>
+              <td colspan="10" class="empty" data-i18n="empty_loading">Caricamento...</td>
             </tr>
           </tbody>
         </table>
@@ -540,6 +541,13 @@ var UI_STRINGS = {
   th_status: "Stato",
   th_password: "Password",
   th_created: "Creato",
+  th_actions: "Azioni",
+  btn_delete: "Elimina",
+  confirm_delete_user: "Vuoi eliminare definitivamente l'accesso di",
+  msg_deleting: "Eliminazione in corso...",
+  msg_deleted: "Utente eliminato correttamente.",
+  msg_delete_error: "Errore durante l'eliminazione dell'utente.",
+  msg_email_update_error: "Errore durante l'aggiornamento dell'email.",
   status_active: "Attivo",
   status_inactive: "Non attivo",
   btn_reset: "Reset",
@@ -730,14 +738,14 @@ async function loadUsers(){
     .order("created_at", { ascending:false });
 
   if(result.error){
-    usersTable.innerHTML = '<tr><td colspan="9" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="10" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
     return;
   }
 
   var data = result.data || [];
 
   if(data.length === 0){
-    usersTable.innerHTML = '<tr><td colspan="9" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="10" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
     return;
   }
 
@@ -749,7 +757,15 @@ async function loadUsers(){
     html += `
       <tr>
         <td>${escapeHTML(user.full_name || "")}</td>
-        <td>${escapeHTML(user.email || "")}</td>
+
+        <td>
+          <input
+            class="small-input"
+            type="email"
+            value="${escapeHTML(user.email || "")}"
+            onchange="updateUserEmail('${user.id}', this.value, this)"
+          >
+        </td>
 
         <td>
           <input
@@ -797,6 +813,12 @@ async function loadUsers(){
         </td>
 
         <td>${formatDate(user.created_at)}</td>
+
+        <td>
+          <button class="small-btn" onclick="deleteUser('${user.id}', '${escapeHTML(user.full_name || user.email || "")}')" ${user.id === currentUser.id ? "disabled" : ""}>
+            ${escapeHTML(T.btn_delete)}
+          </button>
+        </td>
       </tr>
     `;
   }
@@ -829,6 +851,52 @@ async function updateUserField(userId, field, value){
     await applyLanguage(value);
   }
 
+  await loadUsers();
+}
+
+async function updateUserEmail(userId, newEmail, inputEl){
+  setStatus(T.msg_updating, "");
+
+  var result = await client.functions.invoke("update-user-email", {
+    body:{
+      user_id:userId,
+      new_email:newEmail
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success){
+    var message = await extractEdgeFunctionErrorMessage(result, T.msg_email_update_error);
+    setStatus(message, "error");
+    await loadUsers();
+    return;
+  }
+
+  setStatus(T.msg_updated, "success");
+  await loadUsers();
+}
+
+async function deleteUser(userId, label){
+  var confirmed = confirm(T.confirm_delete_user + " " + label + "?");
+
+  if(!confirmed){
+    return;
+  }
+
+  setStatus(T.msg_deleting, "");
+
+  var result = await client.functions.invoke("delete-user", {
+    body:{
+      user_id:userId
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success){
+    var message = await extractEdgeFunctionErrorMessage(result, T.msg_delete_error);
+    setStatus(message, "error");
+    return;
+  }
+
+  setStatus(T.msg_deleted, "success");
   await loadUsers();
 }
 
