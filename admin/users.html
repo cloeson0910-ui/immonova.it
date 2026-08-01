@@ -756,7 +756,14 @@ async function loadUsers(){
 
     html += `
       <tr>
-        <td>${escapeHTML(user.full_name || "")}</td>
+        <td>
+          <input
+            class="small-input"
+            type="text"
+            value="${escapeHTML(user.full_name || "")}"
+            onchange="updateUserField('${user.id}', 'full_name', this.value)"
+          >
+        </td>
 
         <td>
           <input
@@ -839,6 +846,7 @@ async function updateUserField(userId, field, value){
 
   if(result.error){
     setStatus(result.error.message, "error");
+    alert("SALVATAGGIO NON RIUSCITO (" + field + "): " + result.error.message);
     await loadUsers();
     return;
   }
@@ -867,6 +875,7 @@ async function updateUserEmail(userId, newEmail, inputEl){
   if(result.error || !result.data || !result.data.success){
     var message = await extractEdgeFunctionErrorMessage(result, T.msg_email_update_error);
     setStatus(message, "error");
+    alert("SALVATAGGIO EMAIL NON RIUSCITO: " + message);
     await loadUsers();
     return;
   }
@@ -893,6 +902,7 @@ async function deleteUser(userId, label){
   if(result.error || !result.data || !result.data.success){
     var message = await extractEdgeFunctionErrorMessage(result, T.msg_delete_error);
     setStatus(message, "error");
+    alert("ELIMINAZIONE NON RIUSCITA: " + message);
     return;
   }
 
@@ -967,13 +977,17 @@ userForm.addEventListener("submit", async function(e){
 
   /* create-user ora restituisce anche email_sent/email_error (vedi edge function
      aggiornata): lo mostriamo così sai subito se la mail con le credenziali è partita,
-     senza doverlo controllare da nessun'altra parte. */
+     senza doverlo controllare da nessun'altra parte. Popup a comparsa OLTRE alla barra di
+     stato: quest'ultima si è dimostrata facile da non notare, il popup no. */
   if(result.data.email_sent === false){
     setStatus(T.msg_created_email_fail + (result.data.email_error || ""), "error");
+    alert("UTENTE CREATO, MA LA MAIL CON LE CREDENZIALI NON È PARTITA.\n\nMotivo: " + (result.data.email_error || "sconosciuto") + "\n\nComunica tu stesso email + password temporanea a " + full_name + ".");
   }else if(result.data.email_sent === true){
     setStatus(T.msg_created_email_ok, "success");
+    alert("UTENTE CREATO E MAIL CON LE CREDENZIALI INVIATA a " + email + ".");
   }else{
     setStatus(T.msg_created, "success");
+    alert("UTENTE CREATO. Nessuna informazione sull'invio email restituita dal server: controlla se stai usando l'ultima versione di create-user.ts caricata su Supabase.");
   }
 
   userForm.reset();
