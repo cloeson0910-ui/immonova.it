@@ -381,7 +381,7 @@ td{
 
   <p class="subtitle" data-i18n="subtitle">
     Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori.
-    Il ruolo accesso regola i permessi; l’incarico operativo identifica la funzione professionale.
+    Il ruolo accesso regola i permessi; l'incarico operativo identifica la funzione professionale.
   </p>
 
   <div class="grid">
@@ -548,6 +548,8 @@ var UI_STRINGS = {
   empty_none: "Nessun utente presente.",
   msg_creating: "Creazione utente in corso...",
   msg_created: "Utente creato correttamente.",
+  msg_created_email_ok: "Utente creato correttamente. Email con le credenziali inviata.",
+  msg_created_email_fail: "Utente creato correttamente, ma l'invio della mail con le credenziali è fallito: ",
   msg_updating: "Aggiornamento utente...",
   msg_updated: "Utente aggiornato correttamente.",
   msg_reset_progress: "Reset password in corso...",
@@ -642,6 +644,34 @@ function escapeHTML(value){
 function setStatus(message, type){
   statusBox.className = "status " + (type || "");
   statusBox.textContent = message || "";
+}
+
+/* CRUCIALE: quando una edge function risponde con un codice HTTP non-2xx (es. 400),
+   supabase-js NON mette il corpo JSON della risposta in result.data -- lo lascia null, e
+   result.error è un oggetto generico (FunctionsHttpError) il cui .message è sempre il testo
+   fisso "Edge Function returned a non-2xx status code", MAI il messaggio vero scritto dalla
+   funzione. Il corpo JSON vero è raggiungibile SOLO leggendo error.context, che è l'oggetto
+   Response grezzo della fetch sottostante -- va letto e parsato a parte. Senza questo, il
+   messaggio di errore reale resta invisibile per sempre, qualunque cosa si guardi nella
+   tab Network del browser. */
+async function extractEdgeFunctionErrorMessage(result, fallback){
+  if(result.data && result.data.message){
+    return result.data.message;
+  }
+  if(result.error && result.error.context && typeof result.error.context.json === "function"){
+    try{
+      var body = await result.error.context.clone().json();
+      if(body && body.message) return body.message;
+    }catch(e){}
+    try{
+      var text = await result.error.context.clone().text();
+      if(text) return text;
+    }catch(e){}
+  }
+  if(result.error && result.error.message){
+    return result.error.message;
+  }
+  return fallback;
 }
 
 function formatDate(value){
@@ -824,7 +854,8 @@ async function resetPassword(userId, email){
   });
 
   if(result.error || !result.data || !result.data.success){
-    setStatus((result.data && result.data.message) || (result.error && result.error.message) || T.msg_reset_error, "error");
+    var message = await extractEdgeFunctionErrorMessage(result, T.msg_reset_error);
+    setStatus(message, "error");
     return;
   }
 
@@ -859,13 +890,23 @@ userForm.addEventListener("submit", async function(e){
   });
 
   if(result.error || !result.data || !result.data.success){
-    setStatus((result.data && result.data.message) || (result.error && result.error.message) || T.msg_create_error, "error");
+    var message = await extractEdgeFunctionErrorMessage(result, T.msg_create_error);
+    setStatus(message, "error");
     createBtn.disabled = false;
     createBtn.textContent = T.btn_create;
     return;
   }
 
-  setStatus(T.msg_created, "success");
+  /* create-user ora restituisce anche email_sent/email_error (vedi edge function
+     aggiornata): lo mostriamo così sai subito se la mail con le credenziali è partita,
+     senza doverlo controllare da nessun'altra parte. */
+  if(result.data.email_sent === false){
+    setStatus(T.msg_created_email_fail + (result.data.email_error || ""), "error");
+  }else if(result.data.email_sent === true){
+    setStatus(T.msg_created_email_ok, "success");
+  }else{
+    setStatus(T.msg_created, "success");
+  }
 
   userForm.reset();
   createBtn.disabled = false;
