@@ -1679,6 +1679,19 @@ async function renderDocumentsPages(){
 /* ---- Rendita & proiezione 15 anni: due scenari indipendenti (ADR minimo / ADR massimo) quando
    entrambi i valori sono disponibili, così il break-even non dipende in modo invisibile da quale
    dei due venga usato per la media. Ipotesi sempre dichiarate, mai inventate. ---- */
+function buildSimpleRentProjection(baseRevenue, revenueSource, verified, total){
+  var rows=[];
+  var cum=0;
+  var breakEvenYear=null, breakEvenExtrapolated=false;
+  var capYears = baseRevenue>0 ? Math.min(60, Math.max(15, Math.ceil(total/baseRevenue)+1)) : 15;
+  for(var y=1;y<=capYears;y++){
+    cum += baseRevenue; // nessuna crescita, nessun costo sottratto: incasso annuo lordo costante
+    rows.push({year:y, revenue:baseRevenue, costs:0, net:baseRevenue, cum:cum});
+    if(breakEvenYear===null && cum>=total){ breakEvenYear=y; breakEvenExtrapolated = y>15; }
+  }
+  if(breakEvenYear===null) breakEvenExtrapolated=true;
+  return {rows:rows.slice(0,15), fullRows:rows, revenueSource:revenueSource, adrVerified:verified, total:total, breakEvenYear:breakEvenYear, breakEvenExtrapolated:breakEvenExtrapolated};
+}
 function isCommercialCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("commercial")>=0; // copre sia "Commerciale" (IT) che "Commercial" (EN)
@@ -1737,7 +1750,7 @@ function buildCashflowProjections(){
       var rentVerified=!!(rentMetric.source && String(rentMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
       var baseRevenue = rentMetric.value*surface*12;
       var revenueSource=(rentVerified?"Canone verificato dall\u2019analista":"Canone di mercato")+" ("+formatMetricVal(rentMetric.value)+" \u20ac/mq/mese, "+label+") \u00d7 "+formatMetricVal(surface)+" mq \u00d7 12 mesi";
-      return buildOneCashflowProjection(baseRevenue, revenueSource, rentVerified, f.total);
+      return buildSimpleRentProjection(baseRevenue, revenueSource, rentVerified, f.total);
     }
 
     if(surface && (rentMin || rentMax)){
