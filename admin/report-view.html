@@ -327,6 +327,7 @@ var UI_STRINGS = {
   kicker_real_estate:"Real estate market", title_real_estate:"Valore immobiliare di riferimento",
   label_market_value_m2:"Valore di mercato al m²", label_source_card:"Fonte",
   kicker_hospitality_pricing:"Hospitality pricing", title_adr:"ADR di riferimento",
+  kicker_commercial_rent:"Commercial pricing", title_commercial_rent:"Canone di riferimento", label_rent_m2_month:"Canone \u2014 \u20ac/mq/mese",
   label_adr_room_night:"ADR \u2014 tariffa media camera/notte",
   kicker_tourism_history:"Tourism history", title_tourism_history:"Turismo \u2014 Serie Storica",
   presences_arrivals_label:"Presenze/arrivi per anno · livello: ", th_value:"Valore", th_yoy:"Crescita YoY",
@@ -369,6 +370,7 @@ var UI_STRINGS = {
   restaurants_plural:" ristoranti censiti entro il raggio analizzato.",
   real_estate_value_prefix:"Valore immobiliare di zona: ", real_estate_value_suffix:" \u20ac/m\u00b2 (fonte: ",
   adr_reference_prefix:"ADR di riferimento: ", adr_reference_suffix:" \u20ac/notte (fonte: ",
+  rent_reference_prefix:"Canone di riferimento: ", rent_reference_suffix:" \u20ac/mq/mese (fonte: ",
   population_prefix:"Popolazione comunale: ", population_suffix:" abitanti.",
   results_found_singular:" risultato trovato da Discovery entro il raggio analizzato",
   results_found_plural:" risultati trovati da Discovery entro il raggio analizzato",
@@ -926,6 +928,23 @@ function renderRealEstatePage(){
     +'</div>';
 }
 function renderPricingPage(){
+  if(isCommercialCategory()){
+    var rmin=metricFromDossier("commercial_rent","monthly_rent_per_m2_min");
+    var rmax=metricFromDossier("commercial_rent","monthly_rent_per_m2_max");
+    var rsingle=metricFromDossier("commercial_rent","monthly_rent_per_m2");
+    if(!rmin&&!rmax&&!rsingle)return "";
+    var rsrc=(rmin||rmax||rsingle).source||{};
+    if(!rmin&&!rmax&&rsingle){
+      return '<div class="section-kicker">'+escapeHTML(T.kicker_commercial_rent)+'</div><h2 class="section-title">'+escapeHTML(T.title_commercial_rent)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
+        +metricCardHTML(T.label_rent_m2_month,rsingle,"eur_per_m2_month")
+        +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(rsrc.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
+        +'</div>';
+    }
+    return '<div class="section-kicker">'+escapeHTML(T.kicker_commercial_rent)+'</div><h2 class="section-title">'+escapeHTML(T.title_commercial_rent)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
+      +rangeCardHTML(T.label_rent_m2_month,rmin,rmax,"eur_per_m2_month")
+      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(rsrc.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
+      +'</div>';
+  }
   var min=metricFromDossier("adr","average_daily_rate_min");
   var max=metricFromDossier("adr","average_daily_rate_max");
   var single=metricFromDossier("adr","average_daily_rate");
@@ -1034,9 +1053,15 @@ function renderNarrativePage(){
   if(res)bits.push(pluralPick(res,"restaurants_singular","restaurants_plural"));
   var remin=metricFromDossier("real_estate_market","residential_sale_per_m2_min"),remax=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
   if(remin||remax)bits.push(T.real_estate_value_prefix+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+T.real_estate_value_suffix+((remin||remax).source.provider_name||"-")+").");
-  var adrmin=metricFromDossier("adr","average_daily_rate_min"),adrmax=metricFromDossier("adr","average_daily_rate_max"),adrsingle=metricFromDossier("adr","average_daily_rate");
-  if(adrmin||adrmax)bits.push(T.adr_reference_prefix+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+T.adr_reference_suffix+((adrmin||adrmax).source.provider_name||"-")+").");
-  else if(adrsingle)bits.push(T.adr_reference_prefix+formatMetricVal(adrsingle.value)+T.adr_reference_suffix+(adrsingle.source.provider_name||"-")+").");
+  if(isCommercialCategory()){
+    var rentminT=metricFromDossier("commercial_rent","monthly_rent_per_m2_min"),rentmaxT=metricFromDossier("commercial_rent","monthly_rent_per_m2_max"),rentsingleT=metricFromDossier("commercial_rent","monthly_rent_per_m2");
+    if(rentminT||rentmaxT)bits.push(T.rent_reference_prefix+(rentminT?formatMetricVal(rentminT.value):"?")+"\u2013"+(rentmaxT?formatMetricVal(rentmaxT.value):"?")+T.rent_reference_suffix+((rentminT||rentmaxT).source.provider_name||"-")+").");
+    else if(rentsingleT)bits.push(T.rent_reference_prefix+formatMetricVal(rentsingleT.value)+T.rent_reference_suffix+(rentsingleT.source.provider_name||"-")+").");
+  }else{
+    var adrmin=metricFromDossier("adr","average_daily_rate_min"),adrmax=metricFromDossier("adr","average_daily_rate_max"),adrsingle=metricFromDossier("adr","average_daily_rate");
+    if(adrmin||adrmax)bits.push(T.adr_reference_prefix+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+T.adr_reference_suffix+((adrmin||adrmax).source.provider_name||"-")+").");
+    else if(adrsingle)bits.push(T.adr_reference_prefix+formatMetricVal(adrsingle.value)+T.adr_reference_suffix+(adrsingle.source.provider_name||"-")+").");
+  }
   var pop=metricFromDossier("demography","population");
   if(pop)bits.push(T.population_prefix+formatMetricVal(pop.value)+T.population_suffix);
   if(!bits.length)return "";
