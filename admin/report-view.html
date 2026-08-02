@@ -1727,22 +1727,23 @@ function buildCashflowProjections(){
   var f=buildFinance();
 
   if(isCommercialCategory()){
-    var rentMin=metricFromDossier("commercial_rent","monthly_rent_min");
-    var rentMax=metricFromDossier("commercial_rent","monthly_rent_max");
-    var rentSingle=metricFromDossier("commercial_rent","monthly_rent");
+    var rentMin=metricFromDossier("commercial_rent","monthly_rent_per_m2_min");
+    var rentMax=metricFromDossier("commercial_rent","monthly_rent_per_m2_max");
+    var rentSingle=metricFromDossier("commercial_rent","monthly_rent_per_m2");
+    var surface=getAssetSurfaceM2();
 
     function projForRent(rentMetric, label){
-      if(!rentMetric) return null;
+      if(!rentMetric || !surface) return null;
       var rentVerified=!!(rentMetric.source && String(rentMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
-      var baseRevenue = rentMetric.value*12;
-      var revenueSource=(rentVerified?"Canone di locazione mensile verificato dall\u2019analista":"Canone di locazione mensile di mercato")+" ("+formatMetricVal(rentMetric.value)+" \u20ac/mese, "+label+") \u00d7 12 mesi";
+      var baseRevenue = rentMetric.value*surface*12;
+      var revenueSource=(rentVerified?"Canone verificato dall\u2019analista":"Canone di mercato")+" ("+formatMetricVal(rentMetric.value)+" \u20ac/mq/mese, "+label+") \u00d7 "+formatMetricVal(surface)+" mq \u00d7 12 mesi";
       return buildOneCashflowProjection(baseRevenue, revenueSource, rentVerified, f.total);
     }
 
-    if(rentMin || rentMax){
+    if(surface && (rentMin || rentMax)){
       return {mode:"range", min:projForRent(rentMin || rentMax, "Canone minimo"), max:projForRent(rentMax || rentMin, "Canone massimo"), total:f.total};
     }
-    if(rentSingle){
+    if(surface && rentSingle){
       return {mode:"single", single:projForRent(rentSingle, "Canone unico"), total:f.total};
     }
     if(f.revenue>0){
