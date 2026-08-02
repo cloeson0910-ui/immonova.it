@@ -494,6 +494,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 }
 .success{color:#4f7f45}
 .error{color:#9c2f2f}
+.warning{color:#a67f34;font-weight:600}
 .empty{
   text-align:center;
   padding:90px 20px;
@@ -635,6 +636,7 @@ const UI_TRANSLATIONS = {
     nda_error:"Devi accettare l'NDA per richiedere il dossier.",
     privacy_error:"Devi accettare il trattamento dei dati.",
     success:"Richiesta inviata correttamente. IMMONOVA verificherà il profilo e invierà il dossier dopo approvazione manuale.",
+    consent_missing_warning:"Richiesta registrata. Per ricevere il dossier confidenziale devi però accettare privacy e NDA: ricontattaci o compila di nuovo il form con entrambe le caselle spuntate.",
     send_error:"Errore durante l'invio della richiesta.",
     market_teaser_with_data:"Analisi di mercato basata su fonti verificate. Comparabili completi e assumptions nel dossier riservato.",
     market_teaser_generic:"Posizionamento di mercato preliminare disponibile. Comparabili completi e assumptions nel dossier.",
@@ -715,6 +717,7 @@ const UI_TRANSLATIONS = {
     nda_error:"You must accept the NDA to request the dossier.",
     privacy_error:"You must accept data processing.",
     success:"Request sent successfully. IMMONOVA will review the profile and send the dossier after manual approval.",
+    consent_missing_warning:"Request recorded. To receive the confidential dossier you must accept both privacy and NDA: please contact us or resubmit the form with both boxes checked.",
     send_error:"Error while sending the request.",
     market_teaser_with_data:"Market positioning based on verified sources. Full comparables and assumptions in the reserved dossier.",
     market_teaser_generic:"Preliminary market positioning available. Full comparables and assumptions in dossier.",
@@ -1158,14 +1161,14 @@ function renderInquiryForm(title){
 
         <div class="consent-box">
           <label class="consent-label">
-            <input type="checkbox" id="nda_accepted" required>
+            <input type="checkbox" id="nda_accepted">
             <span>${escapeHTML(dict("nda_accept"))}</span>
           </label>
         </div>
 
         <div class="consent-box">
           <label class="consent-label">
-            <input type="checkbox" id="privacy_accepted" required>
+            <input type="checkbox" id="privacy_accepted">
             <span>${escapeHTML(dict("privacy_accept"))}</span>
           </label>
         </div>
@@ -1293,8 +1296,7 @@ async function submitInquiry(e){
       throw new Error(dict("required_error"));
     }
 
-    if(!ndaAccepted) throw new Error(dict("nda_error"));
-    if(!privacyAccepted) throw new Error(dict("privacy_error"));
+    const consentComplete = ndaAccepted && privacyAccepted;
 
     const payload = {
       opportunity_id: currentOpportunity.id,
@@ -1319,13 +1321,13 @@ async function submitInquiry(e){
         " | Budget range: " + (budgetRange || "-") +
         " | Company: " + (company || "-") +
         " | Message: " + message,
-      nda_accepted:true,
-      nda_accepted_at:new Date().toISOString(),
+      nda_accepted:ndaAccepted,
+      nda_accepted_at:ndaAccepted ? new Date().toISOString() : null,
       nda_text_version:"IMMONOVA_NDA_PUBLIC_V1",
-      privacy_accepted:true,
-      privacy_accepted_at:new Date().toISOString(),
-      request_completed:true,
-      completion_status:"pending_review",
+      privacy_accepted:privacyAccepted,
+      privacy_accepted_at:privacyAccepted ? new Date().toISOString() : null,
+      request_completed:consentComplete,
+      completion_status: consentComplete ? "pending_review" : "pending_consent",
       approved:false,
       dossier_sent:false,
       status:"pending",
@@ -1347,8 +1349,13 @@ async function submitInquiry(e){
       console.warn("Email notification failed:", mailError);
     }
 
-    status.className = "status success";
-    status.textContent = dict("success");
+    if(consentComplete){
+      status.className = "status success";
+      status.textContent = dict("success");
+    }else{
+      status.className = "status warning";
+      status.textContent = dict("consent_missing_warning");
+    }
     e.target.reset();
 
     const preferredLanguageSelect = document.getElementById("preferred_language");
