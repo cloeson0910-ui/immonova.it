@@ -40,6 +40,7 @@
 <select id="category">
   <option value="adr" data-i18n="cat_adr">ADR / Ospitalità (tourism_pricing)</option>
   <option value="real_estate_market" data-i18n="cat_real_estate">Mercato immobiliare</option>
+  <option value="commercial_rent" data-i18n="cat_commercial_rent">Locazione Commerciale (canone mensile)</option>
   <option value="custom" data-i18n="cat_custom">Altra categoria...</option>
 </select>
 <input id="category_custom" data-i18n-placeholder="ph_category_custom" placeholder="Nome categoria personalizzata" style="display:none;margin-top:8px" />
@@ -62,7 +63,7 @@
 
 <section class="card">
 <h2 data-i18n="archive_title">Archivio Dati Verificati</h2>
-<div class="filters"><input id="search" data-i18n-placeholder="ph_search" placeholder="Cerca nota, geografia, categoria..." /><select id="filterCategory"><option value="" data-i18n="filter_all_categories">Tutte categorie</option><option value="adr" data-i18n="filter_adr">ADR</option><option value="real_estate_market" data-i18n="filter_real_estate">Mercato immobiliare</option></select><select id="filterStatus"><option value="" data-i18n="filter_all_status">Tutti gli stati</option><option value="true" data-i18n="filter_active">Attivi</option><option value="false" data-i18n="filter_disabled">Disattivati</option></select><input id="filterCountry" placeholder="Country" /><input id="filterProvince" data-i18n-placeholder="label_province" placeholder="Provincia" /></div>
+<div class="filters"><input id="search" data-i18n-placeholder="ph_search" placeholder="Cerca nota, geografia, categoria..." /><select id="filterCategory"><option value="" data-i18n="filter_all_categories">Tutte categorie</option><option value="adr" data-i18n="filter_adr">ADR</option><option value="real_estate_market" data-i18n="filter_real_estate">Mercato immobiliare</option><option value="commercial_rent" data-i18n="filter_commercial_rent">Locazione Commerciale</option></select><select id="filterStatus"><option value="" data-i18n="filter_all_status">Tutti gli stati</option><option value="true" data-i18n="filter_active">Attivi</option><option value="false" data-i18n="filter_disabled">Disattivati</option></select><input id="filterCountry" placeholder="Country" /><input id="filterProvince" data-i18n-placeholder="label_province" placeholder="Provincia" /></div>
 <div class="actions" style="margin-top:0;margin-bottom:14px"><button class="btn" type="button" id="refreshBtn" data-i18n="btn_refresh">Aggiorna</button></div>
 <div class="table-wrap"><table><thead><tr><th data-i18n="th_scope">Ambito</th><th data-i18n="th_category_field">Categoria / Campo</th><th data-i18n="th_value">Valore</th><th data-i18n="th_year">Anno</th><th data-i18n="th_note">Nota</th><th data-i18n="th_status">Stato</th><th data-i18n="th_actions">Azioni</th></tr></thead><tbody id="overridesBody"><tr><td colspan="7" class="empty" data-i18n="loading">Caricamento...</td></tr></tbody></table></div>
 </section>
@@ -76,7 +77,8 @@ let currentUserLanguage="it";
 
 const FIELD_OPTIONS={
   adr:[{value:'average_daily_rate_min',labelKey:'field_adr_min',unit:'eur_per_room_night'},{value:'average_daily_rate_max',labelKey:'field_adr_max',unit:'eur_per_room_night'}],
-  real_estate_market:[{value:'residential_sale_per_m2_min',labelKey:'field_sqm_min',unit:'eur_per_m2'},{value:'residential_sale_per_m2_max',labelKey:'field_sqm_max',unit:'eur_per_m2'}]
+  real_estate_market:[{value:'residential_sale_per_m2_min',labelKey:'field_sqm_min',unit:'eur_per_m2'},{value:'residential_sale_per_m2_max',labelKey:'field_sqm_max',unit:'eur_per_m2'}],
+  commercial_rent:[{value:'monthly_rent_min',labelKey:'field_rent_min',unit:'eur_per_month'},{value:'monthly_rent_max',labelKey:'field_rent_max',unit:'eur_per_month'}]
 };
 
 const FORM_IDS=['overrideId','opportunity_id','country_code','region','province','city','category','category_custom','field_key','field_key_custom','value','unit','year','observation_period','source_note','active'];
@@ -94,11 +96,12 @@ var UI_STRINGS = {
   hint_opportunity_scope:"Il dato si applica SOLO a questa opportunità, a prescindere dalla geografia.",
   label_country_code:"Country code", label_region:"Regione", label_province:"Provincia", label_city:"Comune / Città",
   hint_geo_scope:"Più campi geografici compili, più il dato è specifico. Lascia vuoto un campo per un dato più generale (es. valido per tutta la provincia).",
-  label_category:"Categoria", cat_adr:"ADR / Ospitalità (tourism_pricing)", cat_real_estate:"Mercato immobiliare", cat_custom:"Altra categoria...",
+  label_category:"Categoria", cat_adr:"ADR / Ospitalità (tourism_pricing)", cat_real_estate:"Mercato immobiliare", cat_commercial_rent:"Locazione Commerciale (canone mensile)", cat_custom:"Altra categoria...",
   ph_category_custom:"Nome categoria personalizzata",
   label_specific_data:"Dato specifico", ph_field_key_custom:"Nome campo personalizzato",
   opt_use_custom_field:"— usa il campo personalizzato qui sotto —", opt_other_field:"Altro dato...",
   field_adr_min:"ADR minimo (€/camera/notte)", field_adr_max:"ADR massimo (€/camera/notte)",
+  field_rent_min:"Canone mensile minimo (€/mese)", field_rent_max:"Canone mensile massimo (€/mese)",
   field_sqm_min:"Valore al m² - minimo", field_sqm_max:"Valore al m² - massimo",
   label_value:"Valore", ph_value:"Es. 3200", label_unit:"Unità",
   label_year:"Anno di riferimento", label_period:"Periodo (facoltativo)", ph_period:"Es. 2° sem. 2025",
@@ -106,7 +109,7 @@ var UI_STRINGS = {
   label_status:"Stato", opt_active:"Attivo (in uso nel dossier)", opt_disabled:"Disattivato",
   btn_save_data:"Salva dato", btn_clear:"Pulisci",
   archive_title:"Archivio Dati Verificati", ph_search:"Cerca nota, geografia, categoria...",
-  filter_all_categories:"Tutte categorie", filter_adr:"ADR", filter_real_estate:"Mercato immobiliare",
+  filter_all_categories:"Tutte categorie", filter_adr:"ADR", filter_real_estate:"Mercato immobiliare", filter_commercial_rent:"Locazione Commerciale",
   filter_all_status:"Tutti gli stati", filter_active:"Attivi", filter_disabled:"Disattivati",
   btn_refresh:"Aggiorna",
   th_scope:"Ambito", th_category_field:"Categoria / Campo", th_value:"Valore", th_year:"Anno",
@@ -130,7 +133,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_manual_overrides_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_manual_overrides_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
