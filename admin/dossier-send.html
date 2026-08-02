@@ -1721,6 +1721,10 @@ async function renderDocumentsPages(){
 /* ---- Rendita & proiezione 15 anni: due scenari indipendenti (ADR minimo / ADR massimo) quando
    entrambi i valori sono disponibili, così il break-even non dipende in modo invisibile da quale
    dei due venga usato per la media. Ipotesi sempre dichiarate, mai inventate. ---- */
+function isCommercialCategory(){
+  var c=String(getCategory()||"").toLowerCase();
+  return c.indexOf("commercial")>=0; // copre sia "Commerciale" (IT) che "Commercial" (EN)
+}
 function getAssetUnits(){
   var o=opportunity||{};
   var n=firstFiniteOpp(o.bedrooms);
@@ -1763,6 +1767,32 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
 }
 function buildCashflowProjections(){
   var f=buildFinance();
+
+  if(isCommercialCategory()){
+    var rentMin=metricFromDossier("commercial_rent","monthly_rent_min");
+    var rentMax=metricFromDossier("commercial_rent","monthly_rent_max");
+    var rentSingle=metricFromDossier("commercial_rent","monthly_rent");
+
+    function projForRent(rentMetric, label){
+      if(!rentMetric) return null;
+      var rentVerified=!!(rentMetric.source && String(rentMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+      var baseRevenue = rentMetric.value*12;
+      var revenueSource=(rentVerified?"Canone di locazione mensile verificato dall\u2019analista":"Canone di locazione mensile di mercato")+" ("+formatMetricVal(rentMetric.value)+" \u20ac/mese, "+label+") \u00d7 12 mesi";
+      return buildOneCashflowProjection(baseRevenue, revenueSource, rentVerified, f.total);
+    }
+
+    if(rentMin || rentMax){
+      return {mode:"range", min:projForRent(rentMin || rentMax, "Canone minimo"), max:projForRent(rentMax || rentMin, "Canone massimo"), total:f.total};
+    }
+    if(rentSingle){
+      return {mode:"single", single:projForRent(rentSingle, "Canone unico"), total:f.total};
+    }
+    if(f.revenue>0){
+      return {mode:"real", single:buildOneCashflowProjection(f.revenue, "dato reale da report interno", false, f.total), total:f.total};
+    }
+    return null;
+  }
+
   var adrMin=metricFromDossier("adr","average_daily_rate_min");
   var adrMax=metricFromDossier("adr","average_daily_rate_max");
   var adrSingle=metricFromDossier("adr","average_daily_rate");
