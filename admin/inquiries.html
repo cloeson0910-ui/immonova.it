@@ -104,7 +104,7 @@ overflow:auto;
 table{
 width:100%;
 border-collapse:collapse;
-min-width:1480px;
+min-width:1650px;
 }
 
 th{
@@ -222,6 +222,19 @@ font-family:inherit;
 .action-btn.danger{border-color:rgba(156,47,47,.35);color:#9c2f2f}
 .action-btn.danger:hover{background:#9c2f2f;color:#fff}
 
+.dossier-status{min-width:130px}
+.dossier-status .not-sent{font-size:11px;color:#8f7643;opacity:.75}
+.dossier-sent-date{font-size:10px;color:#7f6430;margin-bottom:6px}
+.time-bar{height:6px;border-radius:3px;background:rgba(166,127,52,.15);position:relative;overflow:hidden;margin-bottom:5px}
+.time-bar-fill{height:100%;border-radius:3px}
+.time-bar-fill.stage-fresh{background:#a67f34}
+.time-bar-fill.stage-followup{background:#c98a3a}
+.time-bar-fill.stage-overdue{background:#9c2f2f}
+.time-bar-label{font-size:9px;letter-spacing:.06em;text-transform:uppercase}
+.time-bar-label.stage-fresh{color:#8f7643}
+.time-bar-label.stage-followup{color:#a3651f}
+.time-bar-label.stage-overdue{color:#9c2f2f;font-weight:600}
+
 @media(max-width:900px){
 .header{flex-direction:column;gap:18px}
 .header-actions{flex-wrap:wrap;justify-content:center}
@@ -270,13 +283,14 @@ Gestisci tutte le richieste ricevute dai clienti e aggiorna lo stato commerciale
 <th data-i18n="th_consent">Consenso</th>
 <th data-i18n="th_message">Messaggio</th>
 <th data-i18n="th_status">Stato</th>
+<th data-i18n="th_dossier">Dossier</th>
 <th data-i18n="th_actions">Azioni</th>
 </tr>
 </thead>
 
 <tbody id="inquiriesTable">
 <tr>
-<td colspan="11" class="empty" data-i18n="loading">Caricamento...</td>
+<td colspan="12" class="empty" data-i18n="loading">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -307,7 +321,7 @@ var UI_STRINGS = {
   subtitle:"Gestisci tutte le richieste ricevute dai clienti e aggiorna lo stato commerciale.",
   th_date:"Data", th_client:"Cliente", th_email:"Email", th_phone:"Telefono", th_country:"Paese",
   th_opportunity:"Opportunità", th_investor:"Investitore / Budget", th_consent:"Consenso",
-  th_message:"Messaggio", th_status:"Stato", th_actions:"Azioni",
+  th_message:"Messaggio", th_status:"Stato", th_dossier:"Dossier", th_actions:"Azioni",
   loading:"Caricamento...", loading_error:"Errore nel caricamento delle richieste.",
   empty_none:"Nessuna richiesta presente.",
   status_pending:"Pending", status_evasa:"Evasa", status_trattativa:"Trattativa",
@@ -318,13 +332,18 @@ var UI_STRINGS = {
   msg_consent_updating:"Aggiornamento consenso...", msg_consent_updated:"Consenso aggiornato correttamente.",
   btn_dossier:"Dossier", btn_delete:"Elimina",
   confirm_delete:"Eliminare definitivamente questa richiesta? L'operazione non è reversibile.",
-  msg_deleting:"Eliminazione richiesta...", msg_deleted:"Richiesta eliminata."
+  msg_deleting:"Eliminazione richiesta...", msg_deleted:"Richiesta eliminata.",
+  dossier_not_sent:"Non inviato",
+  dossier_sent_prefix:"Inviato ",
+  dossier_day_of_15:"Giorno {n}/15",
+  dossier_contact_today:"Ricontattare oggi",
+  dossier_overdue:"Aggiornamento scaduto"
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_inquiries_" + lang + "_v3"; }
+function i18nCacheKey(lang){ return "immonova_i18n_inquiries_" + lang + "_v4"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -433,6 +452,36 @@ function actionButtons(row){
   return `<div class="action-btns">${dossierHref ? `<a class="action-btn" href="${dossierHref}" target="_blank">${T.btn_dossier}</a>` : ""}<button type="button" class="action-btn danger" onclick="deleteInquiry(${row.id})">${T.btn_delete}</button></div>`;
 }
 
+function dossierStatusHTML(row){
+  if(!row.dossier_sent || !row.dossier_sent_at){
+    return `<div class="dossier-status"><span class="not-sent">${T.dossier_not_sent}</span></div>`;
+  }
+
+  const sentDate = new Date(row.dossier_sent_at);
+  const daysElapsed = Math.floor((Date.now() - sentDate.getTime()) / 86400000);
+  const pct = Math.max(0, Math.min(daysElapsed / 15, 1)) * 100;
+
+  let stage = "stage-fresh";
+  let label = T.dossier_day_of_15.replace("{n}", String(daysElapsed));
+  if(daysElapsed <= 0){
+    label = T.dossier_sent_prefix + formatDate(row.dossier_sent_at);
+  }else if(daysElapsed === 1){
+    stage = "stage-followup";
+    label = T.dossier_contact_today;
+  }else if(daysElapsed >= 15){
+    stage = "stage-overdue";
+    label = T.dossier_overdue + " (" + daysElapsed + "gg)";
+  }else if(daysElapsed >= 2){
+    stage = "stage-followup";
+  }
+
+  return `<div class="dossier-status">
+    <div class="dossier-sent-date">${T.dossier_sent_prefix}${formatDate(row.dossier_sent_at)}</div>
+    <div class="time-bar"><div class="time-bar-fill ${stage}" style="width:${pct}%"></div></div>
+    <div class="time-bar-label ${stage}">${label}</div>
+  </div>`;
+}
+
 async function loadInquiries(){
   const { data, error } = await client
     .from("investor_requests")
@@ -442,7 +491,7 @@ async function loadInquiries(){
   if(error){
     table.innerHTML = `
       <tr>
-        <td colspan="11" class="empty">
+        <td colspan="12" class="empty">
           ${T.loading_error}
         </td>
       </tr>
@@ -453,7 +502,7 @@ async function loadInquiries(){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="11" class="empty">
+        <td colspan="12" class="empty">
           ${T.empty_none}
         </td>
       </tr>
@@ -485,6 +534,7 @@ async function loadInquiries(){
             <option value="trattativa" ${currentStatus === "trattativa" ? "selected" : ""}>${T.status_trattativa}</option>
           </select>
         </td>
+        <td>${dossierStatusHTML(i)}</td>
         <td>${actionButtons(i)}</td>
       </tr>
     `;
