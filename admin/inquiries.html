@@ -104,7 +104,7 @@ overflow:auto;
 table{
 width:100%;
 border-collapse:collapse;
-min-width:1180px;
+min-width:1480px;
 }
 
 th{
@@ -167,6 +167,30 @@ min-height:18px;
 .success{color:#4f7f45}
 .error{color:#9c2f2f}
 
+.badge-ok{
+display:inline-block;
+padding:5px 9px;
+margin-right:4px;
+font-size:10px;
+letter-spacing:.1em;
+text-transform:uppercase;
+border:1px solid rgba(79,127,69,.4);
+color:#4f7f45;
+background:rgba(79,127,69,.08);
+}
+
+.badge-warn{
+display:inline-block;
+padding:5px 9px;
+margin-right:4px;
+font-size:10px;
+letter-spacing:.1em;
+text-transform:uppercase;
+border:1px solid rgba(156,47,47,.4);
+color:#9c2f2f;
+background:rgba(156,47,47,.08);
+}
+
 @media(max-width:900px){
 .header{flex-direction:column;gap:18px}
 .header-actions{flex-wrap:wrap;justify-content:center}
@@ -209,8 +233,10 @@ Gestisci tutte le richieste ricevute dai clienti e aggiorna lo stato commerciale
 <th data-i18n="th_client">Cliente</th>
 <th data-i18n="th_email">Email</th>
 <th data-i18n="th_phone">Telefono</th>
+<th data-i18n="th_country">Paese</th>
 <th data-i18n="th_opportunity">Opportunità</th>
-<th data-i18n="th_category">Categoria</th>
+<th data-i18n="th_investor">Investitore / Budget</th>
+<th data-i18n="th_consent">Consenso</th>
 <th data-i18n="th_message">Messaggio</th>
 <th data-i18n="th_status">Stato</th>
 </tr>
@@ -247,18 +273,21 @@ var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_new_opportunity:"Nuova Opportunità", nav_opportunities:"Opportunità", logout:"Logout",
   title:"Richieste",
   subtitle:"Gestisci tutte le richieste ricevute dai clienti e aggiorna lo stato commerciale.",
-  th_date:"Data", th_client:"Cliente", th_email:"Email", th_phone:"Telefono",
-  th_opportunity:"Opportunità", th_category:"Categoria", th_message:"Messaggio", th_status:"Stato",
+  th_date:"Data", th_client:"Cliente", th_email:"Email", th_phone:"Telefono", th_country:"Paese",
+  th_opportunity:"Opportunità", th_investor:"Investitore / Budget", th_consent:"Consenso",
+  th_message:"Messaggio", th_status:"Stato",
   loading:"Caricamento...", loading_error:"Errore nel caricamento delle richieste.",
   empty_none:"Nessuna richiesta presente.",
   status_pending:"Pending", status_evasa:"Evasa", status_trattativa:"Trattativa",
-  msg_updating:"Aggiornamento stato...", msg_updated:"Stato aggiornato correttamente."
+  msg_updating:"Aggiornamento stato...", msg_updated:"Stato aggiornato correttamente.",
+  consent_nda_yes:"NDA \u2713", consent_nda_no:"NDA \u2715",
+  consent_privacy_yes:"Privacy \u2713", consent_privacy_no:"Privacy \u2715"
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_inquiries_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_inquiries_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -348,39 +377,34 @@ function formatDate(value){
   });
 }
 
-function extractOpportunity(message){
+function extractUserMessage(message){
   if(!message) return "";
-  const match = message.match(/Opportunity:\s*(.*?)\s*\|/);
-  return match ? match[1] : "";
+  const match = message.match(/\|\s*Message:\s*([\s\S]*)$/);
+  return match ? match[1].trim() : message.trim();
 }
 
-function extractCategory(message){
-  if(!message) return "";
-  const match = message.match(/Category:\s*(.*?)\s*\|/);
-  return match ? match[1] : "";
-}
+function consentBadges(row){
+  const ndaOk = !!row.nda_accepted;
+  const privacyOk = !!row.privacy_accepted;
 
-function cleanMessage(message){
-  if(!message) return "";
+  const ndaClass = ndaOk ? "badge-ok" : "badge-warn";
+  const privacyClass = privacyOk ? "badge-ok" : "badge-warn";
+  const ndaLabel = ndaOk ? T.consent_nda_yes : T.consent_nda_no;
+  const privacyLabel = privacyOk ? T.consent_privacy_yes : T.consent_privacy_no;
 
-  return message
-    .replace(/Opportunity:\s*(.*?)\s*\|\s*/,"")
-    .replace(/Category:\s*(.*?)\s*\|\s*/,"")
-    .replace(/Location:\s*(.*?)\s*\|\s*/,"")
-    .replace(/Message:\s*/,"")
-    .trim();
+  return `<span class="${ndaClass}">${ndaLabel}</span><span class="${privacyClass}">${privacyLabel}</span>`;
 }
 
 async function loadInquiries(){
   const { data, error } = await client
-    .from("inquiries")
+    .from("investor_requests")
     .select("*")
     .order("created_at", { ascending:false });
 
   if(error){
     table.innerHTML = `
       <tr>
-        <td colspan="8" class="empty">
+        <td colspan="10" class="empty">
           ${T.loading_error}
         </td>
       </tr>
@@ -391,7 +415,7 @@ async function loadInquiries(){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="8" class="empty">
+        <td colspan="10" class="empty">
           ${T.empty_none}
         </td>
       </tr>
@@ -400,19 +424,21 @@ async function loadInquiries(){
   }
 
   table.innerHTML = data.map(i => {
-    const opportunity = extractOpportunity(i.message);
-    const category = extractCategory(i.message);
-    const message = cleanMessage(i.message);
+    const clientName = i.full_name || [i.first_name, i.last_name].filter(Boolean).join(" ");
+    const investorLine = [i.investor_type, i.budget_range].filter(Boolean).join(" · ");
+    const message = extractUserMessage(i.message);
     const currentStatus = i.status || "pending";
 
     return `
       <tr>
         <td>${formatDate(i.created_at)}</td>
-        <td>${i.name || ""}</td>
+        <td>${clientName || ""}${i.company ? `<br><span style="opacity:.65">${i.company}</span>` : ""}</td>
         <td>${i.email || ""}</td>
         <td>${i.phone || ""}</td>
-        <td>${opportunity || "—"}</td>
-        <td>${category ? `<span class="badge">${category}</span>` : "—"}</td>
+        <td>${i.country || "—"}</td>
+        <td>${i.opportunity_title || "—"}</td>
+        <td>${investorLine || "—"}</td>
+        <td>${consentBadges(i)}</td>
         <td class="message">${message || ""}</td>
         <td>
           <select onchange="updateInquiryStatus(${i.id}, this.value)">
@@ -431,7 +457,7 @@ async function updateInquiryStatus(id, status){
   statusMessage.textContent = T.msg_updating;
 
   const { error } = await client
-    .from("inquiries")
+    .from("investor_requests")
     .update({ status })
     .eq("id", id);
 
