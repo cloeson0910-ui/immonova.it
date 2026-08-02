@@ -234,6 +234,7 @@ font-family:inherit;
 .time-bar-label.stage-fresh{color:#8f7643}
 .time-bar-label.stage-followup{color:#a3651f}
 .time-bar-label.stage-overdue{color:#9c2f2f;font-weight:600}
+.time-bar-label.stage-suspended{color:#8f7643;font-style:italic}
 
 @media(max-width:900px){
 .header{flex-direction:column;gap:18px}
@@ -324,22 +325,22 @@ var UI_STRINGS = {
   th_message:"Messaggio", th_status:"Stato", th_dossier:"Dossier", th_actions:"Azioni",
   loading:"Caricamento...", loading_error:"Errore nel caricamento delle richieste.",
   empty_none:"Nessuna richiesta presente.",
-  status_pending:"Pending", status_evasa:"Evasa", status_trattativa:"Trattativa",
+  status_pending:"Pending", status_evasa:"Evasa", status_trattativa:"Trattativa", status_sospesa:"Sospesa (non interessato)",
   msg_updating:"Aggiornamento stato...", msg_updated:"Stato aggiornato correttamente.",
   consent_nda_yes:"NDA \u2713", consent_nda_no:"NDA \u2715",
   consent_privacy_yes:"Privacy \u2713", consent_privacy_no:"Privacy \u2715",
   consent_nda_label:"NDA accettato", consent_privacy_label:"Privacy accettata",
   msg_consent_updating:"Aggiornamento consenso...", msg_consent_updated:"Consenso aggiornato correttamente.",
-  btn_dossier:"Dossier", btn_delete:"Elimina",
+  btn_dossier:"Dossier", btn_delete:"Elimina", btn_suspend:"Sospendi", btn_reactivate:"Riattiva",
   confirm_delete:"Eliminare definitivamente questa richiesta? L'operazione non è reversibile.",
   msg_deleting:"Eliminazione richiesta...", msg_deleted:"Richiesta eliminata.",
   dossier_not_sent:"Non inviato",
   dossier_sent_prefix:"Inviato ",
   dossier_day_of_15:"Giorno {n}/15",
   dossier_contact_today:"Ricontattare oggi",
-  dossier_overdue:"Aggiornamento scaduto"
+  dossier_overdue:"Aggiornamento scaduto",
+  dossier_suspended:"Trattativa sospesa"
 };
-
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
@@ -449,12 +450,23 @@ function actionButtons(row){
   const dossierHref = row.opportunity_id
     ? `dossier-send.html?request_id=${encodeURIComponent(row.id)}&opportunity_id=${encodeURIComponent(row.opportunity_id)}`
     : null;
-  return `<div class="action-btns">${dossierHref ? `<a class="action-btn" href="${dossierHref}" target="_blank">${T.btn_dossier}</a>` : ""}<button type="button" class="action-btn danger" onclick="deleteInquiry(${row.id})">${T.btn_delete}</button></div>`;
+  const isSuspended = row.status === "sospesa";
+  const suspendBtn = isSuspended
+    ? `<button type="button" class="action-btn" onclick="updateInquiryStatus(${row.id}, 'trattativa'); setTimeout(loadInquiries, 400)">${T.btn_reactivate}</button>`
+    : `<button type="button" class="action-btn" onclick="updateInquiryStatus(${row.id}, 'sospesa'); setTimeout(loadInquiries, 400)">${T.btn_suspend}</button>`;
+  return `<div class="action-btns">${dossierHref ? `<a class="action-btn" href="${dossierHref}" target="_blank">${T.btn_dossier}</a>` : ""}${suspendBtn}<button type="button" class="action-btn danger" onclick="deleteInquiry(${row.id})">${T.btn_delete}</button></div>`;
 }
 
 function dossierStatusHTML(row){
   if(!row.dossier_sent || !row.dossier_sent_at){
     return `<div class="dossier-status"><span class="not-sent">${T.dossier_not_sent}</span></div>`;
+  }
+
+  if(row.status === "sospesa"){
+    return `<div class="dossier-status">
+      <div class="dossier-sent-date">${T.dossier_sent_prefix}${formatDate(row.dossier_sent_at)}</div>
+      <div class="time-bar-label stage-suspended">${T.dossier_suspended}</div>
+    </div>`;
   }
 
   const sentDate = new Date(row.dossier_sent_at);
@@ -532,6 +544,7 @@ async function loadInquiries(){
             <option value="pending" ${currentStatus === "pending" ? "selected" : ""}>${T.status_pending}</option>
             <option value="evasa" ${currentStatus === "evasa" ? "selected" : ""}>${T.status_evasa}</option>
             <option value="trattativa" ${currentStatus === "trattativa" ? "selected" : ""}>${T.status_trattativa}</option>
+            <option value="sospesa" ${currentStatus === "sospesa" ? "selected" : ""}>${T.status_sospesa}</option>
           </select>
         </td>
         <td>${dossierStatusHTML(i)}</td>

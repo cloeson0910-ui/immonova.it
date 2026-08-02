@@ -1472,11 +1472,28 @@ function mapQuery(){
   if(a.formatted)return a.formatted;
   return [a.address,a.locality,a.city,a.province,a.region,a.country].filter(Boolean).join(", ");
 }
+var GOOGLE_STATIC_MAPS_KEY = "AIzaSyCZHPQ1wUZm9WWSOy8Y4R9tDPHqTWxf78k";
 function renderLocationPage(){
   var a=getAddressParts();
   var q=mapQuery();
   if(!q)return "";
-  var mapSrc="https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
+  var lat=Number(opportunity&&opportunity.latitude), lng=Number(opportunity&&opportunity.longitude);
+  var hasCoords=Number.isFinite(lat)&&Number.isFinite(lng);
+  var mapHTML;
+  if(hasCoords && GOOGLE_STATIC_MAPS_KEY){
+    /* Immagine statica invece di iframe: l'iframe della mappa live non è catturabile da
+       html2canvas (restrizione di sicurezza sui contenuti cross-origin negli iframe), quindi
+       nel PDF generato automaticamente da "Invia al cliente" risultava vuoto. L'immagine
+       statica invece è un semplice <img>, catturata correttamente. */
+    var staticSrc="https://maps.googleapis.com/maps/api/staticmap?center="+lat+","+lng
+      +"&zoom=15&size=1200x700&scale=2&maptype=roadmap"
+      +"&markers=color:0xa67f34%7C"+lat+","+lng
+      +"&key="+GOOGLE_STATIC_MAPS_KEY;
+    mapHTML='<img class="map-frame" src="'+escapeHTML(staticSrc)+'" crossorigin="anonymous" alt="Mappa posizione immobile" style="object-fit:cover">';
+  }else{
+    var mapSrc="https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
+    mapHTML='<iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>';
+  }
   function row(label,val){ return val?'<div class="addr-row"><strong>'+escapeHTML(label)+'</strong><span>'+escapeHTML(val)+'</span></div>':''; }
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_asset_location)+'</div><h2 class="section-title">'+escapeHTML(T.title_location)+'</h2><div class="lux-rule"></div><div class="location-layout"><div>'
     +row(T.label_address_row,a.address||"-")
@@ -1485,7 +1502,7 @@ function renderLocationPage(){
     +row(T.label_city_row,a.city||"-")
     +row(T.label_province_row,a.province||"-")
     +row(T.label_region_row,a.region||"-")
-    +'</div><iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div></div></article>';
+    +'</div>'+mapHTML+'</div></div></article>';
 }
 
 /* ---- Media gallery: solo foto caricate dall'analista per QUESTO immobile ---- */
