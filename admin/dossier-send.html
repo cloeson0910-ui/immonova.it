@@ -1540,15 +1540,15 @@ function renderLocationPage(){
   var mapHTML;
   if(hasCoords){
     /* Immagine statica invece di iframe: l'iframe della mappa live non è catturabile da
-       html2canvas (restrizione di sicurezza sui contenuti cross-origin negli iframe), quindi
-       nel PDF generato automaticamente da "Invia al cliente" risultava vuoto. L'immagine
-       statica passa dall'edge function static-map-proxy (non più da Google direttamente):
-       Google Static Maps non manda header CORS, quindi a schermo l'immagine si vedeva ma
-       html2canvas non riusciva comunque a leggerne i pixel e la pagina usciva vuota nel PDF.
-       Il proxy scarica l'immagine lato server e la restituisce con Access-Control-Allow-Origin,
-       così sia lo schermo che la cattura PDF funzionano. La API key resta lato server. */
-    var staticSrc=SUPABASE_URL+"/functions/v1/static-map-proxy?lat="+encodeURIComponent(lat)+"&lng="+encodeURIComponent(lng)+"&zoom=15&size=1200x700&scale=2";
-    mapHTML='<img class="map-frame" id="locationMapImg" crossorigin="anonymous" src="'+escapeHTML(staticSrc)+'" alt="Mappa posizione immobile" style="object-fit:cover">';
+       html2canvas, quindi nel PDF generato da "Invia al cliente" risultava vuoto. Prima
+       tentata via edge function static-map-proxy con <img src> diretto, ma il gateway
+       Supabase richiede sempre l'header Authorization anche per le sole immagini pubbliche,
+       cosa che un tag <img> non può mandare (da qui l'errore UNAUTHORIZED_NO_AUTH_HEADER).
+       Soluzione definitiva: la scarichiamo noi via fetch() autenticato (stessa sessione già
+       aperta sul sito) e la mostriamo come blob URL locale — niente CORS, niente JWT, niente
+       dipendenza da impostazioni della dashboard Supabase. Il caricamento vero avviene in
+       loadLocationMapImage(), chiamata dopo il render del libro. */
+    mapHTML='<img class="map-frame" id="locationMapImg" data-lat="'+escapeHTML(String(lat))+'" data-lng="'+escapeHTML(String(lng))+'" alt="Mappa posizione immobile" style="object-fit:cover">';
   }else{
     var mapSrc="https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
     mapHTML='<iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>';
@@ -2055,8 +2055,28 @@ function renderBook(){
   finalHtml += renderDebugBootstrap();
 
   book.innerHTML = finalHtml;
+  loadLocationMapImage();
 }
 
+async function loadLocationMapImage(){
+  var img=document.getElementById("locationMapImg");
+  if(!img) return;
+  var lat=img.getAttribute("data-lat");
+  var lng=img.getAttribute("data-lng");
+  if(!lat||!lng) return;
+  try{
+    var url=SUPABASE_URL+"/functions/v1/static-map-proxy?lat="+encodeURIComponent(lat)+"&lng="+encodeURIComponent(lng)+"&zoom=15&size=1200x700&scale=2";
+    var res=await fetch(url,{headers:{"Authorization":"Bearer "+SUPABASE_ANON_KEY,"apikey":SUPABASE_ANON_KEY}});
+    if(!res.ok){
+      console.warn("Mappa posizione non caricata:",res.status,await res.text());
+      return;
+    }
+    var blob=await res.blob();
+    img.src=URL.createObjectURL(blob);
+  }catch(e){
+    console.warn("Mappa posizione: errore fetch",e);
+  }
+}
 function formatDateShort(v){
   if(!v) return "";
   try{ return new Date(v).toLocaleDateString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG,{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
@@ -2106,6 +2126,14 @@ function buildDossierFilename(){
    in modalita' stampa (classe .pdf-export-mode, stessa resa di @media print ma senza aprire
    il dialogo di stampa del browser — necessario per generarlo in automatico al click su Invia). ---- */
 async function generateDossierPdfBlob(){
+  var mapImg=document.getElementById("locationMapImg");
+  if(mapImg){
+    var waited=0;
+    while(waited<5000 && String(mapImg.src||"").indexOf("blob:")!==0){
+      await new Promise(function(r){ setTimeout(r,100); });
+      waited+=100;
+    }
+  }
   document.body.classList.add("pdf-export-mode");
   await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
   try{
