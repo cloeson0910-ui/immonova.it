@@ -264,7 +264,7 @@ var UI_STRINGS = {
   label_net_income:"Net Income", label_roi:"ROI", label_breakeven:"Break-even",
   note_net_income:"Reddito netto operativo annuo.", note_roi:"Net Income / Total Project Cost.",
   note_breakeven:"Total Project Cost / Net Operating Cash Flow",
-  tag_verified_adr:" (da ADR verificato)", tag_estimated:" (stimato)",
+  tag_verified_adr:" (da ADR verificato)", tag_estimated:" (stimato)", tag_verified_rent:" (da canone verificato)",
   years_suffix:" anni", extrapolated_note:" (proiezione estesa oltre i 15 anni in tabella)",
   extrapolated_note2:" (proiezione estesa oltre i 15 anni mostrati in tabella)",
   scenario_min:"Scenario ADR minimo", scenario_max:"Scenario ADR massimo", scenario_real_data:"Scenario da dati reali", scenario_adr:"Scenario ADR",
@@ -274,6 +274,11 @@ var UI_STRINGS = {
   rule_single_note_verified:"Net Income e ROI calcolati sull\u2019unico ADR disponibile (verificato dall\u2019analista). Occupazione e costi operativi restano ipotesi dichiarate.",
   rule_single_note_market:"Net Income e ROI calcolati sull\u2019unico ADR disponibile (di mercato automatico). Occupazione e costi operativi restano ipotesi dichiarate.",
   rule_none_note:"Questa pagina non inventa scenari. Senza reddito netto reale nel report e senza alcun ADR (verificato o automatico), Net Income, ROI e Break-even restano esplicitamente non disponibili.",
+  rule_range_note_verified_commercial:"Net Income, ROI e Break-even sono mostrati per entrambi gli scenari di canone verificato dall\u2019analista (minimo e massimo, \u20ac/mq/mese \u00d7 superficie \u00d7 12), qui sopra, senza dover scorrere fino alla tabella di proiezione. Nessuna crescita annua o costo operativo \u00e8 sottratto: \u00e8 il canone lordo.",
+  rule_range_note_market_commercial:"Net Income, ROI e Break-even sono mostrati per entrambi gli scenari di canone di mercato (minimo e massimo, \u20ac/mq/mese \u00d7 superficie \u00d7 12), qui sopra, senza dover scorrere fino alla tabella di proiezione. Nessuna crescita annua o costo operativo \u00e8 sottratto: \u00e8 il canone lordo.",
+  rule_single_note_verified_commercial:"Net Income e ROI calcolati sull\u2019unico canone disponibile (verificato dall\u2019analista, \u20ac/mq/mese \u00d7 superficie \u00d7 12). Nessuna crescita annua o costo operativo \u00e8 sottratto: \u00e8 il canone lordo.",
+  rule_single_note_market_commercial:"Net Income e ROI calcolati sull\u2019unico canone disponibile (di mercato, \u20ac/mq/mese \u00d7 superficie \u00d7 12). Nessuna crescita annua o costo operativo \u00e8 sottratto: \u00e8 il canone lordo.",
+  rule_none_note_commercial:"Questa pagina non inventa scenari. Senza un canone di locazione verificato (\u20ac/mq/mese) e senza la superficie dell\u2019immobile, Net Income, ROI e Break-even restano esplicitamente non disponibili.",
   calc_rule_title:"Regola di calcolo",
   kicker_investment_structure:"Investment structure", title_total_project_cost:"Total Project Cost",
   cost_acquisition_title:"Costi acquisizione", cost_development_title:"Costi sviluppo",
@@ -300,6 +305,8 @@ var UI_STRINGS = {
   real_data_source:"dato reale da report interno",
   kicker_property:"Property documents", kicker_media_gallery:"Media gallery", title_media_gallery:"Immagini dell\u2019Immobile",
   kicker_asset_location:"Asset location", title_location:"Posizione e Localizzazione",
+  kicker_asset_characteristics:"Asset characteristics", title_asset_characteristics:"Caratteristiche dell\u2019immobile",
+  label_internal_size:"Superficie interna", label_land_size:"Superficie terreno", label_rooms_count:"Numero locali",
   label_address_row:"Indirizzo", label_locality_row:"Località / Contrada", label_zip_row:"CAP",
   label_city_row:"Comune", label_province_row:"Provincia", label_region_row:"Regione",
   kicker_territorial_profile:"Territorial profile", title_territorial_profile:"Profilo territoriale",
@@ -970,6 +977,19 @@ function renderTerritorialAndTourismPage(){
     +(tour?'<div class="merge-block">'+tour+'</div>':'')
     +'</div></article>';
 }
+function renderAssetCharacteristicsPage(){
+  var o=opportunity||{};
+  var rows=[];
+  var internalSize=firstFiniteOpp(o.internal_size);
+  var landSize=firstFiniteOpp(o.land_size);
+  var bedrooms=firstFiniteOpp(o.bedrooms);
+  if(internalSize) rows.push([T.label_internal_size, formatMetricVal(internalSize)+" mq"]);
+  if(landSize) rows.push([T.label_land_size, formatMetricVal(landSize)+" mq"]);
+  if(bedrooms) rows.push([T.label_rooms_count, formatMetricVal(bedrooms)]);
+  if(!rows.length) return "";
+  var cards = rows.map(function(r){return '<div class="metric-card"><div class="metric-label">'+escapeHTML(r[0])+'</div><div class="metric-value">'+escapeHTML(r[1])+'</div></div>';}).join("");
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_asset_characteristics)+'</div><h2 class="section-title">'+escapeHTML(T.title_asset_characteristics)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div></div></article>';
+}
 function renderMarketAndADRPage(){
   var mkt=renderRealEstatePage();
   var adr=renderPricingPage();
@@ -1262,12 +1282,17 @@ function renderFinancialSnapshot(){
   var f=buildFinance();
   var projs=buildCashflowProjections();
   var leftColumn,ruleNote,hasAny;
+  var isCommercial=isCommercialCategory();
 
   if(projs && projs.mode==="range" && (projs.min || projs.max)){
     hasAny=true;
     leftColumn = scenarioBoxHTML(projs.min,T.scenario_min) + scenarioBoxHTML(projs.max,T.scenario_max);
     var minAdrVerified = projs.min && projs.min.adrVerified;
-    ruleNote = minAdrVerified ? T.rule_range_note_verified : T.rule_range_note_market;
+    if(isCommercial){
+      ruleNote = minAdrVerified ? T.rule_range_note_verified_commercial : T.rule_range_note_market_commercial;
+    }else{
+      ruleNote = minAdrVerified ? T.rule_range_note_verified : T.rule_range_note_market;
+    }
   }else{
     var headline=projs?(projs.mode==="range"?(projs.min||projs.max):projs.single):null;
     hasAny=!!headline;
@@ -1281,12 +1306,16 @@ function renderFinancialSnapshot(){
         tag="";
         ruleNote=T.rule_real_note;
       }else{
-        tag=headline.adrVerified?T.tag_verified_adr:T.tag_estimated;
-        ruleNote = headline.adrVerified ? T.rule_single_note_verified : T.rule_single_note_market;
+        tag=headline.adrVerified?(isCommercial?T.tag_verified_rent:T.tag_verified_adr):T.tag_estimated;
+        if(isCommercial){
+          ruleNote = headline.adrVerified ? T.rule_single_note_verified_commercial : T.rule_single_note_market_commercial;
+        }else{
+          ruleNote = headline.adrVerified ? T.rule_single_note_verified : T.rule_single_note_market;
+        }
       }
       leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_net_income)+tag+'</div><div class="metric-value">'+escapeHTML(euro(net))+'</div><div class="metric-note">'+escapeHTML(T.note_net_income)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_roi)+tag+'</div><div class="metric-value">'+escapeHTML(percent(roi))+'</div><div class="metric-note">'+escapeHTML(T.note_roi)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_breakeven)+tag+'</div><div class="metric-value">'+(breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+escapeHTML(T.years_suffix):escapeHTML(T.not_available_long))+'</div><div class="metric-note">'+escapeHTML(T.note_breakeven)+escapeHTML(breakEvenNote||"")+'.</div></div></div>';
     }else{
-      ruleNote=T.rule_none_note;
+      ruleNote=isCommercial?T.rule_none_note_commercial:T.rule_none_note;
       leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_net_income)+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(T.not_available)+'</div></div></div>';
     }
   }
@@ -1927,9 +1956,11 @@ function renderBook(){
 
   var docPages = preparedDocumentPages;
   var renovationPages = renderRenovationBeforeAfterPages();
+  var characteristicsPage = renderAssetCharacteristicsPage();
   var hasMedia = normalizeGallery(opportunity&&opportunity.gallery_images).length || clean(opportunity&&opportunity.cover_image) || docPages.length || renovationPages.length;
-  if(hasMedia){
+  if(hasMedia || characteristicsPage){
     push(T.chapter_property, dividerPageHTML(T.divider_property_title,T.divider_property_kicker), true);
+    push(T.chapter_property, characteristicsPage);
     renderMediaGalleryPage().forEach(function(p){ push(T.chapter_property, p); });
     renovationPages.forEach(function(p){ push(T.chapter_property, p); });
     docPages.forEach(function(p){ push(T.chapter_property, p); });
