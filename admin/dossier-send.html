@@ -1531,7 +1531,6 @@ function mapQuery(){
   if(a.formatted)return a.formatted;
   return [a.address,a.locality,a.city,a.province,a.region,a.country].filter(Boolean).join(", ");
 }
-var GOOGLE_STATIC_MAPS_KEY = "AIzaSyCZHPQ1wUZm9WWSOy8Y4R9tDPHqTWxf78k";
 function renderLocationPage(){
   var a=getAddressParts();
   var q=mapQuery();
@@ -1539,16 +1538,17 @@ function renderLocationPage(){
   var lat=Number(opportunity&&opportunity.latitude), lng=Number(opportunity&&opportunity.longitude);
   var hasCoords=Number.isFinite(lat)&&Number.isFinite(lng);
   var mapHTML;
-  if(hasCoords && GOOGLE_STATIC_MAPS_KEY){
+  if(hasCoords){
     /* Immagine statica invece di iframe: l'iframe della mappa live non è catturabile da
        html2canvas (restrizione di sicurezza sui contenuti cross-origin negli iframe), quindi
        nel PDF generato automaticamente da "Invia al cliente" risultava vuoto. L'immagine
-       statica invece è un semplice <img>, catturata correttamente. */
-    var staticSrc="https://maps.googleapis.com/maps/api/staticmap?center="+lat+","+lng
-      +"&zoom=15&size=1200x700&scale=2&maptype=roadmap"
-      +"&markers=color:0xa67f34%7C"+lat+","+lng
-      +"&key="+GOOGLE_STATIC_MAPS_KEY;
-    mapHTML='<img class="map-frame" id="locationMapImg" src="'+escapeHTML(staticSrc)+'" alt="Mappa posizione immobile" style="object-fit:cover">';
+       statica passa dall'edge function static-map-proxy (non più da Google direttamente):
+       Google Static Maps non manda header CORS, quindi a schermo l'immagine si vedeva ma
+       html2canvas non riusciva comunque a leggerne i pixel e la pagina usciva vuota nel PDF.
+       Il proxy scarica l'immagine lato server e la restituisce con Access-Control-Allow-Origin,
+       così sia lo schermo che la cattura PDF funzionano. La API key resta lato server. */
+    var staticSrc=SUPABASE_URL+"/functions/v1/static-map-proxy?lat="+encodeURIComponent(lat)+"&lng="+encodeURIComponent(lng)+"&zoom=15&size=1200x700&scale=2";
+    mapHTML='<img class="map-frame" id="locationMapImg" crossorigin="anonymous" src="'+escapeHTML(staticSrc)+'" alt="Mappa posizione immobile" style="object-fit:cover">';
   }else{
     var mapSrc="https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
     mapHTML='<iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>';
