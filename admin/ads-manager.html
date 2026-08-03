@@ -286,8 +286,19 @@ Gestisci le pagine sponsorizzate che compaiono nei dossier degli investitori, tr
 <input type="text" id="tagline" placeholder="Es. L'eccellenza italiana su strada">
 </div>
 <div class="field">
-<label data-i18n="label_contact">Recapiti (indirizzo, telefono, sito — una riga, opzionale)</label>
-<input type="text" id="contactLine" placeholder="Es. Via Roma 12, Bari · +39 080 1234567">
+<label data-i18n="label_contact">Indirizzo (opzionale)</label>
+<input type="text" id="contactLine" placeholder="Es. Via Roma 12, Bari">
+</div>
+</div>
+
+<div class="form-grid">
+<div class="field">
+<label data-i18n="label_phone">Telefono (opzionale)</label>
+<input type="text" id="adPhone" placeholder="Es. +39 080 1234567">
+</div>
+<div class="field">
+<label data-i18n="label_email">Email (opzionale)</label>
+<input type="text" id="adEmail" placeholder="Es. info@cliente.it">
 </div>
 </div>
 
@@ -302,6 +313,7 @@ Gestisci le pagine sponsorizzate che compaiono nei dossier degli investitori, tr
 <div class="field">
 <label data-i18n="label_position">Posizione nel dossier</label>
 <select id="adPosition">
+<option value="after_toc" data-i18n="pos_after_toc">Dopo il sommario</option>
 <option value="after_financial" data-i18n="pos_after_financial">Dopo la sezione Finanza</option>
 <option value="after_property" data-i18n="pos_after_property">Dopo la sezione Immobile</option>
 <option value="after_territory" data-i18n="pos_after_territory">Dopo la sezione Territorio</option>
@@ -368,6 +380,8 @@ const imageFileInput=document.getElementById("imageFile");
 const imagePreview=document.getElementById("imagePreview");
 const taglineInput=document.getElementById("tagline");
 const contactLineInput=document.getElementById("contactLine");
+const adPhoneInput=document.getElementById("adPhone");
+const adEmailInput=document.getElementById("adEmail");
 const adSizeSelect=document.getElementById("adSize");
 const adPositionSelect=document.getElementById("adPosition");
 const startDateInput=document.getElementById("startDate");
@@ -391,9 +405,11 @@ var UI_STRINGS = {
   label_client_name:"Nome cliente (uso interno, non compare nel dossier)",
   label_image:"Immagine (formato orizzontale, verrà usata a piena larghezza)",
   label_tagline:"Frase / titolo (breve, opzionale)",
-  label_contact:"Recapiti (indirizzo, telefono, sito — una riga, opzionale)",
+  label_contact:"Indirizzo (opzionale)",
+  label_phone:"Telefono (opzionale)", label_email:"Email (opzionale)",
   label_size:"Formato", size_full:"Pagina intera", size_half:"Mezza pagina",
   label_position:"Posizione nel dossier",
+  pos_after_toc:"Dopo il sommario",
   pos_after_financial:"Dopo la sezione Finanza", pos_after_property:"Dopo la sezione Immobile",
   pos_after_territory:"Dopo la sezione Territorio", pos_after_ecosystem:"Dopo la sezione Ecosistema",
   pos_after_evaluation:"Dopo la sezione Valutazione", pos_before_closing:"Prima della chiusura",
@@ -418,7 +434,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_ads_manager_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_ads_manager_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -501,6 +517,8 @@ function resetForm(){
   imagePreview.style.display = "none";
   taglineInput.value = "";
   contactLineInput.value = "";
+  adPhoneInput.value = "";
+  adEmailInput.value = "";
   adSizeSelect.value = "full";
   adPositionSelect.value = "after_financial";
   startDateInput.value = "";
@@ -518,6 +536,8 @@ function fillFormForEdit(ad){
   imagePreview.style.display = "block";
   taglineInput.value = ad.tagline || "";
   contactLineInput.value = ad.contact_line || "";
+  adPhoneInput.value = ad.phone || "";
+  adEmailInput.value = ad.email || "";
   adSizeSelect.value = ad.size || "full";
   adPositionSelect.value = ad.position || "after_financial";
   startDateInput.value = ad.start_date || "";
@@ -574,6 +594,8 @@ saveBtn.addEventListener("click", async function(){
       client_name: clientName,
       tagline: taglineInput.value.trim() || null,
       contact_line: contactLineInput.value.trim() || null,
+      phone: adPhoneInput.value.trim() || null,
+      email: adEmailInput.value.trim() || null,
       size: adSizeSelect.value,
       position: adPositionSelect.value,
       start_date: startDateInput.value || null,
@@ -607,6 +629,7 @@ saveBtn.addEventListener("click", async function(){
 
 function positionLabel(pos){
   var map = {
+    after_toc: T.pos_after_toc,
     after_financial: T.pos_after_financial, after_property: T.pos_after_property,
     after_territory: T.pos_after_territory, after_ecosystem: T.pos_after_ecosystem,
     after_evaluation: T.pos_after_evaluation, before_closing: T.pos_before_closing

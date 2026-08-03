@@ -840,26 +840,35 @@ async function loadDossierAds(){
     });
   }catch(e){ console.warn(e); dossierAds=[]; }
 }
+function buildAdContactLine(ad){
+  var parts=[];
+  if(ad.contact_line) parts.push(clean(ad.contact_line));
+  if(ad.phone) parts.push(clean(ad.phone));
+  if(ad.email) parts.push(clean(ad.email));
+  return parts.join(" \u00b7 ");
+}
 function renderFullAdPage(ad){
+  var contactLine=buildAdContactLine(ad);
   return '<article class="report-page cover with-image ad-page"><img class="cover-bg" src="'+escapeHTML(ad.image_url)+'" alt=""><div class="page-inner cover" style="justify-content:flex-end"><div class="ad-disclosure">'+escapeHTML(T.ad_disclosure_label)+'</div><div>'
     +(ad.tagline?'<div class="cover-title divider-title" style="font-size:32px">'+escapeHTML(ad.tagline)+'</div>':'')
-    +(ad.contact_line?'<div class="cover-meta">'+escapeHTML(ad.contact_line)+'</div>':'')
+    +(contactLine?'<div class="cover-meta">'+escapeHTML(contactLine)+'</div>':'')
     +'</div></div></article>';
 }
 function renderHalfAdBlock(ad){
   if(!ad) return '<div class="ad-half-empty"></div>';
+  var contactLine=buildAdContactLine(ad);
   return '<div class="ad-half"><img class="ad-half-bg" src="'+escapeHTML(ad.image_url)+'" alt=""><div class="ad-half-inner"><div class="ad-disclosure">'+escapeHTML(T.ad_disclosure_label)+'</div><div>'
     +(ad.tagline?'<div class="ad-half-title">'+escapeHTML(ad.tagline)+'</div>':'')
-    +(ad.contact_line?'<div class="ad-half-meta">'+escapeHTML(ad.contact_line)+'</div>':'')
+    +(contactLine?'<div class="ad-half-meta">'+escapeHTML(contactLine)+'</div>':'')
     +'</div></div></div>';
 }
 function renderAdPagesForPosition(positionKey){
   var ads=(dossierAds||[]).filter(function(a){return a.position===positionKey;});
   var fullAds=ads.filter(function(a){return a.size==="full";});
   var halfAds=ads.filter(function(a){return a.size==="half";});
-  var pages=fullAds.map(renderFullAdPage);
+  var pages=fullAds.map(function(ad){ return {html:renderFullAdPage(ad), divider:true}; });
   for(var i=0;i<halfAds.length;i+=2){
-    pages.push('<article class="report-page ad-half-page">'+renderHalfAdBlock(halfAds[i])+renderHalfAdBlock(halfAds[i+1]||null)+'</article>');
+    pages.push({html:'<article class="report-page ad-half-page">'+renderHalfAdBlock(halfAds[i])+renderHalfAdBlock(halfAds[i+1]||null)+'</article>', divider:false});
   }
   return pages;
 }
@@ -2051,12 +2060,14 @@ function renderBook(){
   var chapters=[];
   function push(chapterLabel,html,isDivider){ if(html) chapters.push({label:chapterLabel,html:html,divider:!!isDivider}); }
 
+  renderAdPagesForPosition("after_toc").forEach(function(p){ push("", p.html, p.divider); });
+
   push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
   push(T.chapter_financial, renderInternalFacts());
   push(T.chapter_financial, renderFinancialSnapshot());
   push(T.chapter_financial, renderInvestmentStructure());
   renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
-  renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p); });
+  renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
 
   var docPages = preparedDocumentPages;
   var renovationPages = renderRenovationBeforeAfterPages();
@@ -2068,7 +2079,7 @@ function renderBook(){
     renderMediaGalleryPage().forEach(function(p){ push(T.chapter_property, p); });
     renovationPages.forEach(function(p){ push(T.chapter_property, p); });
     docPages.forEach(function(p){ push(T.chapter_property, p); });
-    renderAdPagesForPosition("after_property").forEach(function(p){ push(T.chapter_property, p); });
+    renderAdPagesForPosition("after_property").forEach(function(p){ push(T.chapter_property, p.html, p.divider); });
   }
 
   push(T.chapter_territory, dividerPageHTML(T.divider_territory_title,T.divider_territory_kicker), true);
@@ -2078,7 +2089,7 @@ function renderBook(){
   push(T.chapter_territory, renderTourismSeriesPage());
   push(T.chapter_territory, renderTourismForecastPage());
   push(T.chapter_territory, renderEnvironmentPage());
-  renderAdPagesForPosition("after_territory").forEach(function(p){ push(T.chapter_territory, p); });
+  renderAdPagesForPosition("after_territory").forEach(function(p){ push(T.chapter_territory, p.html, p.divider); });
 
   var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["shopping",T.eco_shopping,T.eco_shopping_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
   var ecoPages=[];
@@ -2090,7 +2101,7 @@ function renderBook(){
   if(ecoPages.length){
     push(T.chapter_ecosystem, dividerPageHTML(T.divider_ecosystem_title,T.divider_ecosystem_kicker), true);
     ecoPages.forEach(function(p){push(T.chapter_ecosystem,p);});
-    renderAdPagesForPosition("after_ecosystem").forEach(function(p){ push(T.chapter_ecosystem, p); });
+    renderAdPagesForPosition("after_ecosystem").forEach(function(p){ push(T.chapter_ecosystem, p.html, p.divider); });
   }
 
   var narrHtml=renderNarrativePage();
@@ -2099,18 +2110,18 @@ function renderBook(){
     push(T.chapter_evaluation, dividerPageHTML(T.divider_evaluation_title,T.divider_evaluation_kicker), true);
     push(T.chapter_evaluation, narrHtml);
     push(T.chapter_evaluation, scoreHtml);
-    renderAdPagesForPosition("after_evaluation").forEach(function(p){ push(T.chapter_evaluation, p); });
+    renderAdPagesForPosition("after_evaluation").forEach(function(p){ push(T.chapter_evaluation, p.html, p.divider); });
   }
 
   push(T.chapter_sources, dividerPageHTML(T.divider_sources_title,T.divider_sources_kicker), true);
   push(T.chapter_sources, renderSourcesPage());
-  renderAdPagesForPosition("before_closing").forEach(function(p){ push(T.chapter_sources, p); });
+  renderAdPagesForPosition("before_closing").forEach(function(p){ push(T.chapter_sources, p.html, p.divider); });
   push(T.chapter_sources, renderClosingPage());
 
   var tocEntries=[];
   var seenChapters={};
   chapters.forEach(function(c,idx){
-    if(!seenChapters[c.label]){ seenChapters[c.label]=true; tocEntries.push({label:c.label,page:idx+2}); }
+    if(c.label && !seenChapters[c.label]){ seenChapters[c.label]=true; tocEntries.push({label:c.label,page:idx+2}); }
   });
 
   var totalNumbered = chapters.length + 1;
