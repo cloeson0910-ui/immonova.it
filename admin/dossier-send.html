@@ -1806,8 +1806,13 @@ function isCommercialCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("commercial")>=0; // copre sia "Commerciale" (IT) che "Commercial" (EN)
 }
+function isPerRoomCategory(){
+  var c=String(getCategory()||"").toLowerCase();
+  return c.indexOf("hotel")>=0 || c.indexOf("b&b")>=0 || c.indexOf("bnb")>=0 || c.indexOf("bed")>=0 || c.indexOf("guesthouse")>=0 || c.indexOf("resort")>=0 || c.indexOf("agriturismo")>=0;
+}
 function getAssetUnits(){
   var o=opportunity||{};
+  if(!isPerRoomCategory()) return 1; // villa, casa, appartamento ecc.: si affitta intera a notte, non a camera
   var n=firstFiniteOpp(o.bedrooms);
   return n && n>0 ? n : 1;
 }
@@ -1885,7 +1890,8 @@ function buildCashflowProjections(){
     if(!adrMetric) return null;
     var adrVerified=!!(adrMetric.source && String(adrMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
     var baseRevenue = adrMetric.value*occ.value*365*units;
-    var revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMetric.value)+" \u20ac/notte, "+label+") \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" \u00d7 "+units+" unit\u00e0";
+    var unitsNote = units>1 ? (" \u00d7 "+units+" unit\u00e0") : " (intera propriet\u00e0, tariffa non moltiplicata per camera)";
+    var revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMetric.value)+" \u20ac/notte, "+label+") \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+unitsNote;
     return buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, f.total);
   }
 
