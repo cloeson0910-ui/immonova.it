@@ -181,7 +181,26 @@ min-height:270px;
 display:block;
 text-decoration:none;
 cursor:pointer;
+position:relative;
+overflow:hidden;
+background-size:cover;
+background-position:center;
 }
+
+.card.has-photo::before{
+content:"";
+position:absolute;
+inset:0;
+background:linear-gradient(180deg,rgba(31,22,8,.32),rgba(31,22,8,.84));
+z-index:0;
+transition:.6s ease;
+}
+.card.has-photo > *{position:relative;z-index:1}
+.card.has-photo h2{color:#f1d27a}
+.card.has-photo .count{color:#f1d27a;border-color:rgba(241,210,122,.4);background:rgba(0,0,0,.18)}
+.card.has-photo .count-label{color:#f1d27a}
+.card.has-photo p{color:rgba(255,255,255,.85)}
+.card.has-photo .explore{color:#f1d27a}
 
 .card:hover{
 transform:translateY(-6px);
@@ -349,56 +368,56 @@ Loading opportunities...
 
 <section class="categories">
 
-<a class="card" href="category.html?category=Ville">
+<a class="card" href="category.html?category=Ville" data-category="Ville">
 <div class="card-top"><h2 data-i18n="cat.ville.title">Ville</h2><div class="count" id="count-Ville">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.ville.text">Luxury villas and trophy assets located in prime destinations.</p>
 <span class="explore" data-i18n="card.explore">Explore</span>
 </a>
 
-<a class="card" href="category.html?category=Hotel">
+<a class="card" href="category.html?category=Hotel" data-category="Hotel">
 <div class="card-top"><h2 data-i18n="cat.hotel.title">Hotel</h2><div class="count" id="count-Hotel">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.hotel.text">Boutique hotels and hospitality investments with strong potential.</p>
 <span class="explore" data-i18n="card.explore">Explore</span>
 </a>
 
-<a class="card" href="category.html?category=Resort">
+<a class="card" href="category.html?category=Resort" data-category="Resort">
 <div class="card-top"><h2 data-i18n="cat.resort.title">Resort</h2><div class="count" id="count-Resort">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.resort.text">Premium hospitality projects and destination developments.</p>
 <span class="explore" data-i18n="card.explore">Explore</span>
 </a>
 
-<a class="card" href="category.html?category=Villaggi">
+<a class="card" href="category.html?category=Villaggi" data-category="Villaggi">
 <div class="card-top"><h2 data-i18n="cat.villaggi.title">Villaggi</h2><div class="count" id="count-Villaggi">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.villaggi.text">Large-scale tourism and leisure investment opportunities.</p>
 <span class="explore" data-i18n="card.explore">Explore</span>
 </a>
 
-<a class="card" href="category.html?category=Nuove%20Edificazioni">
+<a class="card" href="category.html?category=Nuove%20Edificazioni" data-category="Nuove Edificazioni">
 <div class="card-top"><h2 data-i18n="cat.new.title">Nuove Edificazioni</h2><div class="count" id="count-Nuove-Edificazioni">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.new.text">Ground-up developments designed for long-term value creation.</p>
 <span class="explore" data-i18n="card.explore">Explore</span>
 </a>
 
-<a class="card" href="category.html?category=Commerciale">
+<a class="card" href="category.html?category=Commerciale" data-category="Commerciale">
 <div class="card-top"><h2 data-i18n="cat.commercial.title">Commerciale</h2><div class="count" id="count-Commerciale">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.commercial.text">Retail, office and commercial-use properties with income potential.</p>
 <span class="explore" data-i18n="card.explore">Explore</span>
 </a>
 
-<a class="card" href="category.html?category=Terreni">
+<a class="card" href="category.html?category=Terreni" data-category="Terreni">
 <div class="card-top"><h2 data-i18n="cat.land.title">Terreni</h2><div class="count" id="count-Terreni">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.land.text">Building and agricultural land with development or investment potential.</p>
 <span class="explore" data-i18n="card.explore">Explore</span>
 </a>
 
-<a class="card" href="category.html?category=Off%20Market">
+<a class="card" href="category.html?category=Off%20Market" data-category="Off Market">
 <div class="card-top"><h2 data-i18n="cat.off.title">Off Market</h2><div class="count" id="count-Off-Market">0</div></div>
 <div class="count-label" data-i18n="card.published">Published Opportunities</div>
 <p data-i18n="cat.off.text">Private opportunities reserved for selected investors and partners.</p>
@@ -613,6 +632,56 @@ function countId(category){
   return "count-" + category.split(" ").join("-");
 }
 
+var cardRotationTimers = [];
+
+function applyCardBackgrounds(categoryImages){
+  categories.forEach(function(cat){
+    var images = (categoryImages[cat] || []).filter(Boolean);
+    if(!images.length) return; // nessuna copertina disponibile: la scheda resta com'e'
+
+    var card = document.querySelector('.card[data-category="' + cat + '"]');
+    if(!card) return;
+
+    card.classList.add("has-photo");
+    var idx = 0;
+
+    function applyImage(){
+      card.style.backgroundImage = "url('" + images[idx] + "')";
+    }
+
+    applyImage();
+
+    if(images.length > 1){
+      var timer = setInterval(function(){
+        idx = (idx + 1) % images.length;
+        applyImage();
+      }, 6000);
+      cardRotationTimers.push(timer);
+    }
+  });
+}
+
+async function loadCategoryCoverImages(){
+  var result = await client
+    .from("opportunities")
+    .select("category,cover_image")
+    .eq("published", true);
+
+  if(result.error){
+    console.warn("Copertine categorie non caricate (non bloccante):", result.error.message);
+    return;
+  }
+
+  var byCategory = {};
+  (result.data || []).forEach(function(row){
+    if(!row.cover_image) return;
+    if(!byCategory[row.category]) byCategory[row.category] = [];
+    byCategory[row.category].push(row.cover_image);
+  });
+
+  applyCardBackgrounds(byCategory);
+}
+
 function setText(id, value){
   var el = document.getElementById(id);
   if(el){
@@ -728,6 +797,7 @@ document.addEventListener("DOMContentLoaded", function(){
   setupLanguageMenu();
   applyLanguage(detectInitialLanguage());
   loadPublishedCounts();
+  loadCategoryCoverImages();
   loadSocialLinks();
 });
 </script>
