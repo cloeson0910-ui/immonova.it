@@ -541,9 +541,6 @@ const REQUIRED_DOCUMENT_TYPES = [
   "systems_certifications"
 ];
 
-/* ---- i18n: stesso meccanismo di users.html/dashboard.html. REQUIRED_DOCUMENT_LABELS resta
-   fuori dal dizionario tradotto e viene ricostruito da T dopo che la traduzione arriva, così
-   il conteggio documenti mancanti parla nella lingua corretta. ---- */
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_new_proposal:"Nuova Proposta", nav_inquiries:"Richieste", nav_users:"Utenti", logout:"Logout",
   role_reserved:"Area Riservata", role_admin:"Area Admin", role_user_area:"Area Utente",
@@ -749,8 +746,6 @@ async function loadProfile(){
     .single();
 
   if(result.error){
-    /* Stesso fix di users.html/dashboard.html: se la colonna "language" non è stata ancora
-       migrata su Supabase, non trattare l'errore come fatale -- riprova senza quella colonna. */
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL. Interfaccia mostrata in italiano nel frattempo.");
@@ -1154,6 +1149,48 @@ async function changeCommercialStatus(id, newStatus){
   await loadOpportunities();
 }
 
+/* ---- Lezione riutilizzata da users.html: leggere l'errore vero da result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
+/* ---- Notifica automatica a tutti i collaboratori quando un'opportunità viene pubblicata
+   per la prima volta (review_status è già "approvato" per costruzione, il pulsante Pubblica
+   resta disabilitato altrimenti). Non blocca mai la pubblicazione stessa se la notifica
+   fallisce: è un effetto collaterale, non deve impedire l'azione principale. Il flag
+   collaborators_notified_at evita di rimandare la mail ad ogni sospendi/ripubblica. ---- */
+async function notifyCollaboratorsIfNeeded(item){
+  if(!item || item.collaborators_notified_at) return;
+
+  try{
+    var result = await client.functions.invoke("notify-new-opportunity", {
+      body:{
+        opportunity_id:item.id,
+        title:item.title || "",
+        category:item.category || "",
+        location:item.location || ""
+      }
+    });
+
+    if(result.error){
+      var msg = await extractEdgeFunctionErrorMessage(result.error);
+      console.warn("Notifica collaboratori non riuscita (non bloccante):", msg);
+      return;
+    }
+
+    await client.from("opportunities").update({ collaborators_notified_at:new Date().toISOString() }).eq("id", item.id);
+  }catch(e){
+    console.warn("Notifica collaboratori non riuscita (non bloccante):", e);
+  }
+}
+
 async function togglePublished(id, currentStatus, reviewStatus, commercialStatus){
   if(!isAdmin){
     setStatus(T.err_only_admin_publish, "error");
@@ -1172,10 +1209,12 @@ async function togglePublished(id, currentStatus, reviewStatus, commercialStatus
 
   setStatus(T.msg_updating_publish, "");
 
+  const willBePublished = !currentStatus;
+
   const { error } = await client
     .from("opportunities")
     .update({
-      published:!currentStatus,
+      published:willBePublished,
       updated_at:new Date().toISOString()
     })
     .eq("id", id);
@@ -1183,6 +1222,11 @@ async function togglePublished(id, currentStatus, reviewStatus, commercialStatus
   if(error){
     setStatus(error.message, "error");
     return;
+  }
+
+  if(willBePublished){
+    var item = allOpportunities.find(function(o){ return String(o.id) === String(id); });
+    await notifyCollaboratorsIfNeeded(item);
   }
 
   setStatus(T.msg_publish_updated, "success");
