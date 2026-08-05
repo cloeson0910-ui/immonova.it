@@ -879,6 +879,13 @@ button.danger{
         <input type="text" id="price">
       </div>
 
+      <div class="field">
+        <label for="ownerId" data-i18n="label_owner">Attribuita a (ai fini provvigione)</label>
+        <select id="ownerId">
+          <option value="" data-i18n="owner_unassigned">Non attribuita</option>
+        </select>
+      </div>
+
       <div class="checks">
         <label class="check">
           <input type="checkbox" id="show_price_public" checked>
@@ -2264,6 +2271,30 @@ async function loadCategories(selectedCategory){
   select.innerHTML = html;
 }
 
+async function loadCollaborators(){
+  var ownerSelect = document.getElementById("ownerId");
+  if(!ownerSelect) return;
+
+  var result = await client
+    .from("profiles")
+    .select("id,full_name,email")
+    .order("full_name", { ascending: true });
+
+  if(result.error){
+    console.warn("Collaboratori non caricati (non bloccante):", result.error.message);
+    return;
+  }
+
+  var rows = result.data || [];
+
+  rows.forEach(function(p){
+    var opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.full_name || p.email || p.id;
+    ownerSelect.appendChild(opt);
+  });
+}
+
 async function uploadImage(file, path){
   var result = await client
     .storage
@@ -2285,12 +2316,6 @@ async function uploadImage(file, path){
   return publicUrl.data.publicUrl;
 }
 
-/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). Questa pagina non
-   caricava un profilo (solo checkAuth), quindi loadUserLanguage() e' una chiamata dedicata
-   invocata dopo checkAuth() nell'IIFE finale. Il dizionario copre l'interfaccia statica visibile.
-   NOTA: come per opportunity-edit.html, i messaggi di stato/errore/conferma generati dalla
-   logica JS profonda (upload, geocoding, render IA) NON sono stati tutti convertiti in questo
-   giro: restano in italiano. Secondo passaggio dedicato disponibile se serve. */
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", logout:"Logout",
   title:"Nuova Opportunità",
@@ -2302,7 +2327,9 @@ var UI_STRINGS = {
   section_main_info:"Informazioni principali", label_title:"Titolo", label_category:"Categoria",
   opt_loading_categories:"Caricamento categorie...", label_investment_type:"Tipo Investimento",
   label_location:"Location", label_municipality:"Comune", label_province:"Provincia", label_region:"Regione",
-  label_price:"Prezzo / Valore investimento", check_show_price_public:"Pubblica prezzo sul sito pubblico",
+  label_price:"Prezzo / Valore investimento",
+  label_owner:"Attribuita a (ai fini provvigione)", owner_unassigned:"Non attribuita",
+  check_show_price_public:"Pubblica prezzo sul sito pubblico",
   section_media:"Media", label_cover:"Copertina", no_cover_text:"Nessuna copertina caricata.",
   btn_remove_cover:"Rimuovi Copertina", label_add_cover:"Aggiungi Copertina",
   label_gallery:"Gallery", no_gallery_text:"Nessuna immagine gallery caricata.",
@@ -2355,7 +2382,7 @@ var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deu
 var T = UI_STRINGS;
 var currentUserLanguage = "it";
 
-function i18nCacheKey(lang){ return "immonova_i18n_opportunity_form_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_opportunity_form_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -2437,6 +2464,7 @@ async function checkAuth(){
 
 async function loadOpportunity(){
   await loadCategories("");
+  await loadCollaborators();
 
   loadedOpportunity = null;
   currentCoverUrl = "";
@@ -2750,6 +2778,7 @@ form.addEventListener("submit", async function(e){
       ai_generated_at:aiGenerated ? new Date().toISOString() : null,
 
       user_id:currentUser ? currentUser.id : null,
+      owner_id:document.getElementById("ownerId") ? (document.getElementById("ownerId").value || null) : null,
       review_status:"da_verificare",
       featured:false,
       published:false,
