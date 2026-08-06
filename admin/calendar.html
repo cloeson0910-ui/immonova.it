@@ -121,9 +121,9 @@ line-height:1.5;
 .slot:hover{background:rgba(166,127,52,.14)}
 .slot.busy{background:rgba(143,91,40,.18);color:#8f5b28;cursor:not-allowed}
 .slot.busy:hover{background:rgba(143,91,40,.18)}
-.slot.telefonata{background:rgba(95,143,146,.20);color:#5f8f92;cursor:default}
-.slot.riunione{background:rgba(166,127,52,.20);color:#8a682c;cursor:default}
-.slot.visita_posto{background:rgba(79,127,69,.20);color:#4f7f45;cursor:default}
+.slot.telefonata{background:rgba(95,143,146,.20);color:#5f8f92;cursor:pointer}
+.slot.riunione{background:rgba(166,127,52,.20);color:#8a682c;cursor:pointer}
+.slot.visita_posto{background:rgba(79,127,69,.20);color:#4f7f45;cursor:pointer}
 .slot.telefonata:hover,.slot.riunione:hover,.slot.visita_posto:hover{opacity:.9}
 .slot-time{display:block;font-weight:600;margin-bottom:3px}
 .slot-note{display:block;font-size:9px;letter-spacing:.06em;text-transform:uppercase;opacity:.85}
@@ -271,6 +271,7 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 <div class="modal-actions">
 <button type="button" class="btn" id="confirmBookBtn" data-i18n="btn_confirm">Conferma appuntamento</button>
 <button type="button" class="btn secondary" id="cancelBookBtn" data-i18n="btn_cancel">Annulla</button>
+<button type="button" class="btn secondary" id="deleteBookBtn" data-i18n="btn_delete" style="display:none;color:#9c2f2f;border-color:rgba(156,47,47,.35)">Elimina appuntamento</button>
 </div>
 
 <div id="modalStatus" class="modal-status"></div>
@@ -289,6 +290,7 @@ const modalOverlay = document.getElementById("modalOverlay");
 const modalStatus = document.getElementById("modalStatus");
 const confirmBookBtn = document.getElementById("confirmBookBtn");
 const cancelBookBtn = document.getElementById("cancelBookBtn");
+const deleteBookBtn = document.getElementById("deleteBookBtn");
 
 const DAYS_AHEAD = 14;
 const DAY_START_HOUR = 8;
@@ -300,6 +302,7 @@ let busyBlocks = [];
 let bookedEvents = [];
 let allOpportunities = [];
 let pendingSlotStart = null;
+let editingEvent = null;
 
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). ---- */
 var UI_STRINGS = {
@@ -314,7 +317,13 @@ var UI_STRINGS = {
   label_date:"Data e ora inizio", label_duration:"Durata",
   label_opportunity:"Opportunità collegata (opzionale)", opt_none:"Nessuna",
   label_notes:"Note (opzionale)",
-  btn_confirm:"Conferma appuntamento", btn_cancel:"Annulla",
+  btn_confirm:"Conferma appuntamento", btn_cancel:"Annulla", btn_delete:"Elimina appuntamento",
+  modal_title_new:"Fissa appuntamento", modal_title_edit:"Modifica appuntamento",
+  btn_save_changes:"Salva modifiche",
+  confirm_delete_event:"Eliminare definitivamente questo appuntamento? Verrà rimosso anche dal calendario iCloud.",
+  msg_deleting:"Eliminazione in corso...", msg_deleted:"Appuntamento eliminato.",
+  msg_updating:"Aggiornamento appuntamento...", msg_updated_full:"Appuntamento aggiornato e sincronizzato con iCloud.",
+  msg_updated_no_sync:"Appuntamento aggiornato su IMMONOVA. Sincronizzazione iCloud non riuscita: ",
   msg_saving:"Salvataggio appuntamento...", msg_syncing:"Sincronizzazione con iCloud...",
   msg_saved_full:"Appuntamento fissato e sincronizzato con iCloud.",
   msg_saved_no_sync:"Appuntamento fissato su IMMONOVA. Sincronizzazione con iCloud non riuscita (comparirà comunque qui): ",
@@ -409,8 +418,9 @@ function isSlotBusy(slotStart, slotEnd){
   });
 }
 
-function bookedEventForSlot(slotStart, slotEnd){
+function bookedEventForSlot(slotStart, slotEnd, excludeId){
   return bookedEvents.find(function(ev){
+    if(excludeId && Number(ev.id) === Number(excludeId)) return false;
     var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
     return slotStart < eEnd && slotEnd > eStart;
   });
@@ -428,7 +438,7 @@ async function loadCalendarData(){
 
   var eventsResult = await client
     .from("immonova_calendar_events")
-    .select("id,event_type,title,start_at,end_at")
+    .select("id,event_type,title,start_at,end_at,notes,opportunity_id,icloud_uid,icloud_href,created_by")
     .gte("start_at", now.toISOString())
     .lte("start_at", rangeEnd.toISOString());
 
@@ -488,7 +498,12 @@ function renderCalendar(){
         note = T.occupied_label;
       }
 
-      var onclick = (!booked && !busy) ? ('onclick="openBookingModal(\'' + slotStart.toISOString() + '\')"') : "";
+      var onclick = "";
+      if(booked){
+        onclick = 'onclick="openEditModal(' + booked.id + ')"';
+      }else if(!busy){
+        onclick = 'onclick="openBookingModal(\'' + slotStart.toISOString() + '\')"';
+      }
 
       slotsHtml += '<div class="' + cls + '" ' + onclick + '>'
         + '<span class="slot-time">' + formatSlotTime(slotStart) + '</span>'
@@ -505,6 +520,7 @@ function renderCalendar(){
 }
 
 window.openBookingModal = function(slotStartIso){
+  editingEvent = null;
   pendingSlotStart = slotStartIso;
   var localValue = slotStartIso.slice(0, 16);
   document.getElementById("eventStart").value = localValue;
@@ -512,12 +528,49 @@ window.openBookingModal = function(slotStartIso){
   document.getElementById("eventDuration").value = "60";
   document.getElementById("eventOpportunity").value = "";
   document.getElementById("eventNotes").value = "";
+  document.querySelector(".modal-title").textContent = T.modal_title_new;
+  confirmBookBtn.textContent = T.btn_confirm;
+  deleteBookBtn.style.display = "none";
+  modalStatus.textContent = "";
+  modalStatus.className = "modal-status";
+  modalOverlay.classList.add("active");
+};
+
+window.openEditModal = function(eventId){
+  var ev = bookedEvents.find(function(e){ return Number(e.id) === Number(eventId); });
+  if(!ev) return;
+
+  editingEvent = ev;
+  pendingSlotStart = null;
+
+  var startDate = new Date(ev.start_at);
+  var endDate = new Date(ev.end_at);
+  var durationMin = Math.round((endDate - startDate) / 60000);
+
+  document.getElementById("eventStart").value = ev.start_at.slice(0, 16);
+  document.getElementById("eventType").value = ev.event_type;
+  var durationSelect = document.getElementById("eventDuration");
+  var hasOption = Array.from(durationSelect.options).some(function(o){ return Number(o.value) === durationMin; });
+  if(!hasOption){
+    var opt = document.createElement("option");
+    opt.value = durationMin;
+    opt.textContent = durationMin + " min";
+    durationSelect.appendChild(opt);
+  }
+  durationSelect.value = durationMin;
+  document.getElementById("eventOpportunity").value = ev.opportunity_id || "";
+  document.getElementById("eventNotes").value = ev.notes || "";
+
+  document.querySelector(".modal-title").textContent = T.modal_title_edit;
+  confirmBookBtn.textContent = T.btn_save_changes;
+  deleteBookBtn.style.display = "inline-block";
   modalStatus.textContent = "";
   modalStatus.className = "modal-status";
   modalOverlay.classList.add("active");
 };
 
 cancelBookBtn.addEventListener("click", function(){
+  editingEvent = null;
   modalOverlay.classList.remove("active");
 });
 
@@ -536,16 +589,18 @@ confirmBookBtn.addEventListener("click", async function(){
 
   var startDate = new Date(startValue);
   var endDate = new Date(startDate.getTime() + durationMin * 60000);
+  var excludeId = editingEvent ? editingEvent.id : null;
 
-  if(isSlotBusy(startDate, endDate) || bookedEventForSlot(startDate, endDate)){
+  if(isSlotBusy(startDate, endDate) || bookedEventForSlot(startDate, endDate, excludeId)){
     modalStatus.className = "modal-status error";
     modalStatus.textContent = T.msg_slot_taken;
     return;
   }
 
   confirmBookBtn.disabled = true;
+  deleteBookBtn.disabled = true;
   modalStatus.className = "modal-status";
-  modalStatus.textContent = T.msg_saving;
+  modalStatus.textContent = editingEvent ? T.msg_updating : T.msg_saving;
 
   try{
     var profileResult = await client.from("profiles").select("full_name,email").eq("id", currentUser.id).single();
@@ -557,40 +612,56 @@ confirmBookBtn.addEventListener("click", async function(){
       if(opp) title += " — " + opp.title;
     }
 
-    var insertResult = await client.from("immonova_calendar_events").insert({
-      event_type:eventType,
-      title:title,
-      start_at:startDate.toISOString(),
-      end_at:endDate.toISOString(),
-      notes:notes,
-      opportunity_id:opportunityId,
-      created_by:currentUser.id
-    }).select("id").single();
+    var eventId;
 
-    if(insertResult.error) throw insertResult.error;
-
-    var eventId = insertResult.data.id;
+    if(editingEvent){
+      eventId = editingEvent.id;
+      var updateResult = await client.from("immonova_calendar_events").update({
+        event_type:eventType,
+        title:title,
+        start_at:startDate.toISOString(),
+        end_at:endDate.toISOString(),
+        notes:notes,
+        opportunity_id:opportunityId
+      }).eq("id", eventId);
+      if(updateResult.error) throw updateResult.error;
+    }else{
+      var insertResult = await client.from("immonova_calendar_events").insert({
+        event_type:eventType,
+        title:title,
+        start_at:startDate.toISOString(),
+        end_at:endDate.toISOString(),
+        notes:notes,
+        opportunity_id:opportunityId,
+        created_by:currentUser.id
+      }).select("id").single();
+      if(insertResult.error) throw insertResult.error;
+      eventId = insertResult.data.id;
+    }
 
     modalStatus.textContent = T.msg_syncing;
 
     var syncResult = await client.functions.invoke("icloud-calendar-push", {
       body:{
+        action:editingEvent ? "update" : "create",
         event_id:eventId,
         title:title,
         event_type:eventType,
         start_at:startDate.toISOString(),
         end_at:endDate.toISOString(),
-        notes:notes
+        notes:notes,
+        icloud_href:editingEvent ? editingEvent.icloud_href : null,
+        icloud_uid:editingEvent ? editingEvent.icloud_uid : null
       }
     });
 
     if(syncResult.error || !syncResult.data || syncResult.data.success !== true){
       var syncMsg = (syncResult.data && syncResult.data.error) || (syncResult.error && syncResult.error.message) || "errore sconosciuto";
       modalStatus.className = "modal-status error";
-      modalStatus.textContent = T.msg_saved_no_sync + syncMsg;
+      modalStatus.textContent = (editingEvent ? T.msg_updated_no_sync : T.msg_saved_no_sync) + syncMsg;
     }else{
       modalStatus.className = "modal-status success";
-      modalStatus.textContent = T.msg_saved_full;
+      modalStatus.textContent = editingEvent ? T.msg_updated_full : T.msg_saved_full;
     }
 
     await loadCalendarData();
@@ -604,6 +675,47 @@ confirmBookBtn.addEventListener("click", async function(){
   }
 
   confirmBookBtn.disabled = false;
+  deleteBookBtn.disabled = false;
+});
+
+deleteBookBtn.addEventListener("click", async function(){
+  if(!editingEvent) return;
+  if(!confirm(T.confirm_delete_event)) return;
+
+  confirmBookBtn.disabled = true;
+  deleteBookBtn.disabled = true;
+  modalStatus.className = "modal-status";
+  modalStatus.textContent = T.msg_deleting;
+
+  try{
+    var delResult = await client.functions.invoke("icloud-calendar-push", {
+      body:{
+        action:"delete",
+        event_id:editingEvent.id,
+        icloud_href:editingEvent.icloud_href
+      }
+    });
+
+    if(delResult.error || !delResult.data || delResult.data.success !== true){
+      var delMsg = (delResult.data && delResult.data.error) || (delResult.error && delResult.error.message) || "errore sconosciuto";
+      throw new Error(delMsg);
+    }
+
+    modalStatus.className = "modal-status success";
+    modalStatus.textContent = T.msg_deleted;
+
+    await loadCalendarData();
+
+    setTimeout(function(){
+      modalOverlay.classList.remove("active");
+    }, 1200);
+  }catch(error){
+    modalStatus.className = "modal-status error";
+    modalStatus.textContent = (error && error.message) || "Errore durante l'eliminazione.";
+  }
+
+  confirmBookBtn.disabled = false;
+  deleteBookBtn.disabled = false;
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
