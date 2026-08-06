@@ -264,9 +264,17 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 </div>
 
 <div class="field">
+<label data-i18n="label_address">Indirizzo (opzionale, utile per Visita sul posto)</label>
+<input type="text" id="eventAddress" placeholder="Es. Via Roma 12, Bari">
+<a href="#" id="mapsLink" target="_blank" rel="noopener" style="display:none;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a67f34;margin-top:8px" data-i18n="link_open_maps">Apri in Maps</a>
+</div>
+
+<div class="field">
 <label data-i18n="label_notes">Note (opzionale)</label>
 <textarea id="eventNotes"></textarea>
 </div>
+
+<div id="createdByInfo" style="display:none;margin-bottom:16px;font-size:12px;color:#8f7643"></div>
 
 <div class="modal-actions">
 <button type="button" class="btn" id="confirmBookBtn" data-i18n="btn_confirm">Conferma appuntamento</button>
@@ -301,8 +309,23 @@ let currentUserLanguage = "it";
 let busyBlocks = [];
 let bookedEvents = [];
 let allOpportunities = [];
+let profilesById = {};
 let pendingSlotStart = null;
 let editingEvent = null;
+
+function pad2(n){ return String(n).padStart(2,"0"); }
+
+/* ---- Un campo <input type="datetime-local"> vuole l'ora LOCALE scritta cosi' com'e',
+   non un timestamp UTC. Usare .toISOString() qui era il bug: quella funzione converte
+   sempre in UTC (a Ferragosto in Italia sono 2 ore indietro), quindi cliccando le 14:00
+   il modulo si apriva precompilato con le 12:00. Questi due helper costruiscono/leggono
+   la stringa locale a mano, senza nessuna conversione di fuso. ---- */
+function toLocalInputValue(date){
+  return date.getFullYear() + "-" + pad2(date.getMonth()+1) + "-" + pad2(date.getDate()) + "T" + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
+}
+function isoToLocalInputValue(iso){
+  return toLocalInputValue(new Date(iso));
+}
 
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). ---- */
 var UI_STRINGS = {
@@ -316,6 +339,8 @@ var UI_STRINGS = {
   label_type:"Tipo appuntamento", type_telefonata:"Telefonata", type_riunione:"Riunione", type_visita:"Visita sul posto",
   label_date:"Data e ora inizio", label_duration:"Durata",
   label_opportunity:"Opportunità collegata (opzionale)", opt_none:"Nessuna",
+  label_address:"Indirizzo (opzionale, utile per Visita sul posto)", link_open_maps:"Apri in Maps",
+  created_by_prefix:"Inserito da: ", unknown_collaborator:"Collaboratore",
   label_notes:"Note (opzionale)",
   btn_confirm:"Conferma appuntamento", btn_cancel:"Annulla", btn_delete:"Elimina appuntamento",
   modal_title_new:"Fissa appuntamento", modal_title_edit:"Modifica appuntamento",
@@ -334,7 +359,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_calendar_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_calendar_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -452,7 +477,7 @@ async function loadCalendarData(){
 
   var eventsResult = await client
     .from("immonova_calendar_events")
-    .select("id,event_type,title,start_at,end_at,notes,opportunity_id,icloud_uid,icloud_href,created_by")
+    .select("id,event_type,title,start_at,end_at,notes,address,opportunity_id,icloud_uid,icloud_href,created_by")
     .gte("start_at", now.toISOString())
     .lte("start_at", rangeEnd.toISOString());
 
@@ -461,6 +486,15 @@ async function loadCalendarData(){
     .select("id,title")
     .order("created_at",{ascending:false})
     .limit(200);
+
+  var profilesResult = await client
+    .from("profiles")
+    .select("id,full_name,email");
+
+  if(profilesResult.data){
+    profilesById = {};
+    profilesResult.data.forEach(function(p){ profilesById[p.id] = p.full_name || p.email || p.id; });
+  }
 
   if(busyResult.error){
     setStatus(T.loading_error + " (busy: " + busyResult.error.message + ")", "error");
@@ -506,7 +540,7 @@ function renderCalendar(){
       var note = "";
       if(booked){
         cls += " " + escapeHTML(booked.event_type);
-        note = eventTypeLabel(booked.event_type);
+        note = booked.title || eventTypeLabel(booked.event_type);
       }else if(busy){
         cls += " busy";
         note = T.occupied_label;
@@ -516,7 +550,7 @@ function renderCalendar(){
       if(booked){
         onclick = 'onclick="openEditModal(' + booked.id + ')"';
       }else if(!busy){
-        onclick = 'onclick="openBookingModal(\'' + slotStart.toISOString() + '\')"';
+        onclick = 'onclick="openBookingModal(\'' + toLocalInputValue(slotStart) + '\')"';
       }
 
       slotsHtml += '<div class="' + cls + '" ' + onclick + '>'
@@ -533,18 +567,20 @@ function renderCalendar(){
   calendarBody.innerHTML = html || '<div class="empty">' + escapeHTML(T.loading_error) + '</div>';
 }
 
-window.openBookingModal = function(slotStartIso){
+window.openBookingModal = function(localValue){
   editingEvent = null;
-  pendingSlotStart = slotStartIso;
-  var localValue = slotStartIso.slice(0, 16);
+  pendingSlotStart = localValue;
   document.getElementById("eventStart").value = localValue;
   document.getElementById("eventType").value = "telefonata";
   document.getElementById("eventDuration").value = "60";
   document.getElementById("eventOpportunity").value = "";
+  document.getElementById("eventAddress").value = "";
   document.getElementById("eventNotes").value = "";
   document.querySelector(".modal-title").textContent = T.modal_title_new;
   confirmBookBtn.textContent = T.btn_confirm;
   deleteBookBtn.style.display = "none";
+  document.getElementById("createdByInfo").style.display = "none";
+  document.getElementById("mapsLink").style.display = "none";
   modalStatus.textContent = "";
   modalStatus.className = "modal-status";
   modalOverlay.classList.add("active");
@@ -561,7 +597,7 @@ window.openEditModal = function(eventId){
   var endDate = new Date(ev.end_at);
   var durationMin = Math.round((endDate - startDate) / 60000);
 
-  document.getElementById("eventStart").value = ev.start_at.slice(0, 16);
+  document.getElementById("eventStart").value = isoToLocalInputValue(ev.start_at);
   document.getElementById("eventType").value = ev.event_type;
   var durationSelect = document.getElementById("eventDuration");
   var hasOption = Array.from(durationSelect.options).some(function(o){ return Number(o.value) === durationMin; });
@@ -573,7 +609,21 @@ window.openEditModal = function(eventId){
   }
   durationSelect.value = durationMin;
   document.getElementById("eventOpportunity").value = ev.opportunity_id || "";
+  document.getElementById("eventAddress").value = ev.address || "";
   document.getElementById("eventNotes").value = ev.notes || "";
+
+  var createdByBox = document.getElementById("createdByInfo");
+  var creatorName = profilesById[ev.created_by] || T.unknown_collaborator;
+  createdByBox.textContent = T.created_by_prefix + creatorName;
+  createdByBox.style.display = "block";
+
+  var mapsLink = document.getElementById("mapsLink");
+  if(ev.address){
+    mapsLink.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(ev.address);
+    mapsLink.style.display = "inline-block";
+  }else{
+    mapsLink.style.display = "none";
+  }
 
   document.querySelector(".modal-title").textContent = T.modal_title_edit;
   confirmBookBtn.textContent = T.btn_save_changes;
@@ -593,6 +643,7 @@ confirmBookBtn.addEventListener("click", async function(){
   var startValue = document.getElementById("eventStart").value;
   var durationMin = Number(document.getElementById("eventDuration").value);
   var opportunityId = document.getElementById("eventOpportunity").value || null;
+  var address = document.getElementById("eventAddress").value.trim() || null;
   var notes = document.getElementById("eventNotes").value.trim() || null;
 
   if(!startValue){
@@ -636,6 +687,7 @@ confirmBookBtn.addEventListener("click", async function(){
         start_at:startDate.toISOString(),
         end_at:endDate.toISOString(),
         notes:notes,
+        address:address,
         opportunity_id:opportunityId
       }).eq("id", eventId);
       if(updateResult.error) throw updateResult.error;
@@ -646,6 +698,7 @@ confirmBookBtn.addEventListener("click", async function(){
         start_at:startDate.toISOString(),
         end_at:endDate.toISOString(),
         notes:notes,
+        address:address,
         opportunity_id:opportunityId,
         created_by:currentUser.id
       }).select("id").single();
@@ -664,6 +717,7 @@ confirmBookBtn.addEventListener("click", async function(){
         start_at:startDate.toISOString(),
         end_at:endDate.toISOString(),
         notes:notes,
+        address:address,
         icloud_href:editingEvent ? editingEvent.icloud_href : null,
         icloud_uid:editingEvent ? editingEvent.icloud_uid : null
       }
