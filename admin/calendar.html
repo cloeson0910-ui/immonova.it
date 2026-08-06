@@ -407,6 +407,20 @@ function eventTypeLabel(type){
   return map[type] || type;
 }
 
+/* ---- Lezione riutilizzata da users.html: su risposta non-2xx di una edge function,
+   supabase-js NON mette il body in result.data (resta null) e result.error.message è
+   sempre il testo fisso generico. Il messaggio vero va letto da result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
 function formatSlotTime(date){
   return date.toLocaleTimeString(currentUserLanguage==="it"?"it-IT":currentUserLanguage,{hour:"2-digit",minute:"2-digit"});
 }
@@ -656,7 +670,7 @@ confirmBookBtn.addEventListener("click", async function(){
     });
 
     if(syncResult.error || !syncResult.data || syncResult.data.success !== true){
-      var syncMsg = (syncResult.data && syncResult.data.error) || (syncResult.error && syncResult.error.message) || "errore sconosciuto";
+      var syncMsg = (syncResult.data && syncResult.data.error) || (syncResult.error ? await extractEdgeFunctionErrorMessage(syncResult.error) : "errore sconosciuto");
       modalStatus.className = "modal-status error";
       modalStatus.textContent = (editingEvent ? T.msg_updated_no_sync : T.msg_saved_no_sync) + syncMsg;
     }else{
@@ -697,7 +711,7 @@ deleteBookBtn.addEventListener("click", async function(){
     });
 
     if(delResult.error || !delResult.data || delResult.data.success !== true){
-      var delMsg = (delResult.data && delResult.data.error) || (delResult.error && delResult.error.message) || "errore sconosciuto";
+      var delMsg = (delResult.data && delResult.data.error) || (delResult.error ? await extractEdgeFunctionErrorMessage(delResult.error) : "errore sconosciuto");
       throw new Error(delMsg);
     }
 
