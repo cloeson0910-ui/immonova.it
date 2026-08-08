@@ -2203,13 +2203,13 @@ function rollToBusinessDay(date){
   return d;
 }
 
-async function createDossierReminderEvents(clientName, opportunityTitle){
+async function createDossierReminderEvents(clientName, opportunityTitle, clientPhone){
   try{
     var baseDate = new Date();
     var day1 = rollToBusinessDay(new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + 1, 9, 0, 0));
     var day15 = rollToBusinessDay(new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + 15, 9, 0, 0));
     var title = (clientName || "Cliente") + " — " + (opportunityTitle || "Opportunità");
-    var notes = "Promemoria automatico: follow-up invio dossier a " + (clientName || "cliente");
+    var notes = "Promemoria automatico: follow-up invio dossier a " + (clientName || "cliente") + (clientPhone ? (" · tel. " + clientPhone) : "");
 
     var reminders = [day1, day15];
 
@@ -2354,7 +2354,8 @@ async function sendDossierToClient(){
     }
 
     var reminderClientName=investorRequest.full_name||[investorRequest.first_name,investorRequest.last_name].filter(Boolean).join(" ")||"";
-    await createDossierReminderEvents(reminderClientName, getTitle());
+    var reminderClientPhone=investorRequest.phone||investorRequest.telefono||investorRequest.phone_number||"";
+    await createDossierReminderEvents(reminderClientName, getTitle(), reminderClientPhone);
 
     renderSendBanner();
     setStatus("Dossier inviato correttamente a "+investorRequest.email+". Torno alle Richieste tra un istante...","success");
