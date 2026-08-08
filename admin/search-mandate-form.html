@@ -161,7 +161,7 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 
   <div class="title-row">
     <div><h1 class="title" data-i18n="title">Nuovo Mandato di Ricerca</h1></div>
-    <a class="secondary-link" href="dashboard.html" data-i18n="btn_back">Torna alla Dashboard</a>
+    <a class="secondary-link" href="search-mandates.html" data-i18n="btn_back">Vedi tutti i mandati</a>
   </div>
 
   <p class="subtitle" data-i18n="subtitle">
@@ -261,7 +261,7 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
     </div>
 
     <div class="footer-actions">
-      <a class="secondary-link" href="dashboard.html" data-i18n="btn_cancel">Annulla</a>
+      <a class="secondary-link" href="search-mandates.html" data-i18n="btn_cancel">Annulla</a>
       <div class="save-panel">
         <div id="progressText" class="progress-text"></div>
         <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
@@ -280,6 +280,8 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const form = document.getElementById("mandateForm");
+const params = new URLSearchParams(window.location.search);
+const mandateId = params.get("id");
 const saveBtn = document.getElementById("saveBtn");
 const progressText = document.getElementById("progressText");
 const progressFill = document.getElementById("progressFill");
@@ -290,8 +292,8 @@ let currentUserLanguage = "it";
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_investors:"Investitori", logout:"Logout",
   kicker:"Mandato di Ricerca Cliente",
-  title:"Nuovo Mandato di Ricerca",
-  btn_back:"Torna alla Dashboard",
+  title:"Nuovo Mandato di Ricerca", title_edit:"Modifica Mandato di Ricerca",
+  btn_back:"Vedi tutti i mandati",
   subtitle:"Un cliente ti ha chiesto di cercargli un immobile con caratteristiche precise: registra qui budget, metratura, camere, bagni e le caratteristiche richieste. Al salvataggio, tutti i collaboratori riceveranno una email con questi criteri di ricerca.",
   section_client:"Cliente", label_client_name:"Nome cliente", label_client_phone:"Telefono", label_client_email:"Email (opzionale)",
   section_search:"Cosa cerca", label_category:"Categoria", opt_any_category:"Qualsiasi",
@@ -304,7 +306,8 @@ var UI_STRINGS = {
   label_features:"Caratteristiche richieste",
   feat_garden:"Giardino", feat_pool:"Piscina", feat_garage:"Garage", feat_sea_view:"Vista mare",
   section_notes:"Note", label_notes:"Note aggiuntive", ph_notes:"Altri dettagli emersi dalla chiamata...",
-  btn_cancel:"Annulla", btn_save:"Salva e Notifica Collaboratori",
+  btn_cancel:"Annulla", btn_save:"Salva e Notifica Collaboratori", btn_update:"Salva Modifiche",
+  msg_mandate_not_found:"Mandato non trovato.",
   msg_required_name:"Il nome del cliente è obbligatorio.",
   msg_saving:"Salvataggio mandato di ricerca...",
   msg_notifying:"Invio notifica ai collaboratori...",
@@ -374,6 +377,38 @@ async function loadUserLanguage(){
   await applyLanguage((result.data && result.data.language) || "it");
 }
 
+async function loadMandateForEdit(){
+  if(!mandateId) return;
+
+  document.querySelector(".title").textContent = T.title_edit;
+  document.title = "Modifica Mandato di Ricerca | IMMONOVA Admin";
+  saveBtn.textContent = T.btn_update;
+
+  var result = await client.from("immonova_search_mandates").select("*").eq("id", mandateId).single();
+  if(result.error || !result.data){
+    setProgress(T.msg_mandate_not_found, 100, "error");
+    return;
+  }
+
+  var data = result.data;
+  document.getElementById("clientName").value = data.client_name || "";
+  document.getElementById("clientPhone").value = data.client_phone || "";
+  document.getElementById("clientEmail").value = data.client_email || "";
+  document.getElementById("category").value = data.category || "";
+  document.getElementById("locationAreas").value = data.location_areas || "";
+  document.getElementById("budgetMin").value = data.budget_min ?? "";
+  document.getElementById("budgetMax").value = data.budget_max ?? "";
+  document.getElementById("sqmMin").value = data.sqm_min ?? "";
+  document.getElementById("sqmMax").value = data.sqm_max ?? "";
+  document.getElementById("bedroomsMin").value = data.bedrooms_min ?? "";
+  document.getElementById("bathroomsMin").value = data.bathrooms_min ?? "";
+  document.getElementById("wantsGarden").checked = !!data.wants_garden;
+  document.getElementById("wantsPool").checked = !!data.wants_pool;
+  document.getElementById("wantsGarage").checked = !!data.wants_garage;
+  document.getElementById("wantsSeaView").checked = !!data.wants_sea_view;
+  document.getElementById("notes").value = data.notes || "";
+}
+
 async function checkAuth(){
   const { data:{ session }, error } = await client.auth.getSession();
   if(error || !session){ window.location.href = "login.html"; return false; }
@@ -431,46 +466,59 @@ form.addEventListener("submit", async function(event){
     wants_pool: boolVal("wantsPool"),
     wants_garage: boolVal("wantsGarage"),
     wants_sea_view: boolVal("wantsSeaView"),
-    notes: val("notes") || null,
-    created_by: currentUser.id
+    notes: val("notes") || null
   };
 
+  if(!mandateId){
+    payload.created_by = currentUser.id;
+  }
+
   try{
-    var insertResult = await client.from("immonova_search_mandates").insert(payload).select("id").single();
-    if(insertResult.error) throw insertResult.error;
+    var savedId = mandateId;
 
-    var mandateId = insertResult.data.id;
+    if(mandateId){
+      var updateResult = await client.from("immonova_search_mandates").update(payload).eq("id", mandateId);
+      if(updateResult.error) throw updateResult.error;
 
-    setProgress(T.msg_notifying, 70, "");
-
-    var notifyResult = await client.functions.invoke("notify-new-search-mandate", {
-      body:{
-        mandate_id: mandateId,
-        client_name: payload.client_name,
-        category: payload.category,
-        location_areas: payload.location_areas,
-        budget_min: payload.budget_min,
-        budget_max: payload.budget_max,
-        sqm_min: payload.sqm_min,
-        sqm_max: payload.sqm_max,
-        bedrooms_min: payload.bedrooms_min,
-        bathrooms_min: payload.bathrooms_min,
-        wants_garden: payload.wants_garden,
-        wants_pool: payload.wants_pool,
-        wants_garage: payload.wants_garage,
-        wants_sea_view: payload.wants_sea_view,
-        notes: payload.notes
-      }
-    });
-
-    if(notifyResult.error){
-      var msg = await extractEdgeFunctionErrorMessage(notifyResult.error);
-      setProgress(T.msg_saved_no_notify + msg, 100, "error");
-    }else{
       setProgress(T.msg_saved_success, 100, "success");
-    }
+      setTimeout(function(){ window.location.href = "search-mandates.html"; }, 1000);
+    }else{
+      var insertResult = await client.from("immonova_search_mandates").insert(payload).select("id").single();
+      if(insertResult.error) throw insertResult.error;
 
-    setTimeout(function(){ window.location.href = "dashboard.html"; }, 1400);
+      savedId = insertResult.data.id;
+
+      setProgress(T.msg_notifying, 70, "");
+
+      var notifyResult = await client.functions.invoke("notify-new-search-mandate", {
+        body:{
+          mandate_id: savedId,
+          client_name: payload.client_name,
+          category: payload.category,
+          location_areas: payload.location_areas,
+          budget_min: payload.budget_min,
+          budget_max: payload.budget_max,
+          sqm_min: payload.sqm_min,
+          sqm_max: payload.sqm_max,
+          bedrooms_min: payload.bedrooms_min,
+          bathrooms_min: payload.bathrooms_min,
+          wants_garden: payload.wants_garden,
+          wants_pool: payload.wants_pool,
+          wants_garage: payload.wants_garage,
+          wants_sea_view: payload.wants_sea_view,
+          notes: payload.notes
+        }
+      });
+
+      if(notifyResult.error){
+        var msg = await extractEdgeFunctionErrorMessage(notifyResult.error);
+        setProgress(T.msg_saved_no_notify + msg, 100, "error");
+      }else{
+        setProgress(T.msg_saved_success, 100, "success");
+      }
+
+      setTimeout(function(){ window.location.href = "search-mandates.html"; }, 1400);
+    }
   }catch(error){
     console.error(error);
     setProgress(error.message || T.msg_save_error, 100, "error");
@@ -486,6 +534,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 (async function init(){
   if(await checkAuth()){
     await loadUserLanguage();
+    await loadMandateForEdit();
   }
 })();
 </script>
