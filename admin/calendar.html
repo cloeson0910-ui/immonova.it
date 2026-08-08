@@ -752,12 +752,10 @@ function renderWeekView(){
 
       if(busy){
         cls += " busy";
-      }else if(!blockingEvents.length){
-        if(!isPast){
-          onclick = 'onclick="openBookingModal(\'' + toLocalInputValue(slotStart) + '\')"';
-        }else if(!phoneEvents.length){
-          cls += " past";
-        }
+      }else if(isPast){
+        if(!phoneEvents.length) cls += " past";
+      }else{
+        onclick = 'onclick="handleWeekCellClick(event,\'' + toLocalInputValue(slotStart) + '\')"';
       }
 
       html += '<div class="' + cls + '" ' + onclick + '>' + barsHtml + '</div>';
@@ -774,6 +772,24 @@ window.goToDayWeek = function(dateStr){
   currentView = "week";
   updateViewButtons();
   loadCalendarData();
+};
+
+/* ---- Il clic su una cella della vista settimana ora calcola il minuto esatto in base a DOVE
+   dentro la cella si clicca (la cella rappresenta un'ora intera), arrotondato ai 15 minuti più
+   vicini — prima l'intera ora veniva bloccata alla prenotazione se anche solo una parte era
+   occupata, anche se il resto era visibilmente libero. Il controllo vero di sovrapposizione
+   resta comunque quello già presente al salvataggio (ignora le telefonate esistenti). ---- */
+window.handleWeekCellClick = function(e, slotStartLocal){
+  var cellEl = e.currentTarget;
+  var rect = cellEl.getBoundingClientRect();
+  var relY = e.clientY - rect.top;
+  var fraction = Math.max(0, Math.min(1, rect.height ? relY / rect.height : 0));
+  var minutesWithinHour = Math.floor((fraction * 60) / 15) * 15;
+
+  var base = new Date(slotStartLocal);
+  base.setMinutes(base.getMinutes() + minutesWithinHour);
+
+  openBookingModal(toLocalInputValue(base));
 };
 
 window.openBookingModal = function(localValue){
