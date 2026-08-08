@@ -2374,6 +2374,7 @@ var UI_STRINGS = {
   label_tourism_summary:"Analisi turistica", label_market_summary:"Analisi mercato immobiliare",
   label_short_rental_summary:"Analisi affitto breve", label_investment_score:"Investment Score preliminare",
   check_featured:"In evidenza", check_published:"Pubblicata",
+  msg_admin_only_render:"Solo un admin può generare i render IA.",
   btn_save:"Salva e invia proposta", btn_cancel:"Annulla",
   save_progress_title:"Salvataggio opportunità"
 };
@@ -2382,7 +2383,7 @@ var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deu
 var T = UI_STRINGS;
 var currentUserLanguage = "it";
 
-function i18nCacheKey(lang){ return "immonova_i18n_opportunity_form_" + lang + "_v2"; }
+function i18nCacheKey(lang){ return "immonova_i18n_opportunity_form_" + lang + "_v3"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -2434,19 +2435,49 @@ async function applyLanguage(lang){
   renderTranslatedStaticText();
 }
 
+var isAdmin = false;
+
 async function loadUserLanguage(){
-  var result = await client.from("profiles").select("id,language").eq("id", currentUser.id).single();
+  var result = await client.from("profiles").select("id,language,role").eq("id", currentUser.id).single();
 
   if(result.error){
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
+      result = await client.from("profiles").select("id,role").eq("id", currentUser.id).single();
     }
+  }
+
+  isAdmin = !!(result.data && result.data.role === "admin");
+  applyAdminRestrictions();
+
+  if(result.error){
     await applyLanguage("it");
     return;
   }
 
   await applyLanguage((result.data && result.data.language) || "it");
+}
+
+/* ---- Stessa restrizione di opportunity-edit.html: le opportunità vanno verificate da un
+   admin prima di essere pubblicate. Su questo form Pubblicata/In evidenza sono comunque già
+   forzate a false nel payload di creazione indipendentemente da chi crea (vedi più sotto),
+   ma disabilitiamo anche i checkbox per un utente normale cosi' l'interfaccia non lascia
+   intendere che possano avere effetto. Il render IA invece va bloccato davvero, non solo
+   nell'aspetto: consuma credito/costo, quindi il controllo isAdmin è anche dentro l'handler. ---- */
+function applyAdminRestrictions(){
+  if(isAdmin) return;
+
+  var publishedCheckbox = document.getElementById("published");
+  var featuredCheckbox = document.getElementById("featured");
+  var renderBtn = document.getElementById("generateRenderBtn");
+
+  if(publishedCheckbox) publishedCheckbox.disabled = true;
+  if(featuredCheckbox) featuredCheckbox.disabled = true;
+  if(renderBtn){
+    renderBtn.disabled = true;
+    renderBtn.title = T.msg_admin_only_render || "Solo un admin può generare i render IA.";
+  }
 }
 
 
@@ -2528,6 +2559,10 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
   var btn = document.getElementById("generateRenderBtn");
 
   try{
+    if(!isAdmin){
+      throw new Error(T.msg_admin_only_render || "Solo un admin può generare i render IA.");
+    }
+
     if(!isRenovationRequired()){
       throw new Error("Immobile non marcato come da ristrutturare.");
     }

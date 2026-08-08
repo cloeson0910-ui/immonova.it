@@ -2733,6 +2733,7 @@ var UI_STRINGS = {
   crm_stat_compatible:"Compatibili", crm_stat_selected:"Selezionati", crm_stat_email:"Email Opt-in", crm_stat_whatsapp:"WhatsApp Opt-in",
   crm_loading:"Caricamento analisi investitori...",
   check_featured:"In evidenza", check_published:"Pubblicata",
+  msg_admin_only_render:"Solo un admin può generare i render IA.",
   label_owner:"Attribuita a (ai fini provvigione)", owner_unassigned:"Non attribuita",
   btn_save:"Salva Modifiche", btn_cancel:"Annulla", btn_open_dossier:"Apri Dossier IA", btn_delete:"Elimina",
   save_progress_title:"Salvataggio opportunità"
@@ -2742,7 +2743,7 @@ var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deu
 var T = UI_STRINGS;
 var currentUserLanguage = "it";
 
-function i18nCacheKey(lang){ return "immonova_i18n_opportunity_edit_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_opportunity_edit_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -2794,19 +2795,50 @@ async function applyLanguage(lang){
   renderTranslatedStaticText();
 }
 
+var isAdmin = false;
+var loadedFeatured = false;
+var loadedPublished = false;
+
 async function loadUserLanguage(){
-  var result = await client.from("profiles").select("id,language").eq("id", currentUser.id).single();
+  var result = await client.from("profiles").select("id,language,role").eq("id", currentUser.id).single();
 
   if(result.error){
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
+      result = await client.from("profiles").select("id,role").eq("id", currentUser.id).single();
     }
+  }
+
+  isAdmin = !!(result.data && result.data.role === "admin");
+  applyAdminRestrictions();
+
+  if(result.error){
     await applyLanguage("it");
     return;
   }
 
   await applyLanguage((result.data && result.data.language) || "it");
+}
+
+/* ---- Le opportunità vanno verificate da un admin prima di essere pubblicate: un utente
+   normale non deve poter pubblicare/mettere in evidenza da solo, né generare render IA
+   (consuma credito/costo). Il controllo lato client evita errori in buona fede, ma la vera
+   sicurezza sta nel bloccare comunque il salvataggio di questi campi lato JS quando
+   !isAdmin (vedi collectPayload), visto che un controllo solo visivo è aggirabile. ---- */
+function applyAdminRestrictions(){
+  if(isAdmin) return;
+
+  var publishedCheckbox = document.getElementById("published");
+  var featuredCheckbox = document.getElementById("featured");
+  var renderBtn = document.getElementById("generateRenderBtn");
+
+  if(publishedCheckbox) publishedCheckbox.disabled = true;
+  if(featuredCheckbox) featuredCheckbox.disabled = true;
+  if(renderBtn){
+    renderBtn.disabled = true;
+    renderBtn.title = T.msg_admin_only_render || "Solo un admin può generare i render IA.";
+  }
 }
 
 
@@ -2917,6 +2949,8 @@ async function loadOpportunity(){
 
   document.getElementById("featured").checked = data.featured === true;
   document.getElementById("published").checked = data.published === true;
+  loadedFeatured = data.featured === true;
+  loadedPublished = data.published === true;
   document.getElementById("show_price_public").checked = data.show_price_public !== false;
   document.getElementById("ownerId").value = data.owner_id || "";
 
@@ -2983,6 +3017,10 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
   var btn = document.getElementById("generateRenderBtn");
 
   try{
+    if(!isAdmin){
+      throw new Error(T.msg_admin_only_render || "Solo un admin può generare i render IA.");
+    }
+
     if(!isRenovationRequired()){
       throw new Error("Immobile non marcato come da ristrutturare.");
     }
@@ -3785,8 +3823,8 @@ form.addEventListener("submit", async function(e){
       ai_generated_description:aiGenerated,
       ai_generated_at:aiGenerated ? new Date().toISOString() : null,
 
-      featured:document.getElementById("featured").checked,
-      published:document.getElementById("published").checked,
+      featured:isAdmin ? document.getElementById("featured").checked : loadedFeatured,
+      published:isAdmin ? document.getElementById("published").checked : loadedPublished,
       show_price_public:document.getElementById("show_price_public").checked,
       owner_id:document.getElementById("ownerId").value || null,
       updated_at:new Date().toISOString()
