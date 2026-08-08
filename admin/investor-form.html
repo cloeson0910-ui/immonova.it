@@ -488,11 +488,6 @@ let currentUser = null;
 let currentProfile = null;
 let currentUserLanguage = "it";
 
-/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). loadProfile() qui
-   caricava gia' il profilo per il ruolo; estesa per includere anche "language" invece di
-   aggiungere una chiamata separata. pageTitle e saveBtn vengono aggiornati sia da applyLanguage
-   (stato "nuovo") sia da loadInvestor (stato "modifica") -- quest'ultima chiamata dopo, quindi
-   usa sempre T corrente. ---- */
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi", nav_investors:"Investitori",
   nav_users:"Utenti", logout:"Logout",
@@ -615,6 +610,46 @@ function splitValues(value){
     .filter(Boolean);
 }
 
+/* ---- Lezione riutilizzata da users.html: leggere l'errore vero da result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
+/* ---- Notifica automatica a tutti i collaboratori quando viene registrato un NUOVO
+   investitore (non su modifica di uno esistente): manda i criteri di ricerca cosi' chiunque
+   puo' mettersi a cercare l'immobile giusto. Non blocca mai il salvataggio se la notifica
+   fallisce: e' un effetto collaterale, non un requisito per completare l'operazione. ---- */
+async function notifyNewInvestor(id){
+  try{
+    var result = await client.functions.invoke("notify-new-investor", {
+      body:{
+        investor_id:id,
+        first_name:val("first_name"),
+        last_name:val("last_name"),
+        budget_min:numVal("budget_min"),
+        budget_max:numVal("budget_max"),
+        areas:val("areas"),
+        categories:collectCategories(),
+        notes:val("notes")
+      }
+    });
+
+    if(result.error){
+      var msg = await extractEdgeFunctionErrorMessage(result.error);
+      console.warn("Notifica nuovo investitore non riuscita (non bloccante):", msg);
+    }
+  }catch(e){
+    console.warn("Notifica nuovo investitore non riuscita (non bloccante):", e);
+  }
+}
+
 async function checkAuth(){
   const { data:{ session }, error } = await client.auth.getSession();
 
@@ -635,8 +670,6 @@ async function loadProfile(){
     .single();
 
   if(result.error){
-    /* Stesso fix delle altre pagine admin: se la colonna "language" non e' stata ancora
-       migrata su Supabase, non trattare l'errore come fatale -- riprova senza quella colonna. */
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
@@ -751,6 +784,7 @@ async function saveInvestor(event){
   }
 
   let savedId = investorId;
+  const isNewInvestor = !investorId;
 
   setProgress(T.msg_saving_registry, 35, "");
 
@@ -775,6 +809,10 @@ async function saveInvestor(event){
 
   setProgress(T.msg_updating_relations, 65, "");
   await saveRelations(savedId);
+
+  if(isNewInvestor){
+    await notifyNewInvestor(savedId);
+  }
 
   setProgress(T.msg_saved_success, 100, "success");
 
