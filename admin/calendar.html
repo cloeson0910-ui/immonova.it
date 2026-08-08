@@ -116,6 +116,7 @@ text-transform:uppercase;
 .week-cell.riunione{background:rgba(166,127,52,.22);color:#8a682c;cursor:pointer}
 .week-cell.visita_posto{background:rgba(79,127,69,.22);color:#4f7f45;cursor:pointer}
 .week-cell-note{font-size:8px;line-height:1.25;letter-spacing:.02em;overflow:hidden}
+.week-cell-note.phone-chip{cursor:pointer;text-decoration:underline;margin-bottom:2px}
 
 .status{margin-bottom:22px;min-height:20px;font-size:13px}
 .success{color:#4f7f45}
@@ -299,13 +300,15 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 </div>
 
 <div class="field">
-<label data-i18n="label_duration">Durata</label>
-<select id="eventDuration">
-<option value="30">30 min</option>
-<option value="60" selected>1 ora</option>
-<option value="90">1 ora e 30</option>
-<option value="120">2 ore</option>
-</select>
+<label data-i18n="label_duration">Durata (minuti)</label>
+<input type="number" id="eventDuration" min="15" step="15" value="30">
+</div>
+
+<div class="field">
+<label class="check-inline" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+<input type="checkbox" id="eventAllDay" style="width:auto">
+<span data-i18n="label_all_day">Blocca tutta la giornata</span>
+</label>
 </div>
 
 <div class="field">
@@ -398,6 +401,7 @@ var UI_STRINGS = {
   label_type:"Tipo appuntamento", type_telefonata:"Telefonata", type_riunione:"Riunione", type_visita:"Visita sul posto",
   label_date:"Data e ora inizio", label_duration:"Durata",
   label_opportunity:"Opportunità collegata (opzionale)", opt_none:"Nessuna",
+  label_all_day:"Blocca tutta la giornata",
   label_address:"Indirizzo (opzionale, utile per Visita sul posto)", link_open_maps:"Apri in Maps",
   created_by_prefix:"Inserito da: ", unknown_collaborator:"Collaboratore",
   label_notes:"Note (opzionale)",
@@ -418,7 +422,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_calendar_" + lang + "_v5"; }
+function i18nCacheKey(lang){ return "immonova_i18n_calendar_" + lang + "_v6"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -704,27 +708,40 @@ function renderWeekView(){
       var slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, 0, 0);
       var slotEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h + 1, 0, 0);
 
-      var booked = bookedEventForSlot(slotStart, slotEnd);
-      var busy = !booked && isSlotBusy(slotStart, slotEnd);
+      var overlapping = bookedEvents.filter(function(ev){
+        var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+        return slotStart < eEnd && slotEnd > eStart;
+      });
+      var blocking = overlapping.find(function(ev){ return ev.event_type !== "telefonata"; });
+      var phoneCalls = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
+      var busy = !blocking && isSlotBusy(slotStart, slotEnd);
       var isPast = slotEnd <= now;
 
       var cls = "week-cell";
-      var note = "";
+      var noteHtml = "";
       var onclick = "";
 
-      if(booked){
-        cls += " " + escapeHTML(booked.event_type);
-        note = booked.title || eventTypeLabel(booked.event_type);
-        onclick = 'onclick="openEditModal(' + booked.id + ')"';
+      if(blocking){
+        cls += " " + escapeHTML(blocking.event_type);
+        noteHtml = '<div class="week-cell-note">' + escapeHTML(blocking.title || eventTypeLabel(blocking.event_type)) + '</div>';
+        onclick = 'onclick="openEditModal(' + blocking.id + ')"';
       }else if(busy){
         cls += " busy";
-      }else if(isPast){
-        cls += " past";
       }else{
-        onclick = 'onclick="openBookingModal(\'' + toLocalInputValue(slotStart) + '\')"';
+        if(phoneCalls.length){
+          cls += " telefonata";
+          noteHtml = phoneCalls.map(function(ev){
+            return '<div class="week-cell-note phone-chip" onclick="event.stopPropagation();openEditModal(' + ev.id + ')">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div>';
+          }).join("");
+        }
+        if(!isPast){
+          onclick = 'onclick="openBookingModal(\'' + toLocalInputValue(slotStart) + '\')"';
+        }else if(!phoneCalls.length){
+          cls += " past";
+        }
       }
 
-      html += '<div class="' + cls + '" ' + onclick + '>' + (note ? '<div class="week-cell-note">' + escapeHTML(note) + '</div>' : '') + '</div>';
+      html += '<div class="' + cls + '" ' + onclick + '>' + noteHtml + '</div>';
     }
   }
 
@@ -745,7 +762,9 @@ window.openBookingModal = function(localValue){
   pendingSlotStart = localValue;
   document.getElementById("eventStart").value = localValue;
   document.getElementById("eventType").value = "telefonata";
-  document.getElementById("eventDuration").value = "60";
+  document.getElementById("eventDuration").value = "30";
+  document.getElementById("eventDuration").disabled = false;
+  document.getElementById("eventAllDay").checked = false;
   document.getElementById("eventOpportunity").value = "";
   document.getElementById("eventAddress").value = "";
   document.getElementById("eventNotes").value = "";
@@ -772,15 +791,9 @@ window.openEditModal = function(eventId){
 
   document.getElementById("eventStart").value = isoToLocalInputValue(ev.start_at);
   document.getElementById("eventType").value = ev.event_type;
-  var durationSelect = document.getElementById("eventDuration");
-  var hasOption = Array.from(durationSelect.options).some(function(o){ return Number(o.value) === durationMin; });
-  if(!hasOption){
-    var opt = document.createElement("option");
-    opt.value = durationMin;
-    opt.textContent = durationMin + " min";
-    durationSelect.appendChild(opt);
-  }
-  durationSelect.value = durationMin;
+  document.getElementById("eventDuration").value = durationMin;
+  document.getElementById("eventDuration").disabled = false;
+  document.getElementById("eventAllDay").checked = false;
   document.getElementById("eventOpportunity").value = ev.opportunity_id || "";
   document.getElementById("eventAddress").value = ev.address || "";
   document.getElementById("eventNotes").value = ev.notes || "";
@@ -806,6 +819,10 @@ window.openEditModal = function(eventId){
   modalOverlay.classList.add("active");
 };
 
+document.getElementById("eventAllDay").addEventListener("change", function(){
+  document.getElementById("eventDuration").disabled = this.checked;
+});
+
 cancelBookBtn.addEventListener("click", function(){
   editingEvent = null;
   modalOverlay.classList.remove("active");
@@ -814,7 +831,8 @@ cancelBookBtn.addEventListener("click", function(){
 confirmBookBtn.addEventListener("click", async function(){
   var eventType = document.getElementById("eventType").value;
   var startValue = document.getElementById("eventStart").value;
-  var durationMin = Number(document.getElementById("eventDuration").value);
+  var isAllDay = document.getElementById("eventAllDay").checked;
+  var durationMin = Number(document.getElementById("eventDuration").value) || 15;
   var opportunityId = document.getElementById("eventOpportunity").value || null;
   var address = document.getElementById("eventAddress").value.trim() || null;
   var notes = document.getElementById("eventNotes").value.trim() || null;
@@ -825,11 +843,29 @@ confirmBookBtn.addEventListener("click", async function(){
     return;
   }
 
-  var startDate = new Date(startValue);
-  var endDate = new Date(startDate.getTime() + durationMin * 60000);
+  var startDate, endDate;
+
+  if(isAllDay){
+    var refDate = new Date(startValue);
+    startDate = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate(), DAY_START_HOUR, 0, 0);
+    endDate = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate(), DAY_END_HOUR, 0, 0);
+  }else{
+    startDate = new Date(startValue);
+    endDate = new Date(startDate.getTime() + durationMin * 60000);
+  }
+
   var excludeId = editingEvent ? editingEvent.id : null;
 
-  if(isSlotBusy(startDate, endDate) || bookedEventForSlot(startDate, endDate, excludeId)){
+  // Le telefonate esistenti non bloccano mai lo slot: solo un evento occupato NON telefonata,
+  // o un blocco "occupato" letto da iCloud, impediscono di prenotare sopra.
+  var hasConflict = isSlotBusy(startDate, endDate) || bookedEvents.some(function(ev){
+    if(excludeId && Number(ev.id) === Number(excludeId)) return false;
+    if(ev.event_type === "telefonata") return false;
+    var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+    return startDate < eEnd && endDate > eStart;
+  });
+
+  if(hasConflict){
     modalStatus.className = "modal-status error";
     modalStatus.textContent = T.msg_slot_taken;
     return;

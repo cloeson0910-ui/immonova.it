@@ -566,6 +566,14 @@ var UI_STRINGS = {
   msg_updating_review:"Aggiornamento stato revisione...", msg_review_updated:"Stato revisione aggiornato correttamente.",
   msg_updating_commercial:"Aggiornamento stato commerciale...", msg_commercial_updated:"Stato commerciale aggiornato correttamente.",
   confirm_sold:"Confermi che questa opportunità è venduta? Verrà sospesa dalle opportunità pubbliche e comparirà nelle Success Stories.",
+  confirm_status_change_prefix:"Confermi il cambio di stato per ",
+  confirm_status_change_review_suffix:" — nuovo stato revisione: ",
+  confirm_status_change_commercial_suffix:" — nuovo stato commerciale: ",
+  confirm_status_change_publish_suffix:" — azione: ",
+  confirm_sold_suffix:"? Verrà sospesa dalle opportunità pubbliche e comparirà nelle Success Stories.",
+  status_publish_action:"Pubblica", status_suspend_action:"Sospendi",
+  notify_review_prefix:"Nuovo stato revisione: ", notify_commercial_prefix:"Nuovo stato commerciale: ",
+  notify_published_true:"Opportunità pubblicata.", notify_published_false:"Opportunità sospesa (non più pubblica).",
   msg_updating_publish:"Aggiornamento pubblicazione...", msg_publish_updated:"Pubblicazione aggiornata correttamente.",
   err_only_admin_publish:"Solo un admin può pubblicare o sospendere una proposta.",
   err_only_approved:"Puoi pubblicare solo una proposta approvata.",
@@ -1058,6 +1066,10 @@ async function changeReviewStatus(id, newStatus){
     return;
   }
 
+  var title = findOpportunityTitle(id);
+  var confirmed = confirm(T.confirm_status_change_prefix + "\"" + title + "\"" + T.confirm_status_change_review_suffix + statusLabel(newStatus) + "?");
+  if(!confirmed) return;
+
   setStatus(T.msg_updating_review, "");
 
   const updateData = {
@@ -1080,6 +1092,8 @@ async function changeReviewStatus(id, newStatus){
     return;
   }
 
+  await notifyStatusChange(id, T.notify_review_prefix + statusLabel(newStatus));
+
   setStatus(T.msg_review_updated, "success");
   await loadOpportunities();
 }
@@ -1089,11 +1103,12 @@ async function changeCommercialStatus(id, newStatus){
     return;
   }
 
-  const confirmSold = newStatus === "sold"
-    ? confirm(T.confirm_sold)
-    : true;
+  var title = findOpportunityTitle(id);
+  var confirmMessage = newStatus === "sold"
+    ? T.confirm_status_change_prefix + "\"" + title + "\"" + T.confirm_sold_suffix
+    : T.confirm_status_change_prefix + "\"" + title + "\"" + T.confirm_status_change_commercial_suffix + commercialStatusLabel(newStatus) + "?";
 
-  if(!confirmSold){
+  if(!confirm(confirmMessage)){
     return;
   }
 
@@ -1145,11 +1160,37 @@ async function changeCommercialStatus(id, newStatus){
     });
   }
 
+  await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
+
   setStatus(T.msg_commercial_updated, "success");
   await loadOpportunities();
 }
 
 /* ---- Lezione riutilizzata da users.html: leggere l'errore vero da result.error.context. ---- */
+function findOpportunityTitle(id){
+  var item = allOpportunities.find(function(o){ return String(o.id) === String(id); });
+  return (item && item.title) || ("Opportunità #" + id);
+}
+
+async function notifyStatusChange(id, changeDescription){
+  try{
+    var result = await client.functions.invoke("notify-opportunity-status-change", {
+      body:{
+        opportunity_id:id,
+        title:findOpportunityTitle(id),
+        change_description:changeDescription
+      }
+    });
+
+    if(result.error){
+      var msg = await extractEdgeFunctionErrorMessage(result.error);
+      console.warn("Notifica cambio stato non riuscita (non bloccante):", msg);
+    }
+  }catch(e){
+    console.warn("Notifica cambio stato non riuscita (non bloccante):", e);
+  }
+}
+
 async function extractEdgeFunctionErrorMessage(error){
   try{
     if(error && error.context && typeof error.context.text==="function"){
@@ -1207,9 +1248,15 @@ async function togglePublished(id, currentStatus, reviewStatus, commercialStatus
     return;
   }
 
-  setStatus(T.msg_updating_publish, "");
+  var title = findOpportunityTitle(id);
+  var willBePublished = !currentStatus;
+  var confirmMessage = T.confirm_status_change_prefix + "\"" + title + "\"" + T.confirm_status_change_publish_suffix + (willBePublished ? T.status_publish_action : T.status_suspend_action) + "?";
 
-  const willBePublished = !currentStatus;
+  if(!confirm(confirmMessage)){
+    return;
+  }
+
+  setStatus(T.msg_updating_publish, "");
 
   const { error } = await client
     .from("opportunities")
@@ -1228,6 +1275,8 @@ async function togglePublished(id, currentStatus, reviewStatus, commercialStatus
     var item = allOpportunities.find(function(o){ return String(o.id) === String(id); });
     await notifyCollaboratorsIfNeeded(item);
   }
+
+  await notifyStatusChange(id, willBePublished ? T.notify_published_true : T.notify_published_false);
 
   setStatus(T.msg_publish_updated, "success");
   await loadOpportunities();

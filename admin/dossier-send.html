@@ -2184,6 +2184,78 @@ function renderSendBanner(){
 /* ---- Lezione riutilizzata da users.html: su errore non-2xx di una edge function supabase-js
    NON mette il corpo JSON in result.data — resta null — e result.error.message e' sempre il
    testo fisso generico. Il messaggio vero e' in result.error.context (Response grezzo). ---- */
+/* ---- Promemoria automatici sull'invio dossier: due appuntamenti tipo "telefonata" vengono
+   creati da soli, il giorno dopo l'invio alle 9:00 e 15 giorni dopo alle 9:00, con nome
+   cliente e opportunità nel titolo. Passano dallo stesso circuito degli appuntamenti fissati
+   a mano da calendar.html (stessa tabella, stessa edge function icloud-calendar-push), quindi
+   compaiono anche sul calendario iCloud di Claudio automaticamente. Le telefonate non
+   bloccano mai lo slot per altri eventi (regola applicata in calendar.html), quindi crearne
+   due non rischia di "occupare" per errore orari che servono per altro. Se la creazione
+   fallisce non blocca mai la conferma di invio dossier: il dossier è comunque partito, i
+   promemoria sono un aiuto in più, non un requisito. ---- */
+/* ---- Se il giorno calcolato (invio+1 o invio+15) cade di sabato o domenica, si sposta al
+   lunedì successivo: nessuna telefonata di lavoro va agendata nel weekend. ---- */
+function rollToBusinessDay(date){
+  var d = new Date(date);
+  var day = d.getDay(); // 0 = domenica, 6 = sabato
+  if(day === 6) d.setDate(d.getDate() + 2);
+  else if(day === 0) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+async function createDossierReminderEvents(clientName, opportunityTitle){
+  try{
+    var baseDate = new Date();
+    var day1 = rollToBusinessDay(new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + 1, 9, 0, 0));
+    var day15 = rollToBusinessDay(new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + 15, 9, 0, 0));
+    var title = (clientName || "Cliente") + " — " + (opportunityTitle || "Opportunità");
+    var notes = "Promemoria automatico: follow-up invio dossier a " + (clientName || "cliente");
+
+    var reminders = [day1, day15];
+
+    for(var i = 0; i < reminders.length; i++){
+      var start = reminders[i];
+      var end = new Date(start.getTime() + 15 * 60000);
+
+      var insertResult = await client.from("immonova_calendar_events").insert({
+        event_type: "telefonata",
+        title: title,
+        start_at: start.toISOString(),
+        end_at: end.toISOString(),
+        notes: notes,
+        opportunity_id: opportunity ? opportunity.id : null,
+        created_by: currentUser ? currentUser.id : null
+      }).select("id").single();
+
+      if(insertResult.error){
+        console.warn("Promemoria dossier non creato (non bloccante):", insertResult.error.message);
+        continue;
+      }
+
+      var eventId = insertResult.data.id;
+
+      var syncResult = await client.functions.invoke("icloud-calendar-push", {
+        body:{
+          action:"create",
+          event_id:eventId,
+          title:title,
+          event_type:"telefonata",
+          start_at:start.toISOString(),
+          end_at:end.toISOString(),
+          notes:notes
+        }
+      });
+
+      if(syncResult.error){
+        var msg = await extractEdgeFunctionErrorMessage(syncResult.error);
+        console.warn("Promemoria dossier creato su IMMONOVA ma non sincronizzato con iCloud (non bloccante):", msg);
+      }
+    }
+  }catch(e){
+    console.warn("Creazione promemoria dossier non riuscita (non bloccante):", e);
+  }
+}
+
 async function extractEdgeFunctionErrorMessage(error){
   try{
     if(error && error.context && typeof error.context.text==="function"){
@@ -2280,6 +2352,10 @@ async function sendDossierToClient(){
       investorRequest.dossier_pdf_url=pdfUrl;
       investorRequest.status="evasa";
     }
+
+    var reminderClientName=investorRequest.full_name||[investorRequest.first_name,investorRequest.last_name].filter(Boolean).join(" ")||"";
+    await createDossierReminderEvents(reminderClientName, getTitle());
+
     renderSendBanner();
     setStatus("Dossier inviato correttamente a "+investorRequest.email+". Torno alle Richieste tra un istante...","success");
     setTimeout(function(){ window.location.href="inquiries.html"; }, 2200);
