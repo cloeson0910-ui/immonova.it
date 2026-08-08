@@ -108,15 +108,17 @@ text-transform:uppercase;
 .week-day-head{padding:10px 4px;text-align:center;background:rgba(255,255,255,.35);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#a67f34}
 .week-day-head .wk-num{display:block;font-size:16px;font-weight:600;margin-top:3px;text-transform:none}
 .week-hour-label{padding:8px 6px;font-size:10px;color:#8f7643;text-align:right;background:rgba(255,255,255,.24)}
-.week-cell{min-height:42px;background:rgba(255,255,255,.32);cursor:pointer;padding:3px}
+.week-cell{position:relative;height:52px;background:rgba(255,255,255,.32);cursor:pointer;padding:0;overflow:hidden}
 .week-cell:hover{background:rgba(166,127,52,.14)}
 .week-cell.busy{background:rgba(143,91,40,.18);cursor:not-allowed}
 .week-cell.past{background:rgba(127,100,48,.05);cursor:default}
-.week-cell.telefonata{background:rgba(95,143,146,.22);color:#5f8f92;cursor:pointer}
-.week-cell.riunione{background:rgba(166,127,52,.22);color:#8a682c;cursor:pointer}
-.week-cell.visita_posto{background:rgba(79,127,69,.22);color:#4f7f45;cursor:pointer}
-.week-cell-note{font-size:8px;line-height:1.25;letter-spacing:.02em;overflow:hidden}
-.week-cell-note.phone-chip{cursor:pointer;text-decoration:underline;margin-bottom:2px}
+.week-event-bar{position:absolute;left:0;right:0;overflow:hidden;cursor:pointer;padding:2px 4px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.5)}
+.week-event-bar.half-left{left:0;right:50%;border-right:1px solid rgba(255,255,255,.6)}
+.week-event-bar.half-right{left:50%;right:0}
+.week-event-bar.telefonata{background:rgba(95,143,146,.34);color:#5f8f92}
+.week-event-bar.riunione{background:rgba(166,127,52,.34);color:#8a682c}
+.week-event-bar.visita_posto{background:rgba(79,127,69,.34);color:#4f7f45}
+.week-cell-note{font-size:7px;line-height:1.2;letter-spacing:.02em;overflow:hidden}
 
 .status{margin-bottom:22px;min-height:20px;font-size:13px}
 .success{color:#4f7f45}
@@ -712,36 +714,48 @@ function renderWeekView(){
         var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
         return slotStart < eEnd && slotEnd > eStart;
       });
-      var blocking = overlapping.find(function(ev){ return ev.event_type !== "telefonata"; });
-      var phoneCalls = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
-      var busy = !blocking && isSlotBusy(slotStart, slotEnd);
+      var blockingEvents = overlapping.filter(function(ev){ return ev.event_type !== "telefonata"; });
+      var phoneEvents = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
+      var busy = !blockingEvents.length && isSlotBusy(slotStart, slotEnd);
       var isPast = slotEnd <= now;
+      var hasSplit = blockingEvents.length > 0 && phoneEvents.length > 0;
+
+      // Ogni barra e' alta/posizionata in percentuale in base a quanto della durata reale
+      // dell'evento cade dentro quest'ora: un evento da 15 minuti occupa un quarto della
+      // cella, non tutta, cosi' la differenza di durata si vede a colpo d'occhio.
+      function barStyle(ev){
+        var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+        var overlapStart = eStart > slotStart ? eStart : slotStart;
+        var overlapEnd = eEnd < slotEnd ? eEnd : slotEnd;
+        var top = (overlapStart - slotStart) / 36000;
+        var height = (overlapEnd - overlapStart) / 36000;
+        return "top:" + top + "%;height:" + Math.max(height, 6) + "%;";
+      }
+
+      var barsHtml = "";
+      blockingEvents.forEach(function(ev){
+        var cls = "week-event-bar " + escapeHTML(ev.event_type) + (hasSplit ? " half-right" : "");
+        barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')"><div class="week-cell-note">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div></div>';
+      });
+      phoneEvents.forEach(function(ev){
+        var cls = "week-event-bar telefonata" + (hasSplit ? " half-left" : "");
+        barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')"><div class="week-cell-note">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div></div>';
+      });
 
       var cls = "week-cell";
-      var noteHtml = "";
       var onclick = "";
 
-      if(blocking){
-        cls += " " + escapeHTML(blocking.event_type);
-        noteHtml = '<div class="week-cell-note">' + escapeHTML(blocking.title || eventTypeLabel(blocking.event_type)) + '</div>';
-        onclick = 'onclick="openEditModal(' + blocking.id + ')"';
-      }else if(busy){
+      if(busy){
         cls += " busy";
-      }else{
-        if(phoneCalls.length){
-          cls += " telefonata";
-          noteHtml = phoneCalls.map(function(ev){
-            return '<div class="week-cell-note phone-chip" onclick="event.stopPropagation();openEditModal(' + ev.id + ')">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div>';
-          }).join("");
-        }
+      }else if(!blockingEvents.length){
         if(!isPast){
           onclick = 'onclick="openBookingModal(\'' + toLocalInputValue(slotStart) + '\')"';
-        }else if(!phoneCalls.length){
+        }else if(!phoneEvents.length){
           cls += " past";
         }
       }
 
-      html += '<div class="' + cls + '" ' + onclick + '>' + noteHtml + '</div>';
+      html += '<div class="' + cls + '" ' + onclick + '>' + barsHtml + '</div>';
     }
   }
 
