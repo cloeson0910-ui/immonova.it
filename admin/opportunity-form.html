@@ -2437,18 +2437,21 @@ async function applyLanguage(lang){
 
 var isAdmin = false;
 
+var currentUserName = "";
+
 async function loadUserLanguage(){
-  var result = await client.from("profiles").select("id,language,role").eq("id", currentUser.id).single();
+  var result = await client.from("profiles").select("id,language,role,full_name,email").eq("id", currentUser.id).single();
 
   if(result.error){
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
-      result = await client.from("profiles").select("id,role").eq("id", currentUser.id).single();
+      result = await client.from("profiles").select("id,role,full_name,email").eq("id", currentUser.id).single();
     }
   }
 
   isAdmin = !!(result.data && result.data.role === "admin");
+  currentUserName = (result.data && (result.data.full_name || result.data.email)) || "";
   applyAdminRestrictions();
 
   if(result.error){
@@ -2465,6 +2468,43 @@ async function loadUserLanguage(){
    ma disabilitiamo anche i checkbox per un utente normale cosi' l'interfaccia non lascia
    intendere che possano avere effetto. Il render IA invece va bloccato davvero, non solo
    nell'aspetto: consuma credito/costo, quindi il controllo isAdmin è anche dentro l'handler. ---- */
+/* ---- Lezione riutilizzata da users.html: leggere l'errore vero da result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
+/* ---- Notifica automatica a tutti gli admin quando viene creata una nuova opportunità,
+   cosi' sanno che c'è del lavoro da verificare (funziona per qualsiasi utente che la crea,
+   admin compreso). Non blocca mai la creazione se la notifica fallisce: è un effetto
+   collaterale, non un requisito per completare l'operazione. ---- */
+async function notifyAdminsNewSubmission(newId, opportunityTitle){
+  try{
+    var result = await client.functions.invoke("notify-admins-new-submission", {
+      body:{
+        opportunity_id:newId,
+        title:opportunityTitle,
+        category:textOrNull("category") || "",
+        location:textOrNull("location") || "",
+        created_by_name:currentUserName
+      }
+    });
+
+    if(result.error){
+      var msg = await extractEdgeFunctionErrorMessage(result.error);
+      console.warn("Notifica admin non riuscita (non bloccante):", msg);
+    }
+  }catch(e){
+    console.warn("Notifica admin non riuscita (non bloccante):", e);
+  }
+}
+
 function applyAdminRestrictions(){
   if(isAdmin) return;
 
@@ -2836,6 +2876,7 @@ form.addEventListener("submit", async function(e){
     updateWorkProgress("save", "Opportunità creata. Caricamento documenti selezionati...", 78);
 
     await uploadSelectedDocumentsAfterCreate();
+    await notifyAdminsNewSubmission(id, title);
 
     updateWorkProgress("save", "Proposta inviata correttamente.", 100);
     hideWorkProgress("save", 1000);
