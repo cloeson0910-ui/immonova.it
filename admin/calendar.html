@@ -113,8 +113,8 @@ text-transform:uppercase;
 .week-cell.busy{background:rgba(143,91,40,.18);cursor:not-allowed}
 .week-cell.past{background:rgba(127,100,48,.05);cursor:default}
 .week-event-bar{position:absolute;left:0;right:0;overflow:hidden;cursor:pointer;padding:2px 4px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.5)}
-.week-event-bar.half-left{left:0;right:50%;border-right:1px solid rgba(255,255,255,.6)}
-.week-event-bar.half-right{left:50%;right:0}
+.week-event-bar.split{border-right:1px solid rgba(255,255,255,.65)}
+.week-event-bar.split:last-child{border-right:0}
 .week-event-bar.telefonata{background:rgba(95,143,146,.34);color:#5f8f92}
 .week-event-bar.riunione{background:rgba(166,127,52,.34);color:#8a682c}
 .week-event-bar.visita_posto{background:rgba(79,127,69,.34);color:#4f7f45}
@@ -718,7 +718,6 @@ function renderWeekView(){
       var phoneEvents = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
       var busy = !blockingEvents.length && isSlotBusy(slotStart, slotEnd);
       var isPast = slotEnd <= now;
-      var hasSplit = blockingEvents.length > 0 && phoneEvents.length > 0;
 
       // Ogni barra e' alta/posizionata in percentuale in base a quanto della durata reale
       // dell'evento cade dentro quest'ora: un evento da 15 minuti occupa un quarto della
@@ -732,14 +731,20 @@ function renderWeekView(){
         return "top:" + top + "%;height:" + Math.max(height, 6) + "%;";
       }
 
+      // Divisione in colonne: vale per QUALSIASI numero e combinazione di eventi sovrapposti
+      // nella stessa ora (telefonata+riunione, due telefonate, riunione+visita ecc.), non solo
+      // per la coppia telefonata/altro-tipo. Ogni evento prende una fetta di larghezza uguale.
       var barsHtml = "";
-      blockingEvents.forEach(function(ev){
-        var cls = "week-event-bar " + escapeHTML(ev.event_type) + (hasSplit ? " half-right" : "");
-        barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')"><div class="week-cell-note">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div></div>';
-      });
-      phoneEvents.forEach(function(ev){
-        var cls = "week-event-bar telefonata" + (hasSplit ? " half-left" : "");
-        barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')"><div class="week-cell-note">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div></div>';
+      var allInCell = phoneEvents.concat(blockingEvents);
+      var columnWidth = allInCell.length > 1 ? (100 / allInCell.length) : 100;
+
+      allInCell.forEach(function(ev, idx){
+        var cls = "week-event-bar " + escapeHTML(ev.event_type);
+        var positionStyle = allInCell.length > 1
+          ? ("left:" + (idx * columnWidth) + "%;width:" + columnWidth + "%;right:auto;")
+          : "";
+        cls += allInCell.length > 1 ? " split" : "";
+        barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + positionStyle + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')"><div class="week-cell-note">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div></div>';
       });
 
       var cls = "week-cell";
