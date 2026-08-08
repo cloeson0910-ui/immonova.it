@@ -1450,6 +1450,13 @@ button.danger{
         <div id="crmMatchStatus" class="crm-match-status"></div>
       </div>
 
+      <div class="field">
+        <label data-i18n="label_owner">Attribuita a (ai fini provvigione)</label>
+        <select id="ownerId">
+          <option value="" data-i18n="owner_unassigned">Non attribuita</option>
+        </select>
+      </div>
+
       <div class="checks">
         <label class="check">
           <input type="checkbox" id="featured">
@@ -2726,6 +2733,7 @@ var UI_STRINGS = {
   crm_stat_compatible:"Compatibili", crm_stat_selected:"Selezionati", crm_stat_email:"Email Opt-in", crm_stat_whatsapp:"WhatsApp Opt-in",
   crm_loading:"Caricamento analisi investitori...",
   check_featured:"In evidenza", check_published:"Pubblicata",
+  label_owner:"Attribuita a (ai fini provvigione)", owner_unassigned:"Non attribuita",
   btn_save:"Salva Modifiche", btn_cancel:"Annulla", btn_open_dossier:"Apri Dossier IA", btn_delete:"Elimina",
   save_progress_title:"Salvataggio opportunità"
 };
@@ -2801,6 +2809,33 @@ async function loadUserLanguage(){
   await applyLanguage((result.data && result.data.language) || "it");
 }
 
+
+async function loadCollaborators(){
+  var ownerSelect = document.getElementById("ownerId");
+  if(!ownerSelect) return;
+
+  var result = await client
+    .from("profiles")
+    .select("id,full_name,email")
+    .order("full_name", { ascending: true });
+
+  if(result.error){
+    console.warn("Collaboratori non caricati (non bloccante):", result.error.message);
+    return;
+  }
+
+  var rows = result.data || [];
+  var currentValue = ownerSelect.value;
+
+  rows.forEach(function(p){
+    var opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.full_name || p.email || p.id;
+    ownerSelect.appendChild(opt);
+  });
+
+  if(currentValue) ownerSelect.value = currentValue;
+}
 
 async function checkAuth(){
   var result = await client.auth.getSession();
@@ -2883,6 +2918,7 @@ async function loadOpportunity(){
   document.getElementById("featured").checked = data.featured === true;
   document.getElementById("published").checked = data.published === true;
   document.getElementById("show_price_public").checked = data.show_price_public !== false;
+  document.getElementById("ownerId").value = data.owner_id || "";
 
   aiGenerated = data.ai_generated_description === true;
 
@@ -3752,6 +3788,7 @@ form.addEventListener("submit", async function(e){
       featured:document.getElementById("featured").checked,
       published:document.getElementById("published").checked,
       show_price_public:document.getElementById("show_price_public").checked,
+      owner_id:document.getElementById("ownerId").value || null,
       updated_at:new Date().toISOString()
     };
 
@@ -3815,6 +3852,7 @@ document.getElementById("logoutBtn").addEventListener("click", async function(){
 
   if(isLogged){
     await loadUserLanguage();
+    await loadCollaborators();
     await loadOpportunity();
   }
 })();
