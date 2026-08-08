@@ -80,6 +80,43 @@ text-transform:uppercase;
 .legend-swatch.riunione{background:rgba(166,127,52,.30);border-color:rgba(166,127,52,.5)}
 .legend-swatch.visita_posto{background:rgba(79,127,69,.30);border-color:rgba(79,127,69,.5)}
 
+.cal-toolbar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.cal-nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.cal-nav button{padding:10px 16px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.25);color:#a67f34;cursor:pointer;font-size:12px;letter-spacing:.06em;font-family:inherit}
+.cal-nav button:hover{background:#a67f34;color:#fff}
+.cal-period-label{font-size:16px;color:#a67f34;min-width:170px;text-align:center;text-transform:capitalize}
+.cal-view-switch{display:flex;gap:8px}
+.cal-view-switch button{padding:10px 16px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.18);color:#a67f34;cursor:pointer;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-family:inherit}
+.cal-view-switch button.active{background:#a67f34;color:#fff}
+
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:rgba(166,127,52,.12);border:1px solid rgba(166,127,52,.15)}
+.month-weekday{padding:10px;text-align:center;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;background:rgba(255,255,255,.35)}
+.month-day{min-height:98px;padding:8px;background:rgba(255,255,255,.32);cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.month-day:hover{background:rgba(255,255,255,.48)}
+.month-day.other-month{opacity:.35}
+.month-day.today{box-shadow:inset 0 0 0 2px rgba(166,127,52,.5)}
+.month-day-num{font-size:12px;color:#a67f34;font-weight:600}
+.month-day-chip{font-size:9px;padding:3px 5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.month-day-chip.busy{background:rgba(143,91,40,.20);color:#8f5b28}
+.month-day-chip.telefonata{background:rgba(95,143,146,.22);color:#5f8f92}
+.month-day-chip.riunione{background:rgba(166,127,52,.22);color:#8a682c}
+.month-day-chip.visita_posto{background:rgba(79,127,69,.22);color:#4f7f45}
+.month-day-more{font-size:9px;color:#8f7643}
+
+.week-grid{display:grid;grid-template-columns:64px repeat(7,1fr);gap:1px;background:rgba(166,127,52,.12);border:1px solid rgba(166,127,52,.15);overflow-x:auto}
+.week-corner{background:rgba(255,255,255,.35)}
+.week-day-head{padding:10px 4px;text-align:center;background:rgba(255,255,255,.35);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#a67f34}
+.week-day-head .wk-num{display:block;font-size:16px;font-weight:600;margin-top:3px;text-transform:none}
+.week-hour-label{padding:8px 6px;font-size:10px;color:#8f7643;text-align:right;background:rgba(255,255,255,.24)}
+.week-cell{min-height:42px;background:rgba(255,255,255,.32);cursor:pointer;padding:3px}
+.week-cell:hover{background:rgba(166,127,52,.14)}
+.week-cell.busy{background:rgba(143,91,40,.18);cursor:not-allowed}
+.week-cell.past{background:rgba(127,100,48,.05);cursor:default}
+.week-cell.telefonata{background:rgba(95,143,146,.22);color:#5f8f92;cursor:pointer}
+.week-cell.riunione{background:rgba(166,127,52,.22);color:#8a682c;cursor:pointer}
+.week-cell.visita_posto{background:rgba(79,127,69,.22);color:#4f7f45;cursor:pointer}
+.week-cell-note{font-size:8px;line-height:1.25;letter-spacing:.02em;overflow:hidden}
+
 .status{margin-bottom:22px;min-height:20px;font-size:13px}
 .success{color:#4f7f45}
 .error{color:#9c2f2f}
@@ -222,6 +259,19 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 
 <button type="button" class="btn secondary" id="refreshSyncBtn" data-i18n="btn_refresh_sync" style="margin-bottom:22px">Aggiorna disponibilità da iCloud ora</button>
 
+<div class="cal-toolbar">
+<div class="cal-nav">
+<button type="button" id="prevPeriodBtn">‹</button>
+<div class="cal-period-label" id="periodLabel"></div>
+<button type="button" id="nextPeriodBtn">›</button>
+<button type="button" id="todayBtn" data-i18n="btn_today">Oggi</button>
+</div>
+<div class="cal-view-switch">
+<button type="button" id="viewMonthBtn" data-i18n="btn_view_month">Mese</button>
+<button type="button" id="viewWeekBtn" data-i18n="btn_view_week">Settimana</button>
+</div>
+</div>
+
 <div id="status" class="status"></div>
 
 <div id="calendarBody">
@@ -302,9 +352,11 @@ const confirmBookBtn = document.getElementById("confirmBookBtn");
 const cancelBookBtn = document.getElementById("cancelBookBtn");
 const deleteBookBtn = document.getElementById("deleteBookBtn");
 
-const DAYS_AHEAD = 14;
 const DAY_START_HOUR = 8;
 const DAY_END_HOUR = 20;
+var currentView = "week";
+var anchorDate = new Date();
+anchorDate.setHours(0,0,0,0);
 
 let currentUser = null;
 let currentUserLanguage = "it";
@@ -337,6 +389,7 @@ var UI_STRINGS = {
   legend_free:"Libero", legend_busy:"Occupato (iCloud)", legend_telefonata:"Telefonata",
   legend_riunione:"Riunione", legend_visita:"Visita sul posto",
   btn_refresh_sync:"Aggiorna disponibilità da iCloud ora",
+  btn_today:"Oggi", btn_view_month:"Mese", btn_view_week:"Settimana",
   msg_refreshing_sync:"Aggiornamento disponibilità da iCloud in corso (può richiedere qualche secondo)...",
   msg_refresh_sync_done:"Disponibilità aggiornata con i dati più recenti di iCloud.",
   msg_refresh_sync_failed:"Aggiornamento non riuscito: ",
@@ -365,7 +418,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_calendar_" + lang + "_v4"; }
+function i18nCacheKey(lang){ return "immonova_i18n_calendar_" + lang + "_v5"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -471,22 +524,36 @@ function bookedEventForSlot(slotStart, slotEnd, excludeId){
   });
 }
 
-async function loadCalendarData(){
-  var now = new Date();
-  var rangeEnd = new Date(now.getTime() + DAYS_AHEAD * 86400000);
+function startOfWeek(d){
+  var date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var day = date.getDay();
+  var diff = (day === 0 ? -6 : 1 - day);
+  date.setDate(date.getDate() + diff);
+  return date;
+}
 
-  var busyResult = await client
-    .from("immonova_calendar_busy_blocks")
-    .select("start_at,end_at")
-    .gte("start_at", now.toISOString())
-    .lte("start_at", rangeEnd.toISOString());
+function getViewRange(){
+  if(currentView === "month"){
+    var start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+    var end = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1);
+    return { start: start, end: end };
+  }
+  var start = startOfWeek(anchorDate);
+  var end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+  return { start: start, end: end };
+}
 
-  var eventsResult = await client
-    .from("immonova_calendar_events")
-    .select("id,event_type,title,start_at,end_at,notes,address,opportunity_id,icloud_uid,icloud_href,created_by")
-    .gte("start_at", now.toISOString())
-    .lte("start_at", rangeEnd.toISOString());
+// Per la vista mese servono anche i giorni "di contorno" (fine mese precedente/inizio
+// successivo) che riempiono la griglia: qui carichiamo dati su quell'intervallo piu' ampio,
+// cosi' occupato/appuntamenti compaiono anche su quei giorni.
+function getMonthGridRange(){
+  var monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  var gridStart = startOfWeek(monthStart);
+  var gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 42);
+  return { start: gridStart, end: gridEnd };
+}
 
+async function loadStaticData(){
   var oppsResult = await client
     .from("opportunities")
     .select("id,title")
@@ -497,10 +564,36 @@ async function loadCalendarData(){
     .from("profiles")
     .select("id,full_name,email");
 
+  allOpportunities = oppsResult.data || [];
   if(profilesResult.data){
     profilesById = {};
     profilesResult.data.forEach(function(p){ profilesById[p.id] = p.full_name || p.email || p.id; });
   }
+
+  var oppSelect = document.getElementById("eventOpportunity");
+  oppSelect.innerHTML = '<option value="">' + escapeHTML(T.opt_none) + '</option>';
+  allOpportunities.forEach(function(o){
+    var opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.title || ("Opportunità #" + o.id);
+    oppSelect.appendChild(opt);
+  });
+}
+
+async function loadCalendarData(){
+  var range = currentView === "month" ? getMonthGridRange() : getViewRange();
+
+  var busyResult = await client
+    .from("immonova_calendar_busy_blocks")
+    .select("start_at,end_at")
+    .gte("start_at", range.start.toISOString())
+    .lt("start_at", range.end.toISOString());
+
+  var eventsResult = await client
+    .from("immonova_calendar_events")
+    .select("id,event_type,title,start_at,end_at,notes,address,opportunity_id,icloud_uid,icloud_href,created_by")
+    .gte("start_at", range.start.toISOString())
+    .lt("start_at", range.end.toISOString());
 
   if(busyResult.error){
     setStatus(T.loading_error + " (busy: " + busyResult.error.message + ")", "error");
@@ -511,67 +604,141 @@ async function loadCalendarData(){
 
   busyBlocks = busyResult.data || [];
   bookedEvents = eventsResult.data || [];
-  allOpportunities = oppsResult.data || [];
-
-  var oppSelect = document.getElementById("eventOpportunity");
-  allOpportunities.forEach(function(o){
-    var opt = document.createElement("option");
-    opt.value = o.id;
-    opt.textContent = o.title || ("Opportunità #" + o.id);
-    oppSelect.appendChild(opt);
-  });
 
   renderCalendar();
 }
 
+function updatePeriodLabel(){
+  var label = document.getElementById("periodLabel");
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
+
+  if(currentView === "month"){
+    label.textContent = anchorDate.toLocaleDateString(locale, { month:"long", year:"numeric" });
+  }else{
+    var range = getViewRange();
+    var endDisplay = new Date(range.end.getTime() - 86400000);
+    var fmt = { day:"2-digit", month:"short" };
+    label.textContent = range.start.toLocaleDateString(locale, fmt) + " – " + endDisplay.toLocaleDateString(locale, fmt);
+  }
+}
+
+function updateViewButtons(){
+  document.getElementById("viewMonthBtn").classList.toggle("active", currentView === "month");
+  document.getElementById("viewWeekBtn").classList.toggle("active", currentView === "week");
+}
+
 function renderCalendar(){
+  updatePeriodLabel();
+  if(currentView === "month") renderMonthView();
+  else renderWeekView();
+}
+
+function renderMonthView(){
   var now = new Date();
-  var html = "";
+  var monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  var gridStart = startOfWeek(monthStart);
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
 
-  for(var d = 0; d < DAYS_AHEAD; d++){
-    var day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
-    var dayLabel = day.toLocaleDateString(currentUserLanguage==="it"?"it-IT":currentUserLanguage,{weekday:"long",day:"2-digit",month:"long"});
+  var html = '<div class="month-grid">';
 
-    var slotsHtml = "";
-    for(var h = DAY_START_HOUR; h < DAY_END_HOUR; h++){
+  for(var w = 0; w < 7; w++){
+    var wd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + w);
+    html += '<div class="month-weekday">' + escapeHTML(wd.toLocaleDateString(locale, { weekday:"short" })) + '</div>';
+  }
+
+  for(var d = 0; d < 42; d++){
+    var day = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + d);
+    var isOtherMonth = day.getMonth() !== anchorDate.getMonth();
+    var isToday = day.toDateString() === now.toDateString();
+
+    var dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    var dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+
+    var dayBooked = bookedEvents.filter(function(ev){
+      var s = new Date(ev.start_at);
+      return s >= dayStart && s < dayEnd;
+    });
+    var hasBusy = busyBlocks.some(function(b){
+      var s = new Date(b.start_at);
+      return s >= dayStart && s < dayEnd;
+    });
+
+    var chips = "";
+    dayBooked.slice(0,3).forEach(function(ev){
+      chips += '<div class="month-day-chip ' + escapeHTML(ev.event_type) + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div>';
+    });
+    if(dayBooked.length > 3){
+      chips += '<div class="month-day-more">+' + (dayBooked.length - 3) + '</div>';
+    }
+    if(hasBusy && !dayBooked.length){
+      chips += '<div class="month-day-chip busy">' + escapeHTML(T.occupied_label) + '</div>';
+    }
+
+    var cls = "month-day" + (isOtherMonth ? " other-month" : "") + (isToday ? " today" : "");
+    var dateStr = day.getFullYear() + "-" + pad2(day.getMonth()+1) + "-" + pad2(day.getDate());
+
+    html += '<div class="' + cls + '" onclick="goToDayWeek(\'' + dateStr + '\')"><div class="month-day-num">' + day.getDate() + '</div>' + chips + '</div>';
+  }
+
+  html += '</div>';
+  calendarBody.innerHTML = html;
+}
+
+function renderWeekView(){
+  var now = new Date();
+  var weekStart = startOfWeek(anchorDate);
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
+
+  var html = '<div class="week-grid"><div class="week-corner"></div>';
+
+  for(var i = 0; i < 7; i++){
+    var d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i);
+    html += '<div class="week-day-head">' + escapeHTML(d.toLocaleDateString(locale, { weekday:"short" })) + '<span class="wk-num">' + d.getDate() + '</span></div>';
+  }
+
+  for(var h = DAY_START_HOUR; h < DAY_END_HOUR; h++){
+    html += '<div class="week-hour-label">' + pad2(h) + ':00</div>';
+
+    for(var j = 0; j < 7; j++){
+      var day = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + j);
       var slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, 0, 0);
       var slotEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h + 1, 0, 0);
 
-      if(slotEnd <= now) continue;
-
       var booked = bookedEventForSlot(slotStart, slotEnd);
       var busy = !booked && isSlotBusy(slotStart, slotEnd);
+      var isPast = slotEnd <= now;
 
-      var cls = "slot";
+      var cls = "week-cell";
       var note = "";
+      var onclick = "";
+
       if(booked){
         cls += " " + escapeHTML(booked.event_type);
         note = booked.title || eventTypeLabel(booked.event_type);
+        onclick = 'onclick="openEditModal(' + booked.id + ')"';
       }else if(busy){
         cls += " busy";
-        note = T.occupied_label;
-      }
-
-      var onclick = "";
-      if(booked){
-        onclick = 'onclick="openEditModal(' + booked.id + ')"';
-      }else if(!busy){
+      }else if(isPast){
+        cls += " past";
+      }else{
         onclick = 'onclick="openBookingModal(\'' + toLocalInputValue(slotStart) + '\')"';
       }
 
-      slotsHtml += '<div class="' + cls + '" ' + onclick + '>'
-        + '<span class="slot-time">' + formatSlotTime(slotStart) + '</span>'
-        + (note ? '<span class="slot-note">' + escapeHTML(note) + '</span>' : '')
-        + '</div>';
+      html += '<div class="' + cls + '" ' + onclick + '>' + (note ? '<div class="week-cell-note">' + escapeHTML(note) + '</div>' : '') + '</div>';
     }
-
-    if(!slotsHtml) continue;
-
-    html += '<div class="day-block"><div class="day-head">' + escapeHTML(dayLabel) + '</div><div class="day-slots">' + slotsHtml + '</div></div>';
   }
 
-  calendarBody.innerHTML = html || '<div class="empty">' + escapeHTML(T.loading_error) + '</div>';
+  html += '</div>';
+  calendarBody.innerHTML = html;
 }
+
+window.goToDayWeek = function(dateStr){
+  var parts = dateStr.split("-");
+  anchorDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  currentView = "week";
+  updateViewButtons();
+  loadCalendarData();
+};
 
 window.openBookingModal = function(localValue){
   editingEvent = null;
@@ -819,10 +986,48 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   window.location.href = "login.html";
 });
 
+document.getElementById("prevPeriodBtn").addEventListener("click", function(){
+  if(currentView === "month"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 1, 1);
+  }else{
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() - 7);
+  }
+  loadCalendarData();
+});
+
+document.getElementById("nextPeriodBtn").addEventListener("click", function(){
+  if(currentView === "month"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1);
+  }else{
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + 7);
+  }
+  loadCalendarData();
+});
+
+document.getElementById("todayBtn").addEventListener("click", function(){
+  anchorDate = new Date();
+  anchorDate.setHours(0,0,0,0);
+  loadCalendarData();
+});
+
+document.getElementById("viewMonthBtn").addEventListener("click", function(){
+  currentView = "month";
+  updateViewButtons();
+  loadCalendarData();
+});
+
+document.getElementById("viewWeekBtn").addEventListener("click", function(){
+  currentView = "week";
+  updateViewButtons();
+  loadCalendarData();
+});
+
 (async function init(){
   const isLogged = await checkAuth();
   if(isLogged){
     await loadUserLanguage();
+    updateViewButtons();
+    await loadStaticData();
     await loadCalendarData();
   }
 })();
