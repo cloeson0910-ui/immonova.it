@@ -207,6 +207,32 @@ Tutti i mandati di ricerca registrati: caratteristiche richieste dai clienti che
 
 </div>
 
+<div class="modal-overlay" id="matchesOverlay">
+<div class="modal-box">
+<div class="modal-title" id="matchesTitle"></div>
+<div class="matches-disclaimer" data-i18n="matches_disclaimer">Camere, bagni, metratura, prezzo, categoria e zona sono confrontati sui dati reali dell'immobile. Giardino/piscina/garage/vista mare sono invece cercati come parole dentro la descrizione — un indizio utile, non una garanzia: verifica sempre a mano prima di proporre.</div>
+<div id="matchesList" class="matches-list"></div>
+<button type="button" class="secondary-link" id="closeMatchesBtn" data-i18n="btn_close" style="margin-top:18px">Chiudi</button>
+</div>
+</div>
+
+<style>
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(31,22,8,.5);z-index:50;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.active{display:flex}
+.modal-box{width:100%;max-width:720px;max-height:85vh;overflow:auto;background:#f4ecdf;border:1px solid rgba(166,127,52,.28);padding:32px}
+.modal-title{font-size:20px;font-weight:300;color:#a67f34;margin-bottom:14px}
+.matches-disclaimer{font-size:11px;line-height:1.6;color:#8f7643;padding:12px 14px;border:1px solid rgba(166,127,52,.18);background:rgba(255,255,255,.20);margin-bottom:18px}
+.matches-list{display:flex;flex-direction:column;gap:12px}
+.match-card{display:flex;gap:14px;padding:14px;border:1px solid rgba(166,127,52,.16);background:rgba(255,255,255,.20)}
+.match-thumb{width:80px;height:60px;object-fit:cover;border:1px solid rgba(166,127,52,.2);flex-shrink:0;background:rgba(166,127,52,.08)}
+.match-info{flex:1;min-width:0}
+.match-title{font-size:14px;color:#7f6430;font-weight:600;margin-bottom:4px}
+.match-score{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#4f7f45;margin-bottom:6px}
+.match-reasons{display:flex;flex-wrap:wrap;gap:5px}
+.match-chip{font-size:9px;padding:4px 7px;border:1px solid rgba(166,127,52,.22);background:rgba(255,255,255,.3);color:#8f7643;letter-spacing:.04em;text-transform:uppercase}
+.match-link{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#a67f34;text-decoration:none;white-space:nowrap;align-self:center}
+</style>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 
@@ -234,15 +260,26 @@ var UI_STRINGS = {
   no_budget:"Non specificato",
   feat_garden:"Giardino", feat_pool:"Piscina", feat_garage:"Garage", feat_sea_view:"Vista mare",
   bedrooms_prefix:"almeno ", bedrooms_suffix:" camere", bathrooms_suffix:" bagni",
-  action_edit:"Modifica", action_delete:"Elimina",
+  action_edit:"Modifica", action_delete:"Elimina", action_matches:"Vedi immobili corrispondenti", action_open:"Apri",
   confirm_delete:"Eliminare definitivamente questo mandato di ricerca?",
-  msg_deleting:"Eliminazione in corso...", msg_deleted:"Mandato eliminato."
+  msg_deleting:"Eliminazione in corso...", msg_deleted:"Mandato eliminato.",
+  matches_title_prefix:"Immobili corrispondenti per ",
+  matches_disclaimer:"Camere, bagni, metratura, prezzo, categoria e zona sono confrontati sui dati reali dell'immobile. Giardino/piscina/garage/vista mare sono invece cercati come parole dentro la descrizione — un indizio utile, non una garanzia: verifica sempre a mano prima di proporre.",
+  matches_none:"Nessuna opportunità trovata per questa categoria.",
+  matches_criteria_suffix:"criteri corrispondenti", matches_no_criteria:"Nessun criterio specifico nel mandato",
+  matches_unpublished:"non pubblicata",
+  reason_budget:"Budget in linea", reason_sqm:"Metratura in linea",
+  reason_bedrooms:"Camere sufficienti", reason_bathrooms:"Bagni sufficienti",
+  reason_garden:"Giardino (da descrizione)", reason_pool:"Piscina (da descrizione)",
+  reason_garage:"Garage (da descrizione)", reason_sea_view:"Vista mare (da descrizione)",
+  reason_location:"Zona corrispondente",
+  btn_close:"Chiudi",
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_search_mandates_list_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_search_mandates_list_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -375,6 +412,7 @@ function renderTable(data){
       + '<td>' + renderFeatures(m) + '</td>'
       + '<td>' + escapeHTML(formatDateShort(m.created_at)) + '</td>'
       + '<td><div class="actions">'
+        + '<button type="button" class="action-btn" onclick="showMatches(' + m.id + ')">' + escapeHTML(T.action_matches) + '</button>'
         + '<a class="action-btn" href="search-mandate-form.html?id=' + encodeURIComponent(m.id) + '">' + escapeHTML(T.action_edit) + '</a>'
         + '<button type="button" class="action-btn danger" onclick="deleteMandate(' + m.id + ')">' + escapeHTML(T.action_delete) + '</button>'
       + '</div></td>'
@@ -393,6 +431,134 @@ window.deleteMandate = async function(id){
   setStatus(T.msg_deleted, "success");
   await loadMandates();
 };
+
+/* ---- Matching automatico tra mandato e opportunità esistenti. Categoria, se il mandato la
+   specifica, e' un filtro netto (mostrare hotel a chi cerca ville sarebbe solo rumore). Tutti
+   gli altri criteri sono "a punteggio": ogni criterio che il mandato ha specificato e che
+   l'opportunità soddisfa aggiunge un punto, il resto ordina per rilevanza. Giardino/piscina/
+   garage/vista mare NON esistono come campi strutturati sulle opportunità (verificato: gli
+   unici campi fisici reali sono camere/bagni/mq/anno/classe energetica/stato) — per questi 4
+   si cerca la parola dentro la descrizione, un indizio non un dato certo (disclaimer sempre
+   visibile nel modale). Il prezzo e' salvato come testo libero, non numero: parsePriceNumber
+   toglie tutto cio' che non e' cifra e prova a leggerlo. ---- */
+var allOpportunitiesCache = null;
+
+async function loadOpportunitiesForMatching(){
+  if(allOpportunitiesCache) return allOpportunitiesCache;
+  var result = await client
+    .from("opportunities")
+    .select("id,title,category,price,location,municipality,province,region,internal_size,land_size,bedrooms,bathrooms,short_description,full_description,cover_image,published");
+  allOpportunitiesCache = result.data || [];
+  return allOpportunitiesCache;
+}
+
+function parsePriceNumber(text){
+  if(!text) return null;
+  var digits = String(text).replace(/[^\d]/g, "");
+  return digits ? Number(digits) : null;
+}
+
+function computeMatch(mandate, opp){
+  var reasons = [];
+  var score = 0;
+  var maxScore = 0;
+
+  var price = parsePriceNumber(opp.price);
+  if(mandate.budget_min || mandate.budget_max){
+    maxScore++;
+    if(price != null){
+      var okMin = !mandate.budget_min || price >= mandate.budget_min;
+      var okMax = !mandate.budget_max || price <= mandate.budget_max;
+      if(okMin && okMax){ score++; reasons.push(T.reason_budget); }
+    }
+  }
+
+  var sqm = opp.internal_size || opp.land_size;
+  if(mandate.sqm_min || mandate.sqm_max){
+    maxScore++;
+    if(sqm != null){
+      var okMinSqm = !mandate.sqm_min || sqm >= mandate.sqm_min;
+      var okMaxSqm = !mandate.sqm_max || sqm <= mandate.sqm_max;
+      if(okMinSqm && okMaxSqm){ score++; reasons.push(T.reason_sqm); }
+    }
+  }
+
+  if(mandate.bedrooms_min){
+    maxScore++;
+    if(opp.bedrooms != null && opp.bedrooms >= mandate.bedrooms_min){ score++; reasons.push(T.reason_bedrooms); }
+  }
+  if(mandate.bathrooms_min){
+    maxScore++;
+    if(opp.bathrooms != null && opp.bathrooms >= mandate.bathrooms_min){ score++; reasons.push(T.reason_bathrooms); }
+  }
+
+  var descText = ((opp.short_description || "") + " " + (opp.full_description || "")).toLowerCase();
+  if(mandate.wants_garden){ maxScore++; if(descText.indexOf("giardino") >= 0){ score++; reasons.push(T.reason_garden); } }
+  if(mandate.wants_pool){ maxScore++; if(descText.indexOf("piscina") >= 0){ score++; reasons.push(T.reason_pool); } }
+  if(mandate.wants_garage){ maxScore++; if(descText.indexOf("garage") >= 0 || descText.indexOf("posto auto") >= 0){ score++; reasons.push(T.reason_garage); } }
+  if(mandate.wants_sea_view){ maxScore++; if(descText.indexOf("vista mare") >= 0){ score++; reasons.push(T.reason_sea_view); } }
+
+  if(mandate.location_areas){
+    maxScore++;
+    var areas = mandate.location_areas.split(",").map(function(a){ return a.trim().toLowerCase(); }).filter(Boolean);
+    var oppLoc = [opp.location, opp.municipality, opp.province, opp.region].filter(Boolean).join(" ").toLowerCase();
+    if(areas.some(function(a){ return oppLoc.indexOf(a) >= 0; })){ score++; reasons.push(T.reason_location); }
+  }
+
+  return { score: score, maxScore: maxScore, reasons: reasons, price: price };
+}
+
+window.showMatches = async function(mandateId){
+  var mandate = allMandates.find(function(m){ return Number(m.id) === Number(mandateId); });
+  if(!mandate) return;
+
+  document.getElementById("matchesTitle").textContent = T.matches_title_prefix + mandate.client_name;
+  document.getElementById("matchesList").innerHTML = '<div class="empty">' + escapeHTML(T.loading) + '</div>';
+  document.getElementById("matchesOverlay").classList.add("active");
+
+  var opportunities = await loadOpportunitiesForMatching();
+
+  var candidates = mandate.category
+    ? opportunities.filter(function(o){ return String(o.category || "").toLowerCase() === String(mandate.category).toLowerCase(); })
+    : opportunities.slice();
+
+  var scored = candidates.map(function(o){
+    return { opp: o, match: computeMatch(mandate, o) };
+  });
+
+  scored.sort(function(a, b){ return b.match.score - a.match.score; });
+
+  var listEl = document.getElementById("matchesList");
+
+  if(!scored.length){
+    listEl.innerHTML = '<div class="empty">' + escapeHTML(T.matches_none) + '</div>';
+    return;
+  }
+
+  listEl.innerHTML = scored.map(function(s){
+    var o = s.opp, m = s.match;
+    var scoreText = m.maxScore > 0 ? (m.score + "/" + m.maxScore + " " + T.matches_criteria_suffix) : T.matches_no_criteria;
+    var thumb = o.cover_image
+      ? '<img class="match-thumb" src="' + escapeHTML(o.cover_image) + '" alt="">'
+      : '<div class="match-thumb"></div>';
+    var chips = m.reasons.map(function(r){ return '<span class="match-chip">' + escapeHTML(r) + '</span>'; }).join("");
+    var pubBadge = o.published ? "" : (' · ' + escapeHTML(T.matches_unpublished));
+
+    return '<div class="match-card">'
+      + thumb
+      + '<div class="match-info">'
+        + '<div class="match-title">' + escapeHTML(o.title || "") + pubBadge + '</div>'
+        + '<div class="match-score">' + escapeHTML(scoreText) + '</div>'
+        + '<div class="match-reasons">' + chips + '</div>'
+      + '</div>'
+      + '<a class="match-link" href="opportunity-edit.html?id=' + encodeURIComponent(o.id) + '" target="_blank">' + escapeHTML(T.action_open) + '</a>'
+      + '</div>';
+  }).join("");
+};
+
+document.getElementById("closeMatchesBtn").addEventListener("click", function(){
+  document.getElementById("matchesOverlay").classList.remove("active");
+});
 
 searchInput.addEventListener("input", applyFilter);
 
