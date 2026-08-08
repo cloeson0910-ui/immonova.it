@@ -98,6 +98,37 @@ input::placeholder{
   color:rgba(127,100,48,.55);
 }
 
+.password-field{
+  position:relative;
+  margin-bottom:16px;
+}
+
+.password-field input{
+  margin-bottom:0;
+  padding-right:46px;
+}
+
+.toggle-password{
+  position:absolute;
+  right:0;
+  top:0;
+  height:100%;
+  width:44px;
+  border:0;
+  background:transparent;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#a58139;
+  padding:0;
+}
+
+.toggle-password svg{
+  width:19px;
+  height:19px;
+}
+
 button{
   width:100%;
   margin-top:8px;
@@ -139,7 +170,12 @@ button:hover{
 
     <form id="loginForm">
       <input type="email" id="email" placeholder="Email" autocomplete="email" required>
-      <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
+      <div class="password-field">
+        <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
+        <button type="button" class="toggle-password" data-target="password" aria-label="Mostra password">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
       <button type="submit" id="loginBtn">Login</button>
     </form>
 
@@ -164,6 +200,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const errorBox = document.getElementById("error");
   const loginBtn = document.getElementById("loginBtn");
   const recoverLink = document.getElementById("recoverLink");
+
+  /* Occhio mostra/nascondi password: semplice toggle del type dell'input. */
+  var EYE_OPEN = '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>';
+  var EYE_SLASH = '<path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.1A10.9 10.9 0 0 1 12 5c7 0 11 7 11 7a13.6 13.6 0 0 1-3.1 3.8M6.2 6.2A13.7 13.7 0 0 0 1 12s4 7 11 7a10.6 10.6 0 0 0 4.2-.85"/>';
+
+  document.querySelectorAll(".toggle-password").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var input = document.getElementById(btn.getAttribute("data-target"));
+      var svg = btn.querySelector("svg");
+      var showing = input.type === "text";
+      input.type = showing ? "password" : "text";
+      svg.innerHTML = showing ? EYE_OPEN : EYE_SLASH;
+      btn.setAttribute("aria-label", showing ? "Mostra password" : "Nascondi password");
+    });
+  });
 
   /* Registra l'accesso in immonova_access_logs. Non deve MAI bloccare il login: se la
      tabella non esiste ancora (migrazione SQL non eseguita) o la scrittura fallisce per
