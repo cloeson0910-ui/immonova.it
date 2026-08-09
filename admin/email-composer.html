@@ -515,7 +515,9 @@ function buildEmailHtmlPreview(subject, bodyText, recipientName){
 previewBtn.addEventListener("click", function(){
   var subject = document.getElementById("subject").value.trim() || "(oggetto)";
   var bodyText = document.getElementById("bodyText").value.trim() || "(testo del messaggio)";
-  var html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Anteprima</title></head><body>" + buildEmailHtmlPreview(subject, bodyText, "Nome Cognome") + "</body></html>";
+  var selectedForPreview = allContacts.filter(function(c){ return c.selected; });
+  var previewName = selectedForPreview.length === 1 ? selectedForPreview[0].name : "";
+  var html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Anteprima</title></head><body>" + buildEmailHtmlPreview(subject, bodyText, previewName) + "</body></html>";
   var blob = new Blob([html], { type: "text/html" });
   var url = URL.createObjectURL(blob);
   window.open(url, "_blank");
@@ -584,7 +586,7 @@ form.addEventListener("submit", async function(event){
       body: Object.assign({
         subject: subject,
         body_text: bodyText,
-        recipients: selected.map(function(c){ return { email: c.email, name: c.name }; })
+        recipients: selected.map(function(c){ return { email: c.email, name: selected.length === 1 ? c.name : "" }; })
       }, attachmentPayload)
     });
 
