@@ -276,6 +276,10 @@ var UI_STRINGS = {
   reason_parking_spot:"Posto auto", reason_terrace:"Terrazza", reason_balcony:"Balcone",
   reason_historic_center:"Centro storico", reason_ac:"Aria condizionata", reason_elevator:"Ascensore",
   reason_fireplace:"Camino", reason_beachfront:"Fronte mare",
+  reason_photovoltaic:"Impianto fotovoltaico", reason_car_charger:"Colonnina ricarica auto",
+  reason_solar_thermal:"Solare termico", reason_storage_battery:"Batterie di accumulo",
+  reason_artesian_well:"Pozzo artesiano", reason_heating_system:"Impianto di riscaldamento",
+  reason_habitability:"Agibilità",
   reason_location:"Zona corrispondente",
   btn_close:"Chiudi",
 };
@@ -283,7 +287,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_search_mandates_list_" + lang + "_v4"; }
+function i18nCacheKey(lang){ return "immonova_i18n_search_mandates_list_" + lang + "_v5"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -384,6 +388,13 @@ function renderFeatures(m){
   if(m.wants_elevator) chips.push(T.reason_elevator);
   if(m.wants_fireplace) chips.push(T.reason_fireplace);
   if(m.wants_beachfront) chips.push(T.reason_beachfront);
+  if(m.wants_photovoltaic) chips.push(T.reason_photovoltaic);
+  if(m.wants_car_charger) chips.push(T.reason_car_charger);
+  if(m.wants_solar_thermal) chips.push(T.reason_solar_thermal);
+  if(m.wants_storage_battery) chips.push(T.reason_storage_battery);
+  if(m.wants_artesian_well) chips.push(T.reason_artesian_well);
+  if(m.wants_heating_system) chips.push(T.reason_heating_system);
+  if(m.wants_habitability) chips.push(T.reason_habitability);
   if(!chips.length) return "";
   return chips.map(function(c){ return '<span class="badge">' + escapeHTML(c) + '</span>'; }).join("");
 }
@@ -461,7 +472,7 @@ async function loadOpportunitiesForMatching(){
   if(allOpportunitiesCache) return allOpportunitiesCache;
   var result = await client
     .from("opportunities")
-    .select("id,title,category,price,location,municipality,province,region,internal_size,land_size,bedrooms,bathrooms,short_description,full_description,cover_image,published,has_pool,has_garden,has_garage,has_parking_spot,has_terrace,has_balcony,has_sea_view,has_historic_center,has_air_conditioning,has_elevator,has_fireplace,has_beachfront");
+    .select("id,title,category,price,location,municipality,province,region,internal_size,land_size,bedrooms,bathrooms,short_description,full_description,cover_image,published,has_pool,has_garden,has_garage,has_parking_spot,has_terrace,has_balcony,has_sea_view,has_historic_center,has_air_conditioning,has_elevator,has_fireplace,has_beachfront,has_photovoltaic,photovoltaic_kw,has_car_charger,has_solar_thermal,has_storage_battery,has_artesian_well,has_heating_system,has_habitability");
   allOpportunitiesCache = result.data || [];
   return allOpportunitiesCache;
 }
@@ -558,7 +569,14 @@ function computeMatch(mandate, opp){
     ["wants_air_conditioning", "has_air_conditioning", T.reason_ac],
     ["wants_elevator", "has_elevator", T.reason_elevator],
     ["wants_fireplace", "has_fireplace", T.reason_fireplace],
-    ["wants_beachfront", "has_beachfront", T.reason_beachfront]
+    ["wants_beachfront", "has_beachfront", T.reason_beachfront],
+    ["wants_photovoltaic", "has_photovoltaic", T.reason_photovoltaic],
+    ["wants_car_charger", "has_car_charger", T.reason_car_charger],
+    ["wants_solar_thermal", "has_solar_thermal", T.reason_solar_thermal],
+    ["wants_storage_battery", "has_storage_battery", T.reason_storage_battery],
+    ["wants_artesian_well", "has_artesian_well", T.reason_artesian_well],
+    ["wants_heating_system", "has_heating_system", T.reason_heating_system],
+    ["wants_habitability", "has_habitability", T.reason_habitability]
   ];
 
   amenities.forEach(function(a){
