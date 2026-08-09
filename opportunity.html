@@ -259,6 +259,35 @@ h1{
   color:#735f36;
   line-height:1.45;
 }
+
+.amenities-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  gap:22px 18px;
+}
+.amenity-item{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  gap:8px;
+}
+.amenity-icon{
+  width:30px;
+  height:30px;
+  color:#a67f34;
+}
+.amenity-icon svg{
+  width:100%;
+  height:100%;
+  display:block;
+}
+.amenity-label{
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:#8f7643;
+}
 .teaser-grid{
   display:grid;
   grid-template-columns:repeat(3,1fr);
@@ -648,7 +677,13 @@ const UI_TRANSLATIONS = {
     timeline_empty:"Timeline riservata in aggiornamento.",
     events_empty:"Eventi pubblici collegati disponibili dopo selezione IMMONOVA.",
     timeline_step_fallback:"Passaggio", event_fallback_title:"Evento IMMONOVA",
-    investment_completed:"Investment Completed", investment_completed_desc:"Operazione conclusa e archiviata come IMMONOVA Success Story."
+    investment_completed:"Investment Completed", investment_completed_desc:"Operazione conclusa e archiviata come IMMONOVA Success Story.",
+    amenities_title:"Caratteristiche",
+    amenity_has_pool:"Piscina", amenity_has_garden:"Giardino", amenity_has_garage:"Box auto",
+    amenity_has_parking_spot:"Posto auto", amenity_has_terrace:"Terrazza", amenity_has_balcony:"Balcone",
+    amenity_has_sea_view:"Vista mare", amenity_has_historic_center:"Centro storico",
+    amenity_has_air_conditioning:"Aria condizionata", amenity_has_elevator:"Ascensore",
+    amenity_has_fireplace:"Camino", amenity_has_beachfront:"Fronte mare"
   },
   en:{
     nav_home:"Home", nav_opportunities:"Opportunities", nav_success_stories:"Success Stories", nav_events:"Events", nav_off_market:"Off Market", nav_contact:"Contact",
@@ -729,7 +764,13 @@ const UI_TRANSLATIONS = {
     timeline_empty:"Reserved timeline being updated.",
     events_empty:"Public linked events available after IMMONOVA selection.",
     timeline_step_fallback:"Step", event_fallback_title:"IMMONOVA Event",
-    investment_completed:"Investment Completed", investment_completed_desc:"Transaction completed and archived as an IMMONOVA Success Story."
+    investment_completed:"Investment Completed", investment_completed_desc:"Transaction completed and archived as an IMMONOVA Success Story.",
+    amenities_title:"Amenities",
+    amenity_has_pool:"Pool", amenity_has_garden:"Garden", amenity_has_garage:"Garage",
+    amenity_has_parking_spot:"Parking Spot", amenity_has_terrace:"Terrace", amenity_has_balcony:"Balcony",
+    amenity_has_sea_view:"Sea View", amenity_has_historic_center:"Historic Center",
+    amenity_has_air_conditioning:"Air Conditioning", amenity_has_elevator:"Elevator",
+    amenity_has_fireplace:"Fireplace", amenity_has_beachfront:"Beachfront"
   }
 };
 
@@ -951,6 +992,42 @@ async function getRenderData(data){
   }
 }
 
+/* ---- Pittogrammi caratteristiche opzionali: nessuna cornice, nessuno sfondo, solo icona +
+   etichetta -- richiesta esplicita di stile pulito. Compaiono solo le caratteristiche
+   davvero presenti sull'immobile (has_pool ecc.), il pannello intero sparisce se non ce
+   n'è nessuna. Le icone sono SVG inline minimali in stile lineare, coerenti con il resto. ---- */
+var AMENITY_ICONS = {
+  has_pool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 17c1.5 1.3 3 1.3 4.5 0s3-1.3 4.5 0 3 1.3 4.5 0 3-1.3 4.5 0"/><path d="M4 13V6a2 2 0 0 1 2-2h8l6 6v3"/><circle cx="15" cy="7" r="1"/></svg>',
+  has_garden: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 22v-9"/><path d="M12 13c-4 0-7-3-7-7 4 0 7 3 7 7Z"/><path d="M12 13c4 0 7-3 7-7-4 0-7 3-7 7Z"/></svg>',
+  has_garage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 21V9l9-5 9 5v12"/><path d="M3 21h18"/><path d="M7 21v-6h10v6"/></svg>',
+  has_parking_spot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>',
+  has_terrace: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 10h18"/><path d="M5 10V4h14v6"/><path d="M5 10v10M19 10v10M9 20v-6h6v6"/></svg>',
+  has_balcony: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 21V9l8-6 8 6v12"/><path d="M4 21h16"/><path d="M9 21v-7M15 21v-7"/></svg>',
+  has_sea_view: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 18c1.5 1.3 3 1.3 4.5 0s3-1.3 4.5 0 3-1.3 4.5 0 3 1.3 4.5 0"/><circle cx="17" cy="6" r="3"/><path d="M2 12l7-6 6 4 7-5"/></svg>',
+  has_historic_center: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 21h16"/><path d="M5 21V9l7-6 7 6v12"/><path d="M10 21v-6h4v6"/></svg>',
+  has_air_conditioning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 2v20M2 12h20"/><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  has_elevator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="2" width="14" height="20" rx="1"/><path d="M10 8l2-2 2 2M10 16l2 2 2-2"/></svg>',
+  has_fireplace: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 21V9h16v12"/><path d="M4 9l3-7h10l3 7"/><path d="M10 21v-5a2 2 0 1 1 4 0v5"/></svg>',
+  has_beachfront: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 20c1.5 1.2 3 1.2 4.5 0s3-1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0"/><path d="M12 15V3M8 7l4-4 4 4"/></svg>'
+};
+
+var AMENITY_LABELS = {
+  has_pool:"Piscina", has_garden:"Giardino", has_garage:"Box auto", has_parking_spot:"Posto auto",
+  has_terrace:"Terrazza", has_balcony:"Balcone", has_sea_view:"Vista mare", has_historic_center:"Centro storico",
+  has_air_conditioning:"Aria condizionata", has_elevator:"Ascensore", has_fireplace:"Camino", has_beachfront:"Fronte mare"
+};
+
+function renderAmenitiesPanel(data){
+  var present = Object.keys(AMENITY_ICONS).filter(function(key){ return data[key] === true; });
+  if(!present.length) return "";
+
+  var items = present.map(function(key){
+    return '<div class="amenity-item"><span class="amenity-icon">' + AMENITY_ICONS[key] + '</span><span class="amenity-label">' + escapeHTML(dict("amenity_" + key)) + '</span></div>';
+  }).join("");
+
+  return '<div class="panel"><h2 class="section-title">' + escapeHTML(dict("amenities_title")) + '</h2><div class="amenities-grid">' + items + '</div></div>';
+}
+
 async function renderOpportunity(data){
   data = await getRenderData(data);
 
@@ -1007,6 +1084,8 @@ async function renderOpportunity(data){
             ${data.bathrooms ? `<div class="data-item"><div class="data-label">Bathrooms</div><div class="data-value">${escapeHTML(data.bathrooms)}</div></div>` : ""}
           </div>
         </div>
+
+        ${renderAmenitiesPanel(data)}
 
         <div class="panel">
           <h2 class="section-title">${escapeHTML(dict("gallery"))}</h2>
