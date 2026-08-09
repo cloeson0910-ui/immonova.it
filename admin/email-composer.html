@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comunicazioni | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{text-decoration:none;color:#a67f34}
+.logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}
+.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:#a58139}
+.header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.header-actions a,.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.header-actions a:hover,.logout:hover{background:#a67f34;color:#fff}
+.container{max-width:1280px;margin:auto;padding:40px}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:12px}
+.title{font-size:42px;font-weight:200;letter-spacing:.05em;color:#a67f34;margin-bottom:18px}
+.subtitle{font-size:15px;line-height:1.8;color:#8f7643;max-width:860px;margin-bottom:28px}
+.form-wrapper{
+  background:rgba(255,255,255,.20);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+  padding:34px;
+}
+.section{margin-bottom:34px;padding-bottom:30px;border-bottom:1px solid rgba(166,127,52,.12)}
+.section:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.section-title{font-size:18px;font-weight:300;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;margin-bottom:20px}
+.field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#8f7643}
+input,textarea{
+  width:100%;
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.25);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+}
+textarea{min-height:220px;resize:vertical;line-height:1.7}
+.field-hint{font-size:11px;color:#8f7643;line-height:1.5}
+
+.book-switch{display:flex;gap:14px;margin-bottom:24px;flex-wrap:wrap}
+.book-btn{
+  flex:1;
+  min-width:200px;
+  padding:20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.20);
+  color:#8f7643;
+  cursor:pointer;
+  font-family:inherit;
+  text-align:left;
+}
+.book-btn strong{display:block;color:#a67f34;font-size:15px;letter-spacing:.04em;margin-bottom:4px}
+.book-btn span{font-size:12px}
+.book-btn.active{background:#a67f34;border-color:#a67f34}
+.book-btn.active strong,.book-btn.active span{color:#fffaf0}
+
+.recipients-toolbar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.recipients-search{
+  flex:1;
+  min-width:220px;
+  padding:12px 14px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.25);
+  color:#7f6430;
+  outline:none;
+  font-size:13px;
+}
+.select-all-label{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#8f7643;white-space:nowrap;cursor:pointer}
+.select-all-label input{width:auto}
+.recipients-count{font-size:12px;color:#a67f34;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+
+.recipients-list{
+  max-height:320px;
+  overflow:auto;
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(255,255,255,.16);
+}
+.recipient-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:12px 16px;
+  border-bottom:1px solid rgba(166,127,52,.08);
+  font-size:13px;
+  cursor:pointer;
+}
+.recipient-row:last-child{border-bottom:0}
+.recipient-row:hover{background:rgba(166,127,52,.08)}
+.recipient-row input{width:auto}
+.recipient-name{color:#7f6430;font-weight:600}
+.recipient-email{color:#8f7643;font-size:11px}
+.empty{padding:30px;text-align:center;opacity:.7;font-size:13px}
+
+.footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
+.btn-group{display:flex;gap:12px;flex-wrap:wrap}
+.submit-btn,.secondary-btn{
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.submit-btn{background:#a67f34;color:#fffaf0}
+.submit-btn:disabled{opacity:.55;cursor:not-allowed}
+.secondary-btn{background:rgba(255,255,255,.25);color:#a67f34}
+.save-panel{min-width:300px}
+.progress-text{min-height:18px;margin-bottom:10px;font-size:13px;color:#8f7643}
+.progress-text.success{color:#4f7f45}
+.progress-text.error{color:#9c2f2f}
+.progress-bar{width:100%;height:6px;border:1px solid rgba(166,127,52,.20);background:rgba(255,255,255,.28);overflow:hidden;margin-bottom:14px}
+.progress-fill{width:0%;height:100%;background:#a67f34;transition:width .35s ease}
+
+@media(max-width:700px){
+  .header{flex-direction:column;gap:18px}
+  .header-actions{justify-content:center}
+  .container{padding:28px 22px}
+  .form-wrapper{padding:24px}
+  .save-panel{min-width:100%}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+  <div class="header-actions">
+    <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="investors.html" data-i18n="nav_investors">Investitori</a>
+    <a href="users.html" data-i18n="nav_users">Utenti</a>
+    <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="kicker" data-i18n="kicker">Comunicazione Ufficiale</div>
+  <h1 class="title" data-i18n="title">Nuova Comunicazione</h1>
+  <p class="subtitle" data-i18n="subtitle">
+    Scrivi una comunicazione ufficiale IMMONOVA e mandala a tutta la rubrica scelta o solo alle persone che selezioni. La mail arriva già con la grafica del sito.
+  </p>
+
+  <form id="composerForm" class="form-wrapper">
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_book">Rubrica</h2>
+      <div class="book-switch">
+        <button type="button" class="book-btn" id="bookInvestorsBtn">
+          <strong data-i18n="book_investors_title">Investitori</strong>
+          <span data-i18n="book_investors_desc">Clienti e acquirenti registrati</span>
+        </button>
+        <button type="button" class="book-btn" id="bookProfilesBtn">
+          <strong data-i18n="book_profiles_title">Collaboratori</strong>
+          <span data-i18n="book_profiles_desc">Utenti con accesso al pannello IMMONOVA</span>
+        </button>
+      </div>
+
+      <div class="recipients-toolbar">
+        <input type="text" id="recipientsSearch" class="recipients-search" data-i18n="search_placeholder" placeholder="Cerca per nome o email...">
+        <label class="select-all-label">
+          <input type="checkbox" id="selectAllCheckbox">
+          <span data-i18n="select_all">Seleziona tutti</span>
+        </label>
+        <div class="recipients-count" id="recipientsCount"></div>
+      </div>
+
+      <div class="recipients-list" id="recipientsList">
+        <div class="empty" data-i18n="pick_book_first">Scegli prima una rubrica qui sopra.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_message">Messaggio</h2>
+      <div class="field">
+        <label data-i18n="label_subject">Oggetto</label>
+        <input type="text" id="subject" required>
+      </div>
+      <div class="field">
+        <label data-i18n="label_body">Testo del messaggio</label>
+        <textarea id="bodyText" required></textarea>
+        <div class="field-hint" data-i18n="body_hint">Vai a capo due volte per iniziare un nuovo paragrafo. Il messaggio verrà inserito automaticamente nella grafica ufficiale IMMONOVA (intestazione, colori, piè di pagina).</div>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <a class="secondary-btn" href="dashboard.html" data-i18n="btn_cancel">Annulla</a>
+      <div class="btn-group">
+        <button type="button" class="secondary-btn" id="previewBtn" data-i18n="btn_preview">Anteprima</button>
+      </div>
+      <div class="save-panel">
+        <div id="progressText" class="progress-text"></div>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <button class="submit-btn" type="submit" id="sendBtn" data-i18n="btn_send">Invia Comunicazione</button>
+      </div>
+    </div>
+
+  </form>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const form = document.getElementById("composerForm");
+const sendBtn = document.getElementById("sendBtn");
+const previewBtn = document.getElementById("previewBtn");
+const progressText = document.getElementById("progressText");
+const progressFill = document.getElementById("progressFill");
+const recipientsList = document.getElementById("recipientsList");
+const recipientsSearch = document.getElementById("recipientsSearch");
+const recipientsCount = document.getElementById("recipientsCount");
+const selectAllCheckbox = document.getElementById("selectAllCheckbox");
+const bookInvestorsBtn = document.getElementById("bookInvestorsBtn");
+const bookProfilesBtn = document.getElementById("bookProfilesBtn");
+
+let currentUser = null;
+let currentUserLanguage = "it";
+let currentBook = null;
+let allContacts = [];
+
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_investors:"Investitori", nav_users:"Utenti", logout:"Logout",
+  kicker:"Comunicazione Ufficiale", title:"Nuova Comunicazione",
+  subtitle:"Scrivi una comunicazione ufficiale IMMONOVA e mandala a tutta la rubrica scelta o solo alle persone che selezioni. La mail arriva già con la grafica del sito.",
+  section_book:"Rubrica",
+  book_investors_title:"Investitori", book_investors_desc:"Clienti e acquirenti registrati",
+  book_profiles_title:"Collaboratori", book_profiles_desc:"Utenti con accesso al pannello IMMONOVA",
+  search_placeholder:"Cerca per nome o email...", select_all:"Seleziona tutti",
+  pick_book_first:"Scegli prima una rubrica qui sopra.",
+  loading:"Caricamento contatti...", loading_error:"Errore nel caricamento dei contatti.",
+  no_contacts:"Nessun contatto con email valida in questa rubrica.",
+  section_message:"Messaggio", label_subject:"Oggetto", label_body:"Testo del messaggio",
+  body_hint:"Vai a capo due volte per iniziare un nuovo paragrafo. Il messaggio verrà inserito automaticamente nella grafica ufficiale IMMONOVA (intestazione, colori, piè di pagina).",
+  btn_cancel:"Annulla", btn_preview:"Anteprima", btn_send:"Invia Comunicazione",
+  count_selected_suffix:" selezionati su ",
+  msg_pick_book:"Scegli prima una rubrica.",
+  msg_no_recipients:"Seleziona almeno un destinatario.",
+  msg_required_fields:"Oggetto e testo del messaggio sono obbligatori.",
+  msg_sending:"Invio comunicazione in corso...",
+  msg_sent_success:"Comunicazione inviata correttamente.",
+  msg_sent_partial:"Comunicazione inviata con alcuni errori: ",
+  msg_send_error:"Errore durante l'invio: "
+};
+
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_email_composer_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Admin page to compose and send an official branded email communication to a selected address book (investors or collaborators).",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione email-composer non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+}
+
+async function loadUserLanguage(){
+  var result = await client.from("profiles").select("language").eq("id", currentUser.id).single();
+  if(result.error){ await applyLanguage("it"); return; }
+  await applyLanguage((result.data && result.data.language) || "it");
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function escapeHTML(value){
+  return String(value == null ? "" : value)
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+function setProgress(message, percent, type){
+  progressText.className = "progress-text " + (type || "");
+  progressText.textContent = message || "";
+  progressFill.style.width = (percent || 0) + "%";
+}
+
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
+async function selectBook(book){
+  currentBook = book;
+  bookInvestorsBtn.classList.toggle("active", book === "investors");
+  bookProfilesBtn.classList.toggle("active", book === "profiles");
+
+  recipientsList.innerHTML = '<div class="empty">' + escapeHTML(T.loading) + '</div>';
+  recipientsSearch.value = "";
+  selectAllCheckbox.checked = false;
+
+  var result;
+  if(book === "investors"){
+    result = await client.from("investors").select("id,first_name,last_name,email").order("first_name",{ascending:true});
+  }else{
+    result = await client.from("profiles").select("id,full_name,email").order("full_name",{ascending:true});
+  }
+
+  if(result.error){
+    recipientsList.innerHTML = '<div class="empty">' + escapeHTML(T.loading_error) + '</div>';
+    allContacts = [];
+    updateRecipientsCount();
+    return;
+  }
+
+  allContacts = (result.data || [])
+    .map(function(row){
+      var name = book === "investors"
+        ? ((row.first_name || "") + " " + (row.last_name || "")).trim()
+        : (row.full_name || "");
+      return { id: row.id, name: name || row.email || "", email: row.email || "", selected: false };
+    })
+    .filter(function(c){ return c.email; });
+
+  renderRecipients();
+}
+
+function renderRecipients(){
+  var query = recipientsSearch.value.trim().toLowerCase();
+  var visible = allContacts.filter(function(c){
+    if(!query) return true;
+    return c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query);
+  });
+
+  if(!visible.length){
+    recipientsList.innerHTML = '<div class="empty">' + escapeHTML(T.no_contacts) + '</div>';
+  }else{
+    recipientsList.innerHTML = visible.map(function(c){
+      return '<label class="recipient-row">'
+        + '<input type="checkbox" data-contact-id="' + escapeHTML(c.id) + '"' + (c.selected ? " checked" : "") + '>'
+        + '<span><span class="recipient-name">' + escapeHTML(c.name) + '</span><br><span class="recipient-email">' + escapeHTML(c.email) + '</span></span>'
+        + '</label>';
+    }).join("");
+
+    recipientsList.querySelectorAll("input[data-contact-id]").forEach(function(input){
+      input.addEventListener("change", function(){
+        var id = input.getAttribute("data-contact-id");
+        var contact = allContacts.find(function(c){ return String(c.id) === String(id); });
+        if(contact) contact.selected = input.checked;
+        updateRecipientsCount();
+      });
+    });
+  }
+
+  updateRecipientsCount();
+}
+
+function updateRecipientsCount(){
+  var total = allContacts.length;
+  var selected = allContacts.filter(function(c){ return c.selected; }).length;
+  recipientsCount.textContent = selected + T.count_selected_suffix + total;
+  selectAllCheckbox.checked = total > 0 && selected === total;
+}
+
+selectAllCheckbox.addEventListener("change", function(){
+  var query = recipientsSearch.value.trim().toLowerCase();
+  allContacts.forEach(function(c){
+    var matchesFilter = !query || c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query);
+    if(matchesFilter) c.selected = selectAllCheckbox.checked;
+  });
+  renderRecipients();
+});
+
+recipientsSearch.addEventListener("input", renderRecipients);
+
+bookInvestorsBtn.addEventListener("click", function(){ selectBook("investors"); });
+bookProfilesBtn.addEventListener("click", function(){ selectBook("profiles"); });
+
+function buildEmailHtmlPreview(subject, bodyText, recipientName){
+  var paragraphs = String(bodyText || "").split(/\n\s*\n/).map(function(p){
+    return '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f">' + escapeHTML(p).replaceAll("\n","<br>") + '</p>';
+  }).join("");
+
+  var greeting = recipientName
+    ? '<p style="margin:0 0 16px;font-size:15px;color:#4a3c1f">Gentile ' + escapeHTML(recipientName) + ',</p>'
+    : "";
+
+  return '<div style="background:#f4ecdf;padding:40px 20px;font-family:\'Avenir Next\',\'Helvetica Neue\',Arial,sans-serif;">'
+    + '<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid rgba(166,127,52,.25);">'
+      + '<div style="padding:36px 40px 24px;text-align:center;border-bottom:1px solid rgba(166,127,52,.15);">'
+        + '<div style="font-size:24px;font-weight:600;letter-spacing:.35em;color:#a67f34;">IMMONOVA</div>'
+        + '<div style="margin-top:8px;font-size:10px;font-weight:700;letter-spacing:.2em;color:#a58139;text-transform:uppercase;">Off Market &middot; Consulting</div>'
+      + '</div>'
+      + '<div style="padding:36px 40px;">'
+        + '<h1 style="margin:0 0 20px;font-size:19px;font-weight:400;color:#a67f34;">' + escapeHTML(subject) + '</h1>'
+        + greeting
+        + paragraphs
+      + '</div>'
+      + '<div style="padding:24px 40px;border-top:1px solid rgba(166,127,52,.15);text-align:center;">'
+        + '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;">IMMONOVA &middot; Off Market Consulting</div>'
+      + '</div>'
+    + '</div>'
+  + '</div>';
+}
+
+previewBtn.addEventListener("click", function(){
+  var subject = document.getElementById("subject").value.trim() || "(oggetto)";
+  var bodyText = document.getElementById("bodyText").value.trim() || "(testo del messaggio)";
+  var html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Anteprima</title></head><body>" + buildEmailHtmlPreview(subject, bodyText, "Nome Cognome") + "</body></html>";
+  var blob = new Blob([html], { type: "text/html" });
+  var url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+});
+
+form.addEventListener("submit", async function(event){
+  event.preventDefault();
+
+  var subject = document.getElementById("subject").value.trim();
+  var bodyText = document.getElementById("bodyText").value.trim();
+
+  if(!currentBook){
+    setProgress(T.msg_pick_book, 100, "error");
+    return;
+  }
+
+  if(!subject || !bodyText){
+    setProgress(T.msg_required_fields, 100, "error");
+    return;
+  }
+
+  var selected = allContacts.filter(function(c){ return c.selected; });
+
+  if(!selected.length){
+    setProgress(T.msg_no_recipients, 100, "error");
+    return;
+  }
+
+  sendBtn.disabled = true;
+  setProgress(T.msg_sending, 40, "");
+
+  try{
+    var result = await client.functions.invoke("send-bulk-communication", {
+      body:{
+        subject: subject,
+        body_text: bodyText,
+        recipients: selected.map(function(c){ return { email: c.email, name: c.name }; })
+      }
+    });
+
+    if(result.error){
+      var msg = await extractEdgeFunctionErrorMessage(result.error);
+      throw new Error(msg);
+    }
+
+    var data = result.data || {};
+    if(data.failed > 0){
+      setProgress(T.msg_sent_partial + data.sent + "/" + (data.sent + data.failed), 100, "error");
+    }else{
+      setProgress(T.msg_sent_success + " (" + data.sent + ")", 100, "success");
+    }
+  }catch(error){
+    console.error(error);
+    setProgress(T.msg_send_error + (error.message || error), 100, "error");
+  }
+
+  sendBtn.disabled = false;
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  if(await checkAuth()){
+    await loadUserLanguage();
+  }
+})();
+</script>
+</body>
+</html>
