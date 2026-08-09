@@ -240,6 +240,11 @@ textarea{min-height:220px;resize:vertical;line-height:1.7}
         <textarea id="bodyText" required></textarea>
         <div class="field-hint" data-i18n="body_hint">Vai a capo due volte per iniziare un nuovo paragrafo. Il messaggio verrà inserito automaticamente nella grafica ufficiale IMMONOVA (intestazione, colori, piè di pagina).</div>
       </div>
+      <div class="field">
+        <label data-i18n="label_attachment">Allegato (opzionale, es. invito PDF)</label>
+        <input type="file" id="attachmentFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+        <div class="field-hint" id="attachmentSelectedHint"></div>
+      </div>
     </div>
 
     <div class="footer-actions">
@@ -294,6 +299,8 @@ var UI_STRINGS = {
   no_contacts:"Nessun contatto con email valida in questa rubrica.",
   section_message:"Messaggio", label_subject:"Oggetto", label_body:"Testo del messaggio",
   body_hint:"Vai a capo due volte per iniziare un nuovo paragrafo. Il messaggio verrà inserito automaticamente nella grafica ufficiale IMMONOVA (intestazione, colori, piè di pagina).",
+  label_attachment:"Allegato (opzionale, es. invito PDF)", attachment_selected_prefix:"File selezionato: ",
+  msg_uploading_attachment:"Caricamento allegato in corso...",
   btn_cancel:"Annulla", btn_preview:"Anteprima", btn_send:"Invia Comunicazione",
   count_selected_suffix:" selezionati su ",
   msg_pick_book:"Scegli prima una rubrica.",
@@ -308,7 +315,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_email_composer_" + lang + "_v1"; }
+function i18nCacheKey(lang){ return "immonova_i18n_email_composer_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -514,6 +521,27 @@ previewBtn.addEventListener("click", function(){
   window.open(url, "_blank");
 });
 
+document.getElementById("attachmentFile").addEventListener("change", function(){
+  var hint = document.getElementById("attachmentSelectedHint");
+  var file = this.files[0];
+  hint.textContent = file ? (T.attachment_selected_prefix + file.name) : "";
+});
+
+async function uploadAttachment(file){
+  var ext = (file.name.split(".").pop() || "pdf").toLowerCase();
+  var path = "email-" + Date.now() + "-" + Math.round(Math.random() * 100000) + "." + ext;
+
+  var upload = await client.storage.from("email-attachments").upload(path, file, {
+    contentType: file.type || "application/octet-stream",
+    upsert: true
+  });
+
+  if(upload.error) throw upload.error;
+
+  var pub = client.storage.from("email-attachments").getPublicUrl(path);
+  return { url: pub && pub.data && pub.data.publicUrl, filename: file.name };
+}
+
 form.addEventListener("submit", async function(event){
   event.preventDefault();
 
@@ -538,15 +566,26 @@ form.addEventListener("submit", async function(event){
   }
 
   sendBtn.disabled = true;
-  setProgress(T.msg_sending, 40, "");
+  setProgress(T.msg_sending, 20, "");
 
   try{
+    var attachmentPayload = {};
+    var attachmentFile = document.getElementById("attachmentFile").files[0];
+
+    if(attachmentFile){
+      setProgress(T.msg_uploading_attachment, 35, "");
+      var uploaded = await uploadAttachment(attachmentFile);
+      attachmentPayload = { attachment_url: uploaded.url, attachment_filename: uploaded.filename };
+    }
+
+    setProgress(T.msg_sending, 55, "");
+
     var result = await client.functions.invoke("send-bulk-communication", {
-      body:{
+      body: Object.assign({
         subject: subject,
         body_text: bodyText,
         recipients: selected.map(function(c){ return { email: c.email, name: c.name }; })
-      }
+      }, attachmentPayload)
     });
 
     if(result.error){
