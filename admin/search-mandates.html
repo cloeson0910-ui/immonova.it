@@ -210,7 +210,7 @@ Tutti i mandati di ricerca registrati: caratteristiche richieste dai clienti che
 <div class="modal-overlay" id="matchesOverlay">
 <div class="modal-box">
 <div class="modal-title" id="matchesTitle"></div>
-<div class="matches-disclaimer" data-i18n="matches_disclaimer">Budget, metratura, camere, bagni e zona ESCLUDONO l'immobile se non rientra nei criteri (quando il dato è disponibile — se manca, resta in elenco con l'etichetta "da verificare"). Giardino/piscina/garage/vista mare invece non escludono mai: sono solo una parola cercata nella descrizione, un indizio da controllare a mano, non una garanzia.</div>
+<div class="matches-disclaimer" data-i18n="matches_disclaimer">Budget, metratura, camere, bagni, zona e tutte le caratteristiche opzionali (piscina, giardino, box auto ecc.) ESCLUDONO l'immobile se non corrisponde. Quando un dato manca (es. prezzo non compilato), l'immobile resta comunque in elenco con l'etichetta "da verificare" invece di sparire.</div>
 <div id="matchesList" class="matches-list"></div>
 <button type="button" class="secondary-link" id="closeMatchesBtn" data-i18n="btn_close" style="margin-top:18px">Chiudi</button>
 </div>
@@ -265,14 +265,17 @@ var UI_STRINGS = {
   confirm_delete:"Eliminare definitivamente questo mandato di ricerca?",
   msg_deleting:"Eliminazione in corso...", msg_deleted:"Mandato eliminato.",
   matches_title_prefix:"Immobili corrispondenti per ",
-  matches_disclaimer:"Budget, metratura, camere, bagni e zona ESCLUDONO l'immobile se non rientra nei criteri (quando il dato è disponibile — se manca, resta in elenco con l'etichetta \"da verificare\"). Giardino/piscina/garage/vista mare invece non escludono mai: sono solo una parola cercata nella descrizione, un indizio da controllare a mano, non una garanzia.",
+  matches_disclaimer:"Budget, metratura, camere, bagni, zona e tutte le caratteristiche opzionali (piscina, giardino, box auto ecc.) ESCLUDONO l'immobile se non corrisponde. Quando un dato manca (es. prezzo non compilato), l'immobile resta comunque in elenco con l'etichetta \"da verificare\" invece di sparire.",
   matches_none:"Nessuna opportunità trovata per questa categoria.",
   matches_criteria_suffix:"criteri corrispondenti", matches_no_criteria:"Nessun criterio specifico nel mandato",
   matches_unpublished:"non pubblicata", matches_unknown_suffix:"da verificare (dato mancante)",
   reason_budget:"Budget in linea", reason_sqm:"Metratura in linea",
   reason_bedrooms:"Camere sufficienti", reason_bathrooms:"Bagni sufficienti",
-  reason_garden:"Giardino (da descrizione)", reason_pool:"Piscina (da descrizione)",
-  reason_garage:"Garage (da descrizione)", reason_sea_view:"Vista mare (da descrizione)",
+  reason_garden:"Giardino", reason_pool:"Piscina",
+  reason_garage:"Box auto", reason_sea_view:"Vista mare",
+  reason_parking_spot:"Posto auto", reason_terrace:"Terrazza", reason_balcony:"Balcone",
+  reason_historic_center:"Centro storico", reason_ac:"Aria condizionata", reason_elevator:"Ascensore",
+  reason_fireplace:"Camino", reason_beachfront:"Fronte mare",
   reason_location:"Zona corrispondente",
   btn_close:"Chiudi",
 };
@@ -280,7 +283,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_search_mandates_list_" + lang + "_v3"; }
+function i18nCacheKey(lang){ return "immonova_i18n_search_mandates_list_" + lang + "_v4"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -373,6 +376,14 @@ function renderFeatures(m){
   if(m.wants_pool) chips.push(T.feat_pool);
   if(m.wants_garage) chips.push(T.feat_garage);
   if(m.wants_sea_view) chips.push(T.feat_sea_view);
+  if(m.wants_parking_spot) chips.push(T.reason_parking_spot);
+  if(m.wants_terrace) chips.push(T.reason_terrace);
+  if(m.wants_balcony) chips.push(T.reason_balcony);
+  if(m.wants_historic_center) chips.push(T.reason_historic_center);
+  if(m.wants_air_conditioning) chips.push(T.reason_ac);
+  if(m.wants_elevator) chips.push(T.reason_elevator);
+  if(m.wants_fireplace) chips.push(T.reason_fireplace);
+  if(m.wants_beachfront) chips.push(T.reason_beachfront);
   if(!chips.length) return "";
   return chips.map(function(c){ return '<span class="badge">' + escapeHTML(c) + '</span>'; }).join("");
 }
@@ -450,7 +461,7 @@ async function loadOpportunitiesForMatching(){
   if(allOpportunitiesCache) return allOpportunitiesCache;
   var result = await client
     .from("opportunities")
-    .select("id,title,category,price,location,municipality,province,region,internal_size,land_size,bedrooms,bathrooms,short_description,full_description,cover_image,published");
+    .select("id,title,category,price,location,municipality,province,region,internal_size,land_size,bedrooms,bathrooms,short_description,full_description,cover_image,published,has_pool,has_garden,has_garage,has_parking_spot,has_terrace,has_balcony,has_sea_view,has_historic_center,has_air_conditioning,has_elevator,has_fireplace,has_beachfront");
   allOpportunitiesCache = result.data || [];
   return allOpportunitiesCache;
 }
@@ -531,13 +542,33 @@ function computeMatch(mandate, opp){
     }
   }
 
-  // Le 4 caratteristiche cercate in descrizione restano solo un indizio (punteggio, mai
-  // escludono): non e' un dato affidabile abbastanza da scartare un immobile su questa base.
-  var descText = ((opp.short_description || "") + " " + (opp.full_description || "")).toLowerCase();
-  if(mandate.wants_garden){ maxScore++; if(descText.indexOf("giardino") >= 0){ score++; reasons.push(T.reason_garden); } }
-  if(mandate.wants_pool){ maxScore++; if(descText.indexOf("piscina") >= 0){ score++; reasons.push(T.reason_pool); } }
-  if(mandate.wants_garage){ maxScore++; if(descText.indexOf("garage") >= 0 || descText.indexOf("posto auto") >= 0){ score++; reasons.push(T.reason_garage); } }
-  if(mandate.wants_sea_view){ maxScore++; if(descText.indexOf("vista mare") >= 0){ score++; reasons.push(T.reason_sea_view); } }
+  // Ora che le caratteristiche sono campi veri sull'immobile (has_pool, has_garden ecc.),
+  // il confronto e' affidabile quanto budget/metratura/camere: se il cliente la chiede e
+  // l'immobile non ce l'ha, esclude davvero — non e' più una ricerca a occhio nella
+  // descrizione.
+  var amenities = [
+    ["wants_pool", "has_pool", T.reason_pool],
+    ["wants_garden", "has_garden", T.reason_garden],
+    ["wants_garage", "has_garage", T.reason_garage],
+    ["wants_parking_spot", "has_parking_spot", T.reason_parking_spot],
+    ["wants_terrace", "has_terrace", T.reason_terrace],
+    ["wants_balcony", "has_balcony", T.reason_balcony],
+    ["wants_sea_view", "has_sea_view", T.reason_sea_view],
+    ["wants_historic_center", "has_historic_center", T.reason_historic_center],
+    ["wants_air_conditioning", "has_air_conditioning", T.reason_ac],
+    ["wants_elevator", "has_elevator", T.reason_elevator],
+    ["wants_fireplace", "has_fireplace", T.reason_fireplace],
+    ["wants_beachfront", "has_beachfront", T.reason_beachfront]
+  ];
+
+  amenities.forEach(function(a){
+    if(excluded) return;
+    var wantKey = a[0], hasKey = a[1], label = a[2];
+    if(!mandate[wantKey]) return;
+    maxScore++;
+    if(opp[hasKey] === true){ score++; reasons.push(label); }
+    else{ excluded = true; }
+  });
 
   return { score: score, maxScore: maxScore, reasons: reasons, unknowns: unknowns, excluded: excluded, price: price };
 }

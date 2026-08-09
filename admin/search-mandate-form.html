@@ -253,10 +253,18 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
       <div class="field full" style="margin-top:18px">
         <label data-i18n="label_features">Caratteristiche richieste</label>
         <div class="checkbox-row">
-          <label class="check-card"><input type="checkbox" id="wantsGarden"> <span data-i18n="feat_garden">Giardino</span></label>
           <label class="check-card"><input type="checkbox" id="wantsPool"> <span data-i18n="feat_pool">Piscina</span></label>
-          <label class="check-card"><input type="checkbox" id="wantsGarage"> <span data-i18n="feat_garage">Garage</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsGarden"> <span data-i18n="feat_garden">Giardino</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsGarage"> <span data-i18n="feat_garage">Box auto</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsParkingSpot"> <span data-i18n="feat_parking_spot">Posto auto</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsTerrace"> <span data-i18n="feat_terrace">Terrazza</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsBalcony"> <span data-i18n="feat_balcony">Balcone</span></label>
           <label class="check-card"><input type="checkbox" id="wantsSeaView"> <span data-i18n="feat_sea_view">Vista mare</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsHistoricCenter"> <span data-i18n="feat_historic_center">Centro storico</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsAirConditioning"> <span data-i18n="feat_air_conditioning">Aria condizionata</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsElevator"> <span data-i18n="feat_elevator">Ascensore</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsFireplace"> <span data-i18n="feat_fireplace">Camino</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsBeachfront"> <span data-i18n="feat_beachfront">Fronte mare</span></label>
         </div>
       </div>
     </div>
@@ -294,6 +302,15 @@ const mandateId = params.get("id");
 const saveBtn = document.getElementById("saveBtn");
 const progressText = document.getElementById("progressText");
 const progressFill = document.getElementById("progressFill");
+
+var MANDATE_FEATURES = [
+  { elementId:"wantsPool", column:"wants_pool" }, { elementId:"wantsGarden", column:"wants_garden" },
+  { elementId:"wantsGarage", column:"wants_garage" }, { elementId:"wantsParkingSpot", column:"wants_parking_spot" },
+  { elementId:"wantsTerrace", column:"wants_terrace" }, { elementId:"wantsBalcony", column:"wants_balcony" },
+  { elementId:"wantsSeaView", column:"wants_sea_view" }, { elementId:"wantsHistoricCenter", column:"wants_historic_center" },
+  { elementId:"wantsAirConditioning", column:"wants_air_conditioning" }, { elementId:"wantsElevator", column:"wants_elevator" },
+  { elementId:"wantsFireplace", column:"wants_fireplace" }, { elementId:"wantsBeachfront", column:"wants_beachfront" }
+];
 
 let currentUser = null;
 let currentUserLanguage = "it";
@@ -414,10 +431,9 @@ async function loadMandateForEdit(){
   document.getElementById("bathroomsMin").value = data.bathrooms_min ?? "";
   document.getElementById("bedroomsMax").value = data.bedrooms_max ?? "";
   document.getElementById("bathroomsMax").value = data.bathrooms_max ?? "";
-  document.getElementById("wantsGarden").checked = !!data.wants_garden;
-  document.getElementById("wantsPool").checked = !!data.wants_pool;
-  document.getElementById("wantsGarage").checked = !!data.wants_garage;
-  document.getElementById("wantsSeaView").checked = !!data.wants_sea_view;
+  MANDATE_FEATURES.forEach(function(f){
+    document.getElementById(f.elementId).checked = !!data[f.column];
+  });
   document.getElementById("notes").value = data.notes || "";
 }
 
@@ -476,12 +492,12 @@ form.addEventListener("submit", async function(event){
     bathrooms_min: numVal("bathroomsMin"),
     bedrooms_max: numVal("bedroomsMax"),
     bathrooms_max: numVal("bathroomsMax"),
-    wants_garden: boolVal("wantsGarden"),
-    wants_pool: boolVal("wantsPool"),
-    wants_garage: boolVal("wantsGarage"),
-    wants_sea_view: boolVal("wantsSeaView"),
     notes: val("notes") || null
   };
+
+  MANDATE_FEATURES.forEach(function(f){
+    payload[f.column] = boolVal(f.elementId);
+  });
 
   if(!mandateId){
     payload.created_by = currentUser.id;
@@ -522,6 +538,14 @@ form.addEventListener("submit", async function(event){
           wants_pool: payload.wants_pool,
           wants_garage: payload.wants_garage,
           wants_sea_view: payload.wants_sea_view,
+          wants_parking_spot: payload.wants_parking_spot,
+          wants_terrace: payload.wants_terrace,
+          wants_balcony: payload.wants_balcony,
+          wants_historic_center: payload.wants_historic_center,
+          wants_air_conditioning: payload.wants_air_conditioning,
+          wants_elevator: payload.wants_elevator,
+          wants_fireplace: payload.wants_fireplace,
+          wants_beachfront: payload.wants_beachfront,
           notes: payload.notes
         }
       });
