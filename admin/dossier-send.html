@@ -1880,6 +1880,10 @@ function isCommercialCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("commercial")>=0; // copre sia "Commerciale" (IT) che "Commercial" (EN)
 }
+function isLandCategory(){
+  var c=String(getCategory()||"").toLowerCase();
+  return c.indexOf("terreni")>=0 || c.indexOf("terreno")>=0 || c.indexOf("land")>=0; // un terreno non ha una proiezione di rendita: niente ADR/ROI/cashflow per questa categoria
+}
 function getAssetUnits(){
   var o=opportunity||{};
   var n=firstFiniteOpp(o.bedrooms);
@@ -2075,12 +2079,14 @@ function renderBook(){
 
   renderAdPagesForPosition("after_toc").forEach(function(p){ push("", p.html, p.divider); });
 
-  push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
-  push(T.chapter_financial, renderInternalFacts());
-  push(T.chapter_financial, renderFinancialSnapshot());
-  push(T.chapter_financial, renderInvestmentStructure());
-  renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
-  renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
+  if(!isLandCategory()){
+    push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
+    push(T.chapter_financial, renderInternalFacts());
+    push(T.chapter_financial, renderFinancialSnapshot());
+    push(T.chapter_financial, renderInvestmentStructure());
+    renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
+    renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
+  }
 
   var docPages = preparedDocumentPages;
   var renovationPages = renderRenovationBeforeAfterPages();
