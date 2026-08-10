@@ -1092,7 +1092,9 @@ async function changeReviewStatus(id, newStatus){
     return;
   }
 
-  await notifyStatusChange(id, T.notify_review_prefix + statusLabel(newStatus));
+  if(isOpportunityCurrentlyPublished(id)){
+    await notifyStatusChange(id, T.notify_review_prefix + statusLabel(newStatus));
+  }
 
   setStatus(T.msg_review_updated, "success");
   await loadOpportunities();
@@ -1160,7 +1162,9 @@ async function changeCommercialStatus(id, newStatus){
     });
   }
 
-  await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
+  if(isOpportunityCurrentlyPublished(id)){
+    await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
+  }
 
   setStatus(T.msg_commercial_updated, "success");
   await loadOpportunities();
@@ -1170,6 +1174,16 @@ async function changeCommercialStatus(id, newStatus){
 function findOpportunityTitle(id){
   var item = allOpportunities.find(function(o){ return String(o.id) === String(id); });
   return (item && item.title) || ("Opportunità #" + id);
+}
+
+/* ---- Un cambio di stato (revisione o commerciale) ha senso notificarlo ai collaboratori
+   solo se l'opportunita' e' GIA' pubblicata: se non e' mai stata resa pubblica, i cambi
+   di revisione/stato commerciale sono lavoro interno, nessuno all'esterno ne e' informato
+   comunque. La notifica di "e' stata pubblicata" resta un caso a parte, gestita
+   direttamente in togglePublished() indipendentemente da questo controllo. ---- */
+function isOpportunityCurrentlyPublished(id){
+  var item = allOpportunities.find(function(o){ return String(o.id) === String(id); });
+  return !!(item && item.published);
 }
 
 async function notifyStatusChange(id, changeDescription){
