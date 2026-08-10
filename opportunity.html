@@ -144,8 +144,10 @@ h1{
   max-width:780px;
 }
 .status-badge{
-  display:inline-block;
-  margin-bottom:18px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:20px;
   padding:8px 12px;
   border:1px solid rgba(166,127,52,.30);
   background:rgba(255,255,255,.20);
@@ -161,19 +163,32 @@ h1{
 }
 .status-badge.reserved{
   color:#fff;
-  font-size:12px;
-  font-weight:700;
-  padding:10px 16px;
-  border-color:rgba(95,111,146,.6);
+  font-size:15px;
+  font-weight:800;
+  padding:14px 22px;
+  border:2px solid #4a5678;
   background:#5f6f92;
+  box-shadow:0 8px 24px rgba(95,111,146,.45);
 }
 .status-badge.under_negotiation{
   color:#fff;
-  font-size:12px;
-  font-weight:700;
-  padding:10px 16px;
-  border-color:rgba(143,91,40,.6);
-  background:#8f5b28;
+  font-size:15px;
+  font-weight:800;
+  padding:14px 22px;
+  border:2px solid #b5732e;
+  background:#d97a2e;
+  box-shadow:0 8px 24px rgba(217,122,46,.5);
+  animation:statusPulse 2.2s ease-in-out infinite;
+}
+.status-badge .status-icon{
+  width:16px;
+  height:16px;
+  flex-shrink:0;
+}
+.status-badge .status-icon svg{width:100%;height:100%;display:block}
+@keyframes statusPulse{
+  0%,100%{box-shadow:0 8px 24px rgba(217,122,46,.5)}
+  50%{box-shadow:0 8px 32px rgba(217,122,46,.85)}
 }
 .hero-media{
   min-height:460px;
@@ -215,9 +230,11 @@ h1{
 }
 .lock-marker small{
   display:block;
-  font-size:8px;
+  font-size:10px;
+  font-weight:700;
   letter-spacing:.20em;
-  color:#f1d27a;
+  color:#fffaf0;
+  text-shadow:0 1px 6px rgba(0,0,0,.55),0 0 2px rgba(0,0,0,.6);
 }
 .lock-marker strong{
   display:block;
@@ -574,7 +591,6 @@ html[dir="rtl"] .data-grid{direction:rtl}
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunities</a>
     <a href="success-stories.html" data-i18n="nav_success_stories">Success Stories</a>
     <a href="events.html" data-i18n="nav_events">Events</a>
-    <a href="off-market.html" data-i18n="nav_off_market">Off Market</a>
     <a href="join-us.html" data-i18n="nav_join_us">Lavora con Noi</a>
     <a href="contact.html" data-i18n="nav_contact">Contact</a>
   </nav>
@@ -866,6 +882,13 @@ function commercialLabel(status){
   return dict("available");
 }
 
+function statusIcon(status){
+  if(status === "under_negotiation" || status === "reserved"){
+    return '<span class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 1 21h22L12 2Z" stroke-linejoin="round"/><path d="M12 9v5"/><circle cx="12" cy="17.2" r="0.9" fill="currentColor" stroke="none"/></svg></span>';
+  }
+  return "";
+}
+
 function isSold(data){
   return (data.commercial_status || "available") === "sold";
 }
@@ -1085,7 +1108,7 @@ async function renderOpportunity(data){
   pageContent.innerHTML = `
     <section class="hero">
       <div>
-        <span class="status-badge ${escapeHTML(data.commercial_status || "available")}">${escapeHTML(commercialLabel(data.commercial_status))}</span>
+        <span class="status-badge ${escapeHTML(data.commercial_status || "available")}">${statusIcon(data.commercial_status)}${escapeHTML(commercialLabel(data.commercial_status))}</span>
         <div class="kicker">${escapeHTML(category || dict("investment_opportunity"))}</div>
         <h1>${escapeHTML(title)}</h1>
         <div class="meta">${escapeHTML(location || "")}${location ? " · " : ""}${escapeHTML(investmentType || dict("investment_opportunity"))}</div>
