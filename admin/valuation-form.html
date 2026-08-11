@@ -491,7 +491,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_valuation_form_" + lang + "_v3"; }
+function i18nCacheKey(lang){ return "immonova_i18n_valuation_form_" + lang + "_v4"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -705,6 +705,22 @@ function isLocalEnoughGeography(level){
   return l === "municipality" || l === "city" || l === "province" || l === "department" || l === "region";
 }
 
+/* ---- Motore demografico dedicato (eta' + reddito), stesso usato nei dossier di vendita. ---- */
+async function findPopulationComposition(municipality, province, region){
+  try{
+    var result = await client.functions.invoke("immonova-demographics-engine", {
+      body:{ municipality: municipality || null, province: province || null, region: region || null, country_code: "IT" }
+    });
+    if(result.error) return null;
+    var data = result.data;
+    if(!data || (!data.age_distribution && !data.income_distribution)) return null;
+    return { age_distribution: data.age_distribution || null, income_distribution: data.income_distribution || null };
+  }catch(e){
+    console.warn("Composizione popolazione non disponibile (non bloccante):", e);
+    return null;
+  }
+}
+
 async function findMarketPricePerSqm(municipality, province, region){
   try{
     var result = await client.functions.invoke("immonova-valuation-engine", {
@@ -765,6 +781,7 @@ calculateBtn.addEventListener("click", async function(){
   try{
     var internalResult = await findInternalComparables(category, province, municipality);
     var marketResult = await findMarketPricePerSqm(municipality, province, region);
+    var populationComposition = await findPopulationComposition(municipality, province, region);
 
     var immonovaFigures = [internalResult.pricePerSqm, marketResult.value].filter(function(v){ return v != null; });
     var immonovaPricePerSqm = immonovaFigures.length ? (immonovaFigures.reduce(function(a,b){return a+b;},0) / immonovaFigures.length) : null;
@@ -811,6 +828,7 @@ calculateBtn.addEventListener("click", async function(){
         market_price_per_sqm: marketResult.value,
         market_geography_level: marketResult.geography_level,
         market_rejected_as_too_broad: marketResult.rejected_as_too_broad,
+        population_composition: populationComposition,
         generated_at: new Date().toISOString()
       },
       valuation_immonova_min: immonovaMin, valuation_immonova_max: immonovaMax,

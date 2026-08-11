@@ -42,6 +42,13 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .section-title{font-size:28px;font-weight:300;letter-spacing:.16em;text-transform:uppercase;color:#a67f34;margin-bottom:18px}
 .lux-rule{height:1px;background:linear-gradient(to right,rgba(166,127,52,.70),transparent);margin:18px 0 26px}
 .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:20px}
+.pop-comp-block{margin-top:22px}
+.pop-comp-title{font-size:14px;font-weight:600;color:#a67f34;letter-spacing:.04em;margin-bottom:14px}
+.pop-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.pop-bar-label{width:130px;font-size:11px;color:#8f7643;flex-shrink:0}
+.pop-bar-track{flex:1;height:10px;background:rgba(166,127,52,.10);border:1px solid rgba(166,127,52,.15)}
+.pop-bar-fill{height:100%;background:#a67f34}
+.pop-bar-value{width:50px;text-align:right;font-size:11px;color:#5a4a2a;flex-shrink:0}
 .metric-card{border:1px solid rgba(166,127,52,.18);background:rgba(255,255,255,.50);padding:22px;min-height:122px;display:flex;flex-direction:column;justify-content:space-between}
 .metric-label{font-size:10px;letter-spacing:.20em;text-transform:uppercase;color:#a58139;line-height:1.35}
 .metric-value{font-size:31px;font-weight:200;color:#a67f34;line-height:1.05;margin-top:10px}
@@ -669,9 +676,75 @@ async function persistDossierData(data){
     console.error("Impossibile salvare i dati territoriali sul report — verranno richiesti di nuovo alla prossima apertura:", e);
   }
 }
+/* ---- Composizione della popolazione (eta' + reddito): motore DEDICATO e leggero
+   (immonova-demographics-engine), separato dal Discovery Engine -- nessun costo/attesa
+   paragonabile, quindi si richiama in automatico ad ogni apertura senza il modale di
+   conferma usato per il Discovery Engine pesante. Il risultato viene comunque salvato nello
+   stesso dossier_data gia' persistito, cosi' non viene richiamato di nuovo se gia' presente. ---- */
+async function ensurePopulationComposition(){
+  if(dossierData && dossierData.population_composition) return;
+  if(!opportunity) return;
+
+  try{
+    var result = await client.functions.invoke("immonova-demographics-engine", {
+      body:{
+        municipality: opportunity.municipality || opportunity.city || null,
+        province: opportunity.province || null,
+        region: opportunity.region || null,
+        country_code: opportunity.country_code || "IT"
+      }
+    });
+
+    if(result.error) return;
+    var data = result.data;
+    if(!data || (!data.age_distribution && !data.income_distribution)) return;
+
+    if(!dossierData) dossierData = {};
+    dossierData.population_composition = {
+      age_distribution: data.age_distribution || null,
+      income_distribution: data.income_distribution || null
+    };
+    await persistDossierData(dossierData);
+  }catch(e){
+    console.warn("Composizione popolazione non disponibile (non bloccante):", e);
+  }
+}
+
+function populationBracketBarsHTML(distribution, brackets){
+  if(!distribution || !distribution.percentages) return "";
+  var rows = brackets.map(function(b){
+    var pct = distribution.percentages[b];
+    if(pct === undefined || pct === null) return "";
+    return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(b)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
+  }).filter(Boolean).join("");
+  return rows;
+}
+
+function renderPopulationCompositionPage(){
+  var comp = dossierData && dossierData.population_composition;
+  if(!comp || (!comp.age_distribution && !comp.income_distribution)) return "";
+
+  var ageBrackets = ["0-14","15-29","30-44","45-59","60-74","75+"];
+  var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€","oltre 120.000€"];
+
+  var ageHTML = comp.age_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_age_distribution||"Composizione per età")+'</h3>'+populationBracketBarsHTML(comp.age_distribution, ageBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(comp.age_distribution.provider_name||"ISTAT")+'</p></div>' : "";
+  var incomeHTML = comp.income_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_income_distribution||"Distribuzione economica")+'</h3>'+populationBracketBarsHTML(comp.income_distribution, incomeBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(comp.income_distribution.provider_name||"MEF - Dipartimento delle Finanze")+'</p></div>' : "";
+
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_population||"Popolazione")+'</div><h2 class="section-title">'+escapeHTML(T.title_population_composition||"Composizione della Popolazione")+'</h2><div class="lux-rule"></div>'+ageHTML+incomeHTML;
+}
+
 async function ensureDossier(){
   dossierData=getStoredDossier();
-  if(dossierData){dossierSource="report";return;}
+  if(dossierData){
+    if(dossierData._no_territorial_data){
+      dossierSource="none_cached";
+      var checkedDate=dossierData._checked_at?new Date(dossierData._checked_at).toLocaleDateString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG):"";
+      setStatus("Il Discovery Engine aveva già verificato questa zona"+(checkedDate?" il "+checkedDate:"")+": nessun dato territoriale/turistico disponibile (normale per terreni o zone poco coperte dalle fonti). Il dossier viene generato con le sole sezioni disponibili. Usa \"Aggiorna dati\" se vuoi ritentare comunque.","");
+      return;
+    }
+    dossierSource="report";
+    return;
+  }
   var options=await askDossierOptions();
   if(options===null){
     // Annulla premuto: NON deve chiamare il Discovery Engine (che ha un costo). Torna alla proposta.
@@ -694,7 +767,9 @@ async function ensureDossier(){
     await persistDossierData(dossierData);
   }else{
     dossierSource="none";
-    setStatus("Discovery Engine non ha restituito dati territoriali, quindi NON è stato salvato nulla (è normale: senza dati non c'è nulla da salvare). Causa: "+(lastDiscoveryFetchError||"sconosciuta, controlla i log della edge function su Supabase.")+" — il dossier verrà comunque generato con le sole sezioni disponibili (dati interni, immobile, documenti).","error");
+    var noDataMarker={_no_territorial_data:true,_checked_at:new Date().toISOString(),_last_error:lastDiscoveryFetchError||null};
+    await persistDossierData(noDataMarker);
+    setStatus("Discovery Engine non ha restituito dati territoriali. Causa: "+(lastDiscoveryFetchError||"sconosciuta, controlla i log della edge function su Supabase.")+" — salvato come verificato, quindi NON verrà richiesto di nuovo automaticamente alle prossime aperture (eviti di rispendere). Il dossier verrà comunque generato con le sole sezioni disponibili (dati interni, immobile, documenti).","error");
   }
 }
 async function forceRefreshDossier(){
@@ -712,7 +787,11 @@ async function forceRefreshDossier(){
   setStatus("Aggiornamento forzato dei dati territoriali dal Discovery Engine in corso...","");
   var fresh=await fetchLiveDossier(radius);
   if(!fresh){
-    setStatus("Impossibile recuperare nuovi dati territoriali dal Discovery Engine.","error");
+    var refreshedNoDataMarker={_no_territorial_data:true,_checked_at:new Date().toISOString(),_last_error:lastDiscoveryFetchError||null};
+    await persistDossierData(refreshedNoDataMarker);
+    dossierData=refreshedNoDataMarker;
+    dossierSource="none_cached";
+    setStatus("Impossibile recuperare nuovi dati territoriali dal Discovery Engine. Causa: "+(lastDiscoveryFetchError||"sconosciuta")+" — segnaposto aggiornato, non verrà richiesto di nuovo automaticamente.","error");
     return;
   }
   dossierData=fresh;
@@ -1032,6 +1111,11 @@ function renderTerritorialAndTourismPage(){
     +(terr?'<div class="merge-block">'+terr+'</div>':'')
     +(tour?'<div class="merge-block">'+tour+'</div>':'')
     +'</div></article>';
+}
+function renderPopulationCompositionPageWrapper(){
+  var comp=renderPopulationCompositionPage();
+  if(!comp)return "";
+  return '<article class="report-page"><div class="page-inner"><div class="merge-block">'+comp+'</div></div></article>';
 }
 function renderAssetCharacteristicsPage(){
   var o=opportunity||{};
@@ -1819,6 +1903,10 @@ function isCommercialCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("commercial")>=0; // copre sia "Commerciale" (IT) che "Commercial" (EN)
 }
+function isLandCategory(){
+  var c=String(getCategory()||"").toLowerCase();
+  return c.indexOf("terreni")>=0 || c.indexOf("terreno")>=0 || c.indexOf("land")>=0; // un terreno non ha una proiezione di rendita: niente ADR/ROI/cashflow per questa categoria
+}
 function getAssetUnits(){
   var o=opportunity||{};
   var n=firstFiniteOpp(o.bedrooms);
@@ -2014,12 +2102,14 @@ function renderBook(){
 
   renderAdPagesForPosition("after_toc").forEach(function(p){ push("", p.html, p.divider); });
 
-  push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
-  push(T.chapter_financial, renderInternalFacts());
-  push(T.chapter_financial, renderFinancialSnapshot());
-  push(T.chapter_financial, renderInvestmentStructure());
-  renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
-  renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
+  if(!isLandCategory()){
+    push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
+    push(T.chapter_financial, renderInternalFacts());
+    push(T.chapter_financial, renderFinancialSnapshot());
+    push(T.chapter_financial, renderInvestmentStructure());
+    renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
+    renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
+  }
 
   var docPages = preparedDocumentPages;
   var renovationPages = renderRenovationBeforeAfterPages();
@@ -2037,6 +2127,7 @@ function renderBook(){
   push(T.chapter_territory, dividerPageHTML(T.divider_territory_title,T.divider_territory_kicker), true);
   push(T.chapter_territory, renderLocationPage());
   push(T.chapter_territory, renderTerritorialAndTourismPage());
+  push(T.chapter_territory, renderPopulationCompositionPageWrapper());
   push(T.chapter_territory, renderMarketAndADRPage());
   push(T.chapter_territory, renderTourismSeriesPage());
   push(T.chapter_territory, renderTourismForecastPage());
@@ -2115,6 +2206,7 @@ async function init(){
     destinationPhotoIndex = 0;
     await ensureDossier();
     if(dossierCancelledByUser) return; // Annulla premuto: redirect già in corso, non disegnare nulla.
+    await ensurePopulationComposition();
     setStatus("Preparazione documenti per la stampa (rasterizzazione PDF in corso se presenti)...","");
     preparedDocumentPages = await renderDocumentsPages();
     renderBook();

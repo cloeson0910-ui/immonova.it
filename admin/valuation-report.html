@@ -76,6 +76,13 @@ body::after{
 .section-title{font-size:22px;font-weight:300;color:#a67f34;margin-bottom:18px}
 
 .info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.pop-comp-block{margin-top:18px}
+.pop-comp-title{font-size:14px;font-weight:600;color:#a67f34;letter-spacing:.04em;margin-bottom:12px}
+.pop-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:7px}
+.pop-bar-label{width:130px;font-size:11px;color:#8f7643;flex-shrink:0}
+.pop-bar-track{flex:1;height:9px;background:rgba(166,127,52,.10);border:1px solid rgba(166,127,52,.15)}
+.pop-bar-fill{height:100%;background:#a67f34}
+.pop-bar-value{width:45px;text-align:right;font-size:11px;color:#5a4a2a;flex-shrink:0}
 .info-item{border-top:1px solid rgba(166,127,52,.18);padding-top:10px}
 .info-label{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:#a58139;margin-bottom:6px}
 .info-value{font-size:14px;color:#4a3c1f}
@@ -293,6 +300,34 @@ async function loadAndRender(){
   html += '</div>';
 
   // Dati catastali (separati)
+  // Composizione popolazione (eta' + reddito), se presente nello snapshot salvato
+  var popComp = snap.population_composition;
+  if(popComp && (popComp.age_distribution || popComp.income_distribution)){
+    var ageBrackets = ["0-14","15-29","30-44","45-59","60-74","75+"];
+    var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€","oltre 120.000€"];
+
+    function bracketBars(distribution, brackets){
+      if(!distribution || !distribution.percentages) return "";
+      return brackets.map(function(b){
+        var pct = distribution.percentages[b];
+        if(pct === undefined || pct === null) return "";
+        return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(b)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
+      }).filter(Boolean).join("");
+    }
+
+    html += '<div class="section">'
+      + '<div class="section-kicker">Il Territorio</div>'
+      + '<div class="section-title">Composizione della Popolazione</div>'
+      + '<p class="method-text">Un elemento a favore nella trattativa: chi acquista o investe vuole capire chi vive nella zona. Dati ufficiali, non stime.</p>';
+    if(popComp.age_distribution){
+      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Composizione per età</h3>' + bracketBars(popComp.age_distribution, ageBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.age_distribution.provider_name || "ISTAT") + '</p></div>';
+    }
+    if(popComp.income_distribution){
+      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Distribuzione economica</h3>' + bracketBars(popComp.income_distribution, incomeBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.income_distribution.provider_name || "MEF - Dipartimento delle Finanze") + '</p></div>';
+    }
+    html += '</div>';
+  }
+
   var hasCadastral = v.cadastral_category || v.cadastral_income || v.cadastral_surface || v.cadastral_sheet;
   if(hasCadastral){
     html += '<div class="section">'
