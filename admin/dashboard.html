@@ -744,7 +744,12 @@ function belongsToSelectedOwner(item){
 }
 function opportunityBelongsToSelectedOwner(item){
   if(!selectedOwnerId)return true;
-  return String(item?.user_id||item?.created_by||item?.owner_id||"")===String(selectedOwnerId);
+  // owner_id e' il campo vero di attribuzione ("Attribuita a" in opportunity-edit.html) --
+  // deve avere priorita' su user_id/created_by, che indicano solo chi ha creato la riga nel
+  // database (tipicamente l'admin, se ha creato l'opportunita' per conto di un collaboratore).
+  // Prima il codice controllava user_id/created_by per primi, quindi un'opportunita' creata
+  // da un admin e attribuita a un collaboratore risultava sempre "dell'admin" nel filtro.
+  return String(item?.owner_id||item?.user_id||item?.created_by||"")===String(selectedOwnerId);
 }
 function currentOpportunities(){return allOpportunities.filter(opportunityBelongsToSelectedOwner)}
 function currentInvestors(){return allInvestors.filter(belongsToSelectedOwner)}
@@ -826,7 +831,7 @@ function renderPerformance(){
   if(!isAdmin){performanceGrid.innerHTML='<div class="empty">'+escapeHTML(T.perf_view_admin_only)+'</div>';return}
   const rows=(allProfiles||[]).filter(p=>p&&p.id).map(p=>{
     const ownerId=String(p.id);
-    const opps=allOpportunities.filter(o=>String(o.user_id||o.created_by||o.owner_id||"")===ownerId);
+    const opps=allOpportunities.filter(o=>String(o.owner_id||o.user_id||o.created_by||"")===ownerId); // owner_id ha priorita': e' l'attribuzione vera, non solo chi ha creato la riga
     const invs=allInvestors.filter(i=>String(i.created_by||i.user_id||i.owner_id||"")===ownerId);
     const evs=allEvents.filter(e=>String(e.created_by||e.user_id||e.owner_id||"")===ownerId);
     const contacts=contactHistory.filter(h=>String(h.created_by||h.user_id||h.owner_id||"")===ownerId);
