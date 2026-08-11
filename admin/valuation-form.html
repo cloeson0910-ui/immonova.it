@@ -491,7 +491,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_valuation_form_" + lang + "_v2"; }
+function i18nCacheKey(lang){ return "immonova_i18n_valuation_form_" + lang + "_v3"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -693,12 +693,13 @@ async function findInternalComparables(category, province, municipality){
 /* ---- Dato di mercato pubblico: motore specializzato immonova-global-data-provider,
    NON l'intero Discovery Engine (che fa 6 chiamate pesanti in piu' e ha gia' dato
    problemi di risorse su singoli comuni) -- qui serve solo il prezzo/mq di zona. ---- */
-/* ---- BUG RISOLTO: prima questa funzione prendeva il PRIMO risultato utile che il motore
-   restituiva, senza controllare a che livello geografico appartenesse -- se il motore non
-   trovava un dato specifico per il comune, poteva risalire fino a un dato nazionale o
-   globale (una media che "racchiude tutte le nazioni", come segnalato), e veniva accettato
-   come se fosse "il dato della zona" senza dirlo. Ora scarta esplicitamente qualsiasi
-   risultato a livello country/global, tenendo solo municipality/city/province/region. ---- */
+/* ---- Ora chiama il motore DEDICATO alle valutazioni (immonova-valuation-engine), separato
+   dal Discovery Engine e piu' leggero, invece del servizio generico immonova-global-data-provider
+   che aveva scarsa copertura per comuni piccoli. Il nuovo motore cerca nelle fonti verificate
+   (immonova_data_sources, categoria real_estate_market) -- se non trova nulla per la zona, lo
+   dice chiaramente: aggiungere una fonte verificata la rende disponibile automaticamente,
+   senza bisogno di toccare questo file. Scarta comunque risultati troppo generici
+   (nazione/globale), stessa protezione di prima contro il bug della "media di tutte le nazioni". ---- */
 function isLocalEnoughGeography(level){
   var l = String(level || "").toLowerCase();
   return l === "municipality" || l === "city" || l === "province" || l === "department" || l === "region";
@@ -706,37 +707,36 @@ function isLocalEnoughGeography(level){
 
 async function findMarketPricePerSqm(municipality, province, region){
   try{
-    var result = await client.functions.invoke("immonova-global-data-provider", {
+    var result = await client.functions.invoke("immonova-valuation-engine", {
       body:{
         municipality: municipality || null,
         province: province || null,
         region: region || null,
         country: "Italia",
-        country_code: "IT",
-        domain: "real_estate",
-        fallback_years: 7
+        country_code: "IT"
       }
     });
 
-    if(result.error) return { value: null, geography_level: null, rejected_as_too_broad: false };
+    if(result.error) return { value: null, geography_level: null, rejected_as_too_broad: false, no_sources_found: false };
     var data = result.data;
     var ev = Array.isArray(data?.evidence) ? data.evidence : [];
     var candidates = ev.filter(function(e){
-      var k = String(e.field_key || e.metric || e.key || e.name || "").toLowerCase();
-      return /residential.*(sale|price).*(m2|sqm)|average.*price.*m2|sale.*per.*m2/.test(k);
+      var k = String(e.field_key || "").toLowerCase();
+      return /residential.*sale.*m2|residential_sale_per_m2/.test(k);
     });
 
     var localMatch = candidates.find(function(e){ return isLocalEnoughGeography(e.geography_level); });
     if(localMatch){
       var value = Number(localMatch.value);
-      return { value: Number.isFinite(value) && value > 0 ? value : null, geography_level: localMatch.geography_level, rejected_as_too_broad: false };
+      return { value: Number.isFinite(value) && value > 0 ? value : null, geography_level: localMatch.geography_level, rejected_as_too_broad: false, no_sources_found: false };
     }
 
     var broadMatch = candidates[0];
-    return { value: null, geography_level: broadMatch ? broadMatch.geography_level : null, rejected_as_too_broad: !!broadMatch };
+    var noSourcesFound = !data?.sources_found;
+    return { value: null, geography_level: broadMatch ? broadMatch.geography_level : null, rejected_as_too_broad: !!broadMatch, no_sources_found: noSourcesFound };
   }catch(e){
     console.warn("Dato di mercato pubblico non disponibile (non bloccante):", e);
-    return { value: null, geography_level: null, rejected_as_too_broad: false };
+    return { value: null, geography_level: null, rejected_as_too_broad: false, no_sources_found: false };
   }
 }
 
@@ -826,6 +826,7 @@ calculateBtn.addEventListener("click", async function(){
     var detailParts = [];
     detailParts.push("<strong>1) Da dati verificati IMMONOVA:</strong> " + (immonovaMin != null ? formatEuro(immonovaMin) + " – " + formatEuro(immonovaMax) : "non calcolabile"));
     if(marketResult.rejected_as_too_broad) detailParts.push("&nbsp;&nbsp;<em>Dato di mercato pubblico scartato: disponibile solo a livello " + escapeHTML(marketResult.geography_level || "molto ampio") + ", non abbastanza specifico per la zona.</em>");
+    if(marketResult.no_sources_found) detailParts.push("&nbsp;&nbsp;<em>Nessuna fonte verificata di mercato immobiliare configurata per questa zona (aggiungerne una la rende disponibile automaticamente).</em>");
     detailParts.push("<strong>2) Valutazione OMI:</strong> " + (omiValuationMin != null ? formatEuro(omiValuationMin) + " – " + formatEuro(omiValuationMax) : "dati OMI non inseriti"));
     detailParts.push("<strong>3) Valutazione catastale:</strong> " + (catastaleValue != null ? formatEuro(catastaleValue) : "rendita/categoria catastale mancanti"));
     resultDetail.innerHTML = detailParts.join("<br>");
