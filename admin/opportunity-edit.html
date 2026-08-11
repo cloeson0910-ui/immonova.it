@@ -3046,8 +3046,32 @@ async function loadOpportunity(){
   await loadOpportunityDocuments();
   await loadInvestorsForCrm();
 
+  applyOwnershipLock(data);
+
   loading.style.display = "none";
   form.style.display = "block";
+}
+
+/* ---- Blocco totale per i non-admin quando l'opportunità è oltre la bozza: una volta in
+   revisione o pubblicata, il collaboratore non può più modificare NULLA -- non solo
+   prezzo/stato come applyAdminRestrictions() già faceva per pubblica/in evidenza, ma
+   l'intero form. La vera protezione è il trigger SQL sul database (bypassabile qui non
+   cambia nulla lato dati), questo è solo per mostrarlo chiaramente invece di lasciare
+   che il collaboratore scopra il blocco solo al momento del salvataggio. ---- */
+function applyOwnershipLock(data){
+  if(isAdmin) return;
+
+  var isLocked = (data.review_status && data.review_status !== "da_verificare") || data.published === true;
+  if(!isLocked) return;
+
+  form.querySelectorAll("input, select, textarea, button[type=submit]").forEach(function(el){
+    el.disabled = true;
+  });
+
+  var banner = document.createElement("div");
+  banner.style.cssText = "padding:16px 20px;margin-bottom:20px;background:rgba(156,47,47,.08);border:1px solid rgba(156,47,47,.3);color:#9c2f2f;font-size:14px;";
+  banner.textContent = T.msg_opportunity_locked || "Questa opportunità è in revisione o pubblicata: non è più modificabile. Contatta un amministratore per qualsiasi cambiamento.";
+  form.parentNode.insertBefore(banner, form);
 }
 
 

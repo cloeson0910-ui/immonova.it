@@ -473,6 +473,15 @@ Caricamento area riservata...
 <option value="sold" data-i18n="commercial_sold">Venduta</option>
 <option value="withdrawn" data-i18n="commercial_withdrawn">Ritirata</option>
 </select>
+
+<label class="check" style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">
+<input type="checkbox" id="myOpportunitiesFilter">
+<span data-i18n="filter_my_opportunities">Solo le mie</span>
+</label>
+
+<select id="ownerFilter" class="filter">
+<option value="" data-i18n="filter_all_owners">Tutti i collaboratori</option>
+</select>
 </div>
 
 <div class="table-wrapper">
@@ -549,7 +558,7 @@ var UI_STRINGS = {
   subtitle_admin:"Gestisci tutte le proposte ricevute. Puoi valutarle, approvarle, rifiutarle, pubblicarle o sospenderle.",
   subtitle_user:"Qui puoi vedere e gestire solo le tue proposte. La pubblicazione è riservata agli admin IMMONOVA.",
   search_placeholder:"Cerca per titolo, categoria, location o stato...",
-  filter_all_review:"Tutti gli stati revisione", filter_all_commercial:"Tutti gli stati commerciali",
+  filter_all_review:"Tutti gli stati revisione", filter_all_commercial:"Tutti gli stati commerciali", filter_my_opportunities:"Solo le mie", filter_all_owners:"Tutti i collaboratori",
   status_da_verificare:"Da verificare", status_da_revisionare:"Da revisionare", status_approvato:"Approvato", status_rifiutato:"Rifiutato",
   commercial_available:"Disponibile", commercial_negotiation:"In trattativa", commercial_reserved:"Riservata",
   commercial_sold:"Venduta", commercial_withdrawn:"Ritirata",
@@ -934,10 +943,27 @@ function renderLinkedEvents(item){
   `;
 }
 
+async function loadOwnerFilterOptions(){
+  const ownerSelect = document.getElementById("ownerFilter");
+  if(!ownerSelect) return;
+
+  const result = await client.from("profiles").select("id,full_name,email").order("full_name", { ascending: true });
+  if(result.error) return;
+
+  (result.data || []).forEach(function(p){
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.full_name || p.email || p.id;
+    ownerSelect.appendChild(opt);
+  });
+}
+
 function applyFilters(){
   const query = searchInput.value.trim().toLowerCase();
   const selectedStatus = statusFilter.value;
   const selectedCommercialStatus = commercialFilter.value;
+  const onlyMine = document.getElementById("myOpportunitiesFilter").checked;
+  const selectedOwner = document.getElementById("ownerFilter").value;
 
   let filtered = allOpportunities.filter(item => {
     const status = item.review_status || "da_verificare";
@@ -946,6 +972,8 @@ function applyFilters(){
 
     const matchesStatus = !selectedStatus || status === selectedStatus;
     const matchesCommercialStatus = !selectedCommercialStatus || commercialStatus === selectedCommercialStatus;
+    const matchesOwner = (!onlyMine || (item.owner_id && currentUser && item.owner_id === currentUser.id))
+      && (!selectedOwner || item.owner_id === selectedOwner);
 
     const eventSearch = (item.linked_events || [])
       .map(event => [event.title, event.event_type, eventTypeLabel(event.event_type)].join(" "))
@@ -963,7 +991,7 @@ function applyFilters(){
       eventSearch
     ].some(value => String(value || "").toLowerCase().includes(query));
 
-    return matchesStatus && matchesCommercialStatus && matchesSearch;
+    return matchesStatus && matchesCommercialStatus && matchesOwner && matchesSearch;
   });
 
   renderTable(filtered);
@@ -1092,9 +1120,7 @@ async function changeReviewStatus(id, newStatus){
     return;
   }
 
-  if(isOpportunityCurrentlyPublished(id)){
-    await notifyStatusChange(id, T.notify_review_prefix + statusLabel(newStatus));
-  }
+  await notifyStatusChange(id, T.notify_review_prefix + statusLabel(newStatus));
 
   setStatus(T.msg_review_updated, "success");
   await loadOpportunities();
@@ -1162,9 +1188,7 @@ async function changeCommercialStatus(id, newStatus){
     });
   }
 
-  if(isOpportunityCurrentlyPublished(id)){
-    await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
-  }
+  await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
 
   setStatus(T.msg_commercial_updated, "success");
   await loadOpportunities();
@@ -1174,16 +1198,6 @@ async function changeCommercialStatus(id, newStatus){
 function findOpportunityTitle(id){
   var item = allOpportunities.find(function(o){ return String(o.id) === String(id); });
   return (item && item.title) || ("Opportunità #" + id);
-}
-
-/* ---- Un cambio di stato (revisione o commerciale) ha senso notificarlo ai collaboratori
-   solo se l'opportunita' e' GIA' pubblicata: se non e' mai stata resa pubblica, i cambi
-   di revisione/stato commerciale sono lavoro interno, nessuno all'esterno ne e' informato
-   comunque. La notifica di "e' stata pubblicata" resta un caso a parte, gestita
-   direttamente in togglePublished() indipendentemente da questo controllo. ---- */
-function isOpportunityCurrentlyPublished(id){
-  var item = allOpportunities.find(function(o){ return String(o.id) === String(id); });
-  return !!(item && item.published);
 }
 
 async function notifyStatusChange(id, changeDescription){
@@ -1327,6 +1341,8 @@ async function deleteOpportunity(id){
 searchInput.addEventListener("input", applyFilters);
 statusFilter.addEventListener("change", applyFilters);
 commercialFilter.addEventListener("change", applyFilters);
+document.getElementById("myOpportunitiesFilter").addEventListener("change", applyFilters);
+document.getElementById("ownerFilter").addEventListener("change", applyFilters);
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await client.auth.signOut();
@@ -1338,6 +1354,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 
   if(isLogged){
     await loadProfile();
+    await loadOwnerFilterOptions();
 
     const params = new URLSearchParams(window.location.search);
     const statusParam = params.get("status");
