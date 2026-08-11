@@ -696,20 +696,7 @@ async function persistDossierData(data){
 }
 async function ensureDossier(){
   dossierData=getStoredDossier();
-  if(dossierData){
-    if(dossierData._no_territorial_data){
-      /* Gia' verificato in passato: nessun dato trovato per questa zona. NON richiama il
-         Discovery Engine di nuovo automaticamente (eviterebbe lo spreco di soldi segnalato) --
-         solo "Aggiorna dati" (forceRefreshDossier) puo' ritentare, con il suo avviso esplicito
-         sul costo prima di procedere. */
-      dossierSource="none_cached";
-      var checkedDate=dossierData._checked_at?new Date(dossierData._checked_at).toLocaleDateString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG):"";
-      setStatus("Il Discovery Engine aveva già verificato questa zona"+(checkedDate?" il "+checkedDate:"")+": nessun dato territoriale/turistico disponibile (normale per terreni o zone poco coperte dalle fonti). Il dossier viene generato con le sole sezioni disponibili. Usa \"Aggiorna dati\" se vuoi ritentare comunque.","");
-      return;
-    }
-    dossierSource="report";
-    return;
-  }
+  if(dossierData){dossierSource="report";return;}
   var options=await askDossierOptions();
   if(options===null){
     // Annulla premuto: NON deve chiamare il Discovery Engine (che ha un costo). Torna alla proposta.
@@ -732,9 +719,7 @@ async function ensureDossier(){
     await persistDossierData(dossierData);
   }else{
     dossierSource="none";
-    var noDataMarker={_no_territorial_data:true,_checked_at:new Date().toISOString(),_last_error:lastDiscoveryFetchError||null};
-    await persistDossierData(noDataMarker);
-    setStatus("Discovery Engine non ha restituito dati territoriali. Causa: "+(lastDiscoveryFetchError||"sconosciuta, controlla i log della edge function su Supabase.")+" — salvato come verificato, quindi NON verrà richiesto di nuovo automaticamente alle prossime aperture (eviti di rispendere). Il dossier verrà comunque generato con le sole sezioni disponibili (dati interni, immobile, documenti).","error");
+    setStatus("Discovery Engine non ha restituito dati territoriali, quindi NON è stato salvato nulla (è normale: senza dati non c'è nulla da salvare). Causa: "+(lastDiscoveryFetchError||"sconosciuta, controlla i log della edge function su Supabase.")+" — il dossier verrà comunque generato con le sole sezioni disponibili (dati interni, immobile, documenti).","error");
   }
 }
 async function forceRefreshDossier(){
@@ -752,11 +737,7 @@ async function forceRefreshDossier(){
   setStatus("Aggiornamento forzato dei dati territoriali dal Discovery Engine in corso...","");
   var fresh=await fetchLiveDossier(radius);
   if(!fresh){
-    var refreshedNoDataMarker={_no_territorial_data:true,_checked_at:new Date().toISOString(),_last_error:lastDiscoveryFetchError||null};
-    await persistDossierData(refreshedNoDataMarker);
-    dossierData=refreshedNoDataMarker;
-    dossierSource="none_cached";
-    setStatus("Impossibile recuperare nuovi dati territoriali dal Discovery Engine. Causa: "+(lastDiscoveryFetchError||"sconosciuta")+" — segnaposto aggiornato, non verrà richiesto di nuovo automaticamente.","error");
+    setStatus("Impossibile recuperare nuovi dati territoriali dal Discovery Engine.","error");
     return;
   }
   dossierData=fresh;
@@ -1880,10 +1861,6 @@ function isCommercialCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("commercial")>=0; // copre sia "Commerciale" (IT) che "Commercial" (EN)
 }
-function isLandCategory(){
-  var c=String(getCategory()||"").toLowerCase();
-  return c.indexOf("terreni")>=0 || c.indexOf("terreno")>=0 || c.indexOf("land")>=0; // un terreno non ha una proiezione di rendita: niente ADR/ROI/cashflow per questa categoria
-}
 function getAssetUnits(){
   var o=opportunity||{};
   var n=firstFiniteOpp(o.bedrooms);
@@ -2079,14 +2056,12 @@ function renderBook(){
 
   renderAdPagesForPosition("after_toc").forEach(function(p){ push("", p.html, p.divider); });
 
-  if(!isLandCategory()){
-    push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
-    push(T.chapter_financial, renderInternalFacts());
-    push(T.chapter_financial, renderFinancialSnapshot());
-    push(T.chapter_financial, renderInvestmentStructure());
-    renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
-    renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
-  }
+  push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
+  push(T.chapter_financial, renderInternalFacts());
+  push(T.chapter_financial, renderFinancialSnapshot());
+  push(T.chapter_financial, renderInvestmentStructure());
+  renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
+  renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
 
   var docPages = preparedDocumentPages;
   var renovationPages = renderRenovationBeforeAfterPages();
