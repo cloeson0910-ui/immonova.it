@@ -610,33 +610,49 @@ function weightedExtrasValue(pricePerSqm, garageSqm, gardenSqm){
    stessa provincia (o comune se la provincia non e' compilata), con prezzo e superficie
    validi. Calcola prezzo/mq per ciascuna, poi la mediana (piu' robusta della media contro
    un singolo annuncio fuori scala). ---- */
+/* ---- BUG GRAVE RISOLTO: prima bastava che la PROVINCIA combaciasse per essere considerato
+   comparabile, anche con comune diverso -- cosi' un locale a Piazza Mazzini a LECCE (citta'
+   capoluogo) risultava "comparabile" a un locale a Tuglie (paese), solo perche' entrambi sono
+   "provincia di Lecce". Un capoluogo e un piccolo comune hanno mercati completamente diversi.
+   Ora il comune ha SEMPRE priorita' assoluta: si allarga alla provincia SOLO se non c'e'
+   proprio nessun comparabile nello stesso comune, e in quel caso il risultato viene segnato
+   chiaramente come "a livello provinciale" (meno preciso), non spacciato per locale. ---- */
 async function findInternalComparables(category, province, municipality){
   var query = client.from("opportunities").select("id,title,price,internal_size,municipality,province").eq("published", true);
   if(category) query = query.eq("category", category);
 
   var result = await query;
-  if(result.error || !result.data) return { comparables: [], pricePerSqm: null };
+  if(result.error || !result.data) return { comparables: [], pricePerSqm: null, geography_level: null };
 
-  var locationFiltered = result.data.filter(function(o){
-    if(province && o.province && String(o.province).toLowerCase() === String(province).toLowerCase()) return true;
-    if(municipality && o.municipality && String(o.municipality).toLowerCase() === String(municipality).toLowerCase()) return true;
-    return false;
-  });
-
-  var withPricePerSqm = locationFiltered.map(function(o){
+  function toComparable(o){
     var price = parsePriceNumber(o.price);
     var size = Number(o.internal_size);
     if(!price || !size || size <= 0) return null;
     return { id: o.id, title: o.title, pricePerSqm: price / size };
-  }).filter(Boolean);
+  }
 
-  if(!withPricePerSqm.length) return { comparables: [], pricePerSqm: null };
+  var sameMunicipality = municipality
+    ? result.data.filter(function(o){ return o.municipality && String(o.municipality).toLowerCase() === String(municipality).toLowerCase(); }).map(toComparable).filter(Boolean)
+    : [];
+
+  var withPricePerSqm, geographyLevel;
+  if(sameMunicipality.length){
+    withPricePerSqm = sameMunicipality;
+    geographyLevel = "municipality";
+  }else{
+    withPricePerSqm = (province
+      ? result.data.filter(function(o){ return o.province && String(o.province).toLowerCase() === String(province).toLowerCase(); }).map(toComparable).filter(Boolean)
+      : []);
+    geographyLevel = "province";
+  }
+
+  if(!withPricePerSqm.length) return { comparables: [], pricePerSqm: null, geography_level: null };
 
   var sorted = withPricePerSqm.map(function(c){ return c.pricePerSqm; }).sort(function(a,b){ return a-b; });
   var mid = Math.floor(sorted.length / 2);
   var median = sorted.length % 2 ? sorted[mid] : (sorted[mid-1] + sorted[mid]) / 2;
 
-  return { comparables: withPricePerSqm, pricePerSqm: median };
+  return { comparables: withPricePerSqm, pricePerSqm: median, geography_level: geographyLevel };
 }
 
 /* ---- Dato di mercato pubblico: motore specializzato immonova-global-data-provider,
@@ -768,11 +784,24 @@ calculateBtn.addEventListener("click", async function(){
     if(marketResult.value) pricesPerSqm.push(marketResult.value);
     (aiResult.comparables||[]).forEach(function(c){ if(c.price_per_sqm) pricesPerSqm.push(c.price_per_sqm); });
 
+    /* ---- Protezione anti-anomalie: prima di calcolare l'intervallo, scarta ogni valore
+       troppo lontano dalla mediana del pool (oltre 2.5x sopra o sotto) -- un solo comparabile
+       fuori scala (per errore geografico, o un dato AI mal trovato) non deve piu' poter far
+       esplodere l'intervallo finale a livelli inutilizzabili. ---- */
+    function trimOutliers(values){
+      if(values.length < 3) return values; // con 1-2 valori non c'e' abbastanza segnale per giudicare cosa sia "anomalo"
+      var s = values.slice().sort(function(a,b){return a-b;});
+      var mid = Math.floor(s.length/2);
+      var med = s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
+      return values.filter(function(v){ return v >= med*0.4 && v <= med*2.5; });
+    }
+    var trimmedPricesPerSqm = trimOutliers(pricesPerSqm);
+
     var equivSurface = equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm);
     var comparativoMin = null, comparativoMax = null;
 
-    if(pricesPerSqm.length && equivSurface){
-      var sorted = pricesPerSqm.slice().sort(function(a,b){return a-b;});
+    if(trimmedPricesPerSqm.length && equivSurface){
+      var sorted = trimmedPricesPerSqm.slice().sort(function(a,b){return a-b;});
       var lo = sorted[0], hi = sorted[sorted.length-1];
       // Se c'e' una sola fonte, allarga leggermente l'intervallo (+-10%) come margine di stima,
       // coerente con l'approccio della relazione di riferimento.
@@ -796,7 +825,7 @@ calculateBtn.addEventListener("click", async function(){
       resultBox.classList.remove("visible");
       setProgress(T.msg_no_data_at_all, 100, "error");
       lastCalculation = {
-        comparables_snapshot: { internal: internalResult.comparables, internal_price_per_sqm: internalResult.pricePerSqm, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
+        comparables_snapshot: { internal: internalResult.comparables, internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
         ai_comparables: aiResult.comparables || [], ai_narrative: aiResult,
         valuation_comparativo_min:null, valuation_comparativo_max:null, valuation_reddituale_min:null, valuation_reddituale_max:null,
         estimated_value_min:null, estimated_value_max:null, estimated_value_per_sqm:null, suggested_listing_price:null
@@ -827,6 +856,7 @@ calculateBtn.addEventListener("click", async function(){
       comparables_snapshot: {
         internal: internalResult.comparables,
         internal_price_per_sqm: internalResult.pricePerSqm,
+        internal_geography_level: internalResult.geography_level,
         market_price_per_sqm: marketResult.value,
         market_geography_level: marketResult.geography_level,
         population_composition: populationComposition,
@@ -852,7 +882,9 @@ calculateBtn.addEventListener("click", async function(){
     resultRange.textContent = formatEuro(finalMin) + " – " + formatEuro(finalMax);
 
     var detailParts = [];
-    detailParts.push("<strong>Metodo comparativo:</strong> " + (hasComparativo ? formatEuro(comparativoMin) + " – " + formatEuro(comparativoMax) + " (" + pricesPerSqm.length + " fonti)" : "non calcolabile"));
+    var discardedCount = pricesPerSqm.length - trimmedPricesPerSqm.length;
+    detailParts.push("<strong>Metodo comparativo:</strong> " + (hasComparativo ? formatEuro(comparativoMin) + " – " + formatEuro(comparativoMax) + " (" + trimmedPricesPerSqm.length + " fonti" + (discardedCount>0 ? ", " + discardedCount + " scartate come anomale" : "") + ")" : "non calcolabile"));
+    if(internalResult.geography_level === "province") detailParts.push("<em>Comparabili IMMONOVA: nessuno nello stesso comune, allargato a livello provinciale (meno preciso).</em>");
     detailParts.push("<strong>Metodo reddituale:</strong> " + (hasReddituale ? formatEuro(reddituraleMin) + " – " + formatEuro(reddituraleMax) : (isRented ? "canone non inserito" : "immobile non locato")));
     detailParts.push("<strong>Prezzo di immissione consigliato:</strong> " + formatEuro(suggestedListingPrice));
     if(aiResult.ai_disclaimer) detailParts.push("<em>" + escapeHTML(aiResult.ai_disclaimer) + "</em>");

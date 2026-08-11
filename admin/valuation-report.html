@@ -149,9 +149,13 @@ body::after{
 
 @media print{
   .toolbar{display:none}
-  body::before,body::after{display:none}
-  body{background:#fff}
-  .page{max-width:none;padding:0 20mm}
+  /* ---- BUG RISOLTO: la filigrana IMMONOVA (il motivo a triangoli dorati) veniva nascosta
+     proprio in stampa, l'unico momento in cui serve davvero -- probabilmente perche' con
+     "position:fixed" un browser in stampa la mostra una sola volta invece di ripeterla su
+     ogni pagina. Corretto passando a "position:absolute": cosi' fa parte del flusso normale
+     del documento e si ripete correttamente pagina per pagina nel PDF. ---- */
+  body::before,body::after{position:absolute}
+  .page{max-width:none;padding:0 20mm;position:relative;z-index:1}
   .section{margin-top:14mm;page-break-inside:avoid}
   .cover{padding:20mm 0 14mm}
 }
@@ -318,7 +322,7 @@ async function loadAndRender(){
     html += '<p class="method-text" style="margin-top:10px;font-size:11px;font-style:italic">' + escapeHTML(narrative.ai_disclaimer) + '</p>';
   }
   html += hasComparativo
-    ? '<p class="method-text" style="margin-top:14px"><strong>Risultato metodo comparativo: ' + formatEuro(v.valuation_comparativo_min) + ' – ' + formatEuro(v.valuation_comparativo_max) + '</strong></p>'
+    ? '<p class="method-text" style="margin-top:14px"><strong>Intervallo metodo comparativo: ' + formatEuro(v.valuation_comparativo_min) + ' – ' + formatEuro(v.valuation_comparativo_max) + '</strong><br>Valore centrale indicativo: <strong>' + formatEuro((v.valuation_comparativo_min+v.valuation_comparativo_max)/2) + '</strong></p>'
     : '<p class="method-text" style="margin-top:14px">Dati insufficienti per il metodo comparativo.</p>';
   html += '</div>';
 
@@ -338,7 +342,7 @@ async function loadAndRender(){
         + '</tbody></table>';
     }
     html += hasReddituale
-      ? '<p class="method-text" style="margin-top:14px"><strong>Risultato metodo reddituale: ' + formatEuro(v.valuation_reddituale_min) + ' – ' + formatEuro(v.valuation_reddituale_max) + '</strong> (intervallo di rendimento 5,50%–7,00%)</p>'
+      ? '<p class="method-text" style="margin-top:14px"><strong>Intervallo metodo reddituale: ' + formatEuro(v.valuation_reddituale_min) + ' – ' + formatEuro(v.valuation_reddituale_max) + '</strong> (rendimento 5,50%–7,00%)<br>Valore centrale indicativo: <strong>' + formatEuro((v.valuation_reddituale_min+v.valuation_reddituale_max)/2) + '</strong></p>'
       : '';
     html += '</div>';
   }
@@ -358,12 +362,33 @@ async function loadAndRender(){
     html += '</div>';
   }
 
-  // 8. Riconciliazione e valore stimato
+  // 8. Riconciliazione e valore stimato -- calcolo esplicito, metodo per metodo, non solo il
+  // risultato finale (come nella relazione di riferimento: ogni passaggio numerico visibile).
   html += '<div class="section">'
-    + '<div class="section-kicker">8. Riconciliazione e Valore di Mercato Stimato</div>';
-  if(isRented && v.valuation_reddituale_min != null && hasComparativo){
-    html += '<p class="method-text">Trattandosi di immobile locato, è stata attribuita maggiore rilevanza al metodo reddituale: <strong>60% reddituale + 40% comparativo</strong>.</p>';
+    + '<div class="section-kicker">8. Riconciliazione dei Metodi Estimativi</div>';
+
+  var hasReddituale8 = v.valuation_reddituale_min != null;
+  if(hasReddituale8 && hasComparativo){
+    var comparativoCentral = (v.valuation_comparativo_min + v.valuation_comparativo_max) / 2;
+    var reddituraleCentral = (v.valuation_reddituale_min + v.valuation_reddituale_max) / 2;
+    var comparativoWeighted = comparativoCentral * 0.4;
+    var reddituraleWeighted = reddituraleCentral * 0.6;
+
+    html += '<p class="method-text">I procedimenti utilizzati hanno prodotto i seguenti risultati:</p>'
+      + '<div class="info-grid" style="margin-bottom:18px">'
+      + infoItem("Metodo comparativo — valore centrale", formatEuro(comparativoCentral))
+      + infoItem("Metodo reddituale — valore centrale", formatEuro(reddituraleCentral))
+      + '</div>'
+      + '<p class="method-text">Trattandosi di immobile locato, è stata attribuita maggiore rilevanza al metodo reddituale rispetto al metodo puramente comparativo. Viene adottata la seguente ponderazione: <strong>metodo reddituale 60%, metodo comparativo 40%</strong>.</p>'
+      + '<p class="method-text"><strong>Calcolo:</strong><br>'
+      + formatEuro(reddituraleCentral) + ' × 60% = ' + formatEuro(reddituraleWeighted) + '<br>'
+      + formatEuro(comparativoCentral) + ' × 40% = ' + formatEuro(comparativoWeighted) + '<br>'
+      + formatEuro(reddituraleWeighted) + ' + ' + formatEuro(comparativoWeighted) + ' = <strong>' + formatEuro(reddituraleWeighted + comparativoWeighted) + '</strong></p>';
+  }else if(hasComparativo){
+    html += '<p class="method-text">Immobile non locato (o canone non disponibile): il valore si basa interamente sul metodo comparativo.</p>';
   }
+
+  html += '<div class="section-title" style="margin-top:24px">Valore di Mercato Stimato</div>';
   if(hasEstimate){
     html += '<div class="value-box">'
       + '<div class="value-label">Valore di mercato stimato</div>'
