@@ -243,61 +243,154 @@ async function loadAndRender(){
     + '<div class="cover-meta">' + escapeHTML(propertyMeta) + (v.created_at ? ' · Preparata il ' + escapeHTML(formatDate(v.created_at)) : '') + '</div>'
     + '</div>';
 
-  // Riepilogo immobile
+  var aiComps = Array.isArray(v.ai_comparables) ? v.ai_comparables : [];
+  var narrative = v.ai_narrative || {};
+  var isRented = !!v.is_rented;
+
+  // 1. Oggetto della valutazione
   html += '<div class="section">'
-    + '<div class="section-kicker">L\'Immobile</div>'
-    + '<div class="section-title">Caratteristiche</div>'
+    + '<div class="section-kicker">1. Oggetto della Valutazione</div>'
+    + '<p class="method-text">La presente relazione ha lo scopo di determinare il più probabile valore di mercato di ' + escapeHTML((v.category||"un\'unità immobiliare").toLowerCase()) + ' ubicata in ' + escapeHTML(v.municipality||"") + (v.address ? ", " + escapeHTML(v.address) : "") + '. La valutazione considera le caratteristiche dimensionali, la micro-localizzazione, la situazione locativa e le evidenze disponibili sul mercato immobiliare locale. Sono stati adottati più criteri estimativi, con successiva riconciliazione dei risultati.</p>'
+    + '</div>';
+
+  // 2. Identificazione e caratteristiche
+  html += '<div class="section">'
+    + '<div class="section-kicker">2. Identificazione e Caratteristiche</div>'
+    + '<div class="section-title">L\'Immobile</div>'
     + '<div class="info-grid">'
     + infoItem("Categoria", v.category)
     + infoItem("Indirizzo", v.address)
     + infoItem("Comune", v.municipality)
     + infoItem("Superficie interna", v.internal_size ? v.internal_size + " mq" : "")
+    + infoItem("Superficie accessoria/deposito", v.accessory_size ? v.accessory_size + " mq" : "")
     + infoItem("Superficie terreno", v.land_size ? v.land_size + " mq" : "")
     + infoItem("Camere", v.bedrooms)
     + infoItem("Bagni", v.bathrooms)
     + infoItem("Anno costruzione", v.construction_year)
     + infoItem("Classe energetica", v.energy_class)
     + infoItem("Stato", v.property_condition)
+    + infoItem("Stato occupazionale", isRented ? "Locato" : "Libero")
+    + (isRented && v.current_annual_rent ? infoItem("Canone annuo attuale", formatEuro(v.current_annual_rent)) : "")
     + '</div>'
     + '</div>';
 
-  // Valore stimato
-  html += '<div class="section">'
-    + '<div class="section-kicker">La Stima</div>'
-    + '<div class="section-title">Valore di Mercato Stimato</div>';
+  // 3. Analisi della posizione (narrativa AI)
+  if(narrative.position_analysis){
+    html += '<div class="section">'
+      + '<div class="section-kicker">3. Analisi della Posizione</div>'
+      + '<p class="method-text">' + escapeHTML(narrative.position_analysis) + '</p>'
+      + '</div>';
+  }
 
+  // 4. Superficie commerciale equivalente
+  var equivSurface = snap.equivalent_surface;
+  if(equivSurface){
+    html += '<div class="section">'
+      + '<div class="section-kicker">4. Superficie Commerciale Equivalente</div>'
+      + '<p class="method-text">Ai fini della valutazione parametrica, alle superfici accessorie (deposito, garage, giardino) non viene attribuito il medesimo valore unitario della superficie principale, ma coefficienti prudenziali.</p>'
+      + '<div class="info-grid">'
+      + infoItem("Superficie principale (100%)", (v.internal_size||0) + " mq")
+      + (v.accessory_size ? infoItem("Superficie accessoria (35%)", v.accessory_size + " mq → " + (v.accessory_size*0.35).toFixed(2) + " mq") : "")
+      + (v.garage_sqm ? infoItem("Garage (35%)", v.garage_sqm + " mq → " + (v.garage_sqm*0.35).toFixed(2) + " mq") : "")
+      + (v.garden_sqm ? infoItem("Giardino (15%)", v.garden_sqm + " mq → " + (v.garden_sqm*0.15).toFixed(2) + " mq") : "")
+      + '</div>'
+      + '<p class="method-text" style="margin-top:14px"><strong>Superficie commerciale equivalente: ' + equivSurface.toFixed(2) + ' mq</strong></p>'
+      + '</div>';
+  }
+
+  // 5. Metodo comparativo
+  var hasComparativo = v.valuation_comparativo_min != null;
+  html += '<div class="section">'
+    + '<div class="section-kicker">5. Metodo Comparativo</div>'
+    + '<p class="method-text">Confronto con l\'offerta immobiliare rilevabile nella stessa zona: opportunità IMMONOVA pubblicate, dati di mercato pubblici e comparabili reali individuati tramite ricerca.</p>';
+
+  var allComps = internalComps.map(function(c){ return { location: c.title || "Opportunità IMMONOVA", price_per_sqm: c.pricePerSqm, source: "IMMONOVA" }; })
+    .concat(aiComps.map(function(c){ return { location: c.location, price_per_sqm: c.price_per_sqm, source: c.source || "Ricerca web" }; }));
+
+  if(allComps.length){
+    html += '<table class="comp-table"><thead><tr><th>Comparabile</th><th>€/mq</th><th>Fonte</th></tr></thead><tbody>'
+      + allComps.map(function(c){
+          return '<tr><td>' + escapeHTML(c.location||"") + '</td><td>' + formatEuro(c.price_per_sqm) + '</td><td>' + escapeHTML(c.source||"") + '</td></tr>';
+        }).join("")
+      + '</tbody></table>';
+  }
+  if(narrative.ai_disclaimer){
+    html += '<p class="method-text" style="margin-top:10px;font-size:11px;font-style:italic">' + escapeHTML(narrative.ai_disclaimer) + '</p>';
+  }
+  html += hasComparativo
+    ? '<p class="method-text" style="margin-top:14px"><strong>Risultato metodo comparativo: ' + formatEuro(v.valuation_comparativo_min) + ' – ' + formatEuro(v.valuation_comparativo_max) + '</strong></p>'
+    : '<p class="method-text" style="margin-top:14px">Dati insufficienti per il metodo comparativo.</p>';
+  html += '</div>';
+
+  // 6. Metodo reddituale (solo se locato)
+  if(isRented){
+    var hasReddituale = v.valuation_reddituale_min != null;
+    html += '<div class="section">'
+      + '<div class="section-kicker">6. Metodo Reddituale — Capitalizzazione del Reddito</div>'
+      + '<p class="method-text">L\'immobile è attualmente locato: il valore può essere determinato anche attraverso la capitalizzazione del canone percepito.</p>';
+    if(v.current_annual_rent){
+      html += '<div class="info-grid" style="margin-bottom:16px">' + infoItem("Canone annuo lordo", formatEuro(v.current_annual_rent)) + '</div>';
+      html += '<table class="comp-table"><thead><tr><th>Rendimento lordo</th><th>Valore risultante</th></tr></thead><tbody>'
+        + [0.055,0.06,0.0625,0.065,0.07].map(function(rate){
+            var val = v.current_annual_rent / rate;
+            return '<tr><td>' + (rate*100).toFixed(2) + '%</td><td>' + formatEuro(val) + '</td></tr>';
+          }).join("")
+        + '</tbody></table>';
+    }
+    html += hasReddituale
+      ? '<p class="method-text" style="margin-top:14px"><strong>Risultato metodo reddituale: ' + formatEuro(v.valuation_reddituale_min) + ' – ' + formatEuro(v.valuation_reddituale_max) + '</strong> (intervallo di rendimento 5,50%–7,00%)</p>'
+      : '';
+    html += '</div>';
+  }
+
+  // 7. Elementi qualitativi (narrativa AI)
+  if((narrative.positive_elements||[]).length || (narrative.risk_elements||[]).length){
+    html += '<div class="section">'
+      + '<div class="section-kicker">7. Elementi Qualitativi Che Incidono sul Valore</div>';
+    if((narrative.positive_elements||[]).length){
+      html += '<p class="method-text" style="font-weight:600;margin-bottom:6px">Elementi positivi</p>'
+        + narrative.positive_elements.map(function(e){ return '<p class="method-text"><strong>' + escapeHTML(e.title||"") + ':</strong> ' + escapeHTML(e.description||"") + '</p>'; }).join("");
+    }
+    if((narrative.risk_elements||[]).length){
+      html += '<p class="method-text" style="font-weight:600;margin:14px 0 6px">Elementi di rischio/attenzione</p>'
+        + narrative.risk_elements.map(function(e){ return '<p class="method-text"><strong>' + escapeHTML(e.title||"") + ':</strong> ' + escapeHTML(e.description||"") + '</p>'; }).join("");
+    }
+    html += '</div>';
+  }
+
+  // 8. Riconciliazione e valore stimato
+  html += '<div class="section">'
+    + '<div class="section-kicker">8. Riconciliazione e Valore di Mercato Stimato</div>';
+  if(isRented && v.valuation_reddituale_min != null && hasComparativo){
+    html += '<p class="method-text">Trattandosi di immobile locato, è stata attribuita maggiore rilevanza al metodo reddituale: <strong>60% reddituale + 40% comparativo</strong>.</p>';
+  }
   if(hasEstimate){
     html += '<div class="value-box">'
-      + '<div class="value-label">Intervallo di valore stimato</div>'
+      + '<div class="value-label">Valore di mercato stimato</div>'
       + '<div class="value-range">' + formatEuro(v.estimated_value_min) + ' – ' + formatEuro(v.estimated_value_max) + '</div>'
-      + (v.estimated_value_per_sqm ? '<div class="value-per-sqm">' + formatEuro(v.estimated_value_per_sqm) + ' / mq (media ponderata)</div>' : '')
+      + (v.estimated_value_per_sqm ? '<div class="value-per-sqm">' + formatEuro(v.estimated_value_per_sqm) + ' / mq</div>' : '')
       + '</div>';
   }else{
     html += '<div class="empty-state">Valutazione non ancora calcolata per questo immobile.</div>';
   }
   html += '</div>';
 
-  // Metodologia
-  html += '<div class="section">'
-    + '<div class="section-kicker">Il Metodo</div>'
-    + '<div class="section-title">Come È Stata Calcolata</div>'
-    + '<p class="method-text">La stima combina due fonti indipendenti: le opportunità IMMONOVA già pubblicate nella stessa zona e categoria, e i dati di mercato pubblici disponibili per l\'area. Il metodo è comparativo: si osservano transazioni e proposte simili, se ne ricava un valore medio al metro quadro, e lo si applica alla superficie dell\'immobile.</p>';
-
-  if(snap.internal_price_per_sqm || snap.market_price_per_sqm){
-    html += '<div class="info-grid" style="margin-bottom:20px">'
-      + infoItem("Media opportunità IMMONOVA comparabili", snap.internal_price_per_sqm ? formatEuro(snap.internal_price_per_sqm) + "/mq (" + internalComps.length + " annunci)" : "Nessun dato disponibile")
-      + infoItem("Dato di mercato pubblico (zona)", snap.market_price_per_sqm ? formatEuro(snap.market_price_per_sqm) + "/mq" : "Nessun dato disponibile")
+  // 9. Strategia di commercializzazione
+  if(v.suggested_listing_price){
+    html += '<div class="section">'
+      + '<div class="section-kicker">9. Strategia di Commercializzazione</div>'
+      + '<p class="method-text">Il valore di mercato non deve necessariamente coincidere con il prezzo iniziale di offerta. Per consentire un fisiologico margine negoziale si propone:</p>'
+      + '<div class="value-box"><div class="value-label">Prezzo di immissione sul mercato</div><div class="value-range">' + formatEuro(v.suggested_listing_price) + '</div></div>'
       + '</div>';
   }
 
-  if(internalComps.length){
-    html += '<table class="comp-table"><thead><tr><th>Opportunità comparabile</th><th>€/mq</th></tr></thead><tbody>'
-      + internalComps.map(function(c){
-          return '<tr><td>' + escapeHTML(c.title || ("Opportunità #" + c.id)) + '</td><td>' + formatEuro(c.pricePerSqm) + '</td></tr>';
-        }).join("")
-      + '</tbody></table>';
+  // 10. Conclusioni (narrativa AI)
+  if(narrative.conclusion){
+    html += '<div class="section">'
+      + '<div class="section-kicker">10. Conclusioni</div>'
+      + '<p class="method-text">' + escapeHTML(narrative.conclusion) + '</p>'
+      + '</div>';
   }
-  html += '</div>';
 
   // Dati catastali (separati)
   // Composizione popolazione (eta' + reddito), se presente nello snapshot salvato
@@ -316,7 +409,7 @@ async function loadAndRender(){
     }
 
     html += '<div class="section">'
-      + '<div class="section-kicker">Il Territorio</div>'
+      + '<div class="section-kicker">12. Il Territorio</div>'
       + '<div class="section-title">Composizione della Popolazione</div>'
       + '<p class="method-text">Un elemento a favore nella trattativa: chi acquista o investe vuole capire chi vive nella zona. Dati ufficiali, non stime.</p>';
     if(popComp.age_distribution){
@@ -331,7 +424,7 @@ async function loadAndRender(){
   var hasCadastral = v.cadastral_category || v.cadastral_income || v.cadastral_surface || v.cadastral_sheet;
   if(hasCadastral){
     html += '<div class="section">'
-      + '<div class="section-kicker">Riferimento Fiscale</div>'
+      + '<div class="section-kicker">11. Riferimento Fiscale</div>'
       + '<div class="section-title">Dati Catastali</div>'
       + '<div class="cadastral-note">Il valore catastale è un dato fiscale, utilizzato per il calcolo di imposte e tasse: è per natura distinto dal valore di mercato riportato sopra, e i due non vanno confusi tra loro.</div>'
       + '<div class="info-grid">'
@@ -348,7 +441,8 @@ async function loadAndRender(){
 
   // Disclaimer
   html += '<div class="section">'
-    + '<div class="disclaimer-box">Questa relazione è una stima indicativa basata su dati comparativi e di mercato disponibili al momento della sua preparazione. Non costituisce una perizia tecnica formale né sostituisce la valutazione di un tecnico abilitato. Il valore di un immobile può variare in base a fattori non rilevabili a distanza (stato di conservazione interno, vincoli specifici, trattative di mercato).</div>'
+    + '<div class="section-kicker">Avvertenze e Limiti della Valutazione</div>'
+    + '<div class="disclaimer-box">Questa relazione costituisce una stima commerciale basata sulle informazioni disponibili alla data dell\'analisi, comparabili individuati tramite ricerca automatizzata (da verificare nella loro effettiva disponibilità) e dati di mercato pubblici. Non costituisce una perizia tecnica formale né sostituisce la valutazione di un tecnico abilitato. Prima della definitiva immissione sul mercato si raccomanda la verifica di: conformità catastale e urbanistica, contratto di locazione registrato e sua effettiva scadenza, regolarità dei pagamenti, eventuali oneri o vincoli sulla proprietà. Il valore stimato può variare in base a fattori non rilevabili a distanza.</div>'
     + '</div>';
 
   html += '<div class="footer-note">IMMONOVA · Off Market Consulting</div>';
