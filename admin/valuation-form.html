@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nuova Valutazione Immobiliare | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{text-decoration:none;color:#a67f34}
+.logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}
+.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:#a58139}
+.header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.header-actions a,.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.header-actions a:hover,.logout:hover{background:#a67f34;color:#fff}
+.container{max-width:1280px;margin:auto;padding:40px}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:12px}
+.title-row{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;flex-wrap:wrap;margin-bottom:18px}
+.title{font-size:42px;font-weight:200;letter-spacing:.05em;color:#a67f34}
+.subtitle{font-size:15px;line-height:1.8;color:#8f7643;max-width:860px;margin-bottom:28px}
+.form-wrapper{
+  background:rgba(255,255,255,.20);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+  padding:34px;
+}
+.section{margin-bottom:34px;padding-bottom:30px;border-bottom:1px solid rgba(166,127,52,.12)}
+.section:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.section-title{font-size:18px;font-weight:300;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;margin-bottom:6px}
+.section-note{font-size:12px;color:#8f7643;margin-bottom:20px;line-height:1.6}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.field.full{grid-column:1/-1}
+label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8f7643}
+input,select,textarea{
+  width:100%;
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.25);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+}
+textarea{min-height:100px;resize:vertical;line-height:1.6}
+
+.cadastral-box{
+  background:rgba(166,127,52,.06);
+  border:1px solid rgba(166,127,52,.18);
+  padding:22px;
+}
+
+.result-box{
+  margin-top:24px;
+  padding:26px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(166,127,52,.08);
+  display:none;
+}
+.result-box.visible{display:block}
+.result-title{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#a67f34;margin-bottom:14px}
+.result-range{font-size:26px;color:#7f6430;margin-bottom:16px}
+.result-detail{font-size:12.5px;color:#8f7643;line-height:1.9}
+.result-detail strong{color:#5a4a2a}
+
+.footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
+.btn-group{display:flex;gap:12px;flex-wrap:wrap}
+.submit-btn,.secondary-btn{
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.submit-btn{background:#a67f34;color:#fffaf0}
+.submit-btn:disabled{opacity:.55;cursor:not-allowed}
+.secondary-btn{background:rgba(255,255,255,.25);color:#a67f34}
+.save-panel{min-width:300px}
+.progress-text{min-height:18px;margin-bottom:10px;font-size:13px;color:#8f7643}
+.progress-text.success{color:#4f7f45}
+.progress-text.error{color:#9c2f2f}
+.progress-bar{width:100%;height:6px;border:1px solid rgba(166,127,52,.20);background:rgba(255,255,255,.28);overflow:hidden;margin-bottom:14px}
+.progress-fill{width:0%;height:100%;background:#a67f34;transition:width .35s ease}
+
+@media(max-width:900px){.grid,.grid-3{grid-template-columns:1fr}}
+@media(max-width:700px){
+  .header{flex-direction:column;gap:18px}
+  .header-actions{justify-content:center}
+  .container{padding:28px 22px}
+  .form-wrapper{padding:24px}
+  .save-panel{min-width:100%}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+  <div class="header-actions">
+    <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="valuations.html" data-i18n="nav_valuations">Valutazioni</a>
+    <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="kicker" data-i18n="kicker">Valutazione Immobiliare</div>
+
+  <div class="title-row">
+    <div><h1 class="title" id="pageTitle" data-i18n="title_new">Nuova Valutazione</h1></div>
+    <a class="secondary-link" href="valuations.html" data-i18n="btn_back">Vedi tutte le valutazioni</a>
+  </div>
+
+  <p class="subtitle" data-i18n="subtitle">
+    Registra i dati del venditore e dell'immobile, con i dati catastali dalla visura. Il calcolo combina le opportunità IMMONOVA già pubblicate nella zona con i dati di mercato pubblici, con metodo comparativo.
+  </p>
+
+  <form id="valuationForm" class="form-wrapper">
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_seller">Venditore</h2>
+      <div class="grid">
+        <div class="field">
+          <label data-i18n="label_first_name">Nome</label>
+          <input type="text" id="sellerFirstName" required>
+        </div>
+        <div class="field">
+          <label data-i18n="label_last_name">Cognome</label>
+          <input type="text" id="sellerLastName" required>
+        </div>
+        <div class="field">
+          <label data-i18n="label_phone">Telefono</label>
+          <input type="text" id="sellerPhone">
+        </div>
+        <div class="field">
+          <label data-i18n="label_email">Email</label>
+          <input type="email" id="sellerEmail">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_property">Immobile</h2>
+      <div class="field full">
+        <label data-i18n="label_property_title">Titolo immobile</label>
+        <input type="text" id="propertyTitle" data-i18n-placeholder="ph_property_title" placeholder="Es. Villa con giardino, Tricase">
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label data-i18n="label_category">Categoria</label>
+          <select id="category">
+            <option value="" data-i18n="opt_select">Seleziona</option>
+            <option value="Ville" data-i18n="cat_villa">Ville</option>
+            <option value="Appartamenti" data-i18n="cat_apartment">Appartamenti</option>
+            <option value="Hotel" data-i18n="cat_hotel">Hotel</option>
+            <option value="Resort" data-i18n="cat_resort">Resort</option>
+            <option value="Villaggi" data-i18n="cat_village">Villaggi</option>
+            <option value="Nuove Edificazioni" data-i18n="cat_development">Nuove Edificazioni</option>
+            <option value="Commerciale" data-i18n="cat_commercial">Commerciale</option>
+            <option value="Terreni" data-i18n="cat_land">Terreni</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-i18n="label_address">Indirizzo</label>
+          <input type="text" id="address">
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="field">
+          <label data-i18n="label_municipality">Comune</label>
+          <input type="text" id="municipality" required>
+        </div>
+        <div class="field">
+          <label data-i18n="label_province">Provincia</label>
+          <input type="text" id="province">
+        </div>
+        <div class="field">
+          <label data-i18n="label_region">Regione</label>
+          <input type="text" id="region">
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:4px">
+        <div class="field">
+          <label data-i18n="label_internal_size">Superficie interna (mq)</label>
+          <input type="number" id="internalSize" min="0" step="1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_land_size">Superficie terreno (mq)</label>
+          <input type="number" id="landSize" min="0" step="1">
+        </div>
+        <div class="field"></div>
+        <div class="field">
+          <label data-i18n="label_bedrooms">Camere</label>
+          <input type="number" id="bedrooms" min="0" step="1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_bathrooms">Bagni</label>
+          <input type="number" id="bathrooms" min="0" step="1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_construction_year">Anno costruzione</label>
+          <input type="number" id="constructionYear" min="1800" max="2100" step="1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_energy_class">Classe energetica</label>
+          <select id="energyClass">
+            <option value="">-</option>
+            <option value="A4">A4</option><option value="A3">A3</option><option value="A2">A2</option><option value="A1">A1</option>
+            <option value="B">B</option><option value="C">C</option><option value="D">D</option>
+            <option value="E">E</option><option value="F">F</option><option value="G">G</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-i18n="label_property_condition">Stato immobile</label>
+          <select id="propertyCondition">
+            <option value="">-</option>
+            <option value="Nuovo/Ristrutturato" data-i18n="cond_new">Nuovo/Ristrutturato</option>
+            <option value="Buono" data-i18n="cond_good">Buono</option>
+            <option value="Da ristrutturare" data-i18n="cond_renovate">Da ristrutturare</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_cadastral">Dati Catastali</h2>
+      <p class="section-note" data-i18n="section_cadastral_note">Dalla visura catastale. Il valore catastale è un dato fiscale, distinto dal valore di mercato: nel documento finale compaiono entrambi, tenuti separati.</p>
+      <div class="cadastral-box">
+        <div class="grid-3">
+          <div class="field">
+            <label data-i18n="label_cadastral_municipality">Comune catastale</label>
+            <input type="text" id="cadastralMunicipality">
+          </div>
+          <div class="field">
+            <label data-i18n="label_cadastral_category">Categoria catastale</label>
+            <input type="text" id="cadastralCategory" data-i18n-placeholder="ph_cadastral_category" placeholder="Es. A/2">
+          </div>
+          <div class="field">
+            <label data-i18n="label_cadastral_income">Rendita catastale (€)</label>
+            <input type="number" id="cadastralIncome" min="0" step="0.01">
+          </div>
+          <div class="field">
+            <label data-i18n="label_cadastral_surface">Superficie catastale (mq)</label>
+            <input type="number" id="cadastralSurface" min="0" step="1">
+          </div>
+          <div class="field">
+            <label data-i18n="label_cadastral_sheet">Foglio</label>
+            <input type="text" id="cadastralSheet">
+          </div>
+          <div class="field">
+            <label data-i18n="label_cadastral_parcel">Particella</label>
+            <input type="text" id="cadastralParcel">
+          </div>
+          <div class="field">
+            <label data-i18n="label_cadastral_subalterno">Subalterno</label>
+            <input type="text" id="cadastralSubalterno">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_notes">Note</h2>
+      <div class="field full">
+        <textarea id="notes" data-i18n-placeholder="ph_notes" placeholder="Dettagli emersi dal sopralluogo, richieste del venditore..."></textarea>
+      </div>
+
+      <button type="button" class="secondary-btn" id="calculateBtn" data-i18n="btn_calculate">Calcola Valutazione</button>
+
+      <div class="result-box" id="resultBox">
+        <div class="result-title" data-i18n="result_title">Valore di mercato stimato</div>
+        <div class="result-range" id="resultRange">—</div>
+        <div class="result-detail" id="resultDetail"></div>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <a class="secondary-btn" href="valuations.html" data-i18n="btn_cancel">Annulla</a>
+      <div class="save-panel">
+        <div id="progressText" class="progress-text"></div>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <button class="submit-btn" type="submit" id="saveBtn" data-i18n="btn_save">Salva Valutazione</button>
+      </div>
+    </div>
+
+  </form>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const params = new URLSearchParams(window.location.search);
+const valuationId = params.get("id");
+
+const form = document.getElementById("valuationForm");
+const saveBtn = document.getElementById("saveBtn");
+const calculateBtn = document.getElementById("calculateBtn");
+const progressText = document.getElementById("progressText");
+const progressFill = document.getElementById("progressFill");
+const resultBox = document.getElementById("resultBox");
+const resultRange = document.getElementById("resultRange");
+const resultDetail = document.getElementById("resultDetail");
+
+let currentUser = null;
+let currentUserLanguage = "it";
+let lastCalculation = null;
+
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_valuations:"Valutazioni", logout:"Logout",
+  kicker:"Valutazione Immobiliare", title_new:"Nuova Valutazione", title_edit:"Modifica Valutazione",
+  btn_back:"Vedi tutte le valutazioni",
+  subtitle:"Registra i dati del venditore e dell'immobile, con i dati catastali dalla visura. Il calcolo combina le opportunità IMMONOVA già pubblicate nella zona con i dati di mercato pubblici, con metodo comparativo.",
+  section_seller:"Venditore", label_first_name:"Nome", label_last_name:"Cognome", label_phone:"Telefono", label_email:"Email",
+  section_property:"Immobile", label_property_title:"Titolo immobile", ph_property_title:"Es. Villa con giardino, Tricase",
+  label_category:"Categoria", opt_select:"Seleziona",
+  cat_villa:"Ville", cat_apartment:"Appartamenti", cat_hotel:"Hotel", cat_resort:"Resort", cat_village:"Villaggi",
+  cat_development:"Nuove Edificazioni", cat_commercial:"Commerciale", cat_land:"Terreni",
+  label_address:"Indirizzo", label_municipality:"Comune", label_province:"Provincia", label_region:"Regione",
+  label_internal_size:"Superficie interna (mq)", label_land_size:"Superficie terreno (mq)",
+  label_bedrooms:"Camere", label_bathrooms:"Bagni", label_construction_year:"Anno costruzione",
+  label_energy_class:"Classe energetica", label_property_condition:"Stato immobile",
+  cond_new:"Nuovo/Ristrutturato", cond_good:"Buono", cond_renovate:"Da ristrutturare",
+  section_cadastral:"Dati Catastali",
+  section_cadastral_note:"Dalla visura catastale. Il valore catastale è un dato fiscale, distinto dal valore di mercato: nel documento finale compaiono entrambi, tenuti separati.",
+  label_cadastral_municipality:"Comune catastale", label_cadastral_category:"Categoria catastale", ph_cadastral_category:"Es. A/2",
+  label_cadastral_income:"Rendita catastale (€)", label_cadastral_surface:"Superficie catastale (mq)",
+  label_cadastral_sheet:"Foglio", label_cadastral_parcel:"Particella", label_cadastral_subalterno:"Subalterno",
+  section_notes:"Note", ph_notes:"Dettagli emersi dal sopralluogo, richieste del venditore...",
+  btn_calculate:"Calcola Valutazione", result_title:"Valore di mercato stimato",
+  btn_cancel:"Annulla", btn_save:"Salva Valutazione", btn_update:"Salva Modifiche",
+  msg_required:"Nome, cognome venditore e comune dell'immobile sono obbligatori.",
+  msg_calculating:"Calcolo in corso: opportunità comparabili e dati di mercato...",
+  msg_calc_error:"Errore nel calcolo: ",
+  msg_no_comparables:"Nessuna opportunità IMMONOVA comparabile trovata in questa zona/categoria.",
+  msg_no_market_data:"Nessun dato di mercato pubblico disponibile per questa zona.",
+  msg_no_data_at_all:"Impossibile calcolare una stima: né opportunità comparabili né dati di mercato pubblici disponibili per questa zona. Puoi comunque salvare la valutazione e completarla in seguito.",
+  msg_saving:"Salvataggio valutazione...",
+  msg_saved_success:"Valutazione salvata correttamente.",
+  msg_save_error:"Errore durante il salvataggio: ",
+  detail_internal_prefix:"Opportunità IMMONOVA comparabili: ", detail_internal_none:"nessuna trovata",
+  detail_market_prefix:"Dato di mercato pubblico (zona): ", detail_market_none:"non disponibile",
+  detail_based_on:"Stima calcolata su superficie interna di "
+};
+
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_valuation_form_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Admin form to register a property valuation lead: seller, property details, cadastral data, comparative market estimate.",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione valuation-form non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(function(el){
+    var key = el.getAttribute("data-i18n-placeholder");
+    if(T[key]) el.setAttribute("placeholder", T[key]);
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+  if(!valuationId){
+    document.getElementById("pageTitle").textContent = T.title_new;
+    saveBtn.textContent = T.btn_save;
+  }
+}
+
+async function loadUserLanguage(){
+  var result = await client.from("profiles").select("language").eq("id", currentUser.id).single();
+  if(result.error){ await applyLanguage("it"); return; }
+  await applyLanguage((result.data && result.data.language) || "it");
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function setProgress(message, percent, type){
+  progressText.className = "progress-text " + (type || "");
+  progressText.textContent = message || "";
+  progressFill.style.width = (percent || 0) + "%";
+}
+
+function val(id){ return document.getElementById(id).value.trim(); }
+function numVal(id){ var v = document.getElementById(id).value; return v === "" ? null : Number(v); }
+
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
+/* ---- Ripulisce un prezzo salvato come testo libero (stesso problema gia' visto nel
+   dossier: il campo "price" delle opportunita' non e' un numero, e' testo formattato
+   liberamente). Toglie tutto cio' che non e' cifra. ---- */
+function parsePriceNumber(text){
+  if(!text) return null;
+  var digits = String(text).replace(/[^\d]/g, "");
+  return digits ? Number(digits) : null;
+}
+
+function formatEuro(n){
+  return new Intl.NumberFormat("it-IT").format(Math.round(n)) + " €";
+}
+
+/* ---- Comparabili interni: altre opportunita' IMMONOVA gia' pubblicate, stessa categoria,
+   stessa provincia (o comune se la provincia non e' compilata), con prezzo e superficie
+   validi. Calcola prezzo/mq per ciascuna, poi la mediana (piu' robusta della media contro
+   un singolo annuncio fuori scala). ---- */
+async function findInternalComparables(category, province, municipality){
+  var query = client.from("opportunities").select("id,title,price,internal_size,municipality,province").eq("published", true);
+  if(category) query = query.eq("category", category);
+
+  var result = await query;
+  if(result.error || !result.data) return { comparables: [], pricePerSqm: null };
+
+  var locationFiltered = result.data.filter(function(o){
+    if(province && o.province && String(o.province).toLowerCase() === String(province).toLowerCase()) return true;
+    if(municipality && o.municipality && String(o.municipality).toLowerCase() === String(municipality).toLowerCase()) return true;
+    return false;
+  });
+
+  var withPricePerSqm = locationFiltered.map(function(o){
+    var price = parsePriceNumber(o.price);
+    var size = Number(o.internal_size);
+    if(!price || !size || size <= 0) return null;
+    return { id: o.id, title: o.title, pricePerSqm: price / size };
+  }).filter(Boolean);
+
+  if(!withPricePerSqm.length) return { comparables: [], pricePerSqm: null };
+
+  var sorted = withPricePerSqm.map(function(c){ return c.pricePerSqm; }).sort(function(a,b){ return a-b; });
+  var mid = Math.floor(sorted.length / 2);
+  var median = sorted.length % 2 ? sorted[mid] : (sorted[mid-1] + sorted[mid]) / 2;
+
+  return { comparables: withPricePerSqm, pricePerSqm: median };
+}
+
+/* ---- Dato di mercato pubblico: motore specializzato immonova-global-data-provider,
+   NON l'intero Discovery Engine (che fa 6 chiamate pesanti in piu' e ha gia' dato
+   problemi di risorse su singoli comuni) -- qui serve solo il prezzo/mq di zona. ---- */
+async function findMarketPricePerSqm(municipality, province, region){
+  try{
+    var result = await client.functions.invoke("immonova-global-data-provider", {
+      body:{
+        municipality: municipality || null,
+        province: province || null,
+        region: region || null,
+        country: "Italia",
+        country_code: "IT",
+        domain: "real_estate",
+        fallback_years: 7
+      }
+    });
+
+    if(result.error) return null;
+    var data = result.data;
+    var ev = Array.isArray(data?.evidence) ? data.evidence : [];
+    var match = ev.find(function(e){
+      var k = String(e.field_key || e.metric || e.key || e.name || "").toLowerCase();
+      return /residential.*(sale|price).*(m2|sqm)|average.*price.*m2|sale.*per.*m2/.test(k);
+    });
+    var value = Number(match && match.value);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }catch(e){
+    console.warn("Dato di mercato pubblico non disponibile (non bloccante):", e);
+    return null;
+  }
+}
+
+calculateBtn.addEventListener("click", async function(){
+  var category = val("category");
+  var municipality = val("municipality");
+  var province = val("province");
+  var region = val("region");
+  var internalSize = numVal("internalSize");
+
+  if(!municipality){
+    setProgress(T.msg_required, 100, "error");
+    return;
+  }
+
+  calculateBtn.disabled = true;
+  setProgress(T.msg_calculating, 40, "");
+
+  try{
+    var internalResult = await findInternalComparables(category, province, municipality);
+    var marketPricePerSqm = await findMarketPricePerSqm(municipality, province, region);
+
+    var figures = [internalResult.pricePerSqm, marketPricePerSqm].filter(function(v){ return v != null; });
+
+    if(!figures.length){
+      resultBox.classList.remove("visible");
+      setProgress(T.msg_no_data_at_all, 100, "error");
+      lastCalculation = { comparables_snapshot: { internal: internalResult.comparables, market_price_per_sqm: null }, estimated_value_min: null, estimated_value_max: null, estimated_value_per_sqm: null };
+      calculateBtn.disabled = false;
+      return;
+    }
+
+    var blendedPricePerSqm = figures.reduce(function(a,b){ return a+b; }, 0) / figures.length;
+    var rangeMin = blendedPricePerSqm * 0.9;
+    var rangeMax = blendedPricePerSqm * 1.1;
+
+    lastCalculation = {
+      comparables_snapshot: {
+        internal: internalResult.comparables,
+        internal_price_per_sqm: internalResult.pricePerSqm,
+        market_price_per_sqm: marketPricePerSqm,
+        blended_price_per_sqm: blendedPricePerSqm,
+        generated_at: new Date().toISOString()
+      },
+      estimated_value_per_sqm: blendedPricePerSqm,
+      estimated_value_min: internalSize ? rangeMin * internalSize : null,
+      estimated_value_max: internalSize ? rangeMax * internalSize : null
+    };
+
+    resultBox.classList.add("visible");
+
+    if(internalSize){
+      resultRange.textContent = formatEuro(lastCalculation.estimated_value_min) + " – " + formatEuro(lastCalculation.estimated_value_max);
+    }else{
+      resultRange.textContent = formatEuro(rangeMin) + " – " + formatEuro(rangeMax) + " / mq";
+    }
+
+    var detailParts = [];
+    detailParts.push("<strong>" + T.detail_internal_prefix + "</strong>" + (internalResult.pricePerSqm ? formatEuro(internalResult.pricePerSqm) + "/mq (" + internalResult.comparables.length + " annunci)" : T.detail_internal_none));
+    detailParts.push("<strong>" + T.detail_market_prefix + "</strong>" + (marketPricePerSqm ? formatEuro(marketPricePerSqm) + "/mq" : T.detail_market_none));
+    if(internalSize) detailParts.push(T.detail_based_on + internalSize + " mq");
+    resultDetail.innerHTML = detailParts.join("<br>");
+
+    setProgress("", 0, "");
+  }catch(error){
+    console.error(error);
+    setProgress(T.msg_calc_error + (error.message || error), 100, "error");
+  }
+
+  calculateBtn.disabled = false;
+});
+
+async function loadValuationForEdit(){
+  if(!valuationId) return;
+
+  document.getElementById("pageTitle").textContent = T.title_edit;
+  document.title = "Modifica Valutazione | IMMONOVA Admin";
+  saveBtn.textContent = T.btn_update;
+
+  var result = await client.from("immonova_property_valuations").select("*").eq("id", valuationId).single();
+  if(result.error || !result.data){
+    setProgress("Valutazione non trovata.", 100, "error");
+    return;
+  }
+
+  var data = result.data;
+  document.getElementById("sellerFirstName").value = data.seller_first_name || "";
+  document.getElementById("sellerLastName").value = data.seller_last_name || "";
+  document.getElementById("sellerPhone").value = data.seller_phone || "";
+  document.getElementById("sellerEmail").value = data.seller_email || "";
+  document.getElementById("propertyTitle").value = data.property_title || "";
+  document.getElementById("category").value = data.category || "";
+  document.getElementById("address").value = data.address || "";
+  document.getElementById("municipality").value = data.municipality || "";
+  document.getElementById("province").value = data.province || "";
+  document.getElementById("region").value = data.region || "";
+  document.getElementById("internalSize").value = data.internal_size ?? "";
+  document.getElementById("landSize").value = data.land_size ?? "";
+  document.getElementById("bedrooms").value = data.bedrooms ?? "";
+  document.getElementById("bathrooms").value = data.bathrooms ?? "";
+  document.getElementById("constructionYear").value = data.construction_year ?? "";
+  document.getElementById("energyClass").value = data.energy_class || "";
+  document.getElementById("propertyCondition").value = data.property_condition || "";
+  document.getElementById("cadastralMunicipality").value = data.cadastral_municipality || "";
+  document.getElementById("cadastralCategory").value = data.cadastral_category || "";
+  document.getElementById("cadastralIncome").value = data.cadastral_income ?? "";
+  document.getElementById("cadastralSurface").value = data.cadastral_surface ?? "";
+  document.getElementById("cadastralSheet").value = data.cadastral_sheet || "";
+  document.getElementById("cadastralParcel").value = data.cadastral_parcel || "";
+  document.getElementById("cadastralSubalterno").value = data.cadastral_subalterno || "";
+  document.getElementById("notes").value = data.notes || "";
+
+  if(data.estimated_value_min || data.estimated_value_max){
+    resultBox.classList.add("visible");
+    resultRange.textContent = formatEuro(data.estimated_value_min) + " – " + formatEuro(data.estimated_value_max);
+    var snap = data.comparables_snapshot || {};
+    var detailParts = [];
+    detailParts.push("<strong>" + T.detail_internal_prefix + "</strong>" + (snap.internal_price_per_sqm ? formatEuro(snap.internal_price_per_sqm) + "/mq (" + (snap.internal||[]).length + " annunci)" : T.detail_internal_none));
+    detailParts.push("<strong>" + T.detail_market_prefix + "</strong>" + (snap.market_price_per_sqm ? formatEuro(snap.market_price_per_sqm) + "/mq" : T.detail_market_none));
+    resultDetail.innerHTML = detailParts.join("<br>");
+    lastCalculation = { comparables_snapshot: snap, estimated_value_min: data.estimated_value_min, estimated_value_max: data.estimated_value_max, estimated_value_per_sqm: data.estimated_value_per_sqm };
+  }
+}
+
+form.addEventListener("submit", async function(event){
+  event.preventDefault();
+
+  var sellerFirstName = val("sellerFirstName");
+  var sellerLastName = val("sellerLastName");
+  var municipality = val("municipality");
+
+  if(!sellerFirstName || !sellerLastName || !municipality){
+    setProgress(T.msg_required, 100, "error");
+    return;
+  }
+
+  saveBtn.disabled = true;
+  setProgress(T.msg_saving, 60, "");
+
+  var payload = {
+    seller_first_name: sellerFirstName,
+    seller_last_name: sellerLastName,
+    seller_phone: val("sellerPhone") || null,
+    seller_email: val("sellerEmail") || null,
+    property_title: val("propertyTitle") || null,
+    category: val("category") || null,
+    address: val("address") || null,
+    municipality: municipality,
+    province: val("province") || null,
+    region: val("region") || null,
+    internal_size: numVal("internalSize"),
+    land_size: numVal("landSize"),
+    bedrooms: numVal("bedrooms"),
+    bathrooms: numVal("bathrooms"),
+    construction_year: numVal("constructionYear"),
+    energy_class: val("energyClass") || null,
+    property_condition: val("propertyCondition") || null,
+    cadastral_municipality: val("cadastralMunicipality") || null,
+    cadastral_category: val("cadastralCategory") || null,
+    cadastral_income: numVal("cadastralIncome"),
+    cadastral_surface: numVal("cadastralSurface"),
+    cadastral_sheet: val("cadastralSheet") || null,
+    cadastral_parcel: val("cadastralParcel") || null,
+    cadastral_subalterno: val("cadastralSubalterno") || null,
+    notes: val("notes") || null
+  };
+
+  if(lastCalculation){
+    payload.comparables_snapshot = lastCalculation.comparables_snapshot;
+    payload.estimated_value_min = lastCalculation.estimated_value_min;
+    payload.estimated_value_max = lastCalculation.estimated_value_max;
+    payload.estimated_value_per_sqm = lastCalculation.estimated_value_per_sqm;
+    payload.valuation_generated_at = new Date().toISOString();
+  }
+
+  if(!valuationId){
+    payload.created_by = currentUser.id;
+  }
+
+  try{
+    var savedId = valuationId;
+    if(valuationId){
+      var updateResult = await client.from("immonova_property_valuations").update(payload).eq("id", valuationId);
+      if(updateResult.error) throw updateResult.error;
+    }else{
+      var insertResult = await client.from("immonova_property_valuations").insert(payload).select("id").single();
+      if(insertResult.error) throw insertResult.error;
+      savedId = insertResult.data.id;
+    }
+
+    setProgress(T.msg_saved_success, 100, "success");
+    setTimeout(function(){ window.location.href = "valuation-report.html?id=" + savedId; }, 1000);
+  }catch(error){
+    console.error(error);
+    setProgress(T.msg_save_error + (error.message || error), 100, "error");
+    saveBtn.disabled = false;
+  }
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  if(await checkAuth()){
+    await loadUserLanguage();
+    await loadValuationForEdit();
+  }
+})();
+</script>
+</body>
+</html>
