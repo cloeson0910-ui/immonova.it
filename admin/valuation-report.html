@@ -338,20 +338,31 @@ async function loadAndRender(){
   // 6. Metodo reddituale (solo se locato)
   if(isRented){
     var hasReddituale = v.valuation_reddituale_min != null;
+    var yMin = narrative.yield_range_min_pct, yMax = narrative.yield_range_max_pct;
     html += '<div class="section">'
       + '<div class="section-kicker">6. Metodo Reddituale — Capitalizzazione del Reddito</div>'
       + '<p class="method-text">L\'immobile è attualmente locato: il valore può essere determinato anche attraverso la capitalizzazione del canone percepito.</p>';
-    if(v.current_annual_rent){
+
+    if(narrative.yield_justification){
+      html += '<p class="method-text"><strong>Intervallo di rendimento di riferimento:</strong> ' + escapeHTML(narrative.yield_justification) + '</p>';
+    }
+    if(narrative.yield_is_fallback){
+      html += '<p class="method-text" style="font-size:11px;font-style:italic">Nota: intervallo di riserva prudenziale (5,50%–7,00%), la ricerca AI non ha fornito un intervallo specifico per questo caso.</p>';
+    }
+
+    if(v.current_annual_rent && yMin && yMax){
       html += '<div class="info-grid" style="margin-bottom:16px">' + infoItem("Canone annuo lordo", formatEuro(v.current_annual_rent)) + '</div>';
+      var step = (yMax - yMin) / 4;
+      var rates = [yMin, yMin+step, yMin+step*2, yMin+step*3, yMax];
       html += '<table class="comp-table"><thead><tr><th>Rendimento lordo</th><th>Valore risultante</th></tr></thead><tbody>'
-        + [0.055,0.06,0.0625,0.065,0.07].map(function(rate){
-            var val = v.current_annual_rent / rate;
-            return '<tr><td>' + (rate*100).toFixed(2) + '%</td><td>' + formatEuro(val) + '</td></tr>';
+        + rates.map(function(ratePct){
+            var val = v.current_annual_rent / (ratePct/100);
+            return '<tr><td>' + ratePct.toFixed(2) + '%</td><td>' + formatEuro(val) + '</td></tr>';
           }).join("")
         + '</tbody></table>';
     }
     html += hasReddituale
-      ? '<p class="method-text" style="margin-top:14px"><strong>Intervallo metodo reddituale: ' + formatEuro(v.valuation_reddituale_min) + ' – ' + formatEuro(v.valuation_reddituale_max) + '</strong> (rendimento 5,50%–7,00%)<br>Valore centrale indicativo: <strong>' + formatEuro((v.valuation_reddituale_min+v.valuation_reddituale_max)/2) + '</strong></p>'
+      ? '<p class="method-text" style="margin-top:14px"><strong>Intervallo metodo reddituale: ' + formatEuro(v.valuation_reddituale_min) + ' – ' + formatEuro(v.valuation_reddituale_max) + '</strong> (rendimento ' + (yMin?yMin.toFixed(2):"—") + '%–' + (yMax?yMax.toFixed(2):"—") + '%)<br>Valore centrale indicativo: <strong>' + formatEuro((v.valuation_reddituale_min+v.valuation_reddituale_max)/2) + '</strong></p>'
       : '';
     html += '</div>';
   }
@@ -380,18 +391,27 @@ async function loadAndRender(){
   if(hasReddituale8 && hasComparativo){
     var comparativoCentral = (v.valuation_comparativo_min + v.valuation_comparativo_max) / 2;
     var reddituraleCentral = (v.valuation_reddituale_min + v.valuation_reddituale_max) / 2;
-    var comparativoWeighted = comparativoCentral * 0.4;
-    var reddituraleWeighted = reddituraleCentral * 0.6;
+    var wReddPct = narrative.reconciliation_weight_reddituale_pct != null ? narrative.reconciliation_weight_reddituale_pct : 60;
+    var wCompPct = 100 - wReddPct;
+    var comparativoWeighted = comparativoCentral * (wCompPct/100);
+    var reddituraleWeighted = reddituraleCentral * (wReddPct/100);
 
     html += '<p class="method-text">I procedimenti utilizzati hanno prodotto i seguenti risultati:</p>'
       + '<div class="info-grid" style="margin-bottom:18px">'
       + infoItem("Metodo comparativo — valore centrale", formatEuro(comparativoCentral))
       + infoItem("Metodo reddituale — valore centrale", formatEuro(reddituraleCentral))
-      + '</div>'
-      + '<p class="method-text">Trattandosi di immobile locato, è stata attribuita maggiore rilevanza al metodo reddituale rispetto al metodo puramente comparativo. Viene adottata la seguente ponderazione: <strong>metodo reddituale 60%, metodo comparativo 40%</strong>.</p>'
-      + '<p class="method-text"><strong>Calcolo:</strong><br>'
-      + formatEuro(reddituraleCentral) + ' × 60% = ' + formatEuro(reddituraleWeighted) + '<br>'
-      + formatEuro(comparativoCentral) + ' × 40% = ' + formatEuro(comparativoWeighted) + '<br>'
+      + '</div>';
+    if(narrative.reconciliation_justification){
+      html += '<p class="method-text">' + escapeHTML(narrative.reconciliation_justification) + ' Ponderazione adottata: <strong>metodo reddituale ' + wReddPct.toFixed(0) + '%, metodo comparativo ' + wCompPct.toFixed(0) + '%</strong>.</p>';
+    }else{
+      html += '<p class="method-text">Trattandosi di immobile locato, è stata attribuita maggiore rilevanza al metodo reddituale rispetto al metodo puramente comparativo. Ponderazione adottata: <strong>metodo reddituale ' + wReddPct.toFixed(0) + '%, metodo comparativo ' + wCompPct.toFixed(0) + '%</strong>.</p>';
+    }
+    if(narrative.weight_is_fallback){
+      html += '<p class="method-text" style="font-size:11px;font-style:italic">Nota: ponderazione di riserva prudenziale (60/40), la ricerca AI non ha fornito una motivazione specifica per questo caso.</p>';
+    }
+    html += '<p class="method-text"><strong>Calcolo:</strong><br>'
+      + formatEuro(reddituraleCentral) + ' × ' + wReddPct.toFixed(0) + '% = ' + formatEuro(reddituraleWeighted) + '<br>'
+      + formatEuro(comparativoCentral) + ' × ' + wCompPct.toFixed(0) + '% = ' + formatEuro(comparativoWeighted) + '<br>'
       + formatEuro(reddituraleWeighted) + ' + ' + formatEuro(comparativoWeighted) + ' = <strong>' + formatEuro(reddituraleWeighted + comparativoWeighted) + '</strong></p>';
   }else if(hasComparativo){
     html += '<p class="method-text">Immobile non locato (o canone non disponibile): il valore si basa interamente sul metodo comparativo.</p>';
@@ -413,8 +433,15 @@ async function loadAndRender(){
   if(v.suggested_listing_price){
     html += '<div class="section">'
       + '<div class="section-kicker">9. Strategia di Commercializzazione</div>'
-      + '<p class="method-text">Il valore di mercato non deve necessariamente coincidere con il prezzo iniziale di offerta. Per consentire un fisiologico margine negoziale si propone:</p>'
-      + '<div class="value-box"><div class="value-label">Prezzo di immissione sul mercato</div><div class="value-range">' + formatEuro(v.suggested_listing_price) + '</div></div>'
+      + '<p class="method-text">Il valore di mercato non deve necessariamente coincidere con il prezzo iniziale di offerta.'
+      + (narrative.listing_margin_justification ? ' ' + escapeHTML(narrative.listing_margin_justification) : ' Per consentire un fisiologico margine negoziale si propone:')
+      + '</p>';
+    if(narrative.listing_margin_is_fallback){
+      html += '<p class="method-text" style="font-size:11px;font-style:italic">Nota: margine di riserva prudenziale (+10%), la ricerca AI non ha fornito una motivazione specifica per questo caso.</p>';
+    }
+    html += '<div class="value-box"><div class="value-label">Prezzo di immissione sul mercato'
+      + (narrative.listing_margin_pct ? ' (margine +' + narrative.listing_margin_pct.toFixed(0) + '%)' : '')
+      + '</div><div class="value-range">' + formatEuro(v.suggested_listing_price) + '</div></div>'
       + '</div>';
   }
 

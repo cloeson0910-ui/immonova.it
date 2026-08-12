@@ -797,6 +797,12 @@ async function forceRefreshDossier(){
   dossierData=fresh;
   dossierSource="live";
   await persistDossierData(fresh);
+  /* ---- BUG RISOLTO: "Aggiorna dati" sostituiva dossierData per intero con i dati freschi
+     del Discovery Engine, cancellando la composizione demografica (eta'/reddito) gia'
+     eventualmente calcolata in precedenza, senza mai richiamarla di nuovo -- da qui la
+     segnalazione "manca sempre la demografia nel dossier di vendita". ensurePopulationComposition()
+     controlla gia' da sola se il dato manca e lo recupera, quindi basta richiamarla di nuovo qui. ---- */
+  await ensurePopulationComposition();
   renderBook();
   setStatus("Dati territoriali aggiornati e salvati. Non verranno richiesti di nuovo automaticamente alle prossime aperture.","success");
 }

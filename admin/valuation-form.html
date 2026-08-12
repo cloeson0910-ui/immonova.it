@@ -724,10 +724,14 @@ async function findMarketPricePerSqm(municipality, province, region){
 /* ---- Trova comparabili reali via AI (motore dedicato, separato -- immonova-ai-valuation-engine),
    con ricerca web attiva, stesso principio del resto del sistema: se non trova nulla di
    verificabile lo dice chiaramente, non inventa mai un prezzo. ---- */
-async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address){
+async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent){
   try{
     var result = await client.functions.invoke("immonova-ai-valuation-engine", {
-      body:{ category: category || null, municipality: municipality || null, province: province || null, region: region || null, internal_size: internalSize || null, address: address || null }
+      body:{
+        category: category || null, municipality: municipality || null, province: province || null, region: region || null,
+        internal_size: internalSize || null, address: address || null, property_condition: propertyCondition || null,
+        is_rented: !!isRented, current_annual_rent: currentAnnualRent || null
+      }
     });
     if(result.error) return { comparables:[], position_analysis:null, positive_elements:[], risk_elements:[], conclusion:null, ai_disclaimer:"Ricerca AI non disponibile: " + result.error.message };
     return result.data;
@@ -774,7 +778,8 @@ calculateBtn.addEventListener("click", async function(){
     var marketResult = await findMarketPricePerSqm(municipality, province, region);
     var populationComposition = await findPopulationComposition(municipality, province, region);
     setProgress((T.msg_calculating||"") + " (ricerca AI comparabili...)", 65, "");
-    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address);
+    var propertyCondition = val("propertyCondition");
+    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent);
 
     /* ---- Metodo comparativo: pool unificato di tutte le fonti disponibili -- comparabili
        interni IMMONOVA, dato di mercato pubblico (se abbastanza locale), comparabili trovati
@@ -810,12 +815,23 @@ calculateBtn.addEventListener("click", async function(){
       comparativoMax = hi * equivSurface;
     }
 
-    /* ---- Metodo reddituale: capitalizzazione del canone, analisi di sensitivita' su un
-       intervallo di rendimento lordo 5,5%-7%, stessa logica della relazione di riferimento. ---- */
+    /* ---- Metodo reddituale: capitalizzazione del canone. L'intervallo di rendimento NON e'
+       piu' un numero fisso identico per ogni immobile -- viene ragionato dall'AI caso per
+       caso (dimensione/liquidita' del mercato locale, stabilita' del conduttore, ecc.), con
+       la motivazione salvata e mostrata nel documento. Se l'AI non fornisce un intervallo
+       valido (validato lato motore), si usa 5,5%-7% come riserva prudenziale, segnalata
+       chiaramente come tale nel documento. ---- */
+    var yieldMin = aiResult.yield_range_min_pct ? aiResult.yield_range_min_pct/100 : null;
+    var yieldMax = aiResult.yield_range_max_pct ? aiResult.yield_range_max_pct/100 : null;
+    var yieldIsFallback = false;
+    if(isRented && currentAnnualRent && (!yieldMin || !yieldMax)){
+      yieldMin = 0.055; yieldMax = 0.07; yieldIsFallback = true;
+    }
+
     var reddituraleMin = null, reddituraleMax = null;
-    if(isRented && currentAnnualRent){
-      reddituraleMin = currentAnnualRent / 0.07;   // rendimento piu' alto -> valore piu' basso
-      reddituraleMax = currentAnnualRent / 0.055;  // rendimento piu' basso -> valore piu' alto
+    if(isRented && currentAnnualRent && yieldMin && yieldMax){
+      reddituraleMin = currentAnnualRent / yieldMax;   // rendimento piu' alto -> valore piu' basso
+      reddituraleMax = currentAnnualRent / yieldMin;   // rendimento piu' basso -> valore piu' alto
     }
 
     var hasComparativo = comparativoMin != null;
@@ -837,20 +853,30 @@ calculateBtn.addEventListener("click", async function(){
     /* ---- Riconciliazione pesata: se locato, 60% reddituale + 40% comparativo (il reddito
        reale e' l'indicatore piu' affidabile per un immobile gia' a reddito); altrimenti 100%
        comparativo -- stessa logica della relazione di riferimento. ---- */
+    // Peso reddituale: ragionato dall'AI (validato lato motore), riserva 60% se non fornito.
+    var weightRedditualeIsFallback = false;
+    var weightReddituale = aiResult.reconciliation_weight_reddituale_pct != null ? aiResult.reconciliation_weight_reddituale_pct/100 : null;
+    if(hasReddituale && hasComparativo && weightReddituale == null){
+      weightReddituale = 0.6; weightRedditualeIsFallback = true;
+    }
+
     var finalMin, finalMax;
     if(hasReddituale && hasComparativo){
-      finalMin = reddituraleMin*0.6 + comparativoMin*0.4;
-      finalMax = reddituraleMax*0.6 + comparativoMax*0.4;
+      finalMin = reddituraleMin*weightReddituale + comparativoMin*(1-weightReddituale);
+      finalMax = reddituraleMax*weightReddituale + comparativoMax*(1-weightReddituale);
     }else if(hasReddituale){
       finalMin = reddituraleMin; finalMax = reddituraleMax;
     }else{
       finalMin = comparativoMin; finalMax = comparativoMax;
     }
 
-    // Prezzo di immissione consigliato: margine negoziale del +10% sul valore centrale,
-    // stessa logica della relazione di riferimento (valore di mercato != prezzo di offerta).
+    // Margine di listino: ragionato dall'AI (validato lato motore), riserva +10% se non fornito.
+    var listingMarginIsFallback = false;
+    var listingMarginPct = aiResult.listing_margin_pct != null ? aiResult.listing_margin_pct/100 : null;
+    if(listingMarginPct == null){ listingMarginPct = 0.10; listingMarginIsFallback = true; }
+
     var centralValue = (finalMin + finalMax) / 2;
-    var suggestedListingPrice = Math.round(centralValue * 1.10 / 100) * 100;
+    var suggestedListingPrice = Math.round(centralValue * (1+listingMarginPct) / 100) * 100;
 
     lastCalculation = {
       comparables_snapshot: {
@@ -869,7 +895,17 @@ calculateBtn.addEventListener("click", async function(){
         positive_elements: aiResult.positive_elements || [],
         risk_elements: aiResult.risk_elements || [],
         conclusion: aiResult.conclusion || null,
-        ai_disclaimer: aiResult.ai_disclaimer || null
+        ai_disclaimer: aiResult.ai_disclaimer || null,
+        yield_range_min_pct: yieldMin ? yieldMin*100 : null,
+        yield_range_max_pct: yieldMax ? yieldMax*100 : null,
+        yield_justification: aiResult.yield_justification || null,
+        yield_is_fallback: yieldIsFallback,
+        reconciliation_weight_reddituale_pct: weightReddituale != null ? weightReddituale*100 : null,
+        reconciliation_justification: aiResult.reconciliation_justification || null,
+        weight_is_fallback: weightRedditualeIsFallback,
+        listing_margin_pct: listingMarginPct*100,
+        listing_margin_justification: aiResult.listing_margin_justification || null,
+        listing_margin_is_fallback: listingMarginIsFallback
       },
       valuation_comparativo_min: comparativoMin, valuation_comparativo_max: comparativoMax,
       valuation_reddituale_min: reddituraleMin, valuation_reddituale_max: reddituraleMax,
