@@ -424,6 +424,11 @@ button.danger{
   cursor:pointer;
 }
 
+.map-tools button.danger{
+  color:#9c2f2f;
+  border-color:rgba(156,47,47,.35);
+}
+
 .map-tools span{
   font-size:12px;
   color:#8f7643;
@@ -1369,6 +1374,7 @@ button.danger{
       <div class="map-tools">
         <button type="button" id="geoBtn" data-i18n="btn_geolocate">Geolocalizza</button>
         <button type="button" id="mapBtn" data-i18n="btn_show_map">Mostra sulla mappa</button>
+        <button type="button" id="resetGeoBtn" class="danger" data-i18n="btn_reset_geo">Reset geolocalizzazione</button>
         <span id="geoStatus" data-i18n="geo_status_default">Usa indirizzo, CAP, località, comune, provincia e regione per ottenere coordinate più precise.</span>
       </div>
 
@@ -2178,15 +2184,40 @@ function openMap(){
   setGeoStatus("Inserisci indirizzo o coordinate per aprire la mappa.", "error");
 }
 
+function resetGeolocation(){
+  var hasAnyGeoData = textOrNull("address") || textOrNull("postal_code") || textOrNull("locality") ||
+    textOrNull("formatted_address") || numberOrNull("latitude") !== null || numberOrNull("longitude") !== null;
+
+  if(!hasAnyGeoData){
+    setGeoStatus("Non c'è nessun dato di geolocalizzazione da azzerare.", "");
+    return;
+  }
+
+  var ok = confirm("Vuoi davvero azzerare indirizzo, CAP, località, indirizzo geocodificato e coordinate? L'operazione non è reversibile una volta salvata la scheda.");
+  if(!ok) return;
+
+  setValue("address", "");
+  setValue("postal_code", "");
+  setValue("locality", "");
+  setValue("formatted_address", "");
+  setValue("latitude", "");
+  setValue("longitude", "");
+
+  updateMapPreview();
+  setGeoStatus("Geolocalizzazione azzerata. Inserisci un nuovo indirizzo e premi \"Geolocalizza\" quando pronto.", "success");
+}
+
 function bindGeoTools(){
   var geoBtn = document.getElementById("geoBtn");
   var mapBtn = document.getElementById("mapBtn");
+  var resetGeoBtn = document.getElementById("resetGeoBtn");
 
   if(geoBtn) geoBtn.addEventListener("click", smartGeolocate);
   if(mapBtn) mapBtn.addEventListener("click", function(){
     updateMapPreview();
     openMap();
   });
+  if(resetGeoBtn) resetGeoBtn.addEventListener("click", resetGeolocation);
 
   ["latitude","longitude","address","postal_code","locality","municipality","province","region","formatted_address"].forEach(function(id){
     var el = document.getElementById(id);
@@ -2313,11 +2344,6 @@ function renderGallery(){
   galleryPreview.innerHTML = html;
 }
 
-/* ---- BUG RISOLTO: il pulsante "Rimuovi" della galleria chiamava removeGalleryImage(i),
-   ma questa funzione non esisteva da nessuna parte nel file -- il click non faceva
-   letteralmente nulla (nessun errore visibile all'utente, solo in console). Toglie la
-   foto dall'array in memoria e ridisegna; il salvataggio vero avviene al click su "Salva",
-   come per tutti gli altri campi del form. ---- */
 function removeGalleryImage(index){
   galleryImages.splice(index, 1);
   renderGallery();
@@ -2476,11 +2502,6 @@ function renderRenderGallery(){
   empty.style.display = box.innerHTML ? "none" : "block";
 }
 
-/* Scarica TUTTI i render generati per questa opportunità in un unico file .zip, invece di
-   dover salvare ogni immagine singolarmente a mano. Ogni file viene rinominato in modo
-   leggibile (ambiente-stile-N.jpg) cosi' e' chiaro cosa contiene senza doverlo aprire. Se il
-   download di una singola immagine fallisce (link scaduto, rete), viene saltata e segnalata
-   alla fine invece di far fallire tutto lo zip. */
 async function downloadAllRenders(){
   var btn = document.getElementById("downloadAllRendersBtn");
 
@@ -2716,14 +2737,6 @@ async function uploadImage(file, path){
   return publicUrl.data.publicUrl;
 }
 
-/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). Questa pagina non
-   caricava un profilo (solo checkAuth), quindi loadUserLanguage() e' una chiamata dedicata
-   invocata dopo checkAuth() nell'IIFE finale. Il dizionario copre l'interfaccia statica visibile
-   (etichette, sezioni, pulsanti, placeholder). NOTA IMPORTANTE: dato il volume enorme di logica
-   JS di questa pagina (CRM matching, render IA, geocoding, gestione documenti — oltre 2000 righe),
-   i messaggi di stato/errore/conferma generati dinamicamente nel resto dello script NON sono
-   stati tutti convertiti a T.* in questo giro: restano in italiano. Va fatto un secondo passaggio
-   dedicato se serve tradurre anche quelli. */
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_dossier_ia:"Dossier IA", logout:"Logout",
   title:"Modifica Opportunità",
@@ -2770,7 +2783,7 @@ var UI_STRINGS = {
   ph_address:"Es. Contrada San Paolo 15", label_postal_code:"CAP", ph_postal_code:"Es. 74015",
   label_locality:"Località / Frazione", ph_locality:"Es. San Paolo / Contrada / Centro storico",
   label_formatted_address:"Indirizzo completo geocodificato", ph_formatted_address:"Compilato automaticamente dalla geolocalizzazione",
-  btn_geolocate:"Geolocalizza", btn_show_map:"Mostra sulla mappa",
+  btn_geolocate:"Geolocalizza", btn_show_map:"Mostra sulla mappa", btn_reset_geo:"Reset geolocalizzazione",
   geo_status_default:"Usa indirizzo, CAP, località, comune, provincia e regione per ottenere coordinate più precise.",
   map_caption_default:"Posizione asset.",
   label_latitude:"Latitudine", label_longitude:"Longitudine", label_distance_sea:"Distanza mare km",
@@ -2855,9 +2868,6 @@ async function applyLanguage(lang){
   renderTranslatedStaticText();
 }
 
-/* ---- Elenco unico delle caratteristiche opzionali (checkbox): usato sia per caricare i
-   valori esistenti che per costruire il payload di salvataggio, cosi' aggiungerne una nuova
-   in futuro richiede solo una riga qui + il checkbox nell'HTML. ---- */
 var PROPERTY_FEATURES = [
   { column:"has_pool" }, { column:"has_garden" }, { column:"has_garage" },
   { column:"has_parking_spot" }, { column:"has_terrace" }, { column:"has_balcony" },
@@ -2894,11 +2904,6 @@ async function loadUserLanguage(){
   await applyLanguage((result.data && result.data.language) || "it");
 }
 
-/* ---- Le opportunità vanno verificate da un admin prima di essere pubblicate: un utente
-   normale non deve poter pubblicare/mettere in evidenza da solo, né generare render IA
-   (consuma credito/costo). Il controllo lato client evita errori in buona fede, ma la vera
-   sicurezza sta nel bloccare comunque il salvataggio di questi campi lato JS quando
-   !isAdmin (vedi collectPayload), visto che un controllo solo visivo è aggirabile. ---- */
 function applyAdminRestrictions(){
   if(isAdmin) return;
 
@@ -3052,12 +3057,6 @@ async function loadOpportunity(){
   form.style.display = "block";
 }
 
-/* ---- Blocco totale per i non-admin quando l'opportunità è oltre la bozza: una volta in
-   revisione o pubblicata, il collaboratore non può più modificare NULLA -- non solo
-   prezzo/stato come applyAdminRestrictions() già faceva per pubblica/in evidenza, ma
-   l'intero form. La vera protezione è il trigger SQL sul database (bypassabile qui non
-   cambia nulla lato dati), questo è solo per mostrarlo chiaramente invece di lasciare
-   che il collaboratore scopra il blocco solo al momento del salvataggio. ---- */
 function applyOwnershipLock(data){
   if(isAdmin) return;
 
