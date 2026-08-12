@@ -2,12 +2,12 @@
 // Due responsabilità: (1) rendere l'app installabile/utilizzabile offline in modo minimo,
 // (2) ricevere le notifiche push e mostrarle, gestire il tap sulla notifica.
 
-const CACHE_NAME = "immonova-shell-v1";
+const CACHE_NAME = "immonova-shell-v2";
 const SHELL_FILES = [
   "/index.html",
   "/manifest.json",
-  "/icon-192.png",
-  "/icon-512.png"
+  "/icon-192-v2.png",
+  "/icon-512-v2.png"
 ];
 
 self.addEventListener("install", (event) => {
@@ -50,8 +50,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "IMMONOVA — Nuova opportunità";
   const options = {
     body: payload.body || "È stata pubblicata una nuova opportunità off-market.",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon: "/icon-192-v2.png",
+    badge: "/icon-192-v2.png",
     data: { url: payload.url || "/opportunities.html" },
     tag: payload.tag || "immonova-new-opportunity"
   };
