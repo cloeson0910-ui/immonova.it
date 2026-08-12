@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Notifiche | IMMONOVA</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<meta name="theme-color" content="#a67f34" />
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%}
+  body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#735f36;display:flex;align-items:center;justify-content:center;padding:32px}
+  body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+  body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px);background-size:230px 199px;opacity:.28}
+  .card{max-width:420px;text-align:center;background:rgba(255,255,255,.5);border:1px solid rgba(166,127,52,.22);padding:44px 34px;box-shadow:0 24px 70px rgba(127,100,48,.10)}
+  .brand{font-size:22px;letter-spacing:.20em;color:#a67f34;font-weight:300;margin-bottom:6px}
+  .brand-sub{font-size:9px;letter-spacing:.22em;color:#a58139;text-transform:uppercase;margin-bottom:34px}
+  .icon{font-size:40px;margin-bottom:18px}
+  h1{font-size:19px;font-weight:500;color:#5c4a20;margin-bottom:14px;line-height:1.4}
+  p{font-size:14px;line-height:1.7;color:#7d6a43;margin-bottom:8px}
+  .terms{font-size:11.5px;line-height:1.6;color:#9a8a63;margin:22px 0;text-align:left}
+  .terms label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+  .terms input{margin-top:2px;flex-shrink:0}
+  .actions{display:flex;flex-direction:column;gap:12px;margin-top:26px}
+  .btn{padding:14px 20px;border:1px solid #a67f34;background:#a67f34;color:white;letter-spacing:.10em;text-transform:uppercase;font-size:12px;cursor:pointer;font-family:inherit}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.secondary{background:transparent;color:#a67f34}
+  .status{min-height:20px;margin-top:18px;font-size:12.5px}
+  .status.error{color:#9c2f2f}
+  .status.success{color:#4f7f45}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">IMMONOVA</div>
+    <div class="brand-sub">Off Market • Consulting</div>
+    <div class="icon">🔔</div>
+    <h1>Vuoi ricevere una notifica quando pubblichiamo una nuova opportunità off-market?</h1>
+    <p>Niente email, niente spam: solo un avviso diretto sul telefono quando c'è un nuovo immobile disponibile.</p>
+
+    <div class="terms">
+      <label>
+        <input type="checkbox" id="consentCheck" />
+        <span>Accetto di ricevere notifiche push da IMMONOVA relative a nuove opportunità pubblicate. Posso disattivarle in qualsiasi momento dalle impostazioni del telefono.</span>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="acceptBtn" disabled>Attiva notifiche</button>
+      <button class="btn secondary" id="skipBtn">Non ora</button>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/js/config.js"></script>
+<script>
+var VAPID_PUBLIC_KEY = "BKSNGyB_2rF1krXLKppDB022aJasOv2fIeogcpZykaMFOtXP4UAzMXgWpi7vBmSbkd3YCZ0s6hBO7GKtVDB8A7s";
+
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var consentCheck = document.getElementById("consentCheck");
+var acceptBtn = document.getElementById("acceptBtn");
+var skipBtn = document.getElementById("skipBtn");
+var statusBox = document.getElementById("status");
+
+function setStatus(msg, type){
+  statusBox.textContent = msg || "";
+  statusBox.className = "status " + (type || "");
+}
+
+function markAsked(){
+  try { localStorage.setItem("immonova_push_asked", "1"); } catch(e){}
+}
+
+function urlBase64ToUint8Array(base64String){
+  var padding = "=".repeat((4 - base64String.length % 4) % 4);
+  var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  var rawData = window.atob(base64);
+  var outputArray = new Uint8Array(rawData.length);
+  for(var i = 0; i < rawData.length; ++i){
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+consentCheck.addEventListener("change", function(){
+  acceptBtn.disabled = !consentCheck.checked;
+});
+
+skipBtn.addEventListener("click", function(){
+  markAsked();
+  window.location.href = "/index.html";
+});
+
+acceptBtn.addEventListener("click", async function(){
+  if(!consentCheck.checked) return;
+  acceptBtn.disabled = true;
+  setStatus("Attivazione in corso...", "");
+
+  try{
+    if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+      setStatus("Questo dispositivo/browser non supporta le notifiche push.", "error");
+      markAsked();
+      return;
+    }
+
+    var permission = await Notification.requestPermission();
+    if(permission !== "granted"){
+      setStatus("Permesso non concesso. Puoi riattivarlo dalle impostazioni del telefono.", "error");
+      markAsked();
+      return;
+    }
+
+    var registration = await navigator.serviceWorker.ready;
+    var subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+
+    var subJson = subscription.toJSON();
+    var res = await client.from("immonova_push_subscriptions").insert({
+      endpoint: subJson.endpoint,
+      p256dh: subJson.keys.p256dh,
+      auth: subJson.keys.auth,
+      user_agent: navigator.userAgent
+    });
+
+    if(res.error){
+      // endpoint duplicato (utente già iscritto) non è un vero errore per l'utente
+      if(String(res.error.message||"").indexOf("duplicate") === -1){
+        throw res.error;
+      }
+    }
+
+    markAsked();
+    setStatus("Notifiche attivate. Grazie!", "success");
+    setTimeout(function(){ window.location.href = "/index.html"; }, 1400);
+  }catch(e){
+    console.error(e);
+    setStatus("Non è stato possibile attivare le notifiche: " + (e.message||e), "error");
+    acceptBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
