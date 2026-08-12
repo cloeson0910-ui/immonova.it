@@ -287,6 +287,36 @@ async function loadAndRender(){
     + '</div>'
     + '</div>';
 
+  // Composizione popolazione (eta' + reddito) -- spostata subito dopo l'identificazione
+  // dell'immobile, non piu' in fondo al documento: e' un dato che aiuta fin da subito a
+  // inquadrare la zona, prima ancora di entrare nei metodi di calcolo.
+  var popComp = snap.population_composition;
+  if(popComp && (popComp.age_distribution || popComp.income_distribution)){
+    var ageBrackets = ["0-14","15-29","30-44","45-59","60-74","75+"];
+    var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€","oltre 120.000€"];
+
+    function bracketBars(distribution, brackets){
+      if(!distribution || !distribution.percentages) return "";
+      return brackets.map(function(b){
+        var pct = distribution.percentages[b];
+        if(pct === undefined || pct === null) return "";
+        return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(b)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
+      }).filter(Boolean).join("");
+    }
+
+    html += '<div class="section">'
+      + '<div class="section-kicker">Il Territorio</div>'
+      + '<div class="section-title">Composizione della Popolazione</div>'
+      + '<p class="method-text">Un elemento a favore nella trattativa: chi acquista o investe vuole capire chi vive nella zona. Dati ufficiali, non stime.</p>';
+    if(popComp.age_distribution){
+      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Composizione per età</h3>' + bracketBars(popComp.age_distribution, ageBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.age_distribution.provider_name || "ISTAT") + '</p></div>';
+    }
+    if(popComp.income_distribution){
+      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Distribuzione economica</h3>' + bracketBars(popComp.income_distribution, incomeBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.income_distribution.provider_name || "MEF - Dipartimento delle Finanze") + '</p></div>';
+    }
+    html += '</div>';
+  }
+
   // 3. Analisi della posizione (narrativa AI)
   if(narrative.position_analysis){
     html += '<div class="section">'
@@ -460,35 +490,6 @@ async function loadAndRender(){
       + '<div class="section-kicker">10. Conclusioni</div>'
       + '<p class="method-text">' + escapeHTML(narrative.conclusion) + '</p>'
       + '</div>';
-  }
-
-  // Dati catastali (separati)
-  // Composizione popolazione (eta' + reddito), se presente nello snapshot salvato
-  var popComp = snap.population_composition;
-  if(popComp && (popComp.age_distribution || popComp.income_distribution)){
-    var ageBrackets = ["0-14","15-29","30-44","45-59","60-74","75+"];
-    var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€","oltre 120.000€"];
-
-    function bracketBars(distribution, brackets){
-      if(!distribution || !distribution.percentages) return "";
-      return brackets.map(function(b){
-        var pct = distribution.percentages[b];
-        if(pct === undefined || pct === null) return "";
-        return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(b)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
-      }).filter(Boolean).join("");
-    }
-
-    html += '<div class="section">'
-      + '<div class="section-kicker">12. Il Territorio</div>'
-      + '<div class="section-title">Composizione della Popolazione</div>'
-      + '<p class="method-text">Un elemento a favore nella trattativa: chi acquista o investe vuole capire chi vive nella zona. Dati ufficiali, non stime.</p>';
-    if(popComp.age_distribution){
-      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Composizione per età</h3>' + bracketBars(popComp.age_distribution, ageBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.age_distribution.provider_name || "ISTAT") + '</p></div>';
-    }
-    if(popComp.income_distribution){
-      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Distribuzione economica</h3>' + bracketBars(popComp.income_distribution, incomeBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.income_distribution.provider_name || "MEF - Dipartimento delle Finanze") + '</p></div>';
-    }
-    html += '</div>';
   }
 
   var hasCadastral = v.cadastral_category || v.cadastral_income || v.cadastral_surface || v.cadastral_sheet;
