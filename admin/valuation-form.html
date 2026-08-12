@@ -335,7 +335,16 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
           <label data-i18n="label_accessory_size">Superficie accessoria/deposito (mq)</label>
           <input type="number" id="accessorySize" min="0" step="1">
         </div>
+        <div class="field">
+          <label data-i18n="label_yield_min_manual">Rendimento atteso minimo (%)</label>
+          <input type="number" id="yieldMinManual" min="0.5" max="20" step="0.1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_yield_max_manual">Rendimento atteso massimo (%)</label>
+          <input type="number" id="yieldMaxManual" min="0.5" max="20" step="0.1">
+        </div>
       </div>
+      <p class="section-note" data-i18n="section_yield_manual_note">Facoltativo: se compili questi due campi, il rendimento che imposti tu ha la priorità su quello ragionato dall'AI. La tabella di sensitività del metodo reddituale procederà a scatti di 1 punto esatto tra il tuo minimo e il tuo massimo (es. 4 e 8 → 4, 5, 6, 7, 8).</p>
     </div>
 
     <div class="section">
@@ -453,7 +462,7 @@ var UI_STRINGS = {
   label_garage_sqm:"Mq garage/box auto", label_garden_sqm:"Mq giardino", label_photovoltaic_kw:"Potenza fotovoltaico (kW)",
   section_rental:"Situazione Locativa",
   section_rental_note:"Se l'immobile è attualmente locato, il canone permette di calcolare il valore anche con il metodo reddituale (capitalizzazione del reddito), oltre al comparativo.",
-  label_is_rented:"Immobile attualmente locato", label_current_annual_rent:"Canone annuo attuale (€)", label_accessory_size:"Superficie accessoria/deposito (mq)",
+  label_is_rented:"Immobile attualmente locato", label_current_annual_rent:"Canone annuo attuale (€)", label_accessory_size:"Superficie accessoria/deposito (mq)", label_yield_min_manual:"Rendimento atteso minimo (%)", label_yield_max_manual:"Rendimento atteso massimo (%)", section_yield_manual_note:"Facoltativo: se compili questi due campi, il rendimento che imposti tu ha la priorità su quello ragionato dall'AI. La tabella di sensitività del metodo reddituale procederà a scatti di 1 punto esatto tra il tuo minimo e il tuo massimo (es. 4 e 8 → 4, 5, 6, 7, 8).",
   label_cadastral_municipality:"Comune catastale", label_cadastral_category:"Categoria catastale", ph_cadastral_category:"Es. A/2",
   label_cadastral_income:"Rendita catastale (€)", label_cadastral_surface:"Superficie catastale (mq)",
   label_cadastral_sheet:"Foglio", label_cadastral_parcel:"Particella", label_cadastral_subalterno:"Subalterno",
@@ -477,7 +486,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_valuation_form_" + lang + "_v5"; }
+function i18nCacheKey(lang){ return "immonova_i18n_valuation_form_" + lang + "_v6"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -815,17 +824,24 @@ calculateBtn.addEventListener("click", async function(){
       comparativoMax = hi * equivSurface;
     }
 
-    /* ---- Metodo reddituale: capitalizzazione del canone. L'intervallo di rendimento NON e'
-       piu' un numero fisso identico per ogni immobile -- viene ragionato dall'AI caso per
-       caso (dimensione/liquidita' del mercato locale, stabilita' del conduttore, ecc.), con
-       la motivazione salvata e mostrata nel documento. Se l'AI non fornisce un intervallo
-       valido (validato lato motore), si usa 5,5%-7% come riserva prudenziale, segnalata
+    /* ---- Metodo reddituale: capitalizzazione del canone. Priorita' del rendimento, dalla
+       piu' alta alla piu' bassa: 1) inserito a mano dall'agente (i due nuovi campi), 2)
+       ragionato dall'AI caso per caso (motivazione salvata e mostrata nel documento), 3)
+       riserva prudenziale 5,5%-7% se nessuno dei due sopra e' disponibile -- segnalata
        chiaramente come tale nel documento. ---- */
-    var yieldMin = aiResult.yield_range_min_pct ? aiResult.yield_range_min_pct/100 : null;
-    var yieldMax = aiResult.yield_range_max_pct ? aiResult.yield_range_max_pct/100 : null;
-    var yieldIsFallback = false;
-    if(isRented && currentAnnualRent && (!yieldMin || !yieldMax)){
-      yieldMin = 0.055; yieldMax = 0.07; yieldIsFallback = true;
+    var yieldMinManual = numVal("yieldMinManual");
+    var yieldMaxManual = numVal("yieldMaxManual");
+    var yieldIsManual = yieldMinManual != null && yieldMaxManual != null && yieldMinManual < yieldMaxManual;
+
+    var yieldMin, yieldMax, yieldIsFallback = false;
+    if(yieldIsManual){
+      yieldMin = yieldMinManual/100; yieldMax = yieldMaxManual/100;
+    }else{
+      yieldMin = aiResult.yield_range_min_pct ? aiResult.yield_range_min_pct/100 : null;
+      yieldMax = aiResult.yield_range_max_pct ? aiResult.yield_range_max_pct/100 : null;
+      if(isRented && currentAnnualRent && (!yieldMin || !yieldMax)){
+        yieldMin = 0.055; yieldMax = 0.07; yieldIsFallback = true;
+      }
     }
 
     var reddituraleMin = null, reddituraleMax = null;
@@ -898,8 +914,9 @@ calculateBtn.addEventListener("click", async function(){
         ai_disclaimer: aiResult.ai_disclaimer || null,
         yield_range_min_pct: yieldMin ? yieldMin*100 : null,
         yield_range_max_pct: yieldMax ? yieldMax*100 : null,
-        yield_justification: aiResult.yield_justification || null,
+        yield_justification: yieldIsManual ? null : (aiResult.yield_justification || null),
         yield_is_fallback: yieldIsFallback,
+        yield_is_manual: yieldIsManual,
         reconciliation_weight_reddituale_pct: weightReddituale != null ? weightReddituale*100 : null,
         reconciliation_justification: aiResult.reconciliation_justification || null,
         weight_is_fallback: weightRedditualeIsFallback,
@@ -978,6 +995,8 @@ async function loadValuationForEdit(){
   document.getElementById("photovoltaicKw").value = data.photovoltaic_kw ?? "";
   document.getElementById("isRented").checked = !!data.is_rented;
   document.getElementById("currentAnnualRent").value = data.current_annual_rent ?? "";
+  document.getElementById("yieldMinManual").value = data.yield_min_manual ?? "";
+  document.getElementById("yieldMaxManual").value = data.yield_max_manual ?? "";
   document.getElementById("notes").value = data.notes || "";
 
   PROPERTY_FEATURES.forEach(function(f){
@@ -1050,6 +1069,8 @@ form.addEventListener("submit", async function(event){
     photovoltaic_kw: numVal("photovoltaicKw"),
     is_rented: document.getElementById("isRented").checked,
     current_annual_rent: numVal("currentAnnualRent"),
+    yield_min_manual: numVal("yieldMinManual"),
+    yield_max_manual: numVal("yieldMaxManual"),
     notes: val("notes") || null
   };
 

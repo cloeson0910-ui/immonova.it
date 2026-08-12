@@ -343,7 +343,9 @@ async function loadAndRender(){
       + '<div class="section-kicker">6. Metodo Reddituale — Capitalizzazione del Reddito</div>'
       + '<p class="method-text">L\'immobile è attualmente locato: il valore può essere determinato anche attraverso la capitalizzazione del canone percepito.</p>';
 
-    if(narrative.yield_justification){
+    if(narrative.yield_is_manual){
+      html += '<p class="method-text"><strong>Intervallo di rendimento di riferimento:</strong> impostato dall\'agente in base alla propria valutazione professionale del rischio e della liquidità dell\'investimento.</p>';
+    }else if(narrative.yield_justification){
       html += '<p class="method-text"><strong>Intervallo di rendimento di riferimento:</strong> ' + escapeHTML(narrative.yield_justification) + '</p>';
     }
     if(narrative.yield_is_fallback){
@@ -352,8 +354,15 @@ async function loadAndRender(){
 
     if(v.current_annual_rent && yMin && yMax){
       html += '<div class="info-grid" style="margin-bottom:16px">' + infoItem("Canone annuo lordo", formatEuro(v.current_annual_rent)) + '</div>';
-      var step = (yMax - yMin) / 4;
-      var rates = [yMin, yMin+step, yMin+step*2, yMin+step*3, yMax];
+      /* ---- Scatti di 1 punto percentuale esatto tra minimo e massimo (es. 4 e 8 -> 4,5,6,7,8),
+         come richiesto -- non piu' una divisione in 4 intervalli uguali. Se l'intervallo non e'
+         un numero intero di punti (es. 5,5%-7%), include comunque gli estremi esatti. ---- */
+      var rates = [];
+      var r = Math.ceil(yMin);
+      if(r > yMin) rates.push(yMin); // include il minimo esatto anche se non e' un numero intero
+      for(; r < yMax; r++) rates.push(r);
+      rates.push(yMax); // include sempre il massimo esatto
+      rates = rates.filter(function(v,i,arr){ return arr.indexOf(v) === i; }); // rimuove doppioni se min/max sono gia' interi
       html += '<table class="comp-table"><thead><tr><th>Rendimento lordo</th><th>Valore risultante</th></tr></thead><tbody>'
         + rates.map(function(ratePct){
             var val = v.current_annual_rent / (ratePct/100);
