@@ -85,6 +85,19 @@ function urlBase64ToUint8Array(base64String){
   return outputArray;
 }
 
+function withTimeout(promise, ms, timeoutMessage){
+  return Promise.race([
+    promise,
+    new Promise(function(_, reject){
+      setTimeout(function(){ reject(new Error(timeoutMessage)); }, ms);
+    })
+  ]);
+}
+
+function isStandaloneMode(){
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
 consentCheck.addEventListener("change", function(){
   acceptBtn.disabled = !consentCheck.checked;
 });
@@ -106,18 +119,49 @@ acceptBtn.addEventListener("click", async function(){
       return;
     }
 
-    var permission = await Notification.requestPermission();
+    // Su iOS le notifiche push funzionano SOLO se l'app è stata aperta dalla schermata Home
+    // (icona installata), mai da una scheda Safari normale — limite di Apple, non aggirabile.
+    if(!isStandaloneMode()){
+      setStatus("Per attivare le notifiche devi prima aprire l'app dalla schermata Home (non da Safari).", "error");
+      return;
+    }
+
+    var permission = await withTimeout(
+      Notification.requestPermission(),
+      15000,
+      "Richiesta permesso scaduta: il sistema non ha risposto in tempo."
+    );
     if(permission !== "granted"){
       setStatus("Permesso non concesso. Puoi riattivarlo dalle impostazioni del telefono.", "error");
       markAsked();
       return;
     }
 
-    var registration = await navigator.serviceWorker.ready;
-    var subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-    });
+    // FIX: prima si registrava il service worker solo su index.html e qui si aspettava
+    // passivamente "navigator.serviceWorker.ready" — se il redirect a questa pagina scattava
+    // prima che quella registrazione finisse, questa attesa restava bloccata per sempre senza
+    // nessun errore visibile ("Attivazione in corso..." fisso). Ora la registrazione si avvia
+    // direttamente qui (idempotente: se è già registrato da index.html, restituisce la stessa
+    // registrazione all'istante), quindi non dipende più dall'ordine di caricamento delle pagine.
+    await withTimeout(
+      navigator.serviceWorker.register("/service-worker.js"),
+      15000,
+      "Registrazione del service worker scaduta."
+    );
+    var registration = await withTimeout(
+      navigator.serviceWorker.ready,
+      15000,
+      "Il service worker non è diventato attivo in tempo."
+    );
+
+    var subscription = await withTimeout(
+      registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      }),
+      15000,
+      "Sottoscrizione alle notifiche scaduta."
+    );
 
     var subJson = subscription.toJSON();
     var res = await client.from("immonova_push_subscriptions").insert({
