@@ -681,23 +681,49 @@ async function persistDossierData(data){
    paragonabile, quindi si richiama in automatico ad ogni apertura senza il modale di
    conferma usato per il Discovery Engine pesante. Il risultato viene comunque salvato nello
    stesso dossier_data gia' persistito, cosi' non viene richiamato di nuovo se gia' presente. ---- */
+/* ---- BUG RISOLTO (2026-08-12): il guard controllava solo "dossierData.population_composition
+   esiste" (truthy), non "contiene davvero un dato utile". Se in passato era stato persistito un
+   population_composition vuoto/malformato (es. {} o {age_distribution:null,income_distribution:null}),
+   il guard restituiva sempre "già presente" e usciva subito -- SENZA MAI PIU' chiamare il motore,
+   senza errori, senza chiamate di rete: esattamente il sintomo segnalato (nessun errore in console,
+   nessuna richiesta in Network). Ora il guard controlla che ci sia almeno un age_distribution O
+   income_distribution REALE prima di considerarlo "già calcolato". Aggiunta anche diagnostica in
+   lastPopulationCompositionStatus, letta da renderDebugBootstrap, cosi' un futuro fallimento del
+   motore è visibile nel pannello debug senza dover aprire la console. ---- */
+var lastPopulationCompositionStatus = null;
 async function ensurePopulationComposition(){
-  if(dossierData && dossierData.population_composition) return;
-  if(!opportunity) return;
+  var existing = dossierData && dossierData.population_composition;
+  var existingHasData = !!(existing && (existing.age_distribution || existing.income_distribution));
+  if(existingHasData){ lastPopulationCompositionStatus="già presente nel report salvato"; return; }
+  if(!opportunity){ lastPopulationCompositionStatus="saltato: opportunity non ancora caricata"; return; }
+
+  var municipality = opportunity.municipality || opportunity.city || null;
+  if(!municipality){
+    lastPopulationCompositionStatus="saltato: nessun comune (municipality/city) impostato sull'opportunità";
+    return;
+  }
 
   try{
     var result = await client.functions.invoke("immonova-demographics-engine", {
       body:{
-        municipality: opportunity.municipality || opportunity.city || null,
+        municipality: municipality,
         province: opportunity.province || null,
         region: opportunity.region || null,
         country_code: opportunity.country_code || "IT"
       }
     });
 
-    if(result.error) return;
+    if(result.error){
+      lastPopulationCompositionStatus="errore chiamata motore: "+(result.error.message||String(result.error));
+      console.error("immonova-demographics-engine ha risposto con errore:", result.error);
+      return;
+    }
     var data = result.data;
-    if(!data || (!data.age_distribution && !data.income_distribution)) return;
+    if(!data || (!data.age_distribution && !data.income_distribution)){
+      lastPopulationCompositionStatus="motore chiamato correttamente ma senza age_distribution/income_distribution nella risposta (comune non coperto da Cruscotto Italia?). Risposta grezza: "+JSON.stringify(data).slice(0,300);
+      console.warn("immonova-demographics-engine: risposta senza dati utili:", data);
+      return;
+    }
 
     if(!dossierData) dossierData = {};
     dossierData.population_composition = {
@@ -705,7 +731,9 @@ async function ensurePopulationComposition(){
       income_distribution: data.income_distribution || null
     };
     await persistDossierData(dossierData);
+    lastPopulationCompositionStatus="calcolato e salvato correttamente ("+municipality+")";
   }catch(e){
+    lastPopulationCompositionStatus="eccezione non gestita: "+String(e&&e.message||e);
     console.warn("Composizione popolazione non disponibile (non bloccante):", e);
   }
 }
@@ -1590,6 +1618,7 @@ function renderDebugBootstrap(){
   var surfaceDbg=getAssetSurfaceM2();
   extraRows+='<div class="debug-item"><div class="debug-label">Categoria opportunità</div><div class="debug-value">"'+escapeHTML(getCategory()||"(vuota)")+'" — riconosciuta come commerciale: '+(isCommercialCategory()?'SÌ':'NO')+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Dati canone commerciale (commercial_rent)</div><div class="debug-value">Superficie: '+(surfaceDbg?escapeHTML(String(surfaceDbg))+' mq':'MANCANTE')+' · Canone min: '+(rentMinDbg?escapeHTML(String(rentMinDbg.value))+' €/mq/mese':'non inserito')+' · Canone max: '+(rentMaxDbg?escapeHTML(String(rentMaxDbg.value))+' €/mq/mese':'non inserito')+'</div></div>';
+  extraRows+='<div class="debug-item"><div class="debug-label">Composizione popolazione (età/reddito)</div><div class="debug-value">'+escapeHTML(lastPopulationCompositionStatus||"non ancora eseguita in questa sessione")+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Aeroporto nel dossier</div><div class="debug-value">'+(airportInfo?escapeHTML(airportInfo.name+" — "+distLabel(airportInfo)+(airportInfo.manual?" (dato manuale)":" (Discovery)")):'nessuno — sezione vuota')+'</div></div>';
   extraRows+='<div class="debug-item"><div class="debug-label">Aeroporti commerciali (dato salvato/cache)</div><div class="debug-value">'+escapeHTML(String((transportSummary&&transportSummary.commercial_airports)||0))+'</div></div>';
   if(lastDiscoveryDiagnostics){
