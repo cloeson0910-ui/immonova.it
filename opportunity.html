@@ -396,19 +396,31 @@ h1{
 }
 .hz-timeline-wrap{
   overflow-x:auto;
-  padding:10px 4px 18px;
+  padding:26px 4px 12px;
 }
 .hz-timeline{
+  position:relative;
   display:flex;
-  align-items:flex-start;
+  width:100%;
   min-width:max-content;
 }
+.hz-timeline-line{
+  position:absolute;
+  top:9px;
+  left:20px;
+  right:20px;
+  height:2px;
+  background:rgba(166,127,52,.30);
+  z-index:0;
+}
 .hz-node{
+  position:relative;
+  z-index:1;
   display:flex;
   flex-direction:column;
   align-items:center;
-  width:150px;
-  flex-shrink:0;
+  flex:1;
+  min-width:120px;
 }
 .hz-dot{
   width:14px;
@@ -419,15 +431,8 @@ h1{
   box-shadow:0 0 0 1px rgba(166,127,52,.45);
   flex-shrink:0;
 }
-.hz-line{
-  height:2px;
-  width:90px;
-  background:rgba(166,127,52,.30);
-  flex-shrink:0;
-  margin-top:6px;
-}
 .hz-date{
-  margin-top:12px;
+  margin-top:10px;
   font-size:10px;
   letter-spacing:.14em;
   text-transform:uppercase;
@@ -435,7 +440,7 @@ h1{
   text-align:center;
 }
 .hz-title{
-  margin-top:5px;
+  margin-top:4px;
   font-size:13px;
   font-weight:500;
   color:#a67f34;
@@ -1241,27 +1246,6 @@ async function renderOpportunity(data){
           <div class="lock-box">${escapeHTML(dict("ai_locked"))}</div>
         </div>
 
-        ${
-          sold ? `
-          <div class="panel">
-            <h2 class="section-title">${escapeHTML(dict("timeline"))}</h2>
-            ${
-              timeline.length
-              ? `<div class="hz-timeline-wrap"><div class="hz-timeline">` +
-                timeline.map((item, idx) => `
-                  <div class="hz-node">
-                    <div class="hz-dot" title="${escapeHTML(item.description || "")}"></div>
-                    <div class="hz-date">${escapeHTML(fmtDate(item.created_at))}</div>
-                    <div class="hz-title">${escapeHTML(item.title || item.timeline_type || dict("timeline_step_fallback"))}</div>
-                  </div>
-                  ${idx < timeline.length - 1 ? `<div class="hz-line"></div>` : ``}
-                `).join("") +
-                `</div></div>`
-              : `<div class="text">${escapeHTML(dict("timeline_empty"))}</div>`
-            }
-          </div>` : ""
-        }
-
         <div class="panel">
           <h2 class="section-title">${escapeHTML(dict("events"))}</h2>
           ${
@@ -1294,6 +1278,26 @@ async function renderOpportunity(data){
         ${renderInquiryForm(title)}
       </aside>
     </section>
+
+    ${
+      sold ? `
+      <section class="panel" style="margin-top:28px">
+        <h2 class="section-title">${escapeHTML(dict("timeline"))}</h2>
+        ${
+          timeline.length
+          ? `<div class="hz-timeline-wrap"><div class="hz-timeline"><div class="hz-timeline-line"></div>` +
+            timeline.map((item) => `
+              <div class="hz-node">
+                <div class="hz-dot" title="${escapeHTML(item.description || "")}"></div>
+                <div class="hz-date">${escapeHTML(fmtDate(item.created_at))}</div>
+                <div class="hz-title">${escapeHTML(item.title || item.timeline_type || dict("timeline_step_fallback"))}</div>
+              </div>
+            `).join("") +
+            `</div></div>`
+          : `<div class="text">${escapeHTML(dict("timeline_empty"))}</div>`
+        }
+      </section>` : ""
+    }
   `;
 
   currentRequestTemplate = dict("message_default") + " " + title;
