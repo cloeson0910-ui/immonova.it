@@ -216,6 +216,60 @@ body::after{
 .timeline{
   max-width:920px;
 }
+.hz-timeline-wrap{
+  overflow-x:auto;
+  padding:26px 4px 12px;
+}
+.hz-timeline{
+  position:relative;
+  display:flex;
+  width:100%;
+  min-width:max-content;
+}
+.hz-timeline-line{
+  position:absolute;
+  top:9px;
+  left:20px;
+  right:20px;
+  height:2px;
+  background:rgba(166,127,52,.30);
+  z-index:0;
+}
+.hz-node{
+  position:relative;
+  z-index:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  flex:1;
+  min-width:120px;
+}
+.hz-dot{
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  background:#a67f34;
+  border:3px solid #f4ecdf;
+  box-shadow:0 0 0 1px rgba(166,127,52,.45);
+  flex-shrink:0;
+}
+.hz-date{
+  margin-top:10px;
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#9a793c;
+  text-align:center;
+}
+.hz-title{
+  margin-top:4px;
+  font-size:13px;
+  font-weight:500;
+  color:#a67f34;
+  text-align:center;
+  line-height:1.35;
+  padding:0 4px;
+}
 .timeline-item{
   display:grid;
   grid-template-columns:160px 1fr;
@@ -435,6 +489,23 @@ function renderTimeline(item){
   }).join("") + '</div>';
 }
 
+/* Timeline visiva a pallini/linea, stesso stile orizzontale di opportunity.html -- mostrata
+   in aggiunta alla timeline scritta (renderTimeline), non al suo posto. */
+function renderVisualTimeline(item){
+  const data = timelineFor(item);
+  if(!data.length) return "";
+
+  return '<div class="hz-timeline-wrap"><div class="hz-timeline"><div class="hz-timeline-line"></div>'
+    + data.map(function(t){
+      return '<div class="hz-node">'
+        + '<div class="hz-dot" title="'+esc(t.description || "")+'"></div>'
+        + '<div class="hz-date">'+esc(fmtDate(t.created_at))+'</div>'
+        + '<div class="hz-title">'+esc(t.title || t.timeline_type || "Step")+'</div>'
+        + '</div>';
+    }).join("")
+    + '</div></div>';
+}
+
 function renderEvents(item){
   const evs = eventsFor(item);
   if(!evs.length){
@@ -488,6 +559,7 @@ function render(item){
     + '<div class="meta-card"><div class="meta-label">Segment</div><div class="meta-value">'+esc(item.category || item.investment_type || "Private Investment")+'</div></div>'
     + '</section>'
 
+    + '<section class="section">'+renderVisualTimeline(item)+'</section>'
     + '<section class="section"><h2 class="section-title">Timeline</h2>'+renderTimeline(item)+'</section>'
     + '<section class="section"><h2 class="section-title">Investment Story</h2><div class="story-text">'+esc(intro).replaceAll("\\n","<br>")+'</div></section>'
     + '<section class="section"><h2 class="section-title">Linked Events</h2>'+renderEvents(item)+'</section>'
