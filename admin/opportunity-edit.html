@@ -1411,6 +1411,64 @@ button.danger{
         <input type="number" step="0.1" id="distance_to_airport_km">
       </div>
 
+      <div class="section-title" data-i18n="section_timeline">Timeline / Milestone</div>
+
+      <div class="documents-box">
+        <div class="documents-head">
+          <div>
+            <div class="documents-title" data-i18n="timeline_title">Cronologia della trattativa</div>
+            <div class="documents-note" data-i18n="timeline_note">
+              Registra qui l'avanzamento dell'operazione, dal primo contatto fino al selling party e oltre.
+              Le milestone segnate come "Pubblica" compaiono nella timeline visibile sulla scheda pubblica e,
+              se l'immobile risulta venduto, nella relativa Success Story. Quelle segnate come "Interna" restano
+              visibili solo qui in admin.
+            </div>
+          </div>
+        </div>
+
+        <div class="renovation-grid" style="margin-top:4px">
+          <div class="field">
+            <label for="timelineDate" data-i18n="label_timeline_date">Data</label>
+            <input type="date" id="timelineDate">
+          </div>
+          <div class="field">
+            <label for="timelineType" data-i18n="label_timeline_type">Tipo</label>
+            <select id="timelineType">
+              <option value="first_contact" data-i18n="tl_first_contact">Primo contatto</option>
+              <option value="property_proposed" data-i18n="tl_property_proposed">Immobile proposto</option>
+              <option value="document_verification" data-i18n="tl_document_verification">Verifica documentale</option>
+              <option value="purchase_offer" data-i18n="tl_purchase_offer">Offerta di acquisto</option>
+              <option value="paperwork_preparation" data-i18n="tl_paperwork_preparation">Preparazione burocrazia cliente</option>
+              <option value="notarial_deed_drafting" data-i18n="tl_notarial_deed_drafting">Definizione atto notarile</option>
+              <option value="notarial_deed_signed" data-i18n="tl_notarial_deed_signed">Stipula notarile</option>
+              <option value="selling_party" data-i18n="tl_selling_party">Selling Party</option>
+              <option value="milestone" selected data-i18n="tl_milestone">Altra milestone</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="timelineTitleInput" data-i18n="label_timeline_title">Titolo breve</label>
+            <input type="text" id="timelineTitleInput" data-i18n-placeholder="ph_timeline_title" placeholder="Es. Prima visita investitore, sopralluogo tecnico completato...">
+          </div>
+          <div class="field full">
+            <label for="timelineDescription" data-i18n="label_timeline_description">Descrizione breve</label>
+            <textarea id="timelineDescription" data-i18n-placeholder="ph_timeline_description" placeholder="Es. Sopralluogo effettuato con investitore family office, esito molto positivo, richiesta seconda visita con socio."></textarea>
+          </div>
+          <div class="field full">
+            <label class="check" style="display:inline-flex;align-items:center;gap:10px">
+              <input type="checkbox" id="timelinePublic" checked>
+              <span data-i18n="label_timeline_public">Pubblica (visibile su scheda pubblica e Success Story)</span>
+            </label>
+          </div>
+          <div class="field full">
+            <button type="button" class="primary" id="addTimelineBtn" data-i18n="btn_add_timeline">Aggiungi Milestone</button>
+          </div>
+        </div>
+
+        <div id="timelineStatus" class="file-note" style="margin-top:14px;"></div>
+
+        <div id="timelineList" style="margin-top:20px;display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+
       <div class="section-title" data-i18n="section_descriptions">Descrizioni</div>
 
       <div class="field full">
@@ -2236,6 +2294,163 @@ function bindGeoTools(){
 
 document.addEventListener("DOMContentLoaded", bindGeoTools);
 
+/* ---- Timeline / Milestone (tabella opportunity_timeline) ----
+   Alimenta la timeline mostrata su opportunity.html e success-story.html. Le milestone con
+   visibility='public' sono leggibili anche da anon (vedi RLS in setup-opportunity-timeline.sql),
+   quelle 'internal' restano visibili solo qui in admin (authenticated). ---- */
+var timelineEntries = [];
+
+function setTimelineStatus(message, type){
+  var el = document.getElementById("timelineStatus");
+  if(!el) return;
+  el.textContent = message || "";
+  el.style.color = type === "error" ? "#9c2f2f" : (type === "success" ? "#4f7f45" : "#8f7643");
+}
+
+function timelineTypeLabel(type){
+  var key = "tl_" + type;
+  return (T && T[key]) || type || "Milestone";
+}
+
+function fmtTimelineDate(v){
+  if(!v) return "";
+  try{
+    return new Date(v).toLocaleDateString(currentUserLanguage === "it" ? "it-IT" : currentUserLanguage, { day:"2-digit", month:"short", year:"numeric" });
+  }catch(e){
+    return v;
+  }
+}
+
+function renderTimelineList(){
+  var box = document.getElementById("timelineList");
+  if(!box) return;
+
+  if(!timelineEntries.length){
+    box.innerHTML = '<div class="file-note">Nessuna milestone registrata per questa opportunità.</div>';
+    return;
+  }
+
+  var sorted = timelineEntries.slice().sort(function(a,b){
+    return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+  });
+
+  box.innerHTML = sorted.map(function(item){
+    var badge = item.visibility === "public"
+      ? '<span style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#4f7f45;border:1px solid rgba(79,127,69,.32);background:rgba(79,127,69,.08);padding:4px 7px">Pubblica</span>'
+      : '<span style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#8f5b28;border:1px solid rgba(165,129,57,.30);background:rgba(255,255,255,.20);padding:4px 7px">Interna</span>';
+
+    return '' +
+      '<div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:14px;border:1px solid rgba(165,129,57,.16);background:rgba(255,255,255,.14)">' +
+        '<div>' +
+          '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#a58139;margin-bottom:5px">' +
+            escapeHTML(fmtTimelineDate(item.created_at)) + ' &middot; ' + escapeHTML(timelineTypeLabel(item.timeline_type)) +
+          '</div>' +
+          '<div style="font-size:14px;color:#7f6430;margin-bottom:4px"><strong style="color:#a58139">' + escapeHTML(item.title || "") + '</strong></div>' +
+          (item.description ? '<div style="font-size:12.5px;line-height:1.6;color:#8f7643">' + escapeHTML(item.description) + '</div>' : "") +
+        '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0">' +
+          badge +
+          '<button type="button" class="danger" style="padding:7px 10px;font-size:9px;letter-spacing:.12em" onclick="deleteTimelineMilestone(\'' + escapeHTML(item.id) + '\')">Elimina</button>' +
+        '</div>' +
+      '</div>';
+  }).join("");
+}
+
+async function loadTimeline(){
+  if(!id) return;
+
+  var result = await client
+    .from("opportunity_timeline")
+    .select("*")
+    .eq("opportunity_id", id)
+    .order("created_at", { ascending:true });
+
+  if(result.error){
+    console.error(result.error);
+    setTimelineStatus("Impossibile caricare la timeline. Verifica di aver eseguito setup-opportunity-timeline.sql su Supabase.", "error");
+    timelineEntries = [];
+    renderTimelineList();
+    return;
+  }
+
+  timelineEntries = result.data || [];
+  renderTimelineList();
+}
+
+async function addTimelineMilestone(){
+  if(!id){
+    setTimelineStatus("Salva prima l'opportunità, poi aggiungi le milestone.", "error");
+    return;
+  }
+
+  var dateValue = document.getElementById("timelineDate").value || new Date().toISOString().slice(0,10);
+  var typeValue = document.getElementById("timelineType").value || "milestone";
+  var titleValue = document.getElementById("timelineTitleInput").value.trim();
+  var descriptionValue = document.getElementById("timelineDescription").value.trim();
+  var isPublic = document.getElementById("timelinePublic").checked;
+
+  if(!titleValue){
+    setTimelineStatus("Inserisci almeno un titolo breve per la milestone.", "error");
+    return;
+  }
+
+  var btn = document.getElementById("addTimelineBtn");
+  btn.disabled = true;
+  setTimelineStatus("Salvataggio milestone in corso...", "");
+
+  /* La tabella opportunity_timeline non ha una colonna data separata: la data scelta
+     dall'utente diventa direttamente created_at (mezzogiorno locale, per evitare che il
+     fuso orario la faccia scivolare al giorno prima/dopo). Colonna created_by non esiste
+     in questa tabella (a differenza di altre nel progetto), quindi non viene inviata. */
+  var result = await client.from("opportunity_timeline").insert({
+    opportunity_id: id,
+    created_at: new Date(dateValue + "T12:00:00").toISOString(),
+    timeline_type: typeValue,
+    title: titleValue,
+    description: descriptionValue || null,
+    visibility: isPublic ? "public" : "internal"
+  });
+
+  btn.disabled = false;
+
+  if(result.error){
+    console.error(result.error);
+    setTimelineStatus("Errore salvataggio milestone: " + result.error.message, "error");
+    return;
+  }
+
+  document.getElementById("timelineTitleInput").value = "";
+  document.getElementById("timelineDescription").value = "";
+  document.getElementById("timelineDate").value = "";
+  document.getElementById("timelinePublic").checked = true;
+
+  setTimelineStatus("Milestone aggiunta correttamente.", "success");
+  await loadTimeline();
+}
+
+async function deleteTimelineMilestone(timelineId){
+  var ok = confirm("Eliminare questa milestone dalla timeline?");
+  if(!ok) return;
+
+  setTimelineStatus("Eliminazione in corso...", "");
+
+  var result = await client.from("opportunity_timeline").delete().eq("id", timelineId);
+
+  if(result.error){
+    console.error(result.error);
+    setTimelineStatus("Errore eliminazione: " + result.error.message, "error");
+    return;
+  }
+
+  setTimelineStatus("Milestone eliminata.", "success");
+  await loadTimeline();
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+  var addBtn = document.getElementById("addTimelineBtn");
+  if(addBtn) addBtn.addEventListener("click", addTimelineMilestone);
+});
+
 
 function setStatus(message, type){
   statusBox.className = "status " + (type || "");
@@ -2788,6 +3003,16 @@ var UI_STRINGS = {
   map_caption_default:"Posizione asset.",
   label_latitude:"Latitudine", label_longitude:"Longitudine", label_distance_sea:"Distanza mare km",
   label_nearest_airport:"Aeroporto più vicino", label_distance_airport:"Distanza aeroporto km",
+  section_timeline:"Timeline / Milestone", timeline_title:"Cronologia della trattativa",
+  timeline_note:"Registra qui l'avanzamento dell'operazione, dal primo contatto fino al selling party e oltre. Le milestone segnate come \"Pubblica\" compaiono nella timeline visibile sulla scheda pubblica e, se l'immobile risulta venduto, nella relativa Success Story. Quelle segnate come \"Interna\" restano visibili solo qui in admin.",
+  label_timeline_date:"Data", label_timeline_type:"Tipo",
+  tl_first_contact:"Primo contatto", tl_property_proposed:"Immobile proposto", tl_document_verification:"Verifica documentale",
+  tl_purchase_offer:"Offerta di acquisto", tl_paperwork_preparation:"Preparazione burocrazia cliente",
+  tl_notarial_deed_drafting:"Definizione atto notarile", tl_notarial_deed_signed:"Stipula notarile",
+  tl_selling_party:"Selling Party", tl_milestone:"Altra milestone",
+  label_timeline_title:"Titolo breve", ph_timeline_title:"Es. Prima visita investitore, sopralluogo tecnico completato...",
+  label_timeline_description:"Descrizione breve", ph_timeline_description:"Es. Sopralluogo effettuato con investitore family office, esito molto positivo, richiesta seconda visita con socio.",
+  label_timeline_public:"Pubblica (visibile su scheda pubblica e Success Story)", btn_add_timeline:"Aggiungi Milestone",
   section_descriptions:"Descrizioni", label_short_description:"Descrizione breve", label_full_description:"Descrizione completa",
   section_ai_analysis:"Analisi IA", label_location_summary:"Attrattività della zona",
   label_tourism_summary:"Analisi turistica", label_market_summary:"Analisi mercato immobiliare",
@@ -3050,6 +3275,7 @@ async function loadOpportunity(){
   await loadRenovationRenders();
   await loadOpportunityDocuments();
   await loadInvestorsForCrm();
+  await loadTimeline();
 
   applyOwnershipLock(data);
 
