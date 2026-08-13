@@ -1460,6 +1460,10 @@ button.danger{
             </label>
           </div>
           <div class="field full">
+            <label for="timelineOperator" data-i18n="label_timeline_operator">Registrato da</label>
+            <input type="text" id="timelineOperator" data-i18n-placeholder="ph_timeline_operator" placeholder="Nome operatore">
+          </div>
+          <div class="field full">
             <button type="button" class="primary" id="addTimelineBtn" data-i18n="btn_add_timeline">Aggiungi Milestone</button>
           </div>
         </div>
@@ -2347,6 +2351,7 @@ function renderTimelineList(){
           '</div>' +
           '<div style="font-size:14px;color:#7f6430;margin-bottom:4px"><strong style="color:#a58139">' + escapeHTML(item.title || "") + '</strong></div>' +
           (item.description ? '<div style="font-size:12.5px;line-height:1.6;color:#8f7643">' + escapeHTML(item.description) + '</div>' : "") +
+          (item.created_by_name ? '<div style="font-size:10.5px;letter-spacing:.04em;color:#a58139;margin-top:6px;font-style:italic">Registrato da: ' + escapeHTML(item.created_by_name) + '</div>' : "") +
         '</div>' +
         '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0">' +
           badge +
@@ -2388,6 +2393,7 @@ async function addTimelineMilestone(){
   var titleValue = document.getElementById("timelineTitleInput").value.trim();
   var descriptionValue = document.getElementById("timelineDescription").value.trim();
   var isPublic = document.getElementById("timelinePublic").checked;
+  var operatorValue = document.getElementById("timelineOperator").value.trim() || currentUserFullName;
 
   if(!titleValue){
     setTimelineStatus("Inserisci almeno un titolo breve per la milestone.", "error");
@@ -2400,15 +2406,20 @@ async function addTimelineMilestone(){
 
   /* La tabella opportunity_timeline non ha una colonna data separata: la data scelta
      dall'utente diventa direttamente created_at (mezzogiorno locale, per evitare che il
-     fuso orario la faccia scivolare al giorno prima/dopo). Colonna created_by non esiste
-     in questa tabella (a differenza di altre nel progetto), quindi non viene inviata. */
+     fuso orario la faccia scivolare al giorno prima/dopo). created_by_name viene proposto
+     automaticamente col nome dell'operatore loggato ma resta modificabile (es. se qualcuno
+     registra una milestone per conto di un collega). Colonne created_by/created_by_name
+     aggiunte con l'ultimo setup-opportunity-timeline.sql (non esistevano nello schema
+     originale). */
   var result = await client.from("opportunity_timeline").insert({
     opportunity_id: id,
     created_at: new Date(dateValue + "T12:00:00").toISOString(),
     timeline_type: typeValue,
     title: titleValue,
     description: descriptionValue || null,
-    visibility: isPublic ? "public" : "internal"
+    visibility: isPublic ? "public" : "internal",
+    created_by: currentUser ? currentUser.id : null,
+    created_by_name: operatorValue || null
   });
 
   btn.disabled = false;
@@ -2423,6 +2434,7 @@ async function addTimelineMilestone(){
   document.getElementById("timelineDescription").value = "";
   document.getElementById("timelineDate").value = "";
   document.getElementById("timelinePublic").checked = true;
+  document.getElementById("timelineOperator").value = currentUserFullName;
 
   setTimelineStatus("Milestone aggiunta correttamente.", "success");
   await loadTimeline();
@@ -3013,6 +3025,7 @@ var UI_STRINGS = {
   label_timeline_title:"Titolo breve", ph_timeline_title:"Es. Prima visita investitore, sopralluogo tecnico completato...",
   label_timeline_description:"Descrizione breve", ph_timeline_description:"Es. Sopralluogo effettuato con investitore family office, esito molto positivo, richiesta seconda visita con socio.",
   label_timeline_public:"Pubblica (visibile su scheda pubblica e Success Story)", btn_add_timeline:"Aggiungi Milestone",
+  label_timeline_operator:"Registrato da", ph_timeline_operator:"Nome operatore",
   section_descriptions:"Descrizioni", label_short_description:"Descrizione breve", label_full_description:"Descrizione completa",
   section_ai_analysis:"Analisi IA", label_location_summary:"Attrattività della zona",
   label_tourism_summary:"Analisi turistica", label_market_summary:"Analisi mercato immobiliare",
@@ -3107,19 +3120,27 @@ var isAdmin = false;
 var loadedFeatured = false;
 var loadedPublished = false;
 
+var currentUserFullName = "";
+
 async function loadUserLanguage(){
-  var result = await client.from("profiles").select("id,language,role").eq("id", currentUser.id).single();
+  var result = await client.from("profiles").select("id,language,role,full_name").eq("id", currentUser.id).single();
 
   if(result.error){
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
-      result = await client.from("profiles").select("id,role").eq("id", currentUser.id).single();
+      result = await client.from("profiles").select("id,role,full_name").eq("id", currentUser.id).single();
     }
   }
 
   isAdmin = !!(result.data && result.data.role === "admin");
   applyAdminRestrictions();
+
+  currentUserFullName = (result.data && result.data.full_name) || (currentUser && currentUser.email) || "";
+  var timelineOperatorInput = document.getElementById("timelineOperator");
+  if(timelineOperatorInput && !timelineOperatorInput.value){
+    timelineOperatorInput.value = currentUserFullName;
+  }
 
   if(result.error){
     await applyLanguage("it");
