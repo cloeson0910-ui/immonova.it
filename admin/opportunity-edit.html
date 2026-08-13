@@ -1461,10 +1461,13 @@ button.danger{
           </div>
           <div class="field full">
             <label for="timelineOperator" data-i18n="label_timeline_operator">Registrato da</label>
-            <input type="text" id="timelineOperator" data-i18n-placeholder="ph_timeline_operator" placeholder="Nome operatore">
+            <select id="timelineOperator">
+              <option value="">Seleziona operatore</option>
+            </select>
           </div>
           <div class="field full">
             <button type="button" class="primary" id="addTimelineBtn" data-i18n="btn_add_timeline">Aggiungi Milestone</button>
+            <button type="button" class="soft" id="cancelTimelineEditBtn" style="display:none;margin-top:10px" data-i18n="btn_cancel_timeline_edit">Annulla modifica</button>
           </div>
         </div>
 
@@ -2355,6 +2358,7 @@ function renderTimelineList(){
         '</div>' +
         '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0">' +
           badge +
+          '<button type="button" style="padding:7px 10px;font-size:9px;letter-spacing:.12em" onclick="startEditTimelineMilestone(\'' + escapeHTML(item.id) + '\')">Modifica</button>' +
           '<button type="button" class="danger" style="padding:7px 10px;font-size:9px;letter-spacing:.12em" onclick="deleteTimelineMilestone(\'' + escapeHTML(item.id) + '\')">Elimina</button>' +
         '</div>' +
       '</div>';
@@ -2382,6 +2386,45 @@ async function loadTimeline(){
   renderTimelineList();
 }
 
+var editingTimelineId = null;
+
+function resetTimelineForm(){
+  document.getElementById("timelineTitleInput").value = "";
+  document.getElementById("timelineDescription").value = "";
+  document.getElementById("timelineDate").value = "";
+  document.getElementById("timelinePublic").checked = true;
+  if(currentUser && currentUser.id){
+    document.getElementById("timelineOperator").value = currentUser.id;
+  }
+  document.getElementById("timelineType").value = "milestone";
+
+  editingTimelineId = null;
+  document.getElementById("addTimelineBtn").textContent = T.btn_add_timeline || "Aggiungi Milestone";
+  document.getElementById("cancelTimelineEditBtn").style.display = "none";
+}
+
+function startEditTimelineMilestone(timelineId){
+  var item = timelineEntries.find(function(entry){ return String(entry.id) === String(timelineId); });
+  if(!item) return;
+
+  editingTimelineId = item.id;
+
+  document.getElementById("timelineDate").value = item.created_at ? item.created_at.slice(0,10) : "";
+  document.getElementById("timelineType").value = item.timeline_type || "milestone";
+  document.getElementById("timelineTitleInput").value = item.title || "";
+  document.getElementById("timelineDescription").value = item.description || "";
+  document.getElementById("timelinePublic").checked = item.visibility === "public";
+  if(item.created_by){
+    document.getElementById("timelineOperator").value = item.created_by;
+  }
+
+  document.getElementById("addTimelineBtn").textContent = "Salva Modifica";
+  document.getElementById("cancelTimelineEditBtn").style.display = "";
+  setTimelineStatus("Stai modificando una milestone esistente.", "");
+
+  document.getElementById("timelineTitleInput").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
 async function addTimelineMilestone(){
   if(!id){
     setTimelineStatus("Salva prima l'opportunità, poi aggiungi le milestone.", "error");
@@ -2393,7 +2436,11 @@ async function addTimelineMilestone(){
   var titleValue = document.getElementById("timelineTitleInput").value.trim();
   var descriptionValue = document.getElementById("timelineDescription").value.trim();
   var isPublic = document.getElementById("timelinePublic").checked;
-  var operatorValue = document.getElementById("timelineOperator").value.trim() || currentUserFullName;
+
+  var operatorSelect = document.getElementById("timelineOperator");
+  var operatorId = operatorSelect.value || (currentUser ? currentUser.id : null);
+  var operatorProfile = collaboratorsCache.find(function(p){ return String(p.id) === String(operatorId); });
+  var operatorName = operatorProfile ? (operatorProfile.full_name || operatorProfile.email) : currentUserFullName;
 
   if(!titleValue){
     setTimelineStatus("Inserisci almeno un titolo breve per la milestone.", "error");
@@ -2402,25 +2449,30 @@ async function addTimelineMilestone(){
 
   var btn = document.getElementById("addTimelineBtn");
   btn.disabled = true;
-  setTimelineStatus("Salvataggio milestone in corso...", "");
+  setTimelineStatus(editingTimelineId ? "Salvataggio modifica in corso..." : "Salvataggio milestone in corso...", "");
 
   /* La tabella opportunity_timeline non ha una colonna data separata: la data scelta
      dall'utente diventa direttamente created_at (mezzogiorno locale, per evitare che il
-     fuso orario la faccia scivolare al giorno prima/dopo). created_by_name viene proposto
-     automaticamente col nome dell'operatore loggato ma resta modificabile (es. se qualcuno
-     registra una milestone per conto di un collega). Colonne created_by/created_by_name
-     aggiunte con l'ultimo setup-opportunity-timeline.sql (non esistevano nello schema
-     originale). */
-  var result = await client.from("opportunity_timeline").insert({
-    opportunity_id: id,
+     fuso orario la faccia scivolare al giorno prima/dopo). created_by/created_by_name sono
+     presi dal menu a tendina operatore (preselezionato sull'utente loggato ma modificabile,
+     es. una segretaria che registra per conto di un consulente). */
+  var payload = {
     created_at: new Date(dateValue + "T12:00:00").toISOString(),
     timeline_type: typeValue,
     title: titleValue,
     description: descriptionValue || null,
     visibility: isPublic ? "public" : "internal",
-    created_by: currentUser ? currentUser.id : null,
-    created_by_name: operatorValue || null
-  });
+    created_by: operatorId || null,
+    created_by_name: operatorName || null
+  };
+
+  var result;
+  if(editingTimelineId){
+    result = await client.from("opportunity_timeline").update(payload).eq("id", editingTimelineId);
+  }else{
+    payload.opportunity_id = id;
+    result = await client.from("opportunity_timeline").insert(payload);
+  }
 
   btn.disabled = false;
 
@@ -2430,13 +2482,10 @@ async function addTimelineMilestone(){
     return;
   }
 
-  document.getElementById("timelineTitleInput").value = "";
-  document.getElementById("timelineDescription").value = "";
-  document.getElementById("timelineDate").value = "";
-  document.getElementById("timelinePublic").checked = true;
-  document.getElementById("timelineOperator").value = currentUserFullName;
+  var wasEditing = !!editingTimelineId;
+  resetTimelineForm();
 
-  setTimelineStatus("Milestone aggiunta correttamente.", "success");
+  setTimelineStatus(wasEditing ? "Milestone modificata correttamente." : "Milestone aggiunta correttamente.", "success");
   await loadTimeline();
 }
 
@@ -2461,6 +2510,12 @@ async function deleteTimelineMilestone(timelineId){
 document.addEventListener("DOMContentLoaded", function(){
   var addBtn = document.getElementById("addTimelineBtn");
   if(addBtn) addBtn.addEventListener("click", addTimelineMilestone);
+
+  var cancelEditBtn = document.getElementById("cancelTimelineEditBtn");
+  if(cancelEditBtn) cancelEditBtn.addEventListener("click", function(){
+    resetTimelineForm();
+    setTimelineStatus("Modifica annullata.", "");
+  });
 });
 
 
@@ -3025,7 +3080,7 @@ var UI_STRINGS = {
   label_timeline_title:"Titolo breve", ph_timeline_title:"Es. Prima visita investitore, sopralluogo tecnico completato...",
   label_timeline_description:"Descrizione breve", ph_timeline_description:"Es. Sopralluogo effettuato con investitore family office, esito molto positivo, richiesta seconda visita con socio.",
   label_timeline_public:"Pubblica (visibile su scheda pubblica e Success Story)", btn_add_timeline:"Aggiungi Milestone",
-  label_timeline_operator:"Registrato da", ph_timeline_operator:"Nome operatore",
+  label_timeline_operator:"Registrato da", ph_timeline_operator:"Nome operatore", btn_cancel_timeline_edit:"Annulla modifica",
   section_descriptions:"Descrizioni", label_short_description:"Descrizione breve", label_full_description:"Descrizione completa",
   section_ai_analysis:"Analisi IA", label_location_summary:"Attrattività della zona",
   label_tourism_summary:"Analisi turistica", label_market_summary:"Analisi mercato immobiliare",
@@ -3136,11 +3191,10 @@ async function loadUserLanguage(){
   isAdmin = !!(result.data && result.data.role === "admin");
   applyAdminRestrictions();
 
+  /* Il campo "Registrato da" della timeline è ora un menu a tendina (vedi loadCollaborators),
+     preselezionato sull'utente loggato ma modificabile -- currentUserFullName resta come
+     fallback testuale nel caso il profilo non compaia ancora nell'elenco collaboratori. */
   currentUserFullName = (result.data && result.data.full_name) || (currentUser && currentUser.email) || "";
-  var timelineOperatorInput = document.getElementById("timelineOperator");
-  if(timelineOperatorInput && !timelineOperatorInput.value){
-    timelineOperatorInput.value = currentUserFullName;
-  }
 
   if(result.error){
     await applyLanguage("it");
@@ -3166,9 +3220,12 @@ function applyAdminRestrictions(){
 }
 
 
+var collaboratorsCache = [];
+
 async function loadCollaborators(){
   var ownerSelect = document.getElementById("ownerId");
-  if(!ownerSelect) return;
+  var timelineOperatorSelect = document.getElementById("timelineOperator");
+  if(!ownerSelect && !timelineOperatorSelect) return;
 
   var result = await client
     .from("profiles")
@@ -3181,16 +3238,32 @@ async function loadCollaborators(){
   }
 
   var rows = result.data || [];
-  var currentValue = ownerSelect.value;
+  collaboratorsCache = rows;
+  var currentValue = ownerSelect ? ownerSelect.value : "";
 
-  rows.forEach(function(p){
-    var opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.full_name || p.email || p.id;
-    ownerSelect.appendChild(opt);
-  });
+  if(ownerSelect){
+    rows.forEach(function(p){
+      var opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.full_name || p.email || p.id;
+      ownerSelect.appendChild(opt);
+    });
+    if(currentValue) ownerSelect.value = currentValue;
+  }
 
-  if(currentValue) ownerSelect.value = currentValue;
+  if(timelineOperatorSelect){
+    rows.forEach(function(p){
+      var opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.full_name || p.email || p.id;
+      timelineOperatorSelect.appendChild(opt);
+    });
+    /* Preseleziona l'utente loggato, ma resta modificabile: es. una segretaria che registra
+       una milestone per conto di un consulente sceglie qui il nome giusto invece del proprio. */
+    if(currentUser && currentUser.id){
+      timelineOperatorSelect.value = currentUser.id;
+    }
+  }
 }
 
 async function checkAuth(){
