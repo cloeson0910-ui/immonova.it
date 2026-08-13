@@ -394,6 +394,55 @@ h1{
   padding:20px 0;
   border-bottom:1px solid rgba(166,127,52,.12);
 }
+.hz-timeline-wrap{
+  overflow-x:auto;
+  padding:10px 4px 18px;
+}
+.hz-timeline{
+  display:flex;
+  align-items:flex-start;
+  min-width:max-content;
+}
+.hz-node{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  width:150px;
+  flex-shrink:0;
+}
+.hz-dot{
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  background:#a67f34;
+  border:3px solid #f4ecdf;
+  box-shadow:0 0 0 1px rgba(166,127,52,.45);
+  flex-shrink:0;
+}
+.hz-line{
+  height:2px;
+  width:90px;
+  background:rgba(166,127,52,.30);
+  flex-shrink:0;
+  margin-top:6px;
+}
+.hz-date{
+  margin-top:12px;
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#9a793c;
+  text-align:center;
+}
+.hz-title{
+  margin-top:5px;
+  font-size:13px;
+  font-weight:500;
+  color:#a67f34;
+  text-align:center;
+  line-height:1.35;
+  padding:0 4px;
+}
 .timeline-date{
   font-size:10px;
   letter-spacing:.16em;
@@ -1192,22 +1241,26 @@ async function renderOpportunity(data){
           <div class="lock-box">${escapeHTML(dict("ai_locked"))}</div>
         </div>
 
-        <div class="panel">
-          <h2 class="section-title">${escapeHTML(dict("timeline"))}</h2>
-          ${
-            timeline.length
-            ? timeline.map(item => `
-              <div class="timeline-item">
-                <div class="timeline-date">${escapeHTML(fmtDate(item.created_at))}</div>
-                <div>
-                  <div class="timeline-title">${escapeHTML(item.title || item.timeline_type || dict("timeline_step_fallback"))}</div>
-                  <div class="timeline-desc">${escapeHTML(item.description || "")}</div>
-                </div>
-              </div>
-            `).join("")
-            : `<div class="text">${escapeHTML(dict("timeline_empty"))}</div>`
-          }
-        </div>
+        ${
+          sold ? `
+          <div class="panel">
+            <h2 class="section-title">${escapeHTML(dict("timeline"))}</h2>
+            ${
+              timeline.length
+              ? `<div class="hz-timeline-wrap"><div class="hz-timeline">` +
+                timeline.map((item, idx) => `
+                  <div class="hz-node">
+                    <div class="hz-dot" title="${escapeHTML(item.description || "")}"></div>
+                    <div class="hz-date">${escapeHTML(fmtDate(item.created_at))}</div>
+                    <div class="hz-title">${escapeHTML(item.title || item.timeline_type || dict("timeline_step_fallback"))}</div>
+                  </div>
+                  ${idx < timeline.length - 1 ? `<div class="hz-line"></div>` : ``}
+                `).join("") +
+                `</div></div>`
+              : `<div class="text">${escapeHTML(dict("timeline_empty"))}</div>`
+            }
+          </div>` : ""
+        }
 
         <div class="panel">
           <h2 class="section-title">${escapeHTML(dict("events"))}</h2>
