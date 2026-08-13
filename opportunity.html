@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Opportunity | IMMONOVA</title>
+<meta name="description" id="metaDescription" content="Opportunità di investimento immobiliare off-market selezionata da IMMONOVA per investitori italiani e internazionali." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="IMMONOVA" />
+<meta property="og:title" id="ogTitle" content="Opportunity | IMMONOVA" />
+<meta property="og:description" id="ogDescription" content="Opportunità di investimento immobiliare off-market selezionata da IMMONOVA." />
+<meta name="twitter:card" content="summary" />
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -854,6 +860,36 @@ function applyStaticTranslations(){
   }
 }
 
+/* Aggiorna title, meta description e Open Graph in base all'opportunità caricata -- ogni
+   scheda ha cosi' i propri meta tag invece di quelli generici della pagina, importante per
+   l'indicizzazione dato che questa e' una pagina dinamica (una URL per ogni immobile tramite
+   ?id=). Chiamata dopo ogni render (incluso il cambio lingua), cosi' anche i meta restano
+   coerenti con la lingua mostrata. Se qualcosa manca, restano i testi generici di fallback
+   gia' presenti nell'head. */
+function updatePageMeta(data){
+  if(!data) return;
+
+  const title = (data.title || dict("investment_opportunity")) + " | IMMONOVA";
+  const descSource = data.short_description || data.full_description || dict("private_off_market");
+  const desc = String(descSource).slice(0,160);
+
+  document.title = title;
+  const metaDesc = document.getElementById("metaDescription");
+  if(metaDesc) metaDesc.setAttribute("content", desc);
+  const ogTitle = document.getElementById("ogTitle");
+  if(ogTitle) ogTitle.setAttribute("content", title);
+  const ogDescription = document.getElementById("ogDescription");
+  if(ogDescription) ogDescription.setAttribute("content", desc);
+
+  var canonical = document.querySelector('link[rel="canonical"]');
+  if(!canonical){
+    canonical = document.createElement("link");
+    canonical.setAttribute("rel","canonical");
+    document.head.appendChild(canonical);
+  }
+  canonical.setAttribute("href", "https://immonova-consulting.it/opportunity.html?id=" + encodeURIComponent(data.id));
+}
+
 function normalizeGallery(value){
   if(!value)return [];
   if(Array.isArray(value))return value.filter(Boolean);
@@ -928,10 +964,6 @@ function teaserText(data){
   return "L’analisi preliminare evidenzia un potenziale interessante in termini di posizionamento, valorizzazione e domanda qualificata. La versione completa è disponibile nel Dossier Riservato.";
 }
 
-/* Market/Tourism teaser: usano SOLO metriche non finanziarie dal dossier verificato
-   (__dossier_data, popolato da loadSafeDossierMetrics -- niente real_estate_market/adr).
-   Se il dossier non è ancora disponibile per questa opportunità, restano i testi generici
-   di sempre: non promettono mai un dato che non c'è davvero. */
 function marketTeaserText(data){
   const dossier = data.__dossier_data;
   if(dossier && dossier.sources_count) return dict("market_teaser_with_data");
@@ -970,12 +1002,6 @@ function timelineFor(data){
     .sort((a,b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
 }
 
-/* Traduce il CONTENUTO specifico di questa scheda (titolo, categoria, tipologia,
-   descrizioni, titoli/descrizioni degli eventi collegati) -- diverso dal dizionario fisso
-   dell'interfaccia: qui il testo cambia per ogni opportunità, quindi la cache è per
-   scheda+lingua, non globale. Location/indirizzi/venue NON vengono mai tradotti: sono nomi
-   di luogo, tradurli li renderebbe sbagliati. Se la traduzione fallisce per qualsiasi motivo,
-   la pagina mostra semplicemente il testo originale in italiano -- non deve mai bloccarsi. */
 async function getRenderData(data){
   if(!data || currentLanguage === "it") return data;
 
@@ -1038,10 +1064,6 @@ async function getRenderData(data){
   }
 }
 
-/* ---- Pittogrammi caratteristiche opzionali: nessuna cornice, nessuno sfondo, solo icona +
-   etichetta -- richiesta esplicita di stile pulito. Compaiono solo le caratteristiche
-   davvero presenti sull'immobile (has_pool ecc.), il pannello intero sparisce se non ce
-   n'è nessuna. Le icone sono SVG inline minimali in stile lineare, coerenti con il resto. ---- */
 var AMENITY_ICONS = {
   has_pool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 17c1.5 1.3 3 1.3 4.5 0s3-1.3 4.5 0 3 1.3 4.5 0 3-1.3 4.5 0"/><path d="M4 13V6a2 2 0 0 1 2-2h8l6 6v3"/><circle cx="15" cy="7" r="1"/></svg>',
   has_garden: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 22v-9"/><path d="M12 13c-4 0-7-3-7-7 4 0 7 3 7 7Z"/><path d="M12 13c4 0 7-3 7-7-4 0-7 3-7 7Z"/></svg>',
@@ -1090,6 +1112,7 @@ function renderAmenitiesPanel(data){
 
 async function renderOpportunity(data){
   data = await getRenderData(data);
+  updatePageMeta(data);
 
   const category = data.category || "";
   const title = data.title || "";
@@ -1343,11 +1366,6 @@ async function loadOpportunity(){
   await renderOpportunity(data);
 }
 
-/* Recupera SOLO le metriche del dossier che non sono cifre di prezzo/investimento (arrivi
-   turistici, popolazione, conteggi di punti d'interesse verificati) -- MAI real_estate_market
-   (valore al m²) o adr/tourism_pricing (tariffe), che restano riservate al dossier completo.
-   Se il report non esiste ancora, o la query fallisce, la pagina pubblica funziona comunque
-   con le card generiche di fallback: questa funzione non deve mai bloccare il caricamento. */
 async function loadSafeDossierMetrics(opportunityId){
   try{
     const { data, error } = await client
@@ -1382,9 +1400,6 @@ async function loadSafeDossierMetrics(opportunityId){
   }
 }
 
-/* Conta le fonti verificate PRESENTI nel dossier, ignorando esplicitamente le sezioni
-   finanziarie -- usato solo per dire "basato su N fonti verificate", mai per mostrare i valori
-   veri e propri di quelle sezioni. */
 function countVerifiedSources(dossierData){
   const EXCLUDED_FINANCIAL_SECTIONS = ["real_estate_market","adr","tourism_pricing"];
   let count = 0;
