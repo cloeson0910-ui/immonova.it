@@ -1132,6 +1132,8 @@ async function changeCommercialStatus(id, newStatus){
   }
 
   var title = findOpportunityTitle(id);
+  var previousOpportunity = allOpportunities.find(function(o){ return String(o.id) === String(id); });
+  var previousStatus = previousOpportunity ? (previousOpportunity.commercial_status || "available") : null;
   var confirmMessage = newStatus === "sold"
     ? T.confirm_status_change_prefix + "\"" + title + "\"" + T.confirm_sold_suffix
     : T.confirm_status_change_prefix + "\"" + title + "\"" + T.confirm_status_change_commercial_suffix + commercialStatusLabel(newStatus) + "?";
@@ -1189,6 +1191,19 @@ async function changeCommercialStatus(id, newStatus){
   }
 
   await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
+
+  /* Notifica chi ha questo immobile tra i preferiti (tabella immonova_favorite_opportunities),
+     SOLO a chi l'ha salvato -- mai un broadcast a tutti come notifyStatusChange sopra.
+     Best-effort: se fallisce non deve mai bloccare il cambio di stato. */
+  if(previousStatus !== newStatus){
+    try{
+      await client.functions.invoke("immonova-notify-favorite-update", {
+        body:{ opportunity_id:Number(id), change_type:"status", old_value:previousStatus, new_value:newStatus }
+      });
+    }catch(favError){
+      console.warn("Notifica preferiti (stato) non riuscita (non bloccante):", favError);
+    }
+  }
 
   setStatus(T.msg_commercial_updated, "success");
   await loadOpportunities();
