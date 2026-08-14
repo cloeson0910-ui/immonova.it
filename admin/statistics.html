@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Statistiche | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.page{max-width:1300px;margin:0 auto;padding:42px 24px 80px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:44px;flex-wrap:wrap;gap:18px}
+.logo{font-size:24px;font-weight:300;letter-spacing:.35em;color:#a58139;text-decoration:none}
+.nav{display:flex;gap:14px;flex-wrap:wrap}
+.nav a{padding:11px 20px;border:1px solid rgba(165,129,57,.42);background:rgba(255,252,244,.22);color:#a58139;text-decoration:none;text-transform:uppercase;font-size:10px;letter-spacing:.18em}
+h1{font-size:32px;font-weight:200;letter-spacing:.08em;color:#a58139;margin-bottom:8px;text-transform:uppercase}
+.intro{font-size:13px;line-height:1.8;color:#8f7643;margin-bottom:36px}
+.status{margin-bottom:20px;font-size:13px}
+.error{color:#9c2f2f}
+
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:40px}
+.card{padding:22px;border:1px solid rgba(165,129,57,.20);background:rgba(255,255,255,.20);min-height:110px;display:flex;flex-direction:column;justify-content:space-between}
+.card-label{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#8f7643;line-height:1.5}
+.card-value{font-size:38px;font-weight:200;color:#a58139;margin-top:8px}
+.card-note{font-size:10.5px;color:#a58139;margin-top:6px}
+
+.section{margin-bottom:44px}
+.section-title{font-size:14px;letter-spacing:.20em;text-transform:uppercase;color:#a58139;margin-bottom:18px;padding-bottom:10px;border-bottom:1px solid rgba(165,129,57,.18)}
+
+.panel{padding:26px;border:1px solid rgba(165,129,57,.18);background:rgba(255,255,255,.16)}
+.two-col{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}
+
+.bar-chart{display:flex;align-items:flex-end;gap:6px;height:160px;margin-top:20px;padding:0 4px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bar-col .bar{width:100%;background:linear-gradient(180deg,#c79c43,#8f6f2c);min-height:2px}
+.bar-col .bar-val{font-size:9px;color:#a58139;font-weight:600;margin-bottom:3px}
+.bar-col .bar-label{font-size:8.5px;color:#8f7643;margin-top:6px;letter-spacing:.03em;text-align:center}
+
+.country-list{display:flex;flex-direction:column;gap:8px}
+.country-row{display:flex;align-items:center;gap:12px;font-size:12.5px}
+.country-name{width:120px;flex-shrink:0;color:#7f6430}
+.country-track{flex:1;height:10px;background:rgba(165,129,57,.10);border:1px solid rgba(165,129,57,.15)}
+.country-fill{height:100%;background:#a58139}
+.country-count{width:36px;text-align:right;color:#a58139;font-weight:600;flex-shrink:0}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid rgba(165,129,57,.14)}
+th{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#a58139;font-weight:600}
+td{color:#7f6430}
+.empty-row td{text-align:center;color:#8f7643;padding:24px}
+
+.rank{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid rgba(165,129,57,.30);color:#a58139;font-size:10px;margin-right:8px}
+
+@media(max-width:900px){
+  .cards{grid-template-columns:1fr 1fr}
+  .two-col{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+
+<body>
+
+<div class="page">
+
+<header class="header">
+  <a href="dashboard.html" class="logo">IMMONOVA</a>
+  <nav class="nav">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="opportunities-pipeline.html">Gestisci Proposte</a>
+  </nav>
+</header>
+
+<h1>Statistiche</h1>
+<p class="intro">Cruscotto di controllo flussi: installazioni app, notifiche attive, lead raccolti, provenienza geografica e interesse per singola opportunità.</p>
+
+<div id="status" class="status"></div>
+
+<div class="cards" id="summaryCards">
+  <div class="card"><div class="card-label">Notifiche push attive</div><div class="card-value" id="cardPushActive">—</div><div class="card-note">proxy più affidabile per "app installata e raggiungibile"</div></div>
+  <div class="card"><div class="card-label">Installazioni registrate</div><div class="card-value" id="cardInstalls">—</div><div class="card-note">1 per dispositivo, anche senza notifiche attive</div></div>
+  <div class="card"><div class="card-label">Lead con dati personali</div><div class="card-value" id="cardLeads">—</div><div class="card-note">nome, cognome, email da banner installazione</div></div>
+  <div class="card"><div class="card-label">Visualizzazioni totali</div><div class="card-value" id="cardViews">—</div><div class="card-note">tutte le opportunità, tutti gli accessi</div></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Installazioni negli ultimi 14 giorni</div>
+  <div class="panel">
+    <div id="installsChart" class="bar-chart"></div>
+  </div>
+</div>
+
+<div class="two-col section">
+  <div class="panel">
+    <div class="section-title" style="border:0;margin-bottom:14px">Installazioni per Paese</div>
+    <div id="countryList" class="country-list"></div>
+  </div>
+  <div class="panel">
+    <div class="section-title" style="border:0;margin-bottom:14px">Immobili più visti</div>
+    <table>
+      <thead><tr><th>Opportunità</th><th style="text-align:right">Viste</th></tr></thead>
+      <tbody id="topViewedBody"><tr class="empty-row"><td colspan="2">Caricamento...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Lead — chi ha lasciato i propri dati</div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>Nome</th><th>Email</th><th>Telefono</th><th>Data</th></tr></thead>
+      <tbody id="leadsBody"><tr class="empty-row"><td colspan="4">Caricamento...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var statusBox = document.getElementById("status");
+
+function escapeHTML(v){
+  return String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+function setStatus(msg, type){
+  statusBox.textContent = msg || "";
+  statusBox.className = "status " + (type || "");
+}
+function fmtDate(v){
+  if(!v) return "";
+  try{ return new Date(v).toLocaleDateString("it-IT", { day:"2-digit", month:"short", year:"numeric" }); }
+  catch(e){ return v; }
+}
+
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  if(result.error || !result.data.session){
+    window.location.href = "login.html";
+    return false;
+  }
+  return true;
+}
+
+async function loadSummaryCards(){
+  var pushRes = await client.from("immonova_push_subscriptions").select("id", { count:"exact", head:true }).eq("active", true);
+  document.getElementById("cardPushActive").textContent = pushRes.count != null ? pushRes.count : "—";
+
+  var installsRes = await client.from("immonova_app_installs").select("id", { count:"exact", head:true });
+  document.getElementById("cardInstalls").textContent = installsRes.count != null ? installsRes.count : "—";
+
+  var leadsRes = await client.from("immonova_app_install_leads").select("id", { count:"exact", head:true });
+  document.getElementById("cardLeads").textContent = leadsRes.count != null ? leadsRes.count : "—";
+
+  var viewsRes = await client.from("immonova_opportunity_views").select("id", { count:"exact", head:true });
+  document.getElementById("cardViews").textContent = viewsRes.count != null ? viewsRes.count : "—";
+}
+
+async function loadInstallsChart(){
+  var since = new Date();
+  since.setDate(since.getDate() - 13);
+  since.setHours(0,0,0,0);
+
+  var result = await client
+    .from("immonova_app_installs")
+    .select("created_at")
+    .gte("created_at", since.toISOString());
+
+  var chart = document.getElementById("installsChart");
+
+  if(result.error){
+    chart.innerHTML = "";
+    setStatus("Errore caricamento installazioni: " + result.error.message, "error");
+    return;
+  }
+
+  var counts = {};
+  for(var i = 0; i < 14; i++){
+    var d = new Date(since);
+    d.setDate(d.getDate() + i);
+    var key = d.toISOString().slice(0,10);
+    counts[key] = 0;
+  }
+
+  (result.data || []).forEach(function(row){
+    var key = row.created_at.slice(0,10);
+    if(counts[key] !== undefined) counts[key]++;
+  });
+
+  var keys = Object.keys(counts).sort();
+  var max = Math.max.apply(null, keys.map(function(k){ return counts[k]; })) || 1;
+
+  chart.innerHTML = keys.map(function(k){
+    var val = counts[k];
+    var h = Math.max(2, Math.round((val / max) * 140));
+    var d = new Date(k + "T12:00:00");
+    var label = d.toLocaleDateString("it-IT", { day:"2-digit", month:"2-digit" });
+    return '<div class="bar-col"><div class="bar-val">' + val + '</div><div class="bar" style="height:' + h + 'px"></div><div class="bar-label">' + label + '</div></div>';
+  }).join("");
+}
+
+async function loadCountryBreakdown(){
+  var result = await client.from("immonova_app_installs").select("country");
+  var box = document.getElementById("countryList");
+
+  if(result.error){
+    box.innerHTML = '<div class="empty-row">Errore caricamento.</div>';
+    return;
+  }
+
+  var counts = {};
+  (result.data || []).forEach(function(row){
+    var country = row.country || "Sconosciuto";
+    counts[country] = (counts[country] || 0) + 1;
+  });
+
+  var entries = Object.keys(counts).map(function(k){ return { country:k, count:counts[k] }; })
+    .sort(function(a,b){ return b.count - a.count; })
+    .slice(0, 10);
+
+  if(!entries.length){
+    box.innerHTML = '<div style="color:#8f7643;font-size:12.5px">Nessuna installazione registrata ancora.</div>';
+    return;
+  }
+
+  var max = entries[0].count || 1;
+
+  box.innerHTML = entries.map(function(e){
+    var pct = Math.max(4, Math.round((e.count / max) * 100));
+    return '<div class="country-row"><div class="country-name">' + escapeHTML(e.country) + '</div><div class="country-track"><div class="country-fill" style="width:' + pct + '%"></div></div><div class="country-count">' + e.count + '</div></div>';
+  }).join("");
+}
+
+async function loadTopViewed(){
+  var body = document.getElementById("topViewedBody");
+
+  var result = await client.from("immonova_opportunity_views").select("opportunity_id");
+
+  if(result.error){
+    body.innerHTML = '<tr class="empty-row"><td colspan="2">Errore caricamento.</td></tr>';
+    return;
+  }
+
+  var counts = {};
+  (result.data || []).forEach(function(row){
+    counts[row.opportunity_id] = (counts[row.opportunity_id] || 0) + 1;
+  });
+
+  var ids = Object.keys(counts);
+  if(!ids.length){
+    body.innerHTML = '<tr class="empty-row"><td colspan="2">Nessuna visualizzazione registrata ancora.</td></tr>';
+    return;
+  }
+
+  var oppRes = await client.from("opportunities").select("id,title").in("id", ids);
+  var titles = {};
+  (oppRes.data || []).forEach(function(o){ titles[o.id] = o.title; });
+
+  var entries = ids.map(function(id){ return { id:id, title: titles[id] || ("#" + id), count: counts[id] }; })
+    .sort(function(a,b){ return b.count - a.count; })
+    .slice(0, 10);
+
+  body.innerHTML = entries.map(function(e, i){
+    return '<tr><td><span class="rank">' + (i+1) + '</span>' + escapeHTML(e.title) + '</td><td style="text-align:right;font-weight:600;color:#a58139">' + e.count + '</td></tr>';
+  }).join("");
+}
+
+async function loadLeads(){
+  var body = document.getElementById("leadsBody");
+
+  var result = await client.from("immonova_app_install_leads").select("*").order("created_at", { ascending:false }).limit(200);
+
+  if(result.error){
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
+    return;
+  }
+
+  var rows = result.data || [];
+  if(!rows.length){
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">Nessun lead registrato ancora.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rows.map(function(r){
+    return '<tr>' +
+      '<td>' + escapeHTML((r.nome || "") + " " + (r.cognome || "")) + '</td>' +
+      '<td>' + escapeHTML(r.email || "-") + '</td>' +
+      '<td>' + escapeHTML(r.telefono || "-") + '</td>' +
+      '<td>' + escapeHTML(fmtDate(r.created_at)) + '</td>' +
+      '</tr>';
+  }).join("");
+}
+
+(async function init(){
+  var ok = await checkAuth();
+  if(!ok) return;
+
+  await Promise.all([
+    loadSummaryCards(),
+    loadInstallsChart(),
+    loadCountryBreakdown(),
+    loadTopViewed(),
+    loadLeads()
+  ]);
+})();
+</script>
+
+</body>
+</html>
