@@ -147,8 +147,8 @@ td{color:#7f6430}
   <div class="section-title">Account registrati</div>
   <div class="panel">
     <table>
-      <thead><tr><th>Nome</th><th>Email</th><th>Canale notifiche</th><th>Registrato il</th></tr></thead>
-      <tbody id="accountsBody"><tr class="empty-row"><td colspan="4">Caricamento...</td></tr></tbody>
+      <thead><tr><th>Nome</th><th>Email</th><th>Canale notifiche</th><th>Registrato il</th><th>Preferiti</th></tr></thead>
+      <tbody id="accountsBody"><tr class="empty-row"><td colspan="5">Caricamento...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -341,14 +341,39 @@ async function loadAccounts(){
   var result = await client.from("immonova_public_accounts").select("*").order("created_at", { ascending:false }).limit(200);
 
   if(result.error){
-    body.innerHTML = '<tr class="empty-row"><td colspan="4">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="5">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
     return;
   }
 
   var rows = result.data || [];
   if(!rows.length){
-    body.innerHTML = '<tr class="empty-row"><td colspan="4">Nessun account registrato ancora.</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="5">Nessun account registrato ancora.</td></tr>';
     return;
+  }
+
+  var favResult = await client
+    .from("immonova_favorite_opportunities")
+    .select("account_id, opportunities(id, title, category)");
+
+  var favByAccount = {};
+  if(!favResult.error){
+    (favResult.data || []).forEach(function(f){
+      if(!f.opportunities) return;
+      if(!favByAccount[f.account_id]) favByAccount[f.account_id] = [];
+      favByAccount[f.account_id].push(f.opportunities);
+    });
+  }
+
+  function favoritesCellHTML(accountId){
+    var favs = favByAccount[accountId] || [];
+    if(!favs.length) return '<span style="color:#8f7643;font-size:11px">Nessuno</span>';
+
+    return '<div style="display:flex;flex-direction:column;gap:4px">' + favs.map(function(f){
+      return '<a href="../opportunity.html?id=' + f.id + '" target="_blank" style="font-size:11.5px;color:#a58139;text-decoration:none">'
+        + escapeHTML(f.title || ("#" + f.id))
+        + (f.category ? ' <span style="color:#8f7643">(' + escapeHTML(f.category) + ')</span>' : '')
+        + '</a>';
+    }).join("") + '</div>';
   }
 
   body.innerHTML = rows.map(function(r){
@@ -357,6 +382,7 @@ async function loadAccounts(){
       '<td>' + escapeHTML(r.email || "-") + '</td>' +
       '<td>' + escapeHTML(r.notification_channel === "push" ? "Push" : "Email") + '</td>' +
       '<td>' + escapeHTML(fmtDate(r.created_at)) + '</td>' +
+      '<td>' + favoritesCellHTML(r.id) + '</td>' +
       '</tr>';
   }).join("");
 }
