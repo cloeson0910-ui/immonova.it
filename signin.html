@@ -47,6 +47,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
   </form>
 
   <div id="status" class="status"></div>
+  <button type="button" id="resendBtn" class="alt" style="display:none;background:none;border:none;text-decoration:underline;cursor:pointer;color:#a67f34;font-size:12.5px;font-family:inherit;padding:0">Invia di nuovo l'email di conferma</button>
   <div class="alt">Non hai un account? <a href="signup.html">Registrati</a></div>
 </div>
 
@@ -82,10 +83,37 @@ form.addEventListener("submit", async function(e){
     setStatus("Accesso effettuato. Reindirizzamento...", "success");
     setTimeout(function(){ window.location.href = redirectTo; }, 700);
   }catch(error){
-    setStatus(error.message || "Errore durante l'accesso.", "error");
+    var message = error.message || "Errore durante l'accesso.";
+    setStatus(message, "error");
+
+    // Supabase segnala così un account creato ma mai confermato via email.
+    if(/email not confirmed/i.test(message)){
+      var resendBtn = document.getElementById("resendBtn");
+      resendBtn.style.display = "";
+      resendBtn.dataset.email = email;
+    }
   }
 
   submitBtn.disabled = false;
+});
+
+document.getElementById("resendBtn").addEventListener("click", async function(){
+  var btn = this;
+  var email = btn.dataset.email;
+  if(!email) return;
+
+  btn.disabled = true;
+  setStatus("Invio email di conferma in corso...", "");
+
+  try{
+    var res = await client.auth.resend({ type: "signup", email: email });
+    if(res.error) throw res.error;
+    setStatus("Email di conferma inviata di nuovo. Controlla anche la cartella spam.", "success");
+  }catch(error){
+    setStatus(error.message || "Errore durante l'invio.", "error");
+  }
+
+  btn.disabled = false;
 });
 
 document.getElementById("forgotBtn").addEventListener("click", async function(){
