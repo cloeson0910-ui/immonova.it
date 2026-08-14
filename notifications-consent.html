@@ -164,26 +164,27 @@ acceptBtn.addEventListener("click", async function(){
     );
 
     var subJson = subscription.toJSON();
+    /* BUG RISOLTO: prima qui c'era .select("id").single() subito dopo l'insert -- ma
+       rileggere la riga appena inserita richiede ANCHE un permesso di SELECT su questa
+       tabella, che di proposito non esiste per anon (privacy: nessuno deve poter leggere
+       l'elenco sottoscrizioni). Questo faceva fallire l'intero inserimento con "row violates
+       row-level security policy", anche se la policy di INSERT era corretta. Ora l'id viene
+       sempre recuperato dopo, tramite la funzione RPC dedicata (bypassa la lettura diretta
+       in modo sicuro, restituisce solo l'id di UNA sottoscrizione nota per endpoint). */
     var res = await client.from("immonova_push_subscriptions").insert({
       endpoint: subJson.endpoint,
       p256dh: subJson.keys.p256dh,
       auth: subJson.keys.auth,
       user_agent: navigator.userAgent
-    }).select("id").single();
+    });
 
-    if(res.error){
-      // endpoint duplicato (utente già iscritto) non è un vero errore per l'utente --
-      // recuperiamo comunque l'id della sottoscrizione esistente tramite la funzione RPC,
-      // serve per collegare i Preferiti a questo dispositivo.
-      if(String(res.error.message||"").indexOf("duplicate") === -1){
-        throw res.error;
-      }
-      var rpcRes = await client.rpc("immonova_get_subscription_id", { p_endpoint: subJson.endpoint });
-      if(!rpcRes.error && rpcRes.data){
-        try{ localStorage.setItem("immonova_subscription_id", rpcRes.data); }catch(e){}
-      }
-    }else if(res.data && res.data.id){
-      try{ localStorage.setItem("immonova_subscription_id", res.data.id); }catch(e){}
+    if(res.error && String(res.error.message||"").indexOf("duplicate") === -1){
+      throw res.error;
+    }
+
+    var rpcRes = await client.rpc("immonova_get_subscription_id", { p_endpoint: subJson.endpoint });
+    if(!rpcRes.error && rpcRes.data){
+      try{ localStorage.setItem("immonova_subscription_id", rpcRes.data); }catch(e){}
     }
 
     markAsked();
