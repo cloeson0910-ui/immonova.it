@@ -169,13 +169,21 @@ acceptBtn.addEventListener("click", async function(){
       p256dh: subJson.keys.p256dh,
       auth: subJson.keys.auth,
       user_agent: navigator.userAgent
-    });
+    }).select("id").single();
 
     if(res.error){
-      // endpoint duplicato (utente già iscritto) non è un vero errore per l'utente
+      // endpoint duplicato (utente già iscritto) non è un vero errore per l'utente --
+      // recuperiamo comunque l'id della sottoscrizione esistente tramite la funzione RPC,
+      // serve per collegare i Preferiti a questo dispositivo.
       if(String(res.error.message||"").indexOf("duplicate") === -1){
         throw res.error;
       }
+      var rpcRes = await client.rpc("immonova_get_subscription_id", { p_endpoint: subJson.endpoint });
+      if(!rpcRes.error && rpcRes.data){
+        try{ localStorage.setItem("immonova_subscription_id", rpcRes.data); }catch(e){}
+      }
+    }else if(res.data && res.data.id){
+      try{ localStorage.setItem("immonova_subscription_id", res.data.id); }catch(e){}
     }
 
     markAsked();

@@ -149,6 +149,24 @@ h1{
   color:#735f36;
   max-width:780px;
 }
+.favorite-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-top:22px;
+  padding:12px 18px;
+  border:1px solid rgba(166,127,52,.34);
+  background:rgba(255,255,255,.20);
+  color:#a67f34;
+  font-family:inherit;
+  font-size:12px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.favorite-btn:hover{background:rgba(166,127,52,.10)}
+.favorite-btn.active{background:#a67f34;color:#fff}
+.favorite-btn #favoriteIcon{font-size:16px;line-height:1}
 .status-badge{
   display:inline-flex;
   align-items:center;
@@ -650,6 +668,7 @@ html[dir="rtl"] .data-grid{direction:rtl}
     <a href="index.html" data-i18n="nav_home">Home</a>
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunities</a>
     <a href="success-stories.html" data-i18n="nav_success_stories">Success Stories</a>
+    <a href="favorites.html">Preferiti</a>
     <a href="events.html" data-i18n="nav_events">Events</a>
     <a href="join-us.html" data-i18n="nav_join_us">Lavora con Noi</a>
     <a href="contact.html" data-i18n="nav_contact">Contact</a>
@@ -695,6 +714,8 @@ const UI_TRANSLATIONS = {
     no_opportunity:"Opportunità non selezionata.",
     unavailable:"Opportunità non disponibile.",
     investment_opportunity:"Opportunità di investimento",
+    save_favorite:"Salva tra i preferiti", saved_favorite:"Salvato tra i preferiti",
+    favorite_requires_notifications:"Per salvare i preferiti e ricevere aggiornamenti devi prima attivare le notifiche. Vuoi farlo ora?",
     private_off_market:"Questa è un'opportunità privata off-market. Le informazioni dettagliate e il dossier di investimento sono disponibili solo dopo qualificazione, accettazione NDA e approvazione manuale da parte di IMMONOVA.",
     available:"Disponibile",
     under_negotiation:"In trattativa",
@@ -786,6 +807,8 @@ const UI_TRANSLATIONS = {
     no_opportunity:"Opportunity not selected.",
     unavailable:"Opportunity unavailable.",
     investment_opportunity:"Investment Opportunity",
+    save_favorite:"Save to favorites", saved_favorite:"Saved to favorites",
+    favorite_requires_notifications:"To save favorites and receive updates you need to enable notifications first. Do it now?",
     private_off_market:"This is a private off-market opportunity. Detailed information and the investment dossier are available only after qualification, NDA acceptance and manual approval by IMMONOVA.",
     available:"Available",
     under_negotiation:"Under Negotiation",
@@ -1190,6 +1213,9 @@ async function renderOpportunity(data){
         <h1>${escapeHTML(title)}</h1>
         <div class="meta">${escapeHTML(location || "")}${location ? " · " : ""}${escapeHTML(investmentType || dict("investment_opportunity"))}</div>
         <p class="hero-desc">${escapeHTML(offMarket ? dict("private_off_market") : (description || dict("private_off_market")))}</p>
+        <button type="button" id="favoriteBtn" class="favorite-btn" data-id="${escapeHTML(String(data.id))}">
+          <span id="favoriteIcon">&#9825;</span> <span id="favoriteLabel">${escapeHTML(dict("save_favorite"))}</span>
+        </button>
       </div>
 
       <div class="hero-media">
@@ -1314,6 +1340,94 @@ async function renderOpportunity(data){
   if(preferredLanguage) preferredLanguage.value = currentLanguage;
 
   document.getElementById("inquiryForm").addEventListener("submit", submitInquiry);
+
+  initFavoriteButton(data.id);
+}
+
+/* ---- Preferiti (collegati alla sottoscrizione push, sistema anonimo senza login) ---- */
+async function resolveSubscriptionId(){
+  var cached = null;
+  try{ cached = localStorage.getItem("immonova_subscription_id"); }catch(e){}
+  if(cached) return cached;
+
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+
+  try{
+    var registration = await navigator.serviceWorker.getRegistration();
+    if(!registration) return null;
+    var subscription = await registration.pushManager.getSubscription();
+    if(!subscription) return null;
+
+    var rpcRes = await client.rpc("immonova_get_subscription_id", { p_endpoint: subscription.endpoint });
+    if(!rpcRes.error && rpcRes.data){
+      try{ localStorage.setItem("immonova_subscription_id", rpcRes.data); }catch(e){}
+      return rpcRes.data;
+    }
+  }catch(e){
+    console.warn("Sottoscrizione push non risolvibile:", e);
+  }
+  return null;
+}
+
+async function initFavoriteButton(opportunityId){
+  var btn = document.getElementById("favoriteBtn");
+  if(!btn) return;
+
+  var subscriptionId = await resolveSubscriptionId();
+  var isFavorite = false;
+
+  if(subscriptionId){
+    var checkRes = await client
+      .from("immonova_favorite_opportunities")
+      .select("id")
+      .eq("subscription_id", subscriptionId)
+      .eq("opportunity_id", opportunityId)
+      .maybeSingle();
+    isFavorite = !!(checkRes.data && checkRes.data.id);
+  }
+
+  updateFavoriteButtonUI(isFavorite);
+
+  btn.addEventListener("click", async function(){
+    btn.disabled = true;
+    var currentSubscriptionId = await resolveSubscriptionId();
+
+    if(!currentSubscriptionId){
+      btn.disabled = false;
+      var goToNotifications = confirm(dict("favorite_requires_notifications"));
+      if(goToNotifications) window.location.href = "/notifications-consent.html";
+      return;
+    }
+
+    var nowFavorite = btn.classList.contains("active");
+
+    if(nowFavorite){
+      await client
+        .from("immonova_favorite_opportunities")
+        .delete()
+        .eq("subscription_id", currentSubscriptionId)
+        .eq("opportunity_id", opportunityId);
+      updateFavoriteButtonUI(false);
+    }else{
+      await client
+        .from("immonova_favorite_opportunities")
+        .insert({ subscription_id: currentSubscriptionId, opportunity_id: opportunityId });
+      updateFavoriteButtonUI(true);
+    }
+
+    btn.disabled = false;
+  });
+}
+
+function updateFavoriteButtonUI(isFavorite){
+  var btn = document.getElementById("favoriteBtn");
+  var icon = document.getElementById("favoriteIcon");
+  var label = document.getElementById("favoriteLabel");
+  if(!btn) return;
+
+  btn.classList.toggle("active", isFavorite);
+  if(icon) icon.innerHTML = isFavorite ? "&#9829;" : "&#9825;";
+  if(label) label.textContent = isFavorite ? dict("saved_favorite") : dict("save_favorite");
 }
 
 function renderInquiryForm(title){

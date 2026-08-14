@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>I miei Preferiti | IMMONOVA</title>
+<meta name="robots" content="noindex" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/apple-touch-icon-v2.png" />
+<meta name="theme-color" content="#a67f34" />
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:34px 52px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.10);
+  background:rgba(244,236,223,.62);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:20;
+}
+.logo{
+  font-size:24px;
+  font-weight:300;
+  letter-spacing:.35em;
+  color:#a67f34;
+  text-decoration:none;
+}
+.nav{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.nav a{text-decoration:none;color:#a67f34;font-size:11px;letter-spacing:.20em;text-transform:uppercase}
+.container{max-width:1200px;margin:0 auto;padding:54px 42px 100px}
+.title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34;text-transform:uppercase;margin-bottom:14px}
+.subtitle{font-size:14px;line-height:1.8;color:#8f7643;max-width:680px;margin-bottom:40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px}
+.card{
+  border:1px solid rgba(166,127,52,.16);
+  background:rgba(255,255,255,.20);
+  overflow:hidden;
+  text-decoration:none;
+  color:inherit;
+  display:block;
+  transition:.3s ease;
+}
+.card:hover{transform:translateY(-4px);border-color:rgba(166,127,52,.36)}
+.card-media{height:200px;background:rgba(166,127,52,.08);position:relative}
+.card-media img{width:100%;height:100%;object-fit:cover;display:block}
+.card-placeholder{height:100%;display:flex;align-items:center;justify-content:center;color:#a67f34;font-size:11px;letter-spacing:.18em;text-transform:uppercase}
+.status-tag{position:absolute;top:12px;left:12px;padding:6px 10px;background:rgba(244,236,223,.90);border:1px solid rgba(166,127,52,.28);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#a67f34}
+.card-body{padding:20px}
+.card-cat{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#9a793c;margin-bottom:8px}
+.card-title{font-size:18px;font-weight:300;color:#a67f34;line-height:1.35;margin-bottom:8px}
+.card-loc{font-size:12.5px;color:#8f7643}
+.remove-btn{
+  margin-top:14px;
+  width:100%;
+  padding:10px;
+  border:1px solid rgba(156,47,47,.30);
+  background:rgba(255,255,255,.30);
+  color:#9c2f2f;
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  cursor:pointer;
+  font-family:inherit;
+}
+.empty{
+  padding:70px 20px;
+  text-align:center;
+  border:1px solid rgba(166,127,52,.16);
+  background:rgba(255,255,255,.14);
+  color:#8f7643;
+  line-height:1.8;
+}
+.empty a{color:#a67f34}
+.status{min-height:20px;margin-bottom:20px;font-size:13px}
+.error{color:#9c2f2f}
+@media(max-width:720px){
+  .header{padding:26px 22px;flex-direction:column;gap:16px}
+  .container{padding:38px 22px 78px}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="index.html" class="logo">IMMONOVA</a>
+  <nav class="nav">
+    <a href="index.html">Home</a>
+    <a href="opportunities.html">Opportunities</a>
+    <a href="favorites.html">Preferiti</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="title">I miei Preferiti</div>
+  <p class="subtitle">Gli immobili che hai salvato. Riceverai una notifica se cambia lo stato o il prezzo di uno di questi.</p>
+  <div id="status" class="status"></div>
+  <div id="favoritesGrid" class="grid"><div class="empty">Caricamento preferiti...</div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var grid = document.getElementById("favoritesGrid");
+var statusBox = document.getElementById("status");
+
+function escapeHTML(v){
+  return String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+function setStatus(msg, type){
+  statusBox.textContent = msg || "";
+  statusBox.className = "status " + (type || "");
+}
+
+function commercialLabel(status){
+  var map = { available:"Disponibile", reserved:"Riservata", under_negotiation:"In trattativa", sold:"Venduta" };
+  return map[status] || "Disponibile";
+}
+
+async function resolveSubscriptionId(){
+  var cached = null;
+  try{ cached = localStorage.getItem("immonova_subscription_id"); }catch(e){}
+  if(cached) return cached;
+
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+
+  try{
+    var registration = await navigator.serviceWorker.getRegistration();
+    if(!registration) return null;
+    var subscription = await registration.pushManager.getSubscription();
+    if(!subscription) return null;
+
+    var rpcRes = await client.rpc("immonova_get_subscription_id", { p_endpoint: subscription.endpoint });
+    if(!rpcRes.error && rpcRes.data){
+      try{ localStorage.setItem("immonova_subscription_id", rpcRes.data); }catch(e){}
+      return rpcRes.data;
+    }
+  }catch(e){
+    console.warn(e);
+  }
+  return null;
+}
+
+async function removeFavorite(subscriptionId, opportunityId){
+  await client.from("immonova_favorite_opportunities").delete()
+    .eq("subscription_id", subscriptionId)
+    .eq("opportunity_id", opportunityId);
+  await load();
+}
+window.removeFavorite = removeFavorite;
+
+async function load(){
+  var subscriptionId = await resolveSubscriptionId();
+
+  if(!subscriptionId){
+    grid.innerHTML = '<div class="empty">Non hai ancora attivato le notifiche su questo dispositivo, quindi non risultano preferiti salvati qui.<br>Apri l\'app dalla schermata Home e attiva le notifiche per iniziare a salvare gli immobili che ti interessano.</div>';
+    return;
+  }
+
+  var favResult = await client
+    .from("immonova_favorite_opportunities")
+    .select("opportunity_id")
+    .eq("subscription_id", subscriptionId)
+    .order("created_at", { ascending:false });
+
+  if(favResult.error){
+    setStatus("Errore caricamento preferiti: " + favResult.error.message, "error");
+    grid.innerHTML = "";
+    return;
+  }
+
+  var ids = (favResult.data || []).map(function(r){ return r.opportunity_id; });
+
+  if(!ids.length){
+    grid.innerHTML = '<div class="empty">Non hai ancora salvato nessun immobile.<br>Vai su <a href="opportunities.html">Opportunities</a> e tocca "Salva tra i preferiti" su quelli che ti interessano.</div>';
+    return;
+  }
+
+  var oppResult = await client
+    .from("opportunities")
+    .select("id,title,category,location,cover_image,commercial_status,published")
+    .in("id", ids);
+
+  if(oppResult.error){
+    setStatus("Errore caricamento immobili: " + oppResult.error.message, "error");
+    grid.innerHTML = "";
+    return;
+  }
+
+  var opportunities = (oppResult.data || []).filter(function(o){ return o.published || o.commercial_status === "sold"; });
+
+  if(!opportunities.length){
+    grid.innerHTML = '<div class="empty">Gli immobili che avevi salvato non sono più disponibili pubblicamente.</div>';
+    return;
+  }
+
+  grid.innerHTML = opportunities.map(function(o){
+    var media = o.cover_image
+      ? '<img src="' + escapeHTML(o.cover_image) + '" alt="' + escapeHTML(o.title) + '">'
+      : '<div class="card-placeholder">IMMONOVA</div>';
+
+    return '' +
+      '<div class="card">' +
+        '<a href="opportunity.html?id=' + encodeURIComponent(o.id) + '" style="text-decoration:none;color:inherit">' +
+          '<div class="card-media">' + media + '<div class="status-tag">' + escapeHTML(commercialLabel(o.commercial_status)) + '</div></div>' +
+          '<div class="card-body">' +
+            '<div class="card-cat">' + escapeHTML(o.category || "") + '</div>' +
+            '<div class="card-title">' + escapeHTML(o.title || "") + '</div>' +
+            '<div class="card-loc">' + escapeHTML(o.location || "") + '</div>' +
+          '</div>' +
+        '</a>' +
+        '<div style="padding:0 20px 20px">' +
+          '<button type="button" class="remove-btn" onclick="removeFavorite(\'' + escapeHTML(subscriptionId) + '\',' + o.id + ')">Rimuovi dai preferiti</button>' +
+        '</div>' +
+      '</div>';
+  }).join("");
+}
+
+load();
+</script>
+
+</body>
+</html>
