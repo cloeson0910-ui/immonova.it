@@ -715,7 +715,7 @@ const UI_TRANSLATIONS = {
     unavailable:"Opportunità non disponibile.",
     investment_opportunity:"Opportunità di investimento",
     save_favorite:"Salva tra i preferiti", saved_favorite:"Salvato tra i preferiti",
-    favorite_requires_notifications:"Per salvare i preferiti e ricevere aggiornamenti devi prima attivare le notifiche. Vuoi farlo ora?",
+    favorite_requires_account:"Per salvare i preferiti devi avere un account IMMONOVA (gratuito, un minuto per registrarsi). Vuoi registrarti ora?",
     private_off_market:"Questa è un'opportunità privata off-market. Le informazioni dettagliate e il dossier di investimento sono disponibili solo dopo qualificazione, accettazione NDA e approvazione manuale da parte di IMMONOVA.",
     available:"Disponibile",
     under_negotiation:"In trattativa",
@@ -808,7 +808,7 @@ const UI_TRANSLATIONS = {
     unavailable:"Opportunity unavailable.",
     investment_opportunity:"Investment Opportunity",
     save_favorite:"Save to favorites", saved_favorite:"Saved to favorites",
-    favorite_requires_notifications:"To save favorites and receive updates you need to enable notifications first. Do it now?",
+    favorite_requires_account:"To save favorites you need a free IMMONOVA account (takes a minute to create). Register now?",
     private_off_market:"This is a private off-market opportunity. Detailed information and the investment dossier are available only after qualification, NDA acceptance and manual approval by IMMONOVA.",
     available:"Available",
     under_negotiation:"Under Negotiation",
@@ -1344,43 +1344,20 @@ async function renderOpportunity(data){
   initFavoriteButton(data.id);
 }
 
-/* ---- Preferiti (collegati alla sottoscrizione push, sistema anonimo senza login) ---- */
-async function resolveSubscriptionId(){
-  var cached = null;
-  try{ cached = localStorage.getItem("immonova_subscription_id"); }catch(e){}
-  if(cached) return cached;
-
-  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
-
-  try{
-    var registration = await navigator.serviceWorker.getRegistration();
-    if(!registration) return null;
-    var subscription = await registration.pushManager.getSubscription();
-    if(!subscription) return null;
-
-    var rpcRes = await client.rpc("immonova_get_subscription_id", { p_endpoint: subscription.endpoint });
-    if(!rpcRes.error && rpcRes.data){
-      try{ localStorage.setItem("immonova_subscription_id", rpcRes.data); }catch(e){}
-      return rpcRes.data;
-    }
-  }catch(e){
-    console.warn("Sottoscrizione push non risolvibile:", e);
-  }
-  return null;
-}
-
+/* ---- Preferiti (collegati all'account, richiede login/registrazione -- funziona anche da PC) ---- */
 async function initFavoriteButton(opportunityId){
   var btn = document.getElementById("favoriteBtn");
   if(!btn) return;
 
-  var subscriptionId = await resolveSubscriptionId();
+  var sessionRes = await client.auth.getSession();
+  var currentUser = sessionRes.data.session ? sessionRes.data.session.user : null;
   var isFavorite = false;
 
-  if(subscriptionId){
+  if(currentUser){
     var checkRes = await client
       .from("immonova_favorite_opportunities")
       .select("id")
-      .eq("subscription_id", subscriptionId)
+      .eq("account_id", currentUser.id)
       .eq("opportunity_id", opportunityId)
       .maybeSingle();
     isFavorite = !!(checkRes.data && checkRes.data.id);
@@ -1390,12 +1367,15 @@ async function initFavoriteButton(opportunityId){
 
   btn.addEventListener("click", async function(){
     btn.disabled = true;
-    var currentSubscriptionId = await resolveSubscriptionId();
+    var sessionCheck = await client.auth.getSession();
+    var user = sessionCheck.data.session ? sessionCheck.data.session.user : null;
 
-    if(!currentSubscriptionId){
+    if(!user){
       btn.disabled = false;
-      var goToNotifications = confirm(dict("favorite_requires_notifications"));
-      if(goToNotifications) window.location.href = "/notifications-consent.html";
+      var goToAccount = confirm(dict("favorite_requires_account"));
+      if(goToAccount){
+        window.location.href = "/signup.html?redirect=" + encodeURIComponent(window.location.pathname + window.location.search);
+      }
       return;
     }
 
@@ -1405,13 +1385,13 @@ async function initFavoriteButton(opportunityId){
       await client
         .from("immonova_favorite_opportunities")
         .delete()
-        .eq("subscription_id", currentSubscriptionId)
+        .eq("account_id", user.id)
         .eq("opportunity_id", opportunityId);
       updateFavoriteButtonUI(false);
     }else{
       await client
         .from("immonova_favorite_opportunities")
-        .insert({ subscription_id: currentSubscriptionId, opportunity_id: opportunityId });
+        .insert({ account_id: user.id, opportunity_id: opportunityId });
       updateFavoriteButtonUI(true);
     }
 

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registrati | IMMONOVA</title>
+<meta name="robots" content="noindex" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/apple-touch-icon-v2.png" />
+<meta name="theme-color" content="#a67f34" />
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430;display:flex;align-items:center;justify-content:center;padding:32px}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.30}
+.card{max-width:420px;width:100%;background:rgba(255,255,255,.5);border:1px solid rgba(166,127,52,.22);padding:44px 34px;box-shadow:0 24px 70px rgba(127,100,48,.10)}
+.logo{font-size:22px;letter-spacing:.35em;color:#a67f34;font-weight:300;text-align:center;margin-bottom:6px}
+.brand-sub{font-size:9px;letter-spacing:.22em;color:#a58139;text-transform:uppercase;text-align:center;margin-bottom:30px}
+h1{font-size:19px;font-weight:500;color:#5c4a20;margin-bottom:22px;text-align:center}
+.field{margin-bottom:16px}
+label{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#8f7643;margin-bottom:7px}
+input{width:100%;padding:13px 14px;border:1px solid rgba(166,127,52,.30);background:rgba(255,255,255,.55);color:#5c4a20;font-size:14px;font-family:inherit;outline:none}
+button{width:100%;margin-top:10px;padding:14px;border:1px solid #a67f34;background:#a67f34;color:#fff;text-transform:uppercase;font-size:12px;letter-spacing:.16em;cursor:pointer;font-family:inherit}
+button:disabled{opacity:.55;cursor:not-allowed}
+.status{margin-top:16px;min-height:20px;font-size:12.5px;line-height:1.6}
+.error{color:#9c2f2f}
+.success{color:#4f7f45}
+.alt{margin-top:20px;text-align:center;font-size:12.5px;color:#8f7643}
+.alt a{color:#a67f34}
+</style>
+</head>
+
+<body>
+<div class="card">
+  <div class="logo">IMMONOVA</div>
+  <div class="brand-sub">Off Market • Consulting</div>
+  <h1>Crea il tuo account</h1>
+
+  <form id="signupForm">
+    <div class="field"><label for="fullName">Nome e cognome</label><input type="text" id="fullName" required></div>
+    <div class="field"><label for="email">Email</label><input type="email" id="email" required></div>
+    <div class="field"><label for="password">Password</label><input type="password" id="password" minlength="8" required></div>
+    <button type="submit" id="submitBtn">Registrati</button>
+  </form>
+
+  <div id="status" class="status"></div>
+  <div class="alt">Hai già un account? <a href="signin.html">Accedi</a></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var form = document.getElementById("signupForm");
+var statusBox = document.getElementById("status");
+var submitBtn = document.getElementById("submitBtn");
+
+var params = new URLSearchParams(window.location.search);
+var redirectTo = params.get("redirect") || "favorites.html";
+
+function setStatus(msg, type){
+  statusBox.textContent = msg || "";
+  statusBox.className = "status " + (type || "");
+}
+
+form.addEventListener("submit", async function(e){
+  e.preventDefault();
+
+  var fullName = document.getElementById("fullName").value.trim();
+  var email = document.getElementById("email").value.trim();
+  var password = document.getElementById("password").value;
+
+  submitBtn.disabled = true;
+  setStatus("Registrazione in corso...", "");
+
+  try{
+    var signUpRes = await client.auth.signUp({ email: email, password: password });
+    if(signUpRes.error) throw signUpRes.error;
+
+    var userId = signUpRes.data.user ? signUpRes.data.user.id : null;
+
+    if(userId){
+      var insertRes = await client.from("immonova_public_accounts").insert({
+        id: userId,
+        email: email,
+        full_name: fullName
+      });
+      if(insertRes.error) console.warn("Profilo account non salvato (non bloccante):", insertRes.error.message);
+    }
+
+    if(signUpRes.data.session){
+      setStatus("Registrazione completata. Reindirizzamento...", "success");
+      setTimeout(function(){ window.location.href = redirectTo; }, 900);
+    }else{
+      setStatus("Registrazione completata. Controlla la tua email per confermare l'account prima di accedere.", "success");
+    }
+  }catch(error){
+    setStatus(error.message || "Errore durante la registrazione.", "error");
+  }
+
+  submitBtn.disabled = false;
+});
+</script>
+</body>
+</html>

@@ -58,10 +58,27 @@ body::after{
   text-decoration:none;
 }
 .nav{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
-.nav a{text-decoration:none;color:#a67f34;font-size:11px;letter-spacing:.20em;text-transform:uppercase}
+.nav a, .nav button{text-decoration:none;color:#a67f34;font-size:11px;letter-spacing:.20em;text-transform:uppercase;background:none;border:none;cursor:pointer;font-family:inherit}
 .container{max-width:1200px;margin:0 auto;padding:54px 42px 100px}
 .title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34;text-transform:uppercase;margin-bottom:14px}
-.subtitle{font-size:14px;line-height:1.8;color:#8f7643;max-width:680px;margin-bottom:40px}
+.subtitle{font-size:14px;line-height:1.8;color:#8f7643;max-width:680px;margin-bottom:30px}
+
+.notify-box{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+  padding:20px 24px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.20);
+  margin-bottom:36px;
+}
+.notify-text{font-size:13px;line-height:1.7;color:#7f6430;max-width:600px}
+.notify-btn{padding:12px 18px;border:1px solid rgba(166,127,52,.40);background:#a67f34;color:#fff;font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;font-family:inherit;white-space:nowrap}
+.notify-btn:disabled{opacity:.6;cursor:not-allowed}
+.notify-btn.secondary{background:transparent;color:#a67f34}
+
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px}
 .card{
   border:1px solid rgba(166,127,52,.16);
@@ -105,6 +122,22 @@ body::after{
 .empty a{color:#a67f34}
 .status{min-height:20px;margin-bottom:20px;font-size:13px}
 .error{color:#9c2f2f}
+.success{color:#4f7f45}
+
+.login-wall{
+  max-width:520px;
+  margin:60px auto;
+  padding:44px;
+  text-align:center;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.24);
+}
+.login-wall h2{font-size:22px;font-weight:300;color:#a67f34;margin-bottom:16px}
+.login-wall p{font-size:14px;line-height:1.8;color:#8f7643;margin-bottom:26px}
+.login-wall .actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.login-wall a{padding:13px 22px;border:1px solid rgba(166,127,52,.40);text-decoration:none;color:#a67f34;font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+.login-wall a.primary{background:#a67f34;color:#fff}
+
 @media(max-width:720px){
   .header{padding:26px 22px;flex-direction:column;gap:16px}
   .container{padding:38px 22px 78px}
@@ -116,7 +149,7 @@ body::after{
 
 <header class="header">
   <a href="index.html" class="logo">IMMONOVA</a>
-  <nav class="nav">
+  <nav class="nav" id="navArea">
     <a href="index.html">Home</a>
     <a href="opportunities.html">Opportunities</a>
     <a href="favorites.html">Preferiti</a>
@@ -125,17 +158,20 @@ body::after{
 
 <div class="container">
   <div class="title">I miei Preferiti</div>
-  <p class="subtitle">Gli immobili che hai salvato. Riceverai una notifica se cambia lo stato o il prezzo di uno di questi.</p>
+  <p class="subtitle">Gli immobili che hai salvato. Riceverai un aggiornamento se cambia lo stato o il prezzo di uno di questi.</p>
+
   <div id="status" class="status"></div>
-  <div id="favoritesGrid" class="grid"><div class="empty">Caricamento preferiti...</div></div>
+  <div id="pageBody"><div class="empty">Caricamento...</div></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
 <script>
+var VAPID_PUBLIC_KEY = "BKSNGyB_2rF1krXLKppDB022aJasOv2fIeogcpZykaMFOtXP4UAzMXgWpi7vBmSbkd3YCZ0s6hBO7GKtVDB8A7s";
 var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-var grid = document.getElementById("favoritesGrid");
+var pageBody = document.getElementById("pageBody");
 var statusBox = document.getElementById("status");
+var currentUser = null;
 
 function escapeHTML(v){
   return String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
@@ -144,68 +180,159 @@ function setStatus(msg, type){
   statusBox.textContent = msg || "";
   statusBox.className = "status " + (type || "");
 }
-
 function commercialLabel(status){
   var map = { available:"Disponibile", reserved:"Riservata", under_negotiation:"In trattativa", sold:"Venduta" };
   return map[status] || "Disponibile";
 }
-
-async function resolveSubscriptionId(){
-  var cached = null;
-  try{ cached = localStorage.getItem("immonova_subscription_id"); }catch(e){}
-  if(cached) return cached;
-
-  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
-
-  try{
-    var registration = await navigator.serviceWorker.getRegistration();
-    if(!registration) return null;
-    var subscription = await registration.pushManager.getSubscription();
-    if(!subscription) return null;
-
-    var rpcRes = await client.rpc("immonova_get_subscription_id", { p_endpoint: subscription.endpoint });
-    if(!rpcRes.error && rpcRes.data){
-      try{ localStorage.setItem("immonova_subscription_id", rpcRes.data); }catch(e){}
-      return rpcRes.data;
-    }
-  }catch(e){
-    console.warn(e);
-  }
-  return null;
+function urlBase64ToUint8Array(base64String){
+  var padding = "=".repeat((4 - base64String.length % 4) % 4);
+  var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  var rawData = window.atob(base64);
+  var outputArray = new Uint8Array(rawData.length);
+  for(var i = 0; i < rawData.length; ++i){ outputArray[i] = rawData.charCodeAt(i); }
+  return outputArray;
 }
 
-async function removeFavorite(subscriptionId, opportunityId){
+function renderLoginWall(){
+  pageBody.innerHTML =
+    '<div class="login-wall">' +
+      '<h2>Accedi per vedere i tuoi preferiti</h2>' +
+      '<p>I Preferiti sono collegati al tuo account, così puoi gestirli da qualsiasi dispositivo — telefono o PC. Se non hai ancora un account, la registrazione richiede solo un minuto.</p>' +
+      '<div class="actions">' +
+        '<a href="signup.html?redirect=favorites.html" class="primary">Registrati</a>' +
+        '<a href="signin.html?redirect=favorites.html">Accedi</a>' +
+      '</div>' +
+    '</div>';
+}
+
+async function checkPushStatus(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return { supported:false };
+  try{
+    var registration = await navigator.serviceWorker.getRegistration();
+    if(!registration) return { supported:true, active:false };
+    var subscription = await registration.pushManager.getSubscription();
+    return { supported:true, active: !!subscription };
+  }catch(e){
+    return { supported:true, active:false };
+  }
+}
+
+async function enablePushForAccount(){
+  var btn = document.getElementById("enableNotifyBtn");
+  if(btn){ btn.disabled = true; }
+  setStatus("Attivazione notifiche in corso...", "");
+
+  try{
+    if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+      throw new Error("Questo browser non supporta le notifiche push.");
+    }
+
+    var permission = await Notification.requestPermission();
+    if(permission !== "granted") throw new Error("Permesso non concesso.");
+
+    await navigator.serviceWorker.register("/service-worker.js");
+    var registration = await navigator.serviceWorker.ready;
+
+    var subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+
+    var subJson = subscription.toJSON();
+
+    var insertRes = await client.from("immonova_push_subscriptions").insert({
+      endpoint: subJson.endpoint,
+      p256dh: subJson.keys.p256dh,
+      auth: subJson.keys.auth,
+      user_agent: navigator.userAgent,
+      account_id: currentUser.id
+    });
+
+    if(insertRes.error && String(insertRes.error.message||"").indexOf("duplicate") === -1){
+      throw insertRes.error;
+    }
+
+    // Se l'endpoint esisteva già (es. attivato in precedenza in modo anonimo), lo colleghiamo
+    // comunque al proprio account tramite la funzione sicura dedicata.
+    await client.rpc("immonova_link_subscription_to_account", { p_endpoint: subJson.endpoint });
+
+    await client.from("immonova_public_accounts").update({ notification_channel:"push" }).eq("id", currentUser.id);
+
+    setStatus("Notifiche attivate su questo dispositivo.", "success");
+    await load();
+  }catch(error){
+    setStatus(error.message || "Errore attivazione notifiche.", "error");
+    if(btn) btn.disabled = false;
+  }
+}
+
+async function removeFavorite(opportunityId){
   await client.from("immonova_favorite_opportunities").delete()
-    .eq("subscription_id", subscriptionId)
+    .eq("account_id", currentUser.id)
     .eq("opportunity_id", opportunityId);
   await load();
 }
 window.removeFavorite = removeFavorite;
 
 async function load(){
-  var subscriptionId = await resolveSubscriptionId();
+  var sessionRes = await client.auth.getSession();
+  currentUser = sessionRes.data.session ? sessionRes.data.session.user : null;
 
-  if(!subscriptionId){
-    grid.innerHTML = '<div class="empty">Non hai ancora attivato le notifiche su questo dispositivo, quindi non risultano preferiti salvati qui.<br>Apri l\'app dalla schermata Home e attiva le notifiche per iniziare a salvare gli immobili che ti interessano.</div>';
+  var navArea = document.getElementById("navArea");
+  if(currentUser){
+    navArea.innerHTML =
+      '<a href="index.html">Home</a>' +
+      '<a href="opportunities.html">Opportunities</a>' +
+      '<a href="favorites.html">Preferiti</a>' +
+      '<button type="button" id="logoutBtn">Esci</button>';
+    document.getElementById("logoutBtn").addEventListener("click", async function(){
+      await client.auth.signOut();
+      window.location.reload();
+    });
+  }
+
+  if(!currentUser){
+    renderLoginWall();
     return;
+  }
+
+  var pushStatus = await checkPushStatus();
+  var notifyBoxHtml = "";
+  if(pushStatus.supported && !pushStatus.active){
+    notifyBoxHtml =
+      '<div class="notify-box">' +
+        '<div class="notify-text">Attiva le notifiche su questo dispositivo per ricevere subito gli aggiornamenti sui tuoi preferiti. Se non le attivi, ti scriveremo comunque via email.</div>' +
+        '<button type="button" class="notify-btn" id="enableNotifyBtn">Attiva notifiche</button>' +
+      '</div>';
+  }else if(pushStatus.active){
+    notifyBoxHtml =
+      '<div class="notify-box">' +
+        '<div class="notify-text">Notifiche attive su questo dispositivo. Riceverai un avviso immediato per ogni aggiornamento sui tuoi preferiti.</div>' +
+      '</div>';
+  }else{
+    notifyBoxHtml =
+      '<div class="notify-box">' +
+        '<div class="notify-text">Questo browser non supporta le notifiche push: riceverai gli aggiornamenti sui tuoi preferiti via email.</div>' +
+      '</div>';
   }
 
   var favResult = await client
     .from("immonova_favorite_opportunities")
     .select("opportunity_id")
-    .eq("subscription_id", subscriptionId)
+    .eq("account_id", currentUser.id)
     .order("created_at", { ascending:false });
 
   if(favResult.error){
     setStatus("Errore caricamento preferiti: " + favResult.error.message, "error");
-    grid.innerHTML = "";
+    pageBody.innerHTML = notifyBoxHtml;
     return;
   }
 
   var ids = (favResult.data || []).map(function(r){ return r.opportunity_id; });
 
   if(!ids.length){
-    grid.innerHTML = '<div class="empty">Non hai ancora salvato nessun immobile.<br>Vai su <a href="opportunities.html">Opportunities</a> e tocca "Salva tra i preferiti" su quelli che ti interessano.</div>';
+    pageBody.innerHTML = notifyBoxHtml + '<div class="empty">Non hai ancora salvato nessun immobile.<br>Vai su <a href="opportunities.html">Opportunities</a> e tocca "Salva tra i preferiti" su quelli che ti interessano.</div>';
+    if(document.getElementById("enableNotifyBtn")) document.getElementById("enableNotifyBtn").addEventListener("click", enablePushForAccount);
     return;
   }
 
@@ -216,37 +343,38 @@ async function load(){
 
   if(oppResult.error){
     setStatus("Errore caricamento immobili: " + oppResult.error.message, "error");
-    grid.innerHTML = "";
+    pageBody.innerHTML = notifyBoxHtml;
     return;
   }
 
   var opportunities = (oppResult.data || []).filter(function(o){ return o.published || o.commercial_status === "sold"; });
 
-  if(!opportunities.length){
-    grid.innerHTML = '<div class="empty">Gli immobili che avevi salvato non sono più disponibili pubblicamente.</div>';
-    return;
-  }
+  var gridHtml = !opportunities.length
+    ? '<div class="empty">Gli immobili che avevi salvato non sono più disponibili pubblicamente.</div>'
+    : '<div class="grid">' + opportunities.map(function(o){
+        var media = o.cover_image
+          ? '<img src="' + escapeHTML(o.cover_image) + '" alt="' + escapeHTML(o.title) + '">'
+          : '<div class="card-placeholder">IMMONOVA</div>';
 
-  grid.innerHTML = opportunities.map(function(o){
-    var media = o.cover_image
-      ? '<img src="' + escapeHTML(o.cover_image) + '" alt="' + escapeHTML(o.title) + '">'
-      : '<div class="card-placeholder">IMMONOVA</div>';
+        return '' +
+          '<div class="card">' +
+            '<a href="opportunity.html?id=' + encodeURIComponent(o.id) + '" style="text-decoration:none;color:inherit">' +
+              '<div class="card-media">' + media + '<div class="status-tag">' + escapeHTML(commercialLabel(o.commercial_status)) + '</div></div>' +
+              '<div class="card-body">' +
+                '<div class="card-cat">' + escapeHTML(o.category || "") + '</div>' +
+                '<div class="card-title">' + escapeHTML(o.title || "") + '</div>' +
+                '<div class="card-loc">' + escapeHTML(o.location || "") + '</div>' +
+              '</div>' +
+            '</a>' +
+            '<div style="padding:0 20px 20px">' +
+              '<button type="button" class="remove-btn" onclick="removeFavorite(' + o.id + ')">Rimuovi dai preferiti</button>' +
+            '</div>' +
+          '</div>';
+      }).join("") + '</div>';
 
-    return '' +
-      '<div class="card">' +
-        '<a href="opportunity.html?id=' + encodeURIComponent(o.id) + '" style="text-decoration:none;color:inherit">' +
-          '<div class="card-media">' + media + '<div class="status-tag">' + escapeHTML(commercialLabel(o.commercial_status)) + '</div></div>' +
-          '<div class="card-body">' +
-            '<div class="card-cat">' + escapeHTML(o.category || "") + '</div>' +
-            '<div class="card-title">' + escapeHTML(o.title || "") + '</div>' +
-            '<div class="card-loc">' + escapeHTML(o.location || "") + '</div>' +
-          '</div>' +
-        '</a>' +
-        '<div style="padding:0 20px 20px">' +
-          '<button type="button" class="remove-btn" onclick="removeFavorite(\'' + escapeHTML(subscriptionId) + '\',' + o.id + ')">Rimuovi dai preferiti</button>' +
-        '</div>' +
-      '</div>';
-  }).join("");
+  pageBody.innerHTML = notifyBoxHtml + gridHtml;
+
+  if(document.getElementById("enableNotifyBtn")) document.getElementById("enableNotifyBtn").addEventListener("click", enablePushForAccount);
 }
 
 load();
