@@ -54,6 +54,10 @@
 <meta name="apple-mobile-web-app-title" content="IMMONOVA" />
 
 <script src="/js/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  var immonovaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+</script>
 <script>
 // Registra il service worker (necessario per installabilità + notifiche push)
 if ("serviceWorker" in navigator) {
@@ -422,25 +426,26 @@ body{
         </div>
       </div>
       <div class="ib-actions">
-        <button class="ib-btn ib-secondary" type="button" onclick="ImmonovaInstallBanner.goInstructions()">Continua senza lasciare dati</button>
-        <button class="ib-btn" type="button" onclick="ImmonovaInstallBanner.goForm()">Lascia i tuoi dati</button>
+        <button class="ib-btn ib-secondary" type="button" onclick="ImmonovaInstallBanner.goInstructions()">Continua senza account</button>
+        <button class="ib-btn" type="button" onclick="ImmonovaInstallBanner.goForm()">Crea il tuo account</button>
       </div>
     </div>
 
-    <!-- Stato 2: form facoltativo -->
+    <!-- Stato 2: creazione account -->
     <div id="ibStateForm" style="display:none">
-      <div class="ib-title" style="margin-bottom:14px">I tuoi dati (facoltativo)</div>
+      <div class="ib-title" style="margin-bottom:14px">Crea il tuo account</div>
       <div class="ib-field"><input type="text" id="ibNome" placeholder="Nome" /></div>
       <div class="ib-field"><input type="text" id="ibCognome" placeholder="Cognome" /></div>
       <div class="ib-field"><input type="email" id="ibEmail" placeholder="Email" /></div>
       <div class="ib-field"><input type="tel" id="ibTelefono" placeholder="Telefono" /></div>
+      <div class="ib-field"><input type="password" id="ibPassword" placeholder="Password (almeno 8 caratteri)" minlength="8" /></div>
       <label class="ib-privacy">
         <input type="checkbox" id="ibPrivacyCheck" />
         <span>Ho letto e accetto la <a href="/privacy.html" target="_blank">Privacy Policy</a> di IMMONOVA.</span>
       </label>
       <div class="ib-actions">
         <button class="ib-btn ib-secondary" type="button" onclick="ImmonovaInstallBanner.goInstructions()">Salta</button>
-        <button class="ib-btn" type="button" id="ibSubmitBtn" onclick="ImmonovaInstallBanner.submitLead()">Invia e continua</button>
+        <button class="ib-btn" type="button" id="ibSubmitBtn" onclick="ImmonovaInstallBanner.submitLead()">Crea account</button>
       </div>
       <div id="ibFormStatus" class="ib-status"></div>
     </div>
@@ -530,10 +535,15 @@ var ImmonovaInstallBanner = (function () {
     var cognome = document.getElementById("ibCognome").value.trim();
     var email = document.getElementById("ibEmail").value.trim();
     var telefono = document.getElementById("ibTelefono").value.trim();
+    var password = document.getElementById("ibPassword").value;
     var privacyChecked = document.getElementById("ibPrivacyCheck").checked;
 
-    if (!nome || !cognome || !email) {
-      setFormStatus("Compila almeno nome, cognome ed email.", "error");
+    if (!nome || !cognome || !email || !password) {
+      setFormStatus("Compila nome, cognome, email e password.", "error");
+      return;
+    }
+    if (password.length < 8) {
+      setFormStatus("La password deve avere almeno 8 caratteri.", "error");
       return;
     }
     if (!privacyChecked) {
@@ -543,46 +553,40 @@ var ImmonovaInstallBanner = (function () {
 
     var btn = document.getElementById("ibSubmitBtn");
     btn.disabled = true;
-    setFormStatus("Invio in corso...", "");
+    setFormStatus("Creazione account in corso...", "");
 
     try {
-      var insertRes = await fetch(SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/immonova_app_install_leads", {
-        method: "POST",
-        headers: {
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": "Bearer " + SUPABASE_ANON_KEY,
-          "Content-Type": "application/json",
-          "Prefer": "return=minimal"
-        },
-        body: JSON.stringify({
-          nome: nome,
-          cognome: cognome,
-          email: email,
-          telefono: telefono || null,
-          user_agent: navigator.userAgent
-        })
-      });
-
-      if (!insertRes.ok) {
-        var errText = await insertRes.text();
-        throw new Error(errText);
-      }
-
-      // Notifica email best-effort: se fallisce non blocca l'utente
-      fetch(SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/immonova-notify-app-lead", {
+      /* Account creato GIÀ CONFERMATO lato server (edge function con service role) --
+         nessuna email di verifica da aspettare, si accede subito con la password appena
+         scelta. Sostituisce il precedente inserimento nella tabella lead, che non creava
+         nessun accesso reale -- ora chi lascia i dati ottiene un vero account attivo. */
+      var createRes = await fetch(SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/immonova-create-account", {
         method: "POST",
         headers: {
           "apikey": SUPABASE_ANON_KEY,
           "Authorization": "Bearer " + SUPABASE_ANON_KEY,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ nome: nome, cognome: cognome, email: email, telefono: telefono })
-      }).catch(function () {});
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          full_name: nome + " " + cognome,
+          phone: telefono || null
+        })
+      });
 
-      setFormStatus("Grazie! Ecco come installare l'app.", "success");
+      var createData = await createRes.json();
+      if (!createRes.ok || !createData.ok) {
+        throw new Error(createData.error || "Errore durante la creazione dell'account.");
+      }
+
+      var signInRes = await immonovaClient.auth.signInWithPassword({ email: email, password: password });
+      if (signInRes.error) throw signInRes.error;
+
+      setFormStatus("Account creato. Ecco come installare l'app.", "success");
       setTimeout(goInstructions, 700);
     } catch (e) {
-      setFormStatus("Errore durante l'invio, riprova.", "error");
+      setFormStatus(e.message || "Errore durante la creazione dell'account, riprova.", "error");
       btn.disabled = false;
     }
   }

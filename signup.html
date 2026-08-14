@@ -41,12 +41,12 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <form id="signupForm">
     <div class="field"><label for="fullName">Nome e cognome</label><input type="text" id="fullName" required></div>
     <div class="field"><label for="email">Email</label><input type="email" id="email" required></div>
+    <div class="field"><label for="phone">Telefono (facoltativo)</label><input type="tel" id="phone"></div>
     <div class="field"><label for="password">Password</label><input type="password" id="password" minlength="8" required></div>
-    <button type="submit" id="submitBtn">Registrati</button>
+    <button type="submit" id="submitBtn">Crea account</button>
   </form>
 
   <div id="status" class="status"></div>
-  <button type="button" id="resendBtn" class="alt" style="display:none;background:none;border:none;text-decoration:underline;cursor:pointer;color:#a67f34;font-size:12.5px;font-family:inherit;padding:0">Non hai ricevuto l'email? Invia di nuovo</button>
   <div class="alt">Hai già un account? <a href="signin.html">Accedi</a></div>
 </div>
 
@@ -71,56 +71,40 @@ form.addEventListener("submit", async function(e){
 
   var fullName = document.getElementById("fullName").value.trim();
   var email = document.getElementById("email").value.trim();
+  var phone = document.getElementById("phone").value.trim();
   var password = document.getElementById("password").value;
 
   submitBtn.disabled = true;
-  setStatus("Registrazione in corso...", "");
+  setStatus("Creazione account in corso...", "");
 
   try{
-    /* is_public_account e full_name vengono letti dal trigger del database
-       (immonova_handle_new_public_account) che crea la riga in immonova_public_accounts --
-       non lo facciamo più qui lato client perché subito dopo signUp(), se l'email richiede
-       conferma, non esiste ancora una sessione attiva e l'inserimento fallirebbe (RLS). */
-    var signUpRes = await client.auth.signUp({
-      email: email,
-      password: password,
-      options: { data: { full_name: fullName, is_public_account: true } }
+    /* L'account viene creato GIÀ CONFERMATO lato server (edge function con service role) --
+       nessuna email di verifica da aspettare, si accede subito. Sostituisce il precedente
+       client.auth.signUp(), che richiedeva conferma email e generava tutti i problemi di
+       affidabilità email/doppio passaggio già affrontati in questo progetto. */
+    var res = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"") + "/functions/v1/immonova-create-account", {
+      method:"POST",
+      headers:{
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email:email, password:password, full_name:fullName, phone:phone || null })
     });
-    if(signUpRes.error) throw signUpRes.error;
 
-    if(signUpRes.data.session){
-      setStatus("Registrazione completata. Reindirizzamento...", "success");
-      setTimeout(function(){ window.location.href = redirectTo; }, 900);
-    }else{
-      setStatus("Registrazione completata. Controlla la tua email per confermare l'account prima di accedere.", "success");
-      var resendBtn = document.getElementById("resendBtn");
-      resendBtn.style.display = "";
-      resendBtn.dataset.email = email;
-    }
+    var data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "Errore durante la creazione dell'account.");
+
+    var signInRes = await client.auth.signInWithPassword({ email: email, password: password });
+    if(signInRes.error) throw signInRes.error;
+
+    setStatus("Account creato. Reindirizzamento...", "success");
+    setTimeout(function(){ window.location.href = redirectTo; }, 700);
   }catch(error){
     setStatus(error.message || "Errore durante la registrazione.", "error");
   }
 
   submitBtn.disabled = false;
-});
-
-document.getElementById("resendBtn").addEventListener("click", async function(){
-  var btn = this;
-  var email = btn.dataset.email;
-  if(!email) return;
-
-  btn.disabled = true;
-  setStatus("Invio email di conferma in corso...", "");
-
-  try{
-    var res = await client.auth.resend({ type: "signup", email: email });
-    if(res.error) throw res.error;
-    setStatus("Email di conferma inviata di nuovo. Controlla anche la cartella spam.", "success");
-  }catch(error){
-    setStatus(error.message || "Errore durante l'invio.", "error");
-  }
-
-  btn.disabled = false;
 });
 </script>
 </body>
