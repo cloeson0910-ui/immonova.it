@@ -348,6 +348,7 @@ text-align:right;
 <a href="favorites.html" class="back">Preferiti</a>
 <a href="events.html" class="back" data-i18n="nav.events">Events</a>
 <a href="join-us.html" class="back" data-i18n="nav.join_us">Lavora con Noi</a>
+<span id="navAccountArea" class="back"></span>
 <div class="language-select">
 <button type="button" class="language-button" id="languageButton">EN</button>
 <div class="language-menu" id="languageMenu">
@@ -808,12 +809,35 @@ async function loadSocialLinks(){
   }
 }
 
+async function renderAccountArea(){
+  var area = document.getElementById("navAccountArea");
+  if(!area) return;
+
+  var sessionRes = await client.auth.getSession();
+  var user = sessionRes.data.session ? sessionRes.data.session.user : null;
+
+  if(user){
+    area.innerHTML = '<span style="opacity:.85">' + user.email + '</span> &middot; <a href="#" id="navLogoutLink">Esci</a>';
+    var logoutLink = document.getElementById("navLogoutLink");
+    if(logoutLink){
+      logoutLink.addEventListener("click", async function(e){
+        e.preventDefault();
+        await client.auth.signOut();
+        window.location.reload();
+      });
+    }
+  }else{
+    area.innerHTML = '<a href="signin.html" class="back">Accedi</a>';
+  }
+}
+
 document.addEventListener("DOMContentLoaded", function(){
   setupLanguageMenu();
   applyLanguage(detectInitialLanguage());
   loadPublishedCounts();
   loadCategoryCoverImages();
   loadSocialLinks();
+  renderAccountArea();
 });
 </script>
 

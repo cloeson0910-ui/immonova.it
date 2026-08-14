@@ -672,6 +672,7 @@ html[dir="rtl"] .data-grid{direction:rtl}
     <a href="events.html" data-i18n="nav_events">Events</a>
     <a href="join-us.html" data-i18n="nav_join_us">Lavora con Noi</a>
     <a href="contact.html" data-i18n="nav_contact">Contact</a>
+    <span id="navAccountArea"></span>
   </nav>
 </header>
 
@@ -1715,8 +1716,31 @@ if(languageSelect){
   });
 }
 
+async function renderAccountArea(){
+  var area = document.getElementById("navAccountArea");
+  if(!area) return;
+
+  var sessionRes = await client.auth.getSession();
+  var user = sessionRes.data.session ? sessionRes.data.session.user : null;
+
+  if(user){
+    area.innerHTML = '<span style="opacity:.85">' + escapeHTML(user.email) + '</span> &middot; <a href="#" id="navLogoutLink">Esci</a>';
+    var logoutLink = document.getElementById("navLogoutLink");
+    if(logoutLink){
+      logoutLink.addEventListener("click", async function(e){
+        e.preventDefault();
+        await client.auth.signOut();
+        window.location.reload();
+      });
+    }
+  }else{
+    area.innerHTML = '<a href="signin.html">Accedi</a>';
+  }
+}
+
 try{
   applyStaticTranslations();
+  renderAccountArea();
   loadOpportunity().catch(function(error){
     console.error(error);
     pageContent.innerHTML = dict("unavailable") + (error && error.message ? "<br>" + escapeHTML(error.message) : "");
