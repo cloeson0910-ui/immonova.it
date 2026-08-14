@@ -1535,6 +1535,38 @@ async function loadOpportunity(){
   currentOpportunity = data;
   data.__dossier_data = await loadSafeDossierMetrics(id);
   await renderOpportunity(data);
+  logOpportunityView(data.id);
+}
+
+/* Registra una visualizzazione anonima di questa opportunità -- una riga per ogni caricamento
+   pagina (a differenza dell'installazione, tracciata una sola volta per dispositivo). Nessun
+   dato personale: solo paese (best-effort, MAI bloccante) e id opportunità. */
+async function logOpportunityView(opportunityId){
+  var country = null;
+  try{
+    var geoRes = await fetch("https://ipapi.co/json/");
+    if(geoRes.ok){
+      var geoData = await geoRes.json();
+      country = geoData && geoData.country_name ? geoData.country_name : null;
+    }
+  }catch(e){
+    console.warn("Geolocalizzazione paese non disponibile (non bloccante):", e);
+  }
+
+  try{
+    await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"") + "/rest/v1/immonova_opportunity_views", {
+      method:"POST",
+      headers:{
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ opportunity_id: opportunityId, country: country })
+    });
+  }catch(e){
+    console.warn("Registrazione visualizzazione non riuscita (non bloccante):", e);
+  }
 }
 
 async function loadSafeDossierMetrics(opportunityId){
