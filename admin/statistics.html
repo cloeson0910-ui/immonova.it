@@ -147,8 +147,8 @@ td{color:#7f6430}
   <div class="section-title">Account registrati</div>
   <div class="panel">
     <table>
-      <thead><tr><th>Nome</th><th>Email</th><th>Canale notifiche</th><th>Registrato il</th><th>Preferiti</th></tr></thead>
-      <tbody id="accountsBody"><tr class="empty-row"><td colspan="5">Caricamento...</td></tr></tbody>
+      <thead><tr><th>Nome</th><th>Email</th><th>Canale notifiche</th><th>Registrato il</th><th>Preferiti</th><th>Azioni</th></tr></thead>
+      <tbody id="accountsBody"><tr class="empty-row"><td colspan="6">Caricamento...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -383,8 +383,41 @@ async function loadAccounts(){
       '<td>' + escapeHTML(r.notification_channel === "push" ? "Push" : "Email") + '</td>' +
       '<td>' + escapeHTML(fmtDate(r.created_at)) + '</td>' +
       '<td>' + favoritesCellHTML(r.id) + '</td>' +
+      '<td><button type="button" class="delete-account-btn" onclick="deleteAccount(\'' + r.id + '\', \'' + escapeHTML((r.full_name || r.email || "").replace(/'/g,"")) + '\')" style="padding:8px 12px;border:1px solid rgba(156,47,47,.30);background:rgba(255,255,255,.30);color:#9c2f2f;font-size:9px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;font-family:inherit;white-space:nowrap">Elimina</button></td>' +
       '</tr>';
   }).join("");
+}
+
+async function deleteAccount(accountId, accountLabel){
+  var ok = confirm('Eliminare definitivamente l\\'account di "' + accountLabel + '"? Verranno rimossi login, profilo e preferiti. Operazione non reversibile.');
+  if(!ok) return;
+
+  setStatus("Eliminazione account in corso...", "");
+
+  try{
+    var sessionRes = await client.auth.getSession();
+    var token = sessionRes.data.session ? sessionRes.data.session.access_token : null;
+    if(!token) throw new Error("Sessione non valida.");
+
+    var res = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"") + "/functions/v1/immonova-delete-public-account", {
+      method:"POST",
+      headers:{
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ account_id: accountId })
+    });
+
+    var data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "Errore durante l'eliminazione.");
+
+    setStatus("Account eliminato correttamente.", "success");
+    await loadAccounts();
+    await loadSummaryCards();
+  }catch(error){
+    setStatus("Errore eliminazione account: " + (error.message || error), "error");
+  }
 }
 
 (async function init(){
