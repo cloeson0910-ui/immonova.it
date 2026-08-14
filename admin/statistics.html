@@ -137,8 +137,8 @@ td{color:#7f6430}
   <div class="section-title">Lead — chi ha lasciato i propri dati</div>
   <div class="panel">
     <table>
-      <thead><tr><th>Nome</th><th>Email</th><th>Telefono</th><th>Data</th></tr></thead>
-      <tbody id="leadsBody"><tr class="empty-row"><td colspan="4">Caricamento...</td></tr></tbody>
+      <thead><tr><th>Nome</th><th>Email</th><th>Telefono</th><th>Data</th><th>Azioni</th></tr></thead>
+      <tbody id="leadsBody"><tr class="empty-row"><td colspan="5">Caricamento...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -315,24 +315,44 @@ async function loadLeads(){
   var result = await client.from("immonova_app_install_leads").select("*").order("created_at", { ascending:false }).limit(200);
 
   if(result.error){
-    body.innerHTML = '<tr class="empty-row"><td colspan="4">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="5">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
     return;
   }
 
   var rows = result.data || [];
   if(!rows.length){
-    body.innerHTML = '<tr class="empty-row"><td colspan="4">Nessun lead registrato ancora.</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="5">Nessun lead registrato ancora.</td></tr>';
     return;
   }
 
   body.innerHTML = rows.map(function(r){
+    var label = ((r.nome || "") + " " + (r.cognome || "")).trim() || r.email || "questo lead";
     return '<tr>' +
       '<td>' + escapeHTML((r.nome || "") + " " + (r.cognome || "")) + '</td>' +
       '<td>' + escapeHTML(r.email || "-") + '</td>' +
       '<td>' + escapeHTML(r.telefono || "-") + '</td>' +
       '<td>' + escapeHTML(fmtDate(r.created_at)) + '</td>' +
+      '<td><button type="button" onclick="deleteLead(&quot;' + r.id + '&quot;, &quot;' + escapeHTML(label) + '&quot;)" style="padding:8px 12px;border:1px solid rgba(156,47,47,.30);background:rgba(255,255,255,.30);color:#9c2f2f;font-size:9px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;font-family:inherit;white-space:nowrap">Elimina</button></td>' +
       '</tr>';
   }).join("");
+}
+
+async function deleteLead(leadId, leadLabel){
+  var ok = confirm("Eliminare definitivamente il lead di " + leadLabel + "? Operazione non reversibile.");
+  if(!ok) return;
+
+  setStatus("Eliminazione lead in corso...", "");
+
+  var result = await client.from("immonova_app_install_leads").delete().eq("id", leadId);
+
+  if(result.error){
+    setStatus("Errore eliminazione lead: " + result.error.message, "error");
+    return;
+  }
+
+  setStatus("Lead eliminato correttamente.", "success");
+  await loadLeads();
+  await loadSummaryCards();
 }
 
 async function loadAccounts(){
