@@ -44,7 +44,7 @@ h1{font-size:32px;font-weight:200;letter-spacing:.08em;color:#a58139;margin-bott
 .status{margin-bottom:20px;font-size:13px}
 .error{color:#9c2f2f}
 
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:40px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:40px}
 .card{padding:22px;border:1px solid rgba(165,129,57,.20);background:rgba(255,255,255,.20);min-height:110px;display:flex;flex-direction:column;justify-content:space-between}
 .card-label{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#8f7643;line-height:1.5}
 .card-value{font-size:38px;font-weight:200;color:#a58139;margin-top:8px}
@@ -95,7 +95,7 @@ td{color:#7f6430}
   <a href="dashboard.html" class="logo">IMMONOVA</a>
   <nav class="nav">
     <a href="dashboard.html">Dashboard</a>
-    <a href="opportunities-pipeline.html">Gestisci Proposte</a>
+    <a href="opportunities.html">Gestisci Proposte</a>
   </nav>
 </header>
 
@@ -109,6 +109,7 @@ td{color:#7f6430}
   <div class="card"><div class="card-label">Installazioni registrate</div><div class="card-value" id="cardInstalls">—</div><div class="card-note">1 per dispositivo, anche senza notifiche attive</div></div>
   <div class="card"><div class="card-label">Lead con dati personali</div><div class="card-value" id="cardLeads">—</div><div class="card-note">nome, cognome, email da banner installazione</div></div>
   <div class="card"><div class="card-label">Visualizzazioni totali</div><div class="card-value" id="cardViews">—</div><div class="card-note">tutte le opportunità, tutti gli accessi</div></div>
+  <div class="card"><div class="card-label">Account registrati</div><div class="card-value" id="cardAccounts">—</div><div class="card-note">email+password, gestiscono i preferiti da qualsiasi dispositivo</div></div>
 </div>
 
 <div class="section">
@@ -138,6 +139,16 @@ td{color:#7f6430}
     <table>
       <thead><tr><th>Nome</th><th>Email</th><th>Telefono</th><th>Data</th></tr></thead>
       <tbody id="leadsBody"><tr class="empty-row"><td colspan="4">Caricamento...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Account registrati</div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>Nome</th><th>Email</th><th>Canale notifiche</th><th>Registrato il</th></tr></thead>
+      <tbody id="accountsBody"><tr class="empty-row"><td colspan="4">Caricamento...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -184,6 +195,9 @@ async function loadSummaryCards(){
 
   var viewsRes = await client.from("immonova_opportunity_views").select("id", { count:"exact", head:true });
   document.getElementById("cardViews").textContent = viewsRes.count != null ? viewsRes.count : "—";
+
+  var accountsRes = await client.from("immonova_public_accounts").select("id", { count:"exact", head:true });
+  document.getElementById("cardAccounts").textContent = accountsRes.count != null ? accountsRes.count : "—";
 }
 
 async function loadInstallsChart(){
@@ -321,6 +335,32 @@ async function loadLeads(){
   }).join("");
 }
 
+async function loadAccounts(){
+  var body = document.getElementById("accountsBody");
+
+  var result = await client.from("immonova_public_accounts").select("*").order("created_at", { ascending:false }).limit(200);
+
+  if(result.error){
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
+    return;
+  }
+
+  var rows = result.data || [];
+  if(!rows.length){
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">Nessun account registrato ancora.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rows.map(function(r){
+    return '<tr>' +
+      '<td>' + escapeHTML(r.full_name || "-") + '</td>' +
+      '<td>' + escapeHTML(r.email || "-") + '</td>' +
+      '<td>' + escapeHTML(r.notification_channel === "push" ? "Push" : "Email") + '</td>' +
+      '<td>' + escapeHTML(fmtDate(r.created_at)) + '</td>' +
+      '</tr>';
+  }).join("");
+}
+
 (async function init(){
   var ok = await checkAuth();
   if(!ok) return;
@@ -330,7 +370,8 @@ async function loadLeads(){
     loadInstallsChart(),
     loadCountryBreakdown(),
     loadTopViewed(),
-    loadLeads()
+    loadLeads(),
+    loadAccounts()
   ]);
 })();
 </script>
