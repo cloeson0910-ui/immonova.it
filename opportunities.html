@@ -134,6 +134,76 @@ font-family:inherit;
 border-bottom:0;
 }
 
+.account-select{
+position:relative;
+}
+
+.account-button{
+width:38px;
+height:38px;
+border-radius:50%;
+border:1px solid rgba(166,127,52,.34);
+background:rgba(166,127,52,.10);
+color:#a67f34;
+font-size:13px;
+letter-spacing:0;
+text-transform:uppercase;
+cursor:pointer;
+font-family:inherit;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:0;
+}
+
+.account-menu{
+position:absolute;
+right:0;
+top:calc(100% + 10px);
+min-width:220px;
+border:1px solid rgba(166,127,52,.24);
+background:rgba(244,236,223,.96);
+backdrop-filter:blur(14px);
+box-shadow:0 22px 60px rgba(127,100,48,.12);
+display:none;
+z-index:30;
+}
+
+.account-menu.open{
+display:block;
+}
+
+.account-menu .account-email{
+padding:14px;
+font-size:11px;
+color:#8f7643;
+border-bottom:1px solid rgba(166,127,52,.14);
+word-break:break-all;
+}
+
+.account-menu a,
+.account-menu button{
+display:block;
+width:100%;
+border:0;
+border-bottom:1px solid rgba(166,127,52,.12);
+background:transparent;
+color:#a67f34;
+padding:12px 14px;
+text-align:left;
+font-size:11px;
+letter-spacing:.13em;
+text-transform:uppercase;
+cursor:pointer;
+font-family:inherit;
+text-decoration:none;
+}
+
+.account-menu a:last-child,
+.account-menu button:last-child{
+border-bottom:0;
+}
+
 .language-menu button:hover,
 .language-menu button.active{
 background:rgba(166,127,52,.10);
@@ -345,10 +415,9 @@ text-align:right;
 <div class="header-right">
 <a href="index.html" class="back" data-i18n="nav.home">Home</a>
 <a href="success-stories.html" class="back" data-i18n="nav.success_stories">Success Stories</a>
-<a href="favorites.html" class="back">Preferiti</a>
 <a href="events.html" class="back" data-i18n="nav.events">Events</a>
 <a href="join-us.html" class="back" data-i18n="nav.join_us">Lavora con Noi</a>
-<span id="navAccountArea" class="back"></span>
+<div id="navAccountArea"></div>
 <div class="language-select">
 <button type="button" class="language-button" id="languageButton">EN</button>
 <div class="language-menu" id="languageMenu">
@@ -817,16 +886,33 @@ async function renderAccountArea(){
   var user = sessionRes.data.session ? sessionRes.data.session.user : null;
 
   if(user){
-    area.innerHTML = '<span style="opacity:.85">' + user.email + '</span> &middot; <a href="#" id="navLogoutLink">Esci</a>';
-    var logoutLink = document.getElementById("navLogoutLink");
-    if(logoutLink){
-      logoutLink.addEventListener("click", async function(e){
-        e.preventDefault();
-        await client.auth.signOut();
-        window.location.reload();
-      });
-    }
+    var initial = (user.email || "?").charAt(0).toUpperCase();
+    area.className = "account-select";
+    area.innerHTML =
+      '<button type="button" class="account-button" id="accountButton">' + initial + '</button>' +
+      '<div class="account-menu" id="accountMenu">' +
+        '<div class="account-email">' + user.email + '</div>' +
+        '<a href="favorites.html">I miei Preferiti</a>' +
+        '<button type="button" id="navLogoutLink">Esci</button>' +
+      '</div>';
+
+    var accountButton = document.getElementById("accountButton");
+    var accountMenu = document.getElementById("accountMenu");
+    accountButton.addEventListener("click", function(e){
+      e.stopPropagation();
+      accountMenu.classList.toggle("open");
+    });
+    document.addEventListener("click", function(){
+      accountMenu.classList.remove("open");
+    });
+
+    document.getElementById("navLogoutLink").addEventListener("click", async function(e){
+      e.preventDefault();
+      await client.auth.signOut();
+      window.location.reload();
+    });
   }else{
+    area.className = "";
     area.innerHTML = '<a href="signin.html" class="back">Accedi</a>';
   }
 }
