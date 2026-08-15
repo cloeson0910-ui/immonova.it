@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meta Ads Planner | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{text-decoration:none;color:#a67f34}
+.logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}
+.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:#a58139}
+.header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.header-actions a,.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.header-actions a:hover,.logout:hover{background:#a67f34;color:#fff}
+.container{max-width:1400px;margin:auto;padding:40px}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:12px}
+.title-row{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;flex-wrap:wrap;margin-bottom:18px}
+.title{font-size:38px;font-weight:200;letter-spacing:.05em;color:#a67f34}
+.subtitle{font-size:14px;line-height:1.8;color:#8f7643;max-width:820px;margin-bottom:10px}
+.status-banner{
+  margin:18px 0 30px;
+  padding:16px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(166,127,52,.08);
+  font-size:13px;
+  line-height:1.7;
+  color:#5a4a2a;
+}
+.status-banner strong{color:#a67f34}
+
+.new-btn{
+  padding:14px 22px;
+  border:1px solid #a67f34;
+  background:#a67f34;
+  color:#fffaf0;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+  text-decoration:none;
+  display:inline-block;
+}
+.new-btn:hover{background:#8f6c2c}
+
+.filters{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}
+.filters select,.filters input{
+  padding:10px 14px;
+  border:1px solid rgba(166,127,52,.28);
+  background:rgba(255,255,255,.30);
+  color:#7f6430;
+  font-size:12px;
+  font-family:inherit;
+}
+
+.campaign-group{margin-bottom:36px}
+.campaign-title{
+  font-size:19px;
+  font-weight:300;
+  color:#a67f34;
+  margin-bottom:4px;
+  padding-bottom:10px;
+  border-bottom:1px solid rgba(166,127,52,.18);
+}
+.campaign-meta{font-size:11px;color:#8f7643;margin-bottom:16px;letter-spacing:.05em}
+
+.variant-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
+.variant-card{
+  background:rgba(255,255,255,.24);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.18);
+  box-shadow:0 18px 50px rgba(127,100,48,.06);
+  padding:24px;
+  position:relative;
+}
+.variant-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.variant-label{
+  font-size:22px;
+  font-weight:300;
+  color:#a67f34;
+  border:1px solid rgba(166,127,52,.35);
+  width:40px;height:40px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.variant-info{flex:1}
+.variant-tested{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9a793c}
+.variant-headline{font-size:16px;color:#5a4a2a;margin-top:4px;font-weight:600}
+
+.status-pill{
+  font-size:9px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  padding:5px 10px;
+  border:1px solid;
+  white-space:nowrap;
+}
+.status-draft{color:#8f7643;border-color:rgba(143,118,67,.4);background:rgba(143,118,67,.08)}
+.status-ready_to_review{color:#a67f34;border-color:rgba(166,127,52,.5);background:rgba(166,127,52,.10)}
+.status-approved{color:#4f7f45;border-color:rgba(79,127,69,.4);background:rgba(79,127,69,.08)}
+.status-launched{color:#2f6d8f;border-color:rgba(47,109,143,.4);background:rgba(47,109,143,.08)}
+.status-paused{color:#9c2f2f;border-color:rgba(156,47,47,.4);background:rgba(156,47,47,.08)}
+.status-archived{color:#999;border-color:rgba(150,150,150,.4);background:rgba(150,150,150,.08)}
+
+.field-row{margin-bottom:10px;font-size:12.5px;line-height:1.6;color:#735f36}
+.field-label{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#a58139;margin-bottom:3px}
+.field-value{white-space:pre-wrap}
+.budget-line{font-size:13px;color:#5a4a2a;margin-top:14px;padding-top:12px;border-top:1px solid rgba(166,127,52,.12)}
+
+.card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.card-actions button{
+  flex:1;
+  min-width:90px;
+  padding:9px 10px;
+  border:1px solid rgba(166,127,52,.30);
+  background:rgba(255,255,255,.30);
+  color:#a67f34;
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  cursor:pointer;
+  font-family:inherit;
+}
+.card-actions button:hover{background:#a67f34;color:#fff}
+.card-actions .danger:hover{background:#9c2f2f;border-color:#9c2f2f}
+
+.empty{
+  padding:54px;
+  text-align:center;
+  color:#8f7643;
+  border:1px solid rgba(166,127,52,.16);
+  background:rgba(255,255,255,.18);
+  line-height:1.8;
+}
+
+/* Modal */
+.modal-overlay{
+  display:none;
+  position:fixed; inset:0; z-index:50;
+  background:rgba(60,45,21,.45);
+  align-items:flex-start;
+  justify-content:center;
+  padding:40px 20px;
+  overflow-y:auto;
+}
+.modal-overlay.open{display:flex}
+.modal{
+  width:100%;
+  max-width:760px;
+  background:#f4ecdf;
+  border:1px solid rgba(166,127,52,.30);
+  box-shadow:0 30px 90px rgba(60,45,21,.35);
+  padding:36px;
+}
+.modal-title{font-size:22px;font-weight:300;color:#a67f34;margin-bottom:22px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field.full{grid-column:1/-1}
+.field label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643}
+.field input,.field select,.field textarea{
+  padding:12px 14px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.35);
+  color:#5a4a2a;
+  font-size:13px;
+  font-family:inherit;
+  outline:none;
+}
+.field textarea{min-height:80px;resize:vertical;line-height:1.6}
+.field .hint{font-size:10.5px;color:#a58139;margin-top:2px}
+.modal-footer{display:flex;justify-content:space-between;align-items:center;margin-top:20px;flex-wrap:wrap;gap:12px}
+.progress-text{font-size:12.5px;min-height:18px}
+.progress-text.error{color:#9c2f2f}
+.progress-text.success{color:#4f7f45}
+.modal-buttons{display:flex;gap:10px}
+.btn-cancel,.btn-save{
+  padding:13px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.16em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.btn-cancel{background:rgba(255,255,255,.25);color:#a67f34}
+.btn-save{background:#a67f34;color:#fffaf0}
+.btn-save:disabled{opacity:.55;cursor:not-allowed}
+
+/* Export modal */
+.export-block{
+  background:rgba(255,255,255,.4);
+  border:1px solid rgba(166,127,52,.2);
+  padding:16px;
+  margin-bottom:12px;
+}
+.export-block .field-label{margin-bottom:6px}
+.export-block .export-value{
+  font-size:13px;
+  color:#3c2d15;
+  white-space:pre-wrap;
+  font-family:Menlo,Consolas,monospace;
+}
+.copy-btn{
+  margin-top:8px;
+  padding:6px 12px;
+  border:1px solid rgba(166,127,52,.35);
+  background:rgba(255,255,255,.3);
+  color:#a67f34;
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  cursor:pointer;
+  font-family:inherit;
+}
+.copy-btn:hover{background:#a67f34;color:#fff}
+
+.preview-frame-wrap{
+  border:1px solid rgba(166,127,52,.25);
+  background:#fff;
+  min-height:420px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:auto;
+}
+.preview-frame-wrap iframe{border:0;width:100%;min-height:420px}
+.meta-status-line{font-size:11px;color:#8f7643;margin-top:10px}
+.meta-status-line strong{color:#a67f34}
+.card-actions button.primary{background:#a67f34;color:#fff;border-color:#a67f34}
+.card-actions button.primary:hover{background:#8f6c2c}
+.card-actions button:disabled{opacity:.45;cursor:not-allowed}
+.card-actions button:disabled:hover{background:rgba(255,255,255,.30);color:#a67f34}
+
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+@media(max-width:700px){
+  .header{flex-direction:column;gap:18px}
+  .header-actions{justify-content:center}
+  .container{padding:28px 20px}
+  .modal{padding:24px}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+  <div class="header-actions">
+    <a href="dashboard.html">Dashboard</a>
+    <button class="logout" id="logoutBtn">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="kicker">Marketing</div>
+
+  <div class="title-row">
+    <div><h1 class="title">Meta Ads Planner</h1></div>
+    <button class="new-btn" id="newDraftBtn">+ Nuova variante</button>
+  </div>
+
+  <p class="subtitle">
+    Organizza e prepara le varianti A/B degli annunci (testi, immagini, budget, targeting) prima di caricarle su Meta Ads Manager.
+    Quando l'account pubblicitario sarà verificato, questa stessa pagina potrà pubblicare direttamente le varianti approvate.
+  </p>
+
+  <div class="status-banner">
+    <strong>Pubblicazione diretta collegata.</strong> Ogni scheda ha ora "Anteprima" (vedi l'annuncio esattamente come lo vedrebbe un cliente, prima di approvarlo), "Pubblica su Meta" (crea l'annuncio su Meta in stato <strong>pausa</strong>, mai visibile subito) e "Attiva" (il vero via libera, solo dopo revisione). Se l'Account Pubblicitario non è ancora verificato da Meta, questi pulsanti restituiranno un errore chiaro finché la verifica non è completa — puoi comunque usare "Esporta per Meta" per procedere manualmente nel frattempo.
+  </div>
+
+  <div class="filters">
+    <input type="text" id="filterCampaign" placeholder="Cerca per nome campagna...">
+    <select id="filterStatus">
+      <option value="">Tutti gli stati</option>
+      <option value="draft">Bozza</option>
+      <option value="ready_to_review">Pronta per revisione</option>
+      <option value="approved">Approvata</option>
+      <option value="launched">Lanciata</option>
+      <option value="paused">In pausa</option>
+      <option value="archived">Archiviata</option>
+    </select>
+  </div>
+
+  <div id="status" class="progress-text"></div>
+  <div id="groupsContainer"><div class="empty">Caricamento varianti...</div></div>
+
+</div>
+
+<!-- Modale creazione/modifica -->
+<div class="modal-overlay" id="draftModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Nuova variante</div>
+
+    <form id="draftForm">
+      <div class="grid-2">
+        <div class="field full">
+          <label>Nome campagna</label>
+          <input type="text" id="campaignName" placeholder="Es. IMMONOVA — Villa Tricase Porto" required>
+        </div>
+        <div class="field">
+          <label>Numero ciclo</label>
+          <input type="number" id="cycleNumber" min="1" value="1" required>
+        </div>
+        <div class="field">
+          <label>Etichetta variante</label>
+          <input type="text" id="variantLabel" placeholder="A, B, C..." maxlength="2" required>
+        </div>
+        <div class="field full">
+          <label>Variabile testata</label>
+          <input type="text" id="variableTested" placeholder="Es. Immagine di copertina, Testo, CTA">
+        </div>
+
+        <div class="field full">
+          <label>Titolo annuncio (headline)</label>
+          <input type="text" id="headline" placeholder="Max ~40 caratteri consigliati" maxlength="60">
+        </div>
+        <div class="field full">
+          <label>Testo principale</label>
+          <textarea id="primaryText" placeholder="Il testo che compare sopra l'immagine/video dell'annuncio"></textarea>
+        </div>
+        <div class="field full">
+          <label>Descrizione (facoltativa)</label>
+          <textarea id="description" placeholder="Riga descrittiva breve, mostrata sotto il titolo in alcuni posizionamenti"></textarea>
+        </div>
+
+        <div class="field">
+          <label>Call to action</label>
+          <select id="callToAction">
+            <option value="LEARN_MORE">Scopri di più</option>
+            <option value="CONTACT_US">Contattaci</option>
+            <option value="SIGN_UP">Registrati</option>
+            <option value="GET_QUOTE">Richiedi preventivo</option>
+            <option value="APPLY_NOW">Richiedi ora</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>URL di destinazione</label>
+          <input type="text" id="destinationUrl" placeholder="Es. opportunity.html?id=26&lang=it">
+        </div>
+
+        <div class="field full">
+          <label>Immagine (URL)</label>
+          <input type="text" id="imageUrl" placeholder="Link all'immagine scelta per l'annuncio">
+        </div>
+        <div class="field full">
+          <label>Note immagine</label>
+          <input type="text" id="imageNotes" placeholder="Es. foto esterna vista mare, formato quadrato 1:1">
+        </div>
+
+        <div class="field full">
+          <label>Note pubblico target</label>
+          <textarea id="targetAudienceNotes" placeholder="Es. Italia + Germania, 35-65 anni, interessi: real estate di lusso, investimenti"></textarea>
+        </div>
+
+        <div class="field">
+          <label>Budget giornaliero (€)</label>
+          <input type="number" id="dailyBudget" min="0" step="0.5" placeholder="Es. 12.50">
+        </div>
+        <div class="field">
+          <label>Posizionamenti</label>
+          <select id="placements">
+            <option value="automatic">Automatici (consigliato)</option>
+            <option value="facebook_only">Solo Facebook</option>
+            <option value="instagram_only">Solo Instagram</option>
+            <option value="manual">Manuale (vedi note)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Stato</label>
+          <select id="statusField">
+            <option value="draft">Bozza</option>
+            <option value="ready_to_review">Pronta per revisione</option>
+            <option value="approved">Approvata</option>
+            <option value="launched">Lanciata</option>
+            <option value="paused">In pausa</option>
+            <option value="archived">Archiviata</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>ID annuncio Meta (se già lanciato)</label>
+          <input type="text" id="metaAdId" placeholder="Facoltativo">
+        </div>
+
+        <div class="field full">
+          <label>Note</label>
+          <textarea id="notes" placeholder="Qualsiasi altra nota utile"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="progress-text" id="modalProgress"></div>
+        <div class="modal-buttons">
+          <button type="button" class="btn-cancel" id="cancelBtn">Annulla</button>
+          <button type="submit" class="btn-save" id="saveBtn">Salva variante</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modale export -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <div class="modal-title">Esporta per Meta Ads Manager</div>
+    <p style="font-size:12.5px;color:#8f7643;margin-bottom:18px;line-height:1.7">
+      Copia ogni campo direttamente negli spazi corrispondenti quando crei l'annuncio su Meta Ads Manager.
+    </p>
+    <div id="exportContent"></div>
+    <div class="modal-footer">
+      <div></div>
+      <div class="modal-buttons">
+        <button type="button" class="btn-cancel" id="closeExportBtn">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modale anteprima -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal">
+    <div class="modal-title">Anteprima annuncio</div>
+    <p style="font-size:12.5px;color:#8f7643;margin-bottom:18px;line-height:1.7">
+      Così lo vedrà chi scorre il feed — controlla testo, immagine e link prima di approvare.
+    </p>
+    <div class="preview-frame-wrap" id="previewFrameWrap">
+      <div style="padding:40px;color:#8f7643;font-size:13px">Generazione anteprima in corso...</div>
+    </div>
+    <div class="modal-footer">
+      <div class="progress-text" id="previewProgress"></div>
+      <div class="modal-buttons">
+        <button type="button" class="btn-cancel" id="closePreviewBtn">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const groupsContainer = document.getElementById("groupsContainer");
+const statusBox = document.getElementById("status");
+const draftModal = document.getElementById("draftModal");
+const exportModal = document.getElementById("exportModal");
+const draftForm = document.getElementById("draftForm");
+const modalTitle = document.getElementById("modalTitle");
+const modalProgress = document.getElementById("modalProgress");
+const saveBtn = document.getElementById("saveBtn");
+
+let allDrafts = [];
+let editingId = null;
+let currentUser = null;
+
+const STATUS_LABELS = {
+  draft: "Bozza",
+  ready_to_review: "Pronta per revisione",
+  approved: "Approvata",
+  launched: "Lanciata",
+  paused: "In pausa",
+  archived: "Archiviata"
+};
+
+const CTA_LABELS = {
+  LEARN_MORE: "Scopri di più",
+  CONTACT_US: "Contattaci",
+  SIGN_UP: "Registrati",
+  GET_QUOTE: "Richiedi preventivo",
+  APPLY_NOW: "Richiedi ora"
+};
+
+function esc(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setStatus(msg, type){
+  statusBox.className = "progress-text " + (type || "");
+  statusBox.textContent = msg || "";
+}
+
+function setModalStatus(msg, type){
+  modalProgress.className = "progress-text " + (type || "");
+  modalProgress.textContent = msg || "";
+}
+
+async function checkAuth(){
+  const { data:{ session } } = await client.auth.getSession();
+  if(!session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function val(id){ return document.getElementById(id).value.trim(); }
+function numVal(id){ const v = document.getElementById(id).value; return v === "" ? null : Number(v); }
+
+function resetForm(){
+  draftForm.reset();
+  document.getElementById("cycleNumber").value = 1;
+  editingId = null;
+  setModalStatus("", "");
+}
+
+function openNewModal(){
+  resetForm();
+  modalTitle.textContent = "Nuova variante";
+  draftModal.classList.add("open");
+}
+
+function openEditModal(draft){
+  editingId = draft.id;
+  modalTitle.textContent = "Modifica variante";
+  document.getElementById("campaignName").value = draft.campaign_name || "";
+  document.getElementById("cycleNumber").value = draft.cycle_number || 1;
+  document.getElementById("variantLabel").value = draft.variant_label || "";
+  document.getElementById("variableTested").value = draft.variable_tested || "";
+  document.getElementById("headline").value = draft.headline || "";
+  document.getElementById("primaryText").value = draft.primary_text || "";
+  document.getElementById("description").value = draft.description || "";
+  document.getElementById("callToAction").value = draft.call_to_action || "LEARN_MORE";
+  document.getElementById("destinationUrl").value = draft.destination_url || "";
+  document.getElementById("imageUrl").value = draft.image_url || "";
+  document.getElementById("imageNotes").value = draft.image_notes || "";
+  document.getElementById("targetAudienceNotes").value = draft.target_audience_notes || "";
+  document.getElementById("dailyBudget").value = draft.daily_budget_eur ?? "";
+  document.getElementById("placements").value = draft.placements || "automatic";
+  document.getElementById("statusField").value = draft.status || "draft";
+  document.getElementById("metaAdId").value = draft.meta_ad_id || "";
+  document.getElementById("notes").value = draft.notes || "";
+  setModalStatus("", "");
+  draftModal.classList.add("open");
+}
+
+function closeDraftModal(){
+  draftModal.classList.remove("open");
+}
+
+draftForm.addEventListener("submit", async function(e){
+  e.preventDefault();
+
+  const campaignName = val("campaignName");
+  const variantLabel = val("variantLabel");
+
+  if(!campaignName || !variantLabel){
+    setModalStatus("Nome campagna ed etichetta variante sono obbligatori.", "error");
+    return;
+  }
+
+  saveBtn.disabled = true;
+  setModalStatus("Salvataggio in corso...", "");
+
+  const payload = {
+    campaign_name: campaignName,
+    cycle_number: numVal("cycleNumber") || 1,
+    variant_label: variantLabel,
+    variable_tested: val("variableTested") || null,
+    headline: val("headline") || null,
+    primary_text: val("primaryText") || null,
+    description: val("description") || null,
+    call_to_action: val("callToAction") || "LEARN_MORE",
+    destination_url: val("destinationUrl") || null,
+    image_url: val("imageUrl") || null,
+    image_notes: val("imageNotes") || null,
+    target_audience_notes: val("targetAudienceNotes") || null,
+    daily_budget_eur: numVal("dailyBudget"),
+    placements: val("placements") || "automatic",
+    status: val("statusField") || "draft",
+    meta_ad_id: val("metaAdId") || null,
+    notes: val("notes") || null
+  };
+
+  try{
+    if(editingId){
+      const res = await client.from("immonova_ad_drafts").update(payload).eq("id", editingId);
+      if(res.error) throw res.error;
+    }else{
+      payload.created_by = currentUser.id;
+      const res = await client.from("immonova_ad_drafts").insert(payload);
+      if(res.error) throw res.error;
+    }
+
+    setModalStatus("Salvato.", "success");
+    setTimeout(function(){
+      closeDraftModal();
+      loadDrafts();
+    }, 500);
+  }catch(error){
+    console.error(error);
+    setModalStatus("Errore durante il salvataggio: " + (error.message || error), "error");
+  }
+
+  saveBtn.disabled = false;
+});
+
+async function deleteDraft(id){
+  try{
+    const res = await client.from("immonova_ad_drafts").delete().eq("id", id);
+    if(res.error) throw res.error;
+    loadDrafts();
+  }catch(error){
+    setStatus("Errore durante l'eliminazione: " + (error.message || error), "error");
+  }
+}
+
+function openExportModal(draft){
+  const content = document.getElementById("exportContent");
+
+  const blocks = [
+    ["Nome campagna", draft.campaign_name],
+    ["Titolo annuncio (headline)", draft.headline],
+    ["Testo principale", draft.primary_text],
+    ["Descrizione", draft.description],
+    ["Call to action", CTA_LABELS[draft.call_to_action] || draft.call_to_action],
+    ["URL di destinazione", draft.destination_url],
+    ["Immagine (URL)", draft.image_url],
+    ["Note pubblico target", draft.target_audience_notes],
+    ["Budget giornaliero", draft.daily_budget_eur != null ? draft.daily_budget_eur + " €/giorno" : ""],
+    ["Posizionamenti", draft.placements]
+  ].filter(([,v]) => v);
+
+  content.innerHTML = blocks.map(function([label, value], idx){
+    return '<div class="export-block">'
+      + '<div class="field-label">' + esc(label) + '</div>'
+      + '<div class="export-value" id="exportVal' + idx + '">' + esc(value) + '</div>'
+      + '<button type="button" class="copy-btn" data-idx="' + idx + '">Copia</button>'
+      + '</div>';
+  }).join("");
+
+  content.querySelectorAll(".copy-btn").forEach(function(btn){
+    btn.addEventListener("click", async function(){
+      const idx = btn.getAttribute("data-idx");
+      const text = document.getElementById("exportVal" + idx).textContent;
+      try{
+        await navigator.clipboard.writeText(text);
+        btn.textContent = "Copiato!";
+        setTimeout(function(){ btn.textContent = "Copia"; }, 1500);
+      }catch(e){
+        btn.textContent = "Seleziona e copia manualmente";
+      }
+    });
+  });
+
+  exportModal.classList.add("open");
+}
+
+function renderVariantCard(draft){
+  const statusClass = "status-" + (draft.status || "draft");
+  const statusLabel = STATUS_LABELS[draft.status] || draft.status;
+
+  let html = '<div class="variant-card">';
+  html += '<div class="variant-top">'
+    + '<div class="variant-label">' + esc(draft.variant_label || "?") + '</div>'
+    + '<div class="variant-info">'
+    + (draft.variable_tested ? '<div class="variant-tested">' + esc(draft.variable_tested) + '</div>' : '')
+    + (draft.headline ? '<div class="variant-headline">' + esc(draft.headline) + '</div>' : '')
+    + '</div>'
+    + '<span class="status-pill ' + statusClass + '">' + esc(statusLabel) + '</span>'
+    + '</div>';
+
+  if(draft.primary_text){
+    html += '<div class="field-row"><div class="field-label">Testo</div><div class="field-value">' + esc(draft.primary_text.length > 140 ? draft.primary_text.slice(0,140) + "…" : draft.primary_text) + '</div></div>';
+  }
+  if(draft.image_notes){
+    html += '<div class="field-row"><div class="field-label">Immagine</div><div class="field-value">' + esc(draft.image_notes) + '</div></div>';
+  }
+  if(draft.target_audience_notes){
+    html += '<div class="field-row"><div class="field-label">Pubblico</div><div class="field-value">' + esc(draft.target_audience_notes.length > 100 ? draft.target_audience_notes.slice(0,100) + "…" : draft.target_audience_notes) + '</div></div>';
+  }
+
+  if(draft.daily_budget_eur != null || draft.results_cost_per_dossier != null){
+    html += '<div class="budget-line">';
+    if(draft.daily_budget_eur != null) html += 'Budget: <strong>' + esc(draft.daily_budget_eur) + ' €/giorno</strong>';
+    if(draft.results_cost_per_dossier != null) html += (draft.daily_budget_eur != null ? ' · ' : '') + 'Costo/dossier: <strong>' + esc(draft.results_cost_per_dossier) + ' €</strong>';
+    html += '</div>';
+  }
+
+  const hasMetaAd = !!draft.meta_ad_id;
+  const isLaunched = draft.status === "launched";
+
+  html += '<div class="card-actions">'
+    + '<button type="button" class="edit-btn" data-id="' + draft.id + '">Modifica</button>'
+    + '<button type="button" class="export-btn" data-id="' + draft.id + '">Esporta per Meta</button>'
+    + '<button type="button" class="preview-btn" data-id="' + draft.id + '">Anteprima</button>'
+    + '<button type="button" class="primary publish-btn" data-id="' + draft.id + '"' + (hasMetaAd ? ' disabled' : '') + '>' + (hasMetaAd ? 'Già pubblicato' : 'Pubblica su Meta') + '</button>'
+    + (hasMetaAd && !isLaunched ? '<button type="button" class="primary activate-btn" data-id="' + draft.id + '">Attiva</button>' : '')
+    + (isLaunched ? '<button type="button" class="pause-btn" data-id="' + draft.id + '">Metti in pausa</button>' : '')
+    + '<button type="button" class="danger delete-btn" data-id="' + draft.id + '">Elimina</button>'
+    + '</div>';
+  html += '<div class="meta-status-line" id="metaStatusLine-' + draft.id + '"></div>';
+
+  html += '</div>';
+  return html;
+}
+
+function render(){
+  const campaignFilter = document.getElementById("filterCampaign").value.trim().toLowerCase();
+  const statusFilter = document.getElementById("filterStatus").value;
+
+  let data = allDrafts.filter(function(d){
+    if(campaignFilter && !(d.campaign_name || "").toLowerCase().includes(campaignFilter)) return false;
+    if(statusFilter && d.status !== statusFilter) return false;
+    return true;
+  });
+
+  if(!data.length){
+    groupsContainer.innerHTML = '<div class="empty">Nessuna variante trovata. Crea la prima con "+ Nuova variante".</div>';
+    return;
+  }
+
+  // Raggruppa per campagna, poi per ciclo
+  const byCampaign = {};
+  data.forEach(function(d){
+    const key = d.campaign_name || "Senza nome";
+    if(!byCampaign[key]) byCampaign[key] = [];
+    byCampaign[key].push(d);
+  });
+
+  let html = "";
+  Object.keys(byCampaign).sort().forEach(function(campaignName){
+    const items = byCampaign[campaignName].sort(function(a,b){
+      if(a.cycle_number !== b.cycle_number) return (b.cycle_number||0) - (a.cycle_number||0);
+      return (a.variant_label||"").localeCompare(b.variant_label||"");
+    });
+
+    const cycles = [...new Set(items.map(i => i.cycle_number))].sort((a,b) => b-a);
+
+    html += '<div class="campaign-group">'
+      + '<div class="campaign-title">' + esc(campaignName) + '</div>'
+      + '<div class="campaign-meta">' + items.length + ' variant' + (items.length === 1 ? 'e' : 'i') + ' · ' + cycles.length + ' cicl' + (cycles.length === 1 ? 'o' : 'i') + '</div>'
+      + '<div class="variant-grid">'
+      + items.map(renderVariantCard).join("")
+      + '</div>'
+      + '</div>';
+  });
+
+  groupsContainer.innerHTML = html;
+
+  groupsContainer.querySelectorAll(".edit-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      const draft = allDrafts.find(d => d.id === btn.getAttribute("data-id"));
+      if(draft) openEditModal(draft);
+    });
+  });
+  groupsContainer.querySelectorAll(".export-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      const draft = allDrafts.find(d => d.id === btn.getAttribute("data-id"));
+      if(draft) openExportModal(draft);
+    });
+  });
+  groupsContainer.querySelectorAll(".delete-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      if(confirm("Eliminare definitivamente questa variante?")){
+        deleteDraft(btn.getAttribute("data-id"));
+      }
+    });
+  });
+  groupsContainer.querySelectorAll(".preview-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      openPreviewModal(btn.getAttribute("data-id"));
+    });
+  });
+  groupsContainer.querySelectorAll(".publish-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      callMetaAction("publish", btn.getAttribute("data-id"), btn);
+    });
+  });
+  groupsContainer.querySelectorAll(".activate-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      if(confirm("Attivare davvero questo annuncio? Diventerà visibile al pubblico e inizierà a spendere budget reale.")){
+        callMetaAction("activate", btn.getAttribute("data-id"), btn);
+      }
+    });
+  });
+  groupsContainer.querySelectorAll(".pause-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      callMetaAction("pause", btn.getAttribute("data-id"), btn);
+    });
+  });
+}
+
+async function callMetaAction(action, draftId, btn){
+  const line = document.getElementById("metaStatusLine-" + draftId);
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Attendere...";
+  if(line){ line.innerHTML = ""; }
+
+  try{
+    const result = await client.functions.invoke("immonova-meta-ads-publish", {
+      body: { action: action, draft_id: draftId }
+    });
+
+    if(result.error){
+      const message = await extractEdgeFunctionErrorMessage(result.error);
+      throw new Error(message);
+    }
+    if(!result.data || result.data.ok !== true){
+      throw new Error((result.data && result.data.error) || "Operazione non riuscita.");
+    }
+
+    if(line){ line.innerHTML = '<strong>OK.</strong> ' + esc(result.data.message || "Operazione completata."); }
+    loadDrafts();
+  }catch(error){
+    console.error(error);
+    if(line){ line.innerHTML = '<strong style="color:#9c2f2f">Errore:</strong> ' + esc(error.message || String(error)); }
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text === "function"){
+      const raw = await error.context.text();
+      try{
+        const parsed = JSON.parse(raw);
+        return parsed.error || parsed.message || raw || error.message;
+      }catch(parseErr){
+        return raw || error.message;
+      }
+    }
+  }catch(e){}
+  return (error && error.message) || String(error);
+}
+
+async function openPreviewModal(draftId){
+  const draft = allDrafts.find(d => d.id === draftId);
+  if(!draft) return;
+
+  const wrap = document.getElementById("previewFrameWrap");
+  const progress = document.getElementById("previewProgress");
+  wrap.innerHTML = '<div style="padding:40px;color:#8f7643;font-size:13px">Generazione anteprima in corso...</div>';
+  progress.className = "progress-text";
+  progress.textContent = "";
+  document.getElementById("previewModal").classList.add("open");
+
+  try{
+    const result = await client.functions.invoke("immonova-meta-ads-publish", {
+      body: { action: "preview", draft_id: draftId }
+    });
+
+    if(result.error){
+      const message = await extractEdgeFunctionErrorMessage(result.error);
+      throw new Error(message);
+    }
+    if(!result.data || result.data.ok !== true || !result.data.previewHtml){
+      throw new Error((result.data && result.data.error) || "Anteprima non disponibile.");
+    }
+
+    wrap.innerHTML = result.data.previewHtml;
+  }catch(error){
+    console.error(error);
+    wrap.innerHTML = '';
+    progress.className = "progress-text error";
+    progress.textContent = "Errore: " + (error.message || error);
+  }
+}
+
+async function loadDrafts(){
+  try{
+    const { data, error } = await client
+      .from("immonova_ad_drafts")
+      .select("*")
+      .order("campaign_name", { ascending: true })
+      .order("cycle_number", { ascending: false })
+      .order("variant_label", { ascending: true });
+
+    if(error) throw error;
+
+    allDrafts = data || [];
+    setStatus("", "");
+    render();
+  }catch(error){
+    console.error(error);
+    setStatus("Errore caricamento varianti: " + (error.message || error), "error");
+    groupsContainer.innerHTML = '<div class="empty">Impossibile caricare le varianti in questo momento.</div>';
+  }
+}
+
+document.getElementById("newDraftBtn").addEventListener("click", openNewModal);
+document.getElementById("cancelBtn").addEventListener("click", closeDraftModal);
+document.getElementById("closeExportBtn").addEventListener("click", function(){
+  exportModal.classList.remove("open");
+});
+document.getElementById("closePreviewBtn").addEventListener("click", function(){
+  document.getElementById("previewModal").classList.remove("open");
+});
+document.getElementById("previewModal").addEventListener("click", function(e){
+  if(e.target === this) this.classList.remove("open");
+});
+draftModal.addEventListener("click", function(e){
+  if(e.target === draftModal) closeDraftModal();
+});
+exportModal.addEventListener("click", function(e){
+  if(e.target === exportModal) exportModal.classList.remove("open");
+});
+document.getElementById("filterCampaign").addEventListener("input", render);
+document.getElementById("filterStatus").addEventListener("change", render);
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  if(await checkAuth()){
+    await loadDrafts();
+  }
+})();
+</script>
+</body>
+</html>
