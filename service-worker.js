@@ -2,7 +2,7 @@
 // Due responsabilità: (1) rendere l'app installabile/utilizzabile offline in modo minimo,
 // (2) ricevere le notifiche push e mostrarle, gestire il tap sulla notifica.
 
-const CACHE_NAME = "immonova-shell-v2";
+const CACHE_NAME = "immonova-shell-v3";
 const SHELL_FILES = [
   "/index.html",
   "/manifest.json",
