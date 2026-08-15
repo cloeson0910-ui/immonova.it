@@ -178,19 +178,25 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 
 <div class="dossier-options-overlay" id="economicsOverlay">
   <div class="dossier-options-box">
-    <div class="dossier-options-title">Valore immobiliare di riferimento</div>
-    <p class="dossier-options-hint">Modifica manuale del range €/m² mostrato nella sezione "Valore immobiliare di riferimento" del dossier — chiamata gratuita, nessun richiamo al motore IA a pagamento. Lascia vuoto un campo per tornare a mostrare "non disponibile" per quel valore.</p>
+    <div class="dossier-options-title">Valori di mercato — modifica manuale</div>
+    <p class="dossier-options-hint">Modifica manuale dei valori mostrati nel dossier — chiamata gratuita, nessun richiamo al motore IA a pagamento. Lascia vuoto un campo per tornare a "non disponibile".</p>
 
-    <label for="ecoMinM2">Valore minimo (€/m²)</label>
+    <div style="margin-top:14px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a58139">Valore immobiliare di riferimento (€/m²)</div>
+    <label for="ecoMinM2">Valore minimo</label>
     <input type="number" id="ecoMinM2" step="1">
-
-    <label for="ecoMaxM2">Valore massimo (€/m²)</label>
+    <label for="ecoMaxM2">Valore massimo</label>
     <input type="number" id="ecoMaxM2" step="1">
 
-    <label for="ecoSourceName">Fonte (nome)</label>
-    <input type="text" id="ecoSourceName" placeholder="Es. Osservatorio Mercato Immobiliare, agenzia locale...">
+    <div style="margin-top:18px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a58139">Canone locazione commerciale (€/m²/mese)</div>
+    <label for="ecoRentMinM2">Canone minimo</label>
+    <input type="number" id="ecoRentMinM2" step="0.5">
+    <label for="ecoRentMaxM2">Canone massimo</label>
+    <input type="number" id="ecoRentMaxM2" step="0.5">
 
-    <label for="ecoSourceUrl">Fonte (link, facoltativo)</label>
+    <div style="margin-top:18px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a58139">Fonte (comune a entrambi)</div>
+    <label for="ecoSourceName">Nome fonte</label>
+    <input type="text" id="ecoSourceName" placeholder="Es. Osservatorio Mercato Immobiliare, agenzia locale...">
+    <label for="ecoSourceUrl">Link fonte (facoltativo)</label>
     <input type="text" id="ecoSourceUrl" placeholder="https://...">
 
     <div id="economicsStatus" style="margin-top:14px;min-height:18px;font-size:12.5px"></div>
@@ -220,7 +226,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
       </select>
       <button class="btn" id="loadBtn" type="button" data-i18n="btn_reload_data">Ricarica dati</button>
       <button class="btn secondary" id="refreshDossierBtn" type="button" data-i18n="btn_refresh_territorial">Aggiorna dati territoriali</button>
-      <button class="btn secondary" id="editRealEstateValueBtn" type="button" data-i18n="btn_edit_real_estate_value">Modifica valore immobiliare</button>
+      <button class="btn secondary" id="editRealEstateValueBtn" type="button" data-i18n="btn_edit_real_estate_value">Modifica valori di mercato</button>
       <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
       <a class="btn secondary" id="editLink" href="#" data-i18n="btn_back_to_proposal">Torna alla proposta</a>
     </div>
@@ -281,7 +287,7 @@ var CURRENT_LANG = "it";
 var T = {};
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Proposte", logout:"Logout",
-  btn_reload_data:"Ricarica dati", btn_refresh_territorial:"Aggiorna dati territoriali", btn_edit_real_estate_value:"Modifica valore immobiliare",
+  btn_reload_data:"Ricarica dati", btn_refresh_territorial:"Aggiorna dati territoriali", btn_edit_real_estate_value:"Modifica valori di mercato",
   btn_print_pdf:"Stampa / PDF", btn_back_to_proposal:"Torna alla proposta",
   loading_dossier:"Caricamento dossier...",
   min_by_car:" min in auto",
@@ -2300,10 +2306,14 @@ function openEconomicsPanel(){
 
   var minMetric=metricFromDossier("real_estate_market","residential_sale_per_m2_min");
   var maxMetric=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
-  var src=(minMetric||maxMetric||{}).source||{};
+  var rentMinMetric=metricFromDossier("commercial_rent","monthly_rent_per_m2_min");
+  var rentMaxMetric=metricFromDossier("commercial_rent","monthly_rent_per_m2_max");
+  var src=(minMetric||maxMetric||rentMinMetric||rentMaxMetric||{}).source||{};
 
   document.getElementById("ecoMinM2").value = minMetric ? minMetric.value : "";
   document.getElementById("ecoMaxM2").value = maxMetric ? maxMetric.value : "";
+  document.getElementById("ecoRentMinM2").value = rentMinMetric ? rentMinMetric.value : "";
+  document.getElementById("ecoRentMaxM2").value = rentMaxMetric ? rentMaxMetric.value : "";
   document.getElementById("ecoSourceName").value = src.provider_name || "";
   document.getElementById("ecoSourceUrl").value = src.source_url || "";
 
@@ -2331,6 +2341,8 @@ async function saveEconomicsPanel(){
   try{
     var minRaw=document.getElementById("ecoMinM2").value.trim();
     var maxRaw=document.getElementById("ecoMaxM2").value.trim();
+    var rentMinRaw=document.getElementById("ecoRentMinM2").value.trim();
+    var rentMaxRaw=document.getElementById("ecoRentMaxM2").value.trim();
     var sourceName=document.getElementById("ecoSourceName").value.trim();
     var sourceUrl=document.getElementById("ecoSourceUrl").value.trim();
 
@@ -2338,6 +2350,7 @@ async function saveEconomicsPanel(){
 
     if(!dossierData)dossierData={};
     if(!dossierData.real_estate_market)dossierData.real_estate_market={};
+    if(!dossierData.commercial_rent)dossierData.commercial_rent={};
 
     if(minRaw===""){
       delete dossierData.real_estate_market.residential_sale_per_m2_min;
@@ -2351,10 +2364,22 @@ async function saveEconomicsPanel(){
       dossierData.real_estate_market.residential_sale_per_m2_max={value:Number(maxRaw),unit:"€/m²",source:source};
     }
 
+    if(rentMinRaw===""){
+      delete dossierData.commercial_rent.monthly_rent_per_m2_min;
+    }else{
+      dossierData.commercial_rent.monthly_rent_per_m2_min={value:Number(rentMinRaw),unit:"€/m²/mese",source:source};
+    }
+
+    if(rentMaxRaw===""){
+      delete dossierData.commercial_rent.monthly_rent_per_m2_max;
+    }else{
+      dossierData.commercial_rent.monthly_rent_per_m2_max={value:Number(rentMaxRaw),unit:"€/m²/mese",source:source};
+    }
+
     await persistDossierData(dossierData);
     if(lastPersistError)throw new Error(lastPersistError);
 
-    setEconomicsStatus("Valore salvato. Aggiornamento anteprima dossier...","success");
+    setEconomicsStatus("Valori salvati. Aggiornamento anteprima dossier...","success");
     await renderBook();
     setTimeout(closeEconomicsPanel,900);
   }catch(e){
