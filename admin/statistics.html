@@ -107,7 +107,6 @@ td{color:#7f6430}
 <div class="cards" id="summaryCards">
   <div class="card"><div class="card-label">Notifiche push attive</div><div class="card-value" id="cardPushActive">—</div><div class="card-note">proxy più affidabile per "app installata e raggiungibile"</div></div>
   <div class="card"><div class="card-label">Installazioni registrate</div><div class="card-value" id="cardInstalls">—</div><div class="card-note">1 per dispositivo, anche senza notifiche attive</div></div>
-  <div class="card"><div class="card-label">Lead con dati personali</div><div class="card-value" id="cardLeads">—</div><div class="card-note">nome, cognome, email da banner installazione</div></div>
   <div class="card"><div class="card-label">Visualizzazioni totali</div><div class="card-value" id="cardViews">—</div><div class="card-note">tutte le opportunità, tutti gli accessi</div></div>
   <div class="card"><div class="card-label">Account registrati</div><div class="card-value" id="cardAccounts">—</div><div class="card-note">email+password, gestiscono i preferiti da qualsiasi dispositivo</div></div>
 </div>
@@ -134,21 +133,11 @@ td{color:#7f6430}
 </div>
 
 <div class="section">
-  <div class="section-title">Lead — chi ha lasciato i propri dati</div>
-  <div class="panel">
-    <table>
-      <thead><tr><th>Nome</th><th>Email</th><th>Telefono</th><th>Data</th><th>Azioni</th></tr></thead>
-      <tbody id="leadsBody"><tr class="empty-row"><td colspan="5">Caricamento...</td></tr></tbody>
-    </table>
-  </div>
-</div>
-
-<div class="section">
   <div class="section-title">Account registrati</div>
   <div class="panel">
     <table>
-      <thead><tr><th>Nome</th><th>Email</th><th>Canale notifiche</th><th>Registrato il</th><th>Preferiti</th><th>Azioni</th></tr></thead>
-      <tbody id="accountsBody"><tr class="empty-row"><td colspan="6">Caricamento...</td></tr></tbody>
+      <thead><tr><th>Nome</th><th>Email</th><th>Telefono</th><th>Canale notifiche</th><th>Registrato il</th><th>Preferiti</th><th>Azioni</th></tr></thead>
+      <tbody id="accountsBody"><tr class="empty-row"><td colspan="7">Caricamento...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -189,9 +178,6 @@ async function loadSummaryCards(){
 
   var installsRes = await client.from("immonova_app_installs").select("id", { count:"exact", head:true });
   document.getElementById("cardInstalls").textContent = installsRes.count != null ? installsRes.count : "—";
-
-  var leadsRes = await client.from("immonova_app_install_leads").select("id", { count:"exact", head:true });
-  document.getElementById("cardLeads").textContent = leadsRes.count != null ? leadsRes.count : "—";
 
   var viewsRes = await client.from("immonova_opportunity_views").select("id", { count:"exact", head:true });
   document.getElementById("cardViews").textContent = viewsRes.count != null ? viewsRes.count : "—";
@@ -309,65 +295,19 @@ async function loadTopViewed(){
   }).join("");
 }
 
-async function loadLeads(){
-  var body = document.getElementById("leadsBody");
-
-  var result = await client.from("immonova_app_install_leads").select("*").order("created_at", { ascending:false }).limit(200);
-
-  if(result.error){
-    body.innerHTML = '<tr class="empty-row"><td colspan="5">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
-    return;
-  }
-
-  var rows = result.data || [];
-  if(!rows.length){
-    body.innerHTML = '<tr class="empty-row"><td colspan="5">Nessun lead registrato ancora.</td></tr>';
-    return;
-  }
-
-  body.innerHTML = rows.map(function(r){
-    var label = ((r.nome || "") + " " + (r.cognome || "")).trim() || r.email || "questo lead";
-    return '<tr>' +
-      '<td>' + escapeHTML((r.nome || "") + " " + (r.cognome || "")) + '</td>' +
-      '<td>' + escapeHTML(r.email || "-") + '</td>' +
-      '<td>' + escapeHTML(r.telefono || "-") + '</td>' +
-      '<td>' + escapeHTML(fmtDate(r.created_at)) + '</td>' +
-      '<td><button type="button" onclick="deleteLead(&quot;' + r.id + '&quot;, &quot;' + escapeHTML(label) + '&quot;)" style="padding:8px 12px;border:1px solid rgba(156,47,47,.30);background:rgba(255,255,255,.30);color:#9c2f2f;font-size:9px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;font-family:inherit;white-space:nowrap">Elimina</button></td>' +
-      '</tr>';
-  }).join("");
-}
-
-async function deleteLead(leadId, leadLabel){
-  var ok = confirm("Eliminare definitivamente il lead di " + leadLabel + "? Operazione non reversibile.");
-  if(!ok) return;
-
-  setStatus("Eliminazione lead in corso...", "");
-
-  var result = await client.from("immonova_app_install_leads").delete().eq("id", leadId);
-
-  if(result.error){
-    setStatus("Errore eliminazione lead: " + result.error.message, "error");
-    return;
-  }
-
-  setStatus("Lead eliminato correttamente.", "success");
-  await loadLeads();
-  await loadSummaryCards();
-}
-
 async function loadAccounts(){
   var body = document.getElementById("accountsBody");
 
   var result = await client.from("immonova_public_accounts").select("*").order("created_at", { ascending:false }).limit(200);
 
   if(result.error){
-    body.innerHTML = '<tr class="empty-row"><td colspan="5">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="7">Errore caricamento: ' + escapeHTML(result.error.message) + '</td></tr>';
     return;
   }
 
   var rows = result.data || [];
   if(!rows.length){
-    body.innerHTML = '<tr class="empty-row"><td colspan="5">Nessun account registrato ancora.</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="7">Nessun account registrato ancora.</td></tr>';
     return;
   }
 
@@ -400,6 +340,7 @@ async function loadAccounts(){
     return '<tr>' +
       '<td>' + escapeHTML(r.full_name || "-") + '</td>' +
       '<td>' + escapeHTML(r.email || "-") + '</td>' +
+      '<td>' + escapeHTML(r.phone || "-") + '</td>' +
       '<td>' + escapeHTML(r.notification_channel === "push" ? "Push" : "Email") + '</td>' +
       '<td>' + escapeHTML(fmtDate(r.created_at)) + '</td>' +
       '<td>' + favoritesCellHTML(r.id) + '</td>' +
@@ -449,7 +390,6 @@ async function deleteAccount(accountId, accountLabel){
     loadInstallsChart(),
     loadCountryBreakdown(),
     loadTopViewed(),
-    loadLeads(),
     loadAccounts()
   ]);
 })();
