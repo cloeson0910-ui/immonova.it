@@ -176,6 +176,40 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
   </div>
 </div>
 
+<div class="dossier-options-overlay" id="economicsOverlay">
+  <div class="dossier-options-box" style="max-width:640px">
+    <div class="dossier-options-title">Aggiorna dati economici</div>
+    <p class="dossier-options-hint">Modifica solo i dati economici del dossier — chiamata gratuita, non richiama il motore IA a pagamento. Lascia vuoto un campo per farlo ricalcolare automaticamente dal sistema come stima percentuale (comportamento attuale).</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px">
+      <div><label for="ecoPurchase">Prezzo di acquisto (€)</label><input type="number" id="ecoPurchase" step="1"></div>
+      <div><label for="ecoTaxes">Imposte (€)</label><input type="number" id="ecoTaxes" step="1"></div>
+      <div><label for="ecoNotary">Notaio (€)</label><input type="number" id="ecoNotary" step="1"></div>
+      <div><label for="ecoAgency">Agenzia (€)</label><input type="number" id="ecoAgency" step="1"></div>
+      <div><label for="ecoDueDiligence">Due diligence (€)</label><input type="number" id="ecoDueDiligence" step="1"></div>
+      <div><label for="ecoTech">Spese tecniche (€)</label><input type="number" id="ecoTech" step="1"></div>
+      <div><label for="ecoFfe">Arredi / FF&E (€)</label><input type="number" id="ecoFfe" step="1"></div>
+      <div><label for="ecoMarketing">Marketing apertura (€)</label><input type="number" id="ecoMarketing" step="1"></div>
+      <div><label for="ecoContingency">Imprevisti (€)</label><input type="number" id="ecoContingency" step="1"></div>
+      <div><label for="ecoAcquisitionTotal">Totale acquisizione (€)</label><input type="number" id="ecoAcquisitionTotal" step="1"></div>
+      <div><label for="ecoDevelopmentTotal">Totale sviluppo (€)</label><input type="number" id="ecoDevelopmentTotal" step="1"></div>
+      <div><label for="ecoTotalCost">Total Project Cost (€)</label><input type="number" id="ecoTotalCost" step="1"></div>
+      <div><label for="ecoRevenue">Ricavi annui (€)</label><input type="number" id="ecoRevenue" step="1"></div>
+      <div><label for="ecoCosts">Costi operativi annui (€)</label><input type="number" id="ecoCosts" step="1"></div>
+      <div><label for="ecoNet">Reddito netto annuo (€)</label><input type="number" id="ecoNet" step="1"></div>
+      <div><label for="ecoRoi">ROI (%)</label><input type="number" id="ecoRoi" step="0.1"></div>
+      <div><label for="ecoBreakEven">Break-even (anni)</label><input type="number" id="ecoBreakEven" step="0.1"></div>
+    </div>
+
+    <div id="economicsStatus" style="margin-top:14px;min-height:18px;font-size:12.5px"></div>
+
+    <div class="dossier-options-actions">
+      <button type="button" class="btn secondary" id="economicsCancel">Annulla</button>
+      <button type="button" class="btn" id="economicsSave">Salva dati economici</button>
+    </div>
+  </div>
+</div>
+
 <main class="container">
   <div class="topbar">
     <div>
@@ -194,6 +228,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
       </select>
       <button class="btn" id="loadBtn" type="button" data-i18n="btn_reload_data">Ricarica dati</button>
       <button class="btn secondary" id="refreshDossierBtn" type="button" data-i18n="btn_refresh_territorial">Aggiorna dati territoriali</button>
+      <button class="btn secondary" id="editEconomicsBtn" type="button" data-i18n="btn_edit_economics">Aggiorna dati economici</button>
       <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
       <a class="btn secondary" id="editLink" href="#" data-i18n="btn_back_to_proposal">Torna alla proposta</a>
     </div>
@@ -254,7 +289,7 @@ var CURRENT_LANG = "it";
 var T = {};
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Proposte", logout:"Logout",
-  btn_reload_data:"Ricarica dati", btn_refresh_territorial:"Aggiorna dati territoriali",
+  btn_reload_data:"Ricarica dati", btn_refresh_territorial:"Aggiorna dati territoriali", btn_edit_economics:"Aggiorna dati economici",
   btn_print_pdf:"Stampa / PDF", btn_back_to_proposal:"Torna alla proposta",
   loading_dossier:"Caricamento dossier...",
   min_by_car:" min in auto",
@@ -2262,6 +2297,113 @@ async function init(){
 if(loadBtn)loadBtn.addEventListener("click",init);
 if(refreshDossierBtn)refreshDossierBtn.addEventListener("click",forceRefreshDossier);
 if(logoutBtn)logoutBtn.addEventListener("click",async function(){await client.auth.signOut();window.location.href="../index.html";});
+
+/* ---- Aggiorna dati economici: scrittura DIRETTA e GRATUITA sulle stesse colonne di
+   opportunity_reports lette da buildFinance()/getPurchasePrice() -- NON richiama mai
+   generate-investment-report (il motore IA a pagamento). Un campo lasciato vuoto viene
+   salvato come null, cosi' buildFinance() torna a calcolarlo in automatico (stima
+   percentuale) come faceva prima che questo pannello esistesse. ---- */
+var ECONOMICS_FIELD_MAP = {
+  ecoPurchase:"purchase_price",
+  ecoTaxes:"acquisition_tax",
+  ecoNotary:"notary_cost",
+  ecoAgency:"agency_cost",
+  ecoDueDiligence:"due_diligence_cost",
+  ecoTech:"technical_cost",
+  ecoFfe:"ffe_cost",
+  ecoMarketing:"marketing_cost",
+  ecoContingency:"contingency_cost",
+  ecoAcquisitionTotal:"acquisition_total",
+  ecoDevelopmentTotal:"development_total",
+  ecoTotalCost:"total_project_cost",
+  ecoRevenue:"annual_revenue",
+  ecoCosts:"annual_cost",
+  ecoNet:"annual_net_income",
+  ecoRoi:"roi",
+  ecoBreakEven:"break_even_years"
+};
+
+function setEconomicsStatus(msg,type){
+  var el=document.getElementById("economicsStatus");
+  if(!el)return;
+  el.textContent=msg||"";
+  el.style.color=type==="error"?"#9c2f2f":(type==="success"?"#4f7f45":"#8f7643");
+}
+
+function openEconomicsPanel(){
+  var overlay=document.getElementById("economicsOverlay");
+  if(!overlay)return;
+
+  // Precompila con i valori attualmente mostrati nel dossier (colonna salvata, o stima
+  // calcolata se la colonna e' vuota) -- cosi' l'utente vede subito cosa sta modificando.
+  var f=buildFinance();
+  Object.keys(ECONOMICS_FIELD_MAP).forEach(function(inputId){
+    var column=ECONOMICS_FIELD_MAP[inputId];
+    var input=document.getElementById(inputId);
+    if(!input)return;
+    var savedValue = report ? report[column] : null;
+    if(savedValue!==null && savedValue!==undefined && savedValue!==""){
+      input.value = savedValue;
+    }else{
+      var financeKeyMap={purchase_price:"purchase",acquisition_tax:"taxes",notary_cost:"notary",agency_cost:"agency",due_diligence_cost:"dueDiligence",technical_cost:"tech",ffe_cost:"ffe",marketing_cost:"marketing",contingency_cost:"contingency",acquisition_total:"acquisition",development_total:"development",total_project_cost:"total",annual_revenue:"revenue",annual_cost:"costs",annual_net_income:"net",roi:"roi",break_even_years:"breakEven"};
+      var fk=financeKeyMap[column];
+      input.value = (fk && f[fk]) ? Math.round(f[fk]*100)/100 : "";
+    }
+    input.placeholder="Calcolato automaticamente se vuoto";
+  });
+
+  setEconomicsStatus("","");
+  overlay.classList.add("active");
+}
+
+function closeEconomicsPanel(){
+  var overlay=document.getElementById("economicsOverlay");
+  if(overlay)overlay.classList.remove("active");
+}
+
+async function saveEconomicsPanel(){
+  var saveBtn=document.getElementById("economicsSave");
+  saveBtn.disabled=true;
+  setEconomicsStatus("Salvataggio in corso...","");
+
+  try{
+    var payload={};
+    Object.keys(ECONOMICS_FIELD_MAP).forEach(function(inputId){
+      var column=ECONOMICS_FIELD_MAP[inputId];
+      var input=document.getElementById(inputId);
+      var raw=input?input.value.trim():"";
+      payload[column]=raw===""?null:Number(raw);
+    });
+
+    if(report && report.id){
+      var res=await client.from("opportunity_reports").update(payload).eq("id",report.id);
+      if(res.error)throw res.error;
+      Object.assign(report,payload);
+    }else{
+      var insertPayload=Object.assign({opportunity_id:Number(opportunityId),generated_at:new Date().toISOString(),report_json:{}},payload);
+      var insertRes=await client.from("opportunity_reports").insert(insertPayload).select("*").single();
+      if(insertRes.error)throw insertRes.error;
+      report=insertRes.data;
+    }
+
+    setEconomicsStatus("Dati economici salvati. Aggiornamento anteprima dossier...","success");
+    await renderBook();
+    setTimeout(closeEconomicsPanel,900);
+  }catch(e){
+    console.error(e);
+    setEconomicsStatus("Errore salvataggio: "+(e.message||e),"error");
+  }
+
+  saveBtn.disabled=false;
+}
+
+var editEconomicsBtn=document.getElementById("editEconomicsBtn");
+if(editEconomicsBtn)editEconomicsBtn.addEventListener("click",openEconomicsPanel);
+var economicsCancelBtn=document.getElementById("economicsCancel");
+if(economicsCancelBtn)economicsCancelBtn.addEventListener("click",closeEconomicsPanel);
+var economicsSaveBtn=document.getElementById("economicsSave");
+if(economicsSaveBtn)economicsSaveBtn.addEventListener("click",saveEconomicsPanel);
+
 init();
 </script>
 </body>
