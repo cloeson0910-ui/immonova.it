@@ -18,7 +18,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 @media print{.lang-switch{display:none!important}}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
 .dossier-options-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(30,22,10,.45);align-items:center;justify-content:center}
 .dossier-options-overlay.active{display:flex}
-.dossier-options-box{width:420px;max-width:92vw;background:#f4ecdf;border:1px solid rgba(166,127,52,.35);box-shadow:0 30px 90px rgba(30,22,10,.35);padding:32px}
+.dossier-options-box{width:420px;max-width:92vw;max-height:88vh;overflow-y:auto;background:#f4ecdf;border:1px solid rgba(166,127,52,.35);box-shadow:0 30px 90px rgba(30,22,10,.35);padding:32px}
 .dossier-options-title{font-size:20px;font-weight:200;letter-spacing:.06em;color:#a67f34;margin-bottom:20px;text-transform:uppercase}
 .dossier-options-box label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;margin:16px 0 7px}
 .dossier-options-box label:first-of-type{margin-top:0}
@@ -176,6 +176,32 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
   </div>
 </div>
 
+<div class="dossier-options-overlay" id="economicsOverlay">
+  <div class="dossier-options-box">
+    <div class="dossier-options-title">Valore immobiliare di riferimento</div>
+    <p class="dossier-options-hint">Modifica manuale del range €/m² mostrato nella sezione "Valore immobiliare di riferimento" del dossier — chiamata gratuita, nessun richiamo al motore IA a pagamento. Lascia vuoto un campo per tornare a mostrare "non disponibile" per quel valore.</p>
+
+    <label for="ecoMinM2">Valore minimo (€/m²)</label>
+    <input type="number" id="ecoMinM2" step="1">
+
+    <label for="ecoMaxM2">Valore massimo (€/m²)</label>
+    <input type="number" id="ecoMaxM2" step="1">
+
+    <label for="ecoSourceName">Fonte (nome)</label>
+    <input type="text" id="ecoSourceName" placeholder="Es. Osservatorio Mercato Immobiliare, agenzia locale...">
+
+    <label for="ecoSourceUrl">Fonte (link, facoltativo)</label>
+    <input type="text" id="ecoSourceUrl" placeholder="https://...">
+
+    <div id="economicsStatus" style="margin-top:14px;min-height:18px;font-size:12.5px"></div>
+
+    <div class="dossier-options-actions">
+      <button type="button" class="btn secondary" id="economicsCancel">Annulla</button>
+      <button type="button" class="btn" id="economicsSave">Salva</button>
+    </div>
+  </div>
+</div>
+
 <main class="container">
   <div class="topbar">
     <div>
@@ -194,6 +220,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
       </select>
       <button class="btn" id="loadBtn" type="button" data-i18n="btn_reload_data">Ricarica dati</button>
       <button class="btn secondary" id="refreshDossierBtn" type="button" data-i18n="btn_refresh_territorial">Aggiorna dati territoriali</button>
+      <button class="btn secondary" id="editRealEstateValueBtn" type="button" data-i18n="btn_edit_real_estate_value">Modifica valore immobiliare</button>
       <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
       <a class="btn secondary" id="editLink" href="#" data-i18n="btn_back_to_proposal">Torna alla proposta</a>
     </div>
@@ -254,7 +281,7 @@ var CURRENT_LANG = "it";
 var T = {};
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Proposte", logout:"Logout",
-  btn_reload_data:"Ricarica dati", btn_refresh_territorial:"Aggiorna dati territoriali",
+  btn_reload_data:"Ricarica dati", btn_refresh_territorial:"Aggiorna dati territoriali", btn_edit_real_estate_value:"Modifica valore immobiliare",
   btn_print_pdf:"Stampa / PDF", btn_back_to_proposal:"Torna alla proposta",
   loading_dossier:"Caricamento dossier...",
   min_by_car:" min in auto",
@@ -2262,6 +2289,89 @@ async function init(){
 if(loadBtn)loadBtn.addEventListener("click",init);
 if(refreshDossierBtn)refreshDossierBtn.addEventListener("click",forceRefreshDossier);
 if(logoutBtn)logoutBtn.addEventListener("click",async function(){await client.auth.signOut();window.location.href="../index.html";});
+
+/* ---- Modifica "Valore immobiliare di riferimento" (dossierData.real_estate_market) ----
+   Usa lo STESSO meccanismo gia' esistente per i dati territoriali (persistDossierData),
+   quindi e' una scrittura diretta e GRATUITA su report_json.dossier_data -- non richiama mai
+   generate-investment-report ne' alcun motore IA a pagamento. ---- */
+function openEconomicsPanel(){
+  var overlay=document.getElementById("economicsOverlay");
+  if(!overlay)return;
+
+  var minMetric=metricFromDossier("real_estate_market","residential_sale_per_m2_min");
+  var maxMetric=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
+  var src=(minMetric||maxMetric||{}).source||{};
+
+  document.getElementById("ecoMinM2").value = minMetric ? minMetric.value : "";
+  document.getElementById("ecoMaxM2").value = maxMetric ? maxMetric.value : "";
+  document.getElementById("ecoSourceName").value = src.provider_name || "";
+  document.getElementById("ecoSourceUrl").value = src.source_url || "";
+
+  setEconomicsStatus("","");
+  overlay.classList.add("active");
+}
+
+function closeEconomicsPanel(){
+  var overlay=document.getElementById("economicsOverlay");
+  if(overlay)overlay.classList.remove("active");
+}
+
+function setEconomicsStatus(msg,type){
+  var el=document.getElementById("economicsStatus");
+  if(!el)return;
+  el.textContent=msg||"";
+  el.style.color=type==="error"?"#9c2f2f":(type==="success"?"#4f7f45":"#8f7643");
+}
+
+async function saveEconomicsPanel(){
+  var saveBtn=document.getElementById("economicsSave");
+  saveBtn.disabled=true;
+  setEconomicsStatus("Salvataggio in corso...","");
+
+  try{
+    var minRaw=document.getElementById("ecoMinM2").value.trim();
+    var maxRaw=document.getElementById("ecoMaxM2").value.trim();
+    var sourceName=document.getElementById("ecoSourceName").value.trim();
+    var sourceUrl=document.getElementById("ecoSourceUrl").value.trim();
+
+    var source={provider_name:sourceName||"Inserito manualmente",source_url:sourceUrl||null,manual:true};
+
+    if(!dossierData)dossierData={};
+    if(!dossierData.real_estate_market)dossierData.real_estate_market={};
+
+    if(minRaw===""){
+      delete dossierData.real_estate_market.residential_sale_per_m2_min;
+    }else{
+      dossierData.real_estate_market.residential_sale_per_m2_min={value:Number(minRaw),unit:"€/m²",source:source};
+    }
+
+    if(maxRaw===""){
+      delete dossierData.real_estate_market.residential_sale_per_m2_max;
+    }else{
+      dossierData.real_estate_market.residential_sale_per_m2_max={value:Number(maxRaw),unit:"€/m²",source:source};
+    }
+
+    await persistDossierData(dossierData);
+    if(lastPersistError)throw new Error(lastPersistError);
+
+    setEconomicsStatus("Valore salvato. Aggiornamento anteprima dossier...","success");
+    await renderBook();
+    setTimeout(closeEconomicsPanel,900);
+  }catch(e){
+    console.error(e);
+    setEconomicsStatus("Errore salvataggio: "+(e.message||e),"error");
+  }
+
+  saveBtn.disabled=false;
+}
+
+var editRealEstateValueBtn=document.getElementById("editRealEstateValueBtn");
+if(editRealEstateValueBtn)editRealEstateValueBtn.addEventListener("click",openEconomicsPanel);
+var economicsCancelBtn=document.getElementById("economicsCancel");
+if(economicsCancelBtn)economicsCancelBtn.addEventListener("click",closeEconomicsPanel);
+var economicsSaveBtn=document.getElementById("economicsSave");
+if(economicsSaveBtn)economicsSaveBtn.addEventListener("click",saveEconomicsPanel);
+
 init();
 </script>
 </body>
