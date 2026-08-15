@@ -290,6 +290,7 @@ textarea{
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
     <a href="events.html" data-i18n="nav_events">Eventi</a>
     <a href="investors.html" data-i18n="nav_investors">Investitori</a>
+    <a href="capital-partners.html" data-i18n="nav_capital_partners" id="capitalPartnersLink" style="display:none">Capital Partners</a>
     <a href="users.html" id="usersLink" data-i18n="nav_users">Utenti</a>
     <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
   </div>
@@ -491,6 +492,7 @@ let currentUserLanguage = "it";
 
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi", nav_investors:"Investitori",
+  nav_capital_partners:"Capital Partners",
   nav_users:"Utenti", logout:"Logout",
   kicker:"Investor Relationship Management",
   title_new:"Nuovo Investitore", title_edit:"Modifica Investitore",
@@ -882,10 +884,27 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   window.location.href = "../index.html";
 });
 
+/* ---- Stesso meccanismo di investors.html: il link "Capital Partners" resta
+   nascosto finché non si conferma che questo utente ha accesso alla sezione
+   riservata (proprietario o admin con permesso esplicito). ---- */
+async function revealCapitalPartnersLinkIfAllowed(){
+  try{
+    const { data, error } = await client.rpc("has_capital_partners_access");
+    if(!error && data){
+      document.getElementById("capitalPartnersLink").style.display = "";
+    }
+  }catch(e){
+    console.warn("Verifica accesso Capital Partners non riuscita (non bloccante):", e);
+  }
+}
+
 (async function init(){
   if(await checkAuth()){
     const ok = await loadProfile();
-    if(ok) await loadInvestor();
+    if(ok){
+      await loadInvestor();
+      await revealCapitalPartnersLinkIfAllowed();
+    }
   }
 })();
 </script>

@@ -287,6 +287,7 @@ td{
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
     <a href="events.html" data-i18n="nav_events">Eventi</a>
     <a href="investors.html" data-i18n="nav_investors">Investitori</a>
+    <a href="capital-partners.html" data-i18n="nav_capital_partners" id="capitalPartnersLink" style="display:none">Capital Partners</a>
     <a href="users.html" id="usersLink" data-i18n="nav_users">Utenti</a>
     <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
   </div>
@@ -402,6 +403,7 @@ let currentUserLanguage = "it";
    sono nel dizionario tradotto -- sono dati, non interfaccia. ---- */
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi", nav_investors:"Investitori",
+  nav_capital_partners:"Capital Partners",
   nav_users:"Utenti", logout:"Logout",
   kicker:"Investor Relationship Management", title:"Investitori", btn_new_investor:"Nuovo Investitore",
   subtitle:"Anagrafica investitori IMMONOVA con preferenze di budget, aree, categorie, lingua e consenso per inviti email / WhatsApp.",
@@ -776,10 +778,28 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   window.location.href = "../index.html";
 });
 
+/* ---- Il link "Capital Partners" è nascosto di default: compare solo se
+   questo utente ha accesso alla sezione riservata (proprietario o admin a
+   cui è stato concesso esplicitamente il permesso). Stesso controllo
+   applicato lato RLS su Supabase, qui serve solo per la UI. ---- */
+async function revealCapitalPartnersLinkIfAllowed(){
+  try{
+    const { data, error } = await client.rpc("has_capital_partners_access");
+    if(!error && data){
+      document.getElementById("capitalPartnersLink").style.display = "";
+    }
+  }catch(e){
+    console.warn("Verifica accesso Capital Partners non riuscita (non bloccante):", e);
+  }
+}
+
 (async function init(){
   if(await checkAuth()){
     const ok = await loadProfile();
-    if(ok) await loadInvestors();
+    if(ok){
+      await loadInvestors();
+      await revealCapitalPartnersLinkIfAllowed();
+    }
   }
 })();
 </script>
