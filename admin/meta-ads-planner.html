@@ -689,6 +689,58 @@ function openEditModal(draft){
   draftModal.classList.add("open");
 }
 
+// Prossima lettera libera per la stessa campagna/ciclo (A -> B -> C ...),
+// usata per proporre subito un'etichetta variante sensata quando si duplica.
+function nextVariantLabel(campaignName, cycleNumber){
+  const used = allDrafts
+    .filter(d => d.campaign_name === campaignName && (d.cycle_number || 1) === (cycleNumber || 1))
+    .map(d => (d.variant_label || "").toUpperCase());
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for(const ch of letters){
+    if(!used.includes(ch)) return ch;
+  }
+  return "";
+}
+
+// Duplica una variante esistente per accelerare i test A/B: apre il form
+// già precompilato con TUTTI i valori della scheda di partenza (testo,
+// immagine, targeting, budget, posizionamenti...) tranne quelli che non
+// devono mai essere copiati (stato pubblicazione su Meta, note libere) —
+// così basta cambiare solo la variabile che si vuole davvero testare.
+function duplicateDraft(draft){
+  editingId = null; // è un nuovo record, non un update di quello originale
+  modalTitle.textContent = "Duplica variante (modifica ciò che vuoi testare)";
+
+  document.getElementById("campaignName").value = draft.campaign_name || "";
+  document.getElementById("cycleNumber").value = draft.cycle_number || 1;
+  document.getElementById("variantLabel").value = nextVariantLabel(draft.campaign_name, draft.cycle_number);
+  document.getElementById("variableTested").value = draft.variable_tested || "";
+  document.getElementById("headline").value = draft.headline || "";
+  document.getElementById("primaryText").value = draft.primary_text || "";
+  document.getElementById("description").value = draft.description || "";
+  document.getElementById("callToAction").value = draft.call_to_action || "LEARN_MORE";
+  document.getElementById("destinationUrl").value = draft.destination_url || "";
+  document.getElementById("imageUrl").value = draft.image_url || "";
+  document.getElementById("imageUrlFile").value = "";
+  document.getElementById("imageUploadStatus").textContent = "";
+  renderAdImagePreview(draft.image_url || "");
+  document.getElementById("imageNotes").value = draft.image_notes || "";
+  document.getElementById("targetAudienceNotes").value = draft.target_audience_notes || "";
+  setCountryCheckboxes(draft.target_countries);
+  document.getElementById("ageMin").value = draft.target_age_min ?? 18;
+  document.getElementById("ageMax").value = draft.target_age_max ?? "";
+  document.getElementById("targetInterests").value = Array.isArray(draft.target_interests) ? draft.target_interests.join("\n") : "";
+  document.getElementById("dailyBudget").value = draft.daily_budget_eur ?? "";
+  document.getElementById("placements").value = draft.placements || "automatic";
+  // Volutamente NON copiati: stato (riparte da bozza), ID annuncio Meta,
+  // note libere — una duplicata è una scheda nuova, non ancora pubblicata.
+  document.getElementById("statusField").value = "draft";
+  document.getElementById("metaAdId").value = "";
+  document.getElementById("notes").value = "";
+  setModalStatus("Scheda precompilata dalla variante " + (draft.variant_label || "") + " — cambia solo ciò che vuoi testare, poi salva.", "");
+  draftModal.classList.add("open");
+}
+
 function closeDraftModal(){
   draftModal.classList.remove("open");
 }
@@ -864,6 +916,7 @@ function renderVariantCard(draft){
 
   html += '<div class="card-actions">'
     + '<button type="button" class="edit-btn" data-id="' + draft.id + '">Modifica</button>'
+    + '<button type="button" class="duplicate-btn" data-id="' + draft.id + '">Duplica</button>'
     + '<button type="button" class="export-btn" data-id="' + draft.id + '">Esporta per Meta</button>'
     + '<button type="button" class="preview-btn" data-id="' + draft.id + '">Anteprima</button>'
     + '<button type="button" class="primary publish-btn" data-id="' + draft.id + '"' + (hasMetaAd ? ' disabled' : '') + '>' + (hasMetaAd ? 'Già pubblicato' : 'Pubblica su Meta') + '</button>'
@@ -924,6 +977,12 @@ function render(){
     btn.addEventListener("click", function(){
       const draft = allDrafts.find(d => d.id === btn.getAttribute("data-id"));
       if(draft) openEditModal(draft);
+    });
+  });
+  groupsContainer.querySelectorAll(".duplicate-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      const draft = allDrafts.find(d => d.id === btn.getAttribute("data-id"));
+      if(draft) duplicateDraft(draft);
     });
   });
   groupsContainer.querySelectorAll(".export-btn").forEach(function(btn){
