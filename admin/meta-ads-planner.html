@@ -407,8 +407,34 @@ body::after{
         </div>
 
         <div class="field full">
-          <label>Note pubblico target</label>
+          <label>Note pubblico target (promemoria libero, non inviato a Meta)</label>
           <textarea id="targetAudienceNotes" placeholder="Es. Italia + Germania, 35-65 anni, interessi: real estate di lusso, investimenti"></textarea>
+        </div>
+
+        <div class="field full">
+          <label>Nazioni (queste sono i valori effettivamente usati alla pubblicazione)</label>
+          <div id="countryCheckboxes" style="display:flex;flex-wrap:wrap;gap:14px;padding:10px 0">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="IT" checked> Italia</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="DE"> Germania</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="FR"> Francia</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="SE"> Svezia</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="NO"> Norvegia</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="CH"> Svizzera</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="GB"> Regno Unito</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="US"> Stati Uniti</label>
+          </div>
+        </div>
+        <div class="field">
+          <label>Età minima</label>
+          <input type="number" id="ageMin" min="13" max="65" value="18">
+        </div>
+        <div class="field">
+          <label>Età massima (vuoto = nessun limite / 65+)</label>
+          <input type="number" id="ageMax" min="13" max="65" placeholder="Es. 65">
+        </div>
+        <div class="field full">
+          <label>Interessi (uno per riga — vengono cercati automaticamente nel catalogo Meta al momento della pubblicazione)</label>
+          <textarea id="targetInterests" placeholder="Es. Real estate&#10;Investing&#10;Luxury goods"></textarea>
         </div>
 
         <div class="field">
@@ -566,6 +592,22 @@ function resetForm(){
   setModalStatus("", "");
   document.getElementById("imageUploadStatus").textContent = "";
   renderAdImagePreview("");
+  setCountryCheckboxes(["IT"]);
+  document.getElementById("ageMin").value = 18;
+  document.getElementById("ageMax").value = "";
+  document.getElementById("targetInterests").value = "";
+}
+
+function setCountryCheckboxes(countries){
+  const list = Array.isArray(countries) && countries.length ? countries : ["IT"];
+  document.querySelectorAll(".countryCb").forEach(cb => {
+    cb.checked = list.includes(cb.value);
+  });
+}
+
+function getCheckedCountries(){
+  const checked = Array.from(document.querySelectorAll(".countryCb:checked")).map(cb => cb.value);
+  return checked.length ? checked : ["IT"];
 }
 
 function renderAdImagePreview(url){
@@ -634,6 +676,10 @@ function openEditModal(draft){
   renderAdImagePreview(draft.image_url || "");
   document.getElementById("imageNotes").value = draft.image_notes || "";
   document.getElementById("targetAudienceNotes").value = draft.target_audience_notes || "";
+  setCountryCheckboxes(draft.target_countries);
+  document.getElementById("ageMin").value = draft.target_age_min ?? 18;
+  document.getElementById("ageMax").value = draft.target_age_max ?? "";
+  document.getElementById("targetInterests").value = Array.isArray(draft.target_interests) ? draft.target_interests.join("\n") : "";
   document.getElementById("dailyBudget").value = draft.daily_budget_eur ?? "";
   document.getElementById("placements").value = draft.placements || "automatic";
   document.getElementById("statusField").value = draft.status || "draft";
@@ -674,6 +720,12 @@ draftForm.addEventListener("submit", async function(e){
     image_url: val("imageUrl") || null,
     image_notes: val("imageNotes") || null,
     target_audience_notes: val("targetAudienceNotes") || null,
+    target_countries: getCheckedCountries(),
+    target_age_min: numVal("ageMin") || 18,
+    target_age_max: numVal("ageMax"),
+    target_interests: val("targetInterests")
+      ? val("targetInterests").split("\n").map(s => s.trim()).filter(Boolean)
+      : [],
     daily_budget_eur: numVal("dailyBudget"),
     placements: val("placements") || "automatic",
     status: val("statusField") || "draft",
@@ -775,8 +827,10 @@ function renderVariantCard(draft){
   if(draft.image_notes){
     html += '<div class="field-row"><div class="field-label">Immagine</div><div class="field-value">' + esc(draft.image_notes) + '</div></div>';
   }
-  if(draft.target_audience_notes){
-    html += '<div class="field-row"><div class="field-label">Pubblico</div><div class="field-value">' + esc(draft.target_audience_notes.length > 100 ? draft.target_audience_notes.slice(0,100) + "…" : draft.target_audience_notes) + '</div></div>';
+  if(Array.isArray(draft.target_countries) && draft.target_countries.length){
+    const ageRange = (draft.target_age_min || 18) + (draft.target_age_max ? "–" + draft.target_age_max : "+");
+    const interestsStr = Array.isArray(draft.target_interests) && draft.target_interests.length ? " · " + draft.target_interests.join(", ") : "";
+    html += '<div class="field-row"><div class="field-label">Pubblico (effettivo)</div><div class="field-value">' + esc(draft.target_countries.join(", ") + " · " + ageRange + " anni" + interestsStr) + '</div></div>';
   }
 
   if(draft.daily_budget_eur != null || draft.results_cost_per_dossier != null){
