@@ -394,8 +394,11 @@ body::after{
         </div>
 
         <div class="field full">
-          <label>Immagine (URL)</label>
-          <input type="text" id="imageUrl" placeholder="Link all'immagine scelta per l'annuncio">
+          <label>Immagine</label>
+          <input type="file" id="imageUrlFile" accept="image/*">
+          <div style="font-size:12px;color:#5a4a2a;margin-top:6px" id="imageUploadStatus"></div>
+          <input type="text" id="imageUrl" placeholder="oppure incolla un link immagine già esistente" style="margin-top:8px">
+          <div id="imageUrlPreviewWrap" style="margin-top:8px"></div>
         </div>
         <div class="field full">
           <label>Note immagine</label>
@@ -560,7 +563,51 @@ function resetForm(){
   document.getElementById("cycleNumber").value = 1;
   editingId = null;
   setModalStatus("", "");
+  document.getElementById("imageUploadStatus").textContent = "";
+  renderAdImagePreview("");
 }
+
+function renderAdImagePreview(url){
+  const wrap = document.getElementById("imageUrlPreviewWrap");
+  wrap.innerHTML = url ? `<img src="${escHtmlAttr(url)}" style="max-width:100%;max-height:160px;border-radius:8px">` : "";
+}
+
+function escHtmlAttr(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function uploadAdImageFile(file){
+  const statusEl = document.getElementById("imageUploadStatus");
+  statusEl.textContent = "Caricamento in corso...";
+  statusEl.style.color = "#5a4a2a";
+
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const safeExt = /^[a-z0-9]+$/.test(ext) ? ext : "jpg";
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+
+  const {error: uploadError} = await client.storage.from("social-media").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+
+  if(uploadError){
+    statusEl.textContent = "Errore caricamento: " + uploadError.message;
+    statusEl.style.color = "#b3452f";
+    return;
+  }
+
+  const {data} = client.storage.from("social-media").getPublicUrl(path);
+  document.getElementById("imageUrl").value = data.publicUrl;
+  renderAdImagePreview(data.publicUrl);
+  statusEl.textContent = "Immagine caricata.";
+  statusEl.style.color = "#227a3f";
+}
+
+document.getElementById("imageUrlFile").addEventListener("change", (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(file) uploadAdImageFile(file);
+});
+document.getElementById("imageUrl").addEventListener("input", (e) => renderAdImagePreview(e.target.value.trim()));
 
 function openNewModal(){
   resetForm();
@@ -581,6 +628,9 @@ function openEditModal(draft){
   document.getElementById("callToAction").value = draft.call_to_action || "LEARN_MORE";
   document.getElementById("destinationUrl").value = draft.destination_url || "";
   document.getElementById("imageUrl").value = draft.image_url || "";
+  document.getElementById("imageUrlFile").value = "";
+  document.getElementById("imageUploadStatus").textContent = "";
+  renderAdImagePreview(draft.image_url || "");
   document.getElementById("imageNotes").value = draft.image_notes || "";
   document.getElementById("targetAudienceNotes").value = draft.target_audience_notes || "";
   document.getElementById("dailyBudget").value = draft.daily_budget_eur ?? "";
