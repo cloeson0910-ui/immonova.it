@@ -93,6 +93,33 @@ button:disabled{opacity:.45; cursor:not-allowed}
 .checkbox-row label{display:flex; align-items:center; gap:6px; font-size:13.5px}
 .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:18px}
 .preview-frame-wrap{border:1px solid var(--border); border-radius:10px; overflow:hidden; min-height:200px; display:flex; align-items:center; justify-content:center; background:#faf7f1}
+.preview-tabs{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap}
+.preview-tab{
+  padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:#fff;
+  color:var(--dark2); font-size:13px; font-weight:700; cursor:pointer;
+}
+.preview-tab.active{background:var(--gold); color:#fff; border-color:var(--gold)}
+.preview-block{display:none}
+.preview-block.active{display:block}
+.li-mock{width:100%; text-align:left; font-family:"Avenir Next","Segoe UI",sans-serif; background:#fff}
+.li-mock .li-head{display:flex; align-items:center; gap:10px; padding:12px 14px 6px}
+.li-mock .li-avatar{width:44px;height:44px;border-radius:6px;background:#0a66c2;color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center}
+.li-mock .li-name{font-weight:700;font-size:13.5px;color:#1a1a1a}
+.li-mock .li-sub{font-size:11.5px;color:#666}
+.li-mock .li-body{padding:4px 14px 10px;font-size:13.5px;color:#1a1a1a;white-space:pre-wrap}
+.ig-mock{width:100%; text-align:left; font-family:"Avenir Next","Segoe UI",sans-serif; background:#fff}
+.ig-mock .ig-head{display:flex; align-items:center; gap:10px; padding:10px 12px}
+.ig-mock .ig-avatar{width:32px;height:32px;border-radius:50%;background:radial-gradient(circle at 30% 107%,#fdf497 0%,#fdf497 5%,#fd5949 45%,#d6249f 60%,#285AEB 90%);}
+.ig-mock .ig-name{font-weight:700;font-size:13px;color:#1a1a1a}
+.ig-mock .ig-body{padding:2px 12px 12px;font-size:13px;color:#1a1a1a}
+.fb-mock{width:100%; text-align:left; font-family:"Avenir Next","Segoe UI",sans-serif; background:#fff}
+.fb-mock .fb-head{display:flex; align-items:center; gap:10px; padding:12px 14px 6px}
+.fb-mock .fb-avatar{width:40px;height:40px;border-radius:50%;background:var(--gold);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center}
+.fb-mock .fb-name{font-weight:700;font-size:13.5px;color:#1a1a1a}
+.fb-mock .fb-sub{font-size:11.5px;color:#65676b}
+.fb-mock .fb-body{padding:4px 14px 10px;font-size:13.5px;color:#1a1a1a;white-space:pre-wrap}
+.fb-mock .fb-link{border-top:1px solid #e4e6eb; background:#f0f2f5; padding:8px 14px; font-size:11.5px; color:#65676b; text-transform:uppercase; letter-spacing:.02em}
+.no-dest{color:#5a4a2a;font-size:13px;padding:20px;text-align:center}
 </style>
 </head>
 <body>
@@ -156,6 +183,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
     <div class="checkbox-row">
       <label><input type="checkbox" id="fFacebook" checked> Pubblica su Facebook</label>
       <label><input type="checkbox" id="fInstagram" checked> Pubblica su Instagram</label>
+      <label><input type="checkbox" id="fLinkedin"> Pubblica su LinkedIn</label>
     </div>
     <div class="field">
       <label>Stato</label>
@@ -176,6 +204,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
 <div class="modal-overlay" id="previewModal">
   <div class="modal">
     <h2>Anteprima</h2>
+    <div class="preview-tabs" id="previewTabs"></div>
     <div class="preview-frame-wrap" id="previewFrameWrap">
       <span style="color:#5a4a2a;font-size:13px">Caricamento anteprima...</span>
     </div>
@@ -242,6 +271,7 @@ function renderCard(p){
   const destinations = [];
   if(p.publish_to_facebook) destinations.push("Facebook");
   if(p.publish_to_instagram) destinations.push("Instagram");
+  if(p.publish_to_linkedin) destinations.push("LinkedIn");
   const alreadyPublished = p.status === "published";
   const errorLine = p.publish_error ? `<div class="post-status-line error">${escapeHTML(p.publish_error)}</div>` : "";
   const okLine = (!p.publish_error && alreadyPublished) ? `<div class="post-status-line ok">Pubblicato${p.published_at ? " · " + new Date(p.published_at).toLocaleString("it-IT") : ""}</div>` : "";
@@ -310,6 +340,7 @@ function openEditModal(id){
   document.getElementById("fType").value = p ? p.post_type : "feed";
   document.getElementById("fFacebook").checked = p ? !!p.publish_to_facebook : true;
   document.getElementById("fInstagram").checked = p ? !!p.publish_to_instagram : true;
+  document.getElementById("fLinkedin").checked = p ? !!p.publish_to_linkedin : false;
   document.getElementById("fStatus").value = p ? p.status : "draft";
   document.getElementById("editModal").classList.add("open");
 }
@@ -327,6 +358,7 @@ async function savePost(){
     post_type: document.getElementById("fType").value,
     publish_to_facebook: document.getElementById("fFacebook").checked,
     publish_to_instagram: document.getElementById("fInstagram").checked,
+    publish_to_linkedin: document.getElementById("fLinkedin").checked,
     status: document.getElementById("fStatus").value,
   };
 
@@ -369,27 +401,94 @@ async function extractEdgeFunctionErrorMessage(error){
   return "Errore sconosciuto";
 }
 
-async function openPreviewModal(id){
+function buildFacebookPreview(p){
+  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "";
+  let domain = "";
+  if(p.link_url){ try{ domain = new URL(p.link_url).hostname.replace(/^www\./,""); }catch(e){ domain = p.link_url; } }
+  return `
+    <div class="fb-mock">
+      <div class="fb-head">
+        <div class="fb-avatar">IN</div>
+        <div>
+          <div class="fb-name">IMMONOVA</div>
+          <div class="fb-sub">${p.post_type === "story" ? "Storia · ora" : "Ora · 🌐"}</div>
+        </div>
+      </div>
+      <div class="fb-body">${escapeHTML(p.caption || "(nessun testo)")}</div>
+      ${img}
+      ${p.link_url ? `<div class="fb-link">${escapeHTML(domain)}</div>` : ""}
+    </div>`;
+}
+
+function buildInstagramPreview(p){
+  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover">` : `<div style="width:100%;aspect-ratio:1/1;background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">Instagram richiede un'immagine</div>`;
+  return `
+    <div class="ig-mock">
+      <div class="ig-head">
+        <div class="ig-avatar"></div>
+        <div class="ig-name">immonova</div>
+      </div>
+      ${img}
+      <div class="ig-body"><b>immonova</b> ${escapeHTML(p.caption || "(nessun testo)")}</div>
+    </div>`;
+}
+
+function buildLinkedinPreview(p){
+  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "";
+  return `
+    <div class="li-mock">
+      <div class="li-head">
+        <div class="li-avatar">IN</div>
+        <div>
+          <div class="li-name">IMMONOVA</div>
+          <div class="li-sub">Pagina aziendale · Ora</div>
+        </div>
+      </div>
+      <div class="li-body">${escapeHTML(p.caption || "(nessun testo)")}</div>
+      ${img}
+      ${(!p.image_url && p.link_url) ? `<div style="border-top:1px solid #e7e7e7;padding:8px 14px;font-size:12px;color:#666">${escapeHTML(p.link_url)}</div>` : ""}
+    </div>`;
+}
+
+function openPreviewModal(id){
   const p = posts.find(x => x.id === id);
+  const tabsWrap = document.getElementById("previewTabs");
   const wrap = document.getElementById("previewFrameWrap");
-  wrap.innerHTML = '<span style="color:#5a4a2a;font-size:13px">Caricamento anteprima...</span>';
   document.getElementById("previewModal").classList.add("open");
 
-  if(!p){ wrap.innerHTML = '<span style="color:#b3452f;font-size:13px">Post non trovato.</span>'; return; }
+  if(!p){ tabsWrap.innerHTML = ""; wrap.innerHTML = '<span style="color:#b3452f;font-size:13px">Post non trovato.</span>'; return; }
 
-  // Anteprima locale semplice (non chiama Meta: i post organici non hanno un
-  // endpoint di preview come gli ads — mostriamo una ricostruzione fedele
-  // del layout invece di una vera generatepreviews).
-  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover;border-radius:8px 8px 0 0">` : "";
-  wrap.innerHTML = `
-    <div style="width:100%;text-align:left">
-      ${img}
-      <div style="padding:14px">
-        <div style="font-weight:700;font-size:13px;color:#3c2d15;margin-bottom:6px">IMMONOVA</div>
-        <div style="font-size:13.5px;color:#3c2d15;white-space:pre-wrap">${escapeHTML(p.caption || "(nessun testo)")}</div>
-        ${p.link_url ? `<div style="margin-top:8px;font-size:12px;color:#a67f34">${escapeHTML(p.link_url)}</div>` : ""}
-      </div>
-    </div>`;
+  // Anteprima locale ricostruita dai dati del post (non chiama Meta/LinkedIn:
+  // i post organici non hanno un vero endpoint di preview) — una scheda
+  // per ciascuna destinazione selezionata, con lo stile visivo di ciascun social.
+  const destinations = [];
+  if(p.publish_to_facebook) destinations.push({key:"facebook", label:"Facebook", html: buildFacebookPreview(p)});
+  if(p.publish_to_instagram) destinations.push({key:"instagram", label:"Instagram", html: buildInstagramPreview(p)});
+  if(p.publish_to_linkedin) destinations.push({key:"linkedin", label:"LinkedIn", html: buildLinkedinPreview(p)});
+
+  if(!destinations.length){
+    tabsWrap.innerHTML = "";
+    wrap.innerHTML = '<span class="no-dest">Nessuna destinazione selezionata per questo post.</span>';
+    return;
+  }
+
+  tabsWrap.innerHTML = destinations.map((d, i) =>
+    `<button type="button" class="preview-tab${i === 0 ? " active" : ""}" data-key="${d.key}">${d.label}</button>`
+  ).join("");
+
+  function renderActive(activeKey){
+    const active = destinations.find(d => d.key === activeKey) || destinations[0];
+    wrap.innerHTML = active.html;
+    tabsWrap.querySelectorAll(".preview-tab").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.key === active.key);
+    });
+  }
+
+  tabsWrap.querySelectorAll(".preview-tab").forEach(btn => {
+    btn.addEventListener("click", () => renderActive(btn.dataset.key));
+  });
+
+  renderActive(destinations[0].key);
 }
 
 async function publishPost(id, btn){
