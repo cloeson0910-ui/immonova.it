@@ -758,6 +758,25 @@ draftForm.addEventListener("submit", async function(e){
 
 async function deleteDraft(id){
   try{
+    const draft = allDrafts.find(d => d.id === id);
+
+    // Se la variante è già stata pubblicata su Meta (meta_ad_id presente),
+    // eliminiamo prima l'annuncio anche lato Meta — altrimenti resterebbe
+    // "orfano" su Ads Manager anche dopo aver cancellato la scheda qui.
+    if(draft && draft.meta_ad_id){
+      const result = await client.functions.invoke("immonova-meta-ads-publish", {
+        body: { action: "delete", draft_id: id }
+      });
+      if(result.error){
+        const message = await extractEdgeFunctionErrorMessage(result.error);
+        const proceed = confirm(
+          "Non sono riuscito a eliminare l'annuncio da Meta (" + message + ").\n\n" +
+          "Vuoi eliminare comunque la scheda qui sul sito? L'annuncio resterebbe su Ads Manager e andrebbe rimosso manualmente."
+        );
+        if(!proceed) return;
+      }
+    }
+
     const res = await client.from("immonova_ad_drafts").delete().eq("id", id);
     if(res.error) throw res.error;
     loadDrafts();
