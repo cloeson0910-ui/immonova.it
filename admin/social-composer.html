@@ -136,8 +136,11 @@ button:disabled{opacity:.45; cursor:not-allowed}
       <textarea id="fCaption" placeholder="Scrivi il testo del post..."></textarea>
     </div>
     <div class="field">
-      <label>URL immagine</label>
-      <input type="url" id="fImage" placeholder="https://...">
+      <label>Immagine</label>
+      <input type="file" id="fImageFile" accept="image/*">
+      <div style="font-size:12px;color:#5a4a2a;margin-top:6px" id="uploadStatus"></div>
+      <input type="url" id="fImage" placeholder="oppure incolla un URL immagine già esistente" style="margin-top:8px">
+      <div id="imagePreviewWrap" style="margin-top:8px"></div>
     </div>
     <div class="field">
       <label>Link (opzionale, solo Facebook)</label>
@@ -262,12 +265,47 @@ function renderCard(p){
   </div>`;
 }
 
+function renderImagePreview(url){
+  const wrap = document.getElementById("imagePreviewWrap");
+  wrap.innerHTML = url ? `<img src="${escapeHTML(url)}" style="max-width:100%;max-height:160px;border-radius:8px">` : "";
+}
+
+async function uploadImageFile(file){
+  const statusEl = document.getElementById("uploadStatus");
+  statusEl.textContent = "Caricamento in corso...";
+  statusEl.style.color = "#5a4a2a";
+
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const safeExt = /^[a-z0-9]+$/.test(ext) ? ext : "jpg";
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+
+  const {error: uploadError} = await client.storage.from("social-media").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+
+  if(uploadError){
+    statusEl.textContent = "Errore caricamento: " + uploadError.message;
+    statusEl.style.color = "#b3452f";
+    return;
+  }
+
+  const {data} = client.storage.from("social-media").getPublicUrl(path);
+  document.getElementById("fImage").value = data.publicUrl;
+  renderImagePreview(data.publicUrl);
+  statusEl.textContent = "Immagine caricata.";
+  statusEl.style.color = "#227a3f";
+}
+
 function openEditModal(id){
   const p = id ? posts.find(x => x.id === id) : null;
   document.getElementById("modalTitle").textContent = p ? "Modifica post" : "Nuovo post";
   document.getElementById("editId").value = p ? p.id : "";
   document.getElementById("fCaption").value = p ? (p.caption || "") : "";
   document.getElementById("fImage").value = p ? (p.image_url || "") : "";
+  document.getElementById("fImageFile").value = "";
+  document.getElementById("uploadStatus").textContent = "";
+  renderImagePreview(p ? (p.image_url || "") : "");
   document.getElementById("fLink").value = p ? (p.link_url || "") : "";
   document.getElementById("fType").value = p ? p.post_type : "feed";
   document.getElementById("fFacebook").checked = p ? !!p.publish_to_facebook : true;
@@ -360,6 +398,11 @@ async function publishPost(id, btn){
   await loadPosts();
 }
 
+document.getElementById("fImageFile").addEventListener("change", (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(file) uploadImageFile(file);
+});
+document.getElementById("fImage").addEventListener("input", (e) => renderImagePreview(e.target.value.trim()));
 document.getElementById("newPostBtn").addEventListener("click", () => openEditModal(null));
 document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
 document.getElementById("saveEditBtn").addEventListener("click", savePost);
