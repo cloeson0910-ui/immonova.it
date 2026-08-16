@@ -989,37 +989,61 @@ async function extractEdgeFunctionErrorMessage(error){
   return (error && error.message) || String(error);
 }
 
-async function openPreviewModal(draftId){
+// Anteprima LOCALE, ricostruita solo dai dati della scheda — non chiama
+// Meta in nessun modo. Serve perché il widget di anteprima reale di Meta
+// (generatepreviews) attualmente risponde sempre "Inserzione incompleta"
+// per un limite del loro lato (app appena passata a Live), indipendente
+// dal nostro codice — vedi log Edge Function, risposta sempre 200 OK.
+// Questa versione non è pixel-perfect rispetto al feed reale, ma mostra
+// SUBITO testo/immagine/CTA/link senza creare nulla su Meta e senza
+// dipendere dalla loro revisione dell'app.
+function openPreviewModal(draftId){
   const draft = allDrafts.find(d => d.id === draftId);
   if(!draft) return;
 
   const wrap = document.getElementById("previewFrameWrap");
   const progress = document.getElementById("previewProgress");
-  wrap.innerHTML = '<div style="padding:40px;color:#8f7643;font-size:13px">Generazione anteprima in corso...</div>';
   progress.className = "progress-text";
-  progress.textContent = "";
+  progress.textContent = "Anteprima ricostruita localmente dai dati della scheda — non è la resa esatta di Meta, ma testo/immagine/link sono quelli reali che verranno pubblicati.";
   document.getElementById("previewModal").classList.add("open");
 
-  try{
-    const result = await client.functions.invoke("immonova-meta-ads-publish", {
-      body: { action: "preview", draft_id: draftId }
-    });
+  const headline = esc(draft.headline || "");
+  const primaryText = esc(draft.primary_text || "");
+  const description = esc(draft.description || "");
+  const imageUrl = draft.image_url || "";
+  const ctaLabels = {
+    LEARN_MORE: "Scopri di più",
+    SIGN_UP: "Iscriviti",
+    CONTACT_US: "Contattaci",
+    SHOP_NOW: "Acquista ora",
+    GET_OFFER: "Ottieni offerta",
+    APPLY_NOW: "Richiedi ora",
+  };
+  const ctaLabel = esc(ctaLabels[draft.call_to_action] || draft.call_to_action || "Scopri di più");
+  let domain = "";
+  try{ domain = draft.destination_url ? new URL(draft.destination_url).hostname : ""; }catch(e){ domain = draft.destination_url || ""; }
 
-    if(result.error){
-      const message = await extractEdgeFunctionErrorMessage(result.error);
-      throw new Error(message);
-    }
-    if(!result.data || result.data.ok !== true || !result.data.previewHtml){
-      throw new Error((result.data && result.data.error) || "Anteprima non disponibile.");
-    }
-
-    wrap.innerHTML = result.data.previewHtml;
-  }catch(error){
-    console.error(error);
-    wrap.innerHTML = '';
-    progress.className = "progress-text error";
-    progress.textContent = "Errore: " + (error.message || error);
-  }
+  wrap.innerHTML = `
+    <div style="max-width:420px;margin:0 auto;border:1px solid rgba(166,127,52,.25);border-radius:10px;overflow:hidden;background:#fff;font-family:'Avenir Next','Helvetica Neue',Arial,sans-serif;text-align:left">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px">
+        <div style="width:36px;height:36px;border-radius:50%;background:#a67f34;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">VA</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#3c2d15">Immonova Off Market Consulting</div>
+          <div style="font-size:11px;color:#8f7643">Sponsorizzato</div>
+        </div>
+      </div>
+      ${primaryText ? `<div style="padding:0 14px 10px;font-size:13.5px;color:#3c2d15;line-height:1.5">${primaryText}</div>` : ""}
+      ${imageUrl ? `<img src="${escHtmlAttr(imageUrl)}" style="width:100%;display:block;max-height:320px;object-fit:cover;background:#f4ecdf">` : `<div style="width:100%;height:200px;background:#f4ecdf;display:flex;align-items:center;justify-content:center;color:#a67f34;font-size:12px">Nessuna immagine impostata</div>`}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:#f4ecdf;border-top:1px solid rgba(166,127,52,.2)">
+        <div style="min-width:0">
+          ${domain ? `<div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#8f7643">${esc(domain)}</div>` : ""}
+          ${headline ? `<div style="font-size:14px;font-weight:700;color:#3c2d15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${headline}</div>` : ""}
+          ${description ? `<div style="font-size:12px;color:#5a4a2a">${description}</div>` : ""}
+        </div>
+        <div style="flex-shrink:0;padding:8px 16px;background:#a67f34;color:#fff;font-size:12px;font-weight:700;border-radius:6px;white-space:nowrap">${ctaLabel}</div>
+      </div>
+    </div>
+  `;
 }
 
 async function loadDrafts(){
