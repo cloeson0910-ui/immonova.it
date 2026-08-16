@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Post Social — IMMONOVA Admin</title>
+<style>
+:root{
+  --bg:#f4ecdf; --gold:#a67f34; --dark:#3c2d15; --dark2:#5a4a2a;
+  --card:#ffffff; --border:rgba(166,127,52,.25);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; font-family:"Avenir Next","Segoe UI",sans-serif; color:var(--dark);
+  background:var(--bg);
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(166,127,52,.06), transparent 40%),
+    repeating-linear-gradient(60deg, rgba(166,127,52,.05) 0 2px, transparent 2px 40px),
+    repeating-linear-gradient(-60deg, rgba(166,127,52,.05) 0 2px, transparent 2px 40px);
+  min-height:100vh;
+}
+header.top{
+  position:sticky; top:0; z-index:20; background:rgba(244,236,223,.92);
+  backdrop-filter:blur(6px); border-bottom:1px solid var(--border);
+  padding:14px 24px; display:flex; align-items:center; justify-content:space-between;
+}
+header.top .brand{font-weight:700; color:var(--gold); letter-spacing:.06em; font-size:15px}
+header.top a.back{color:var(--dark2); text-decoration:none; font-size:14px}
+main{max-width:1100px; margin:0 auto; padding:28px 20px 80px}
+h1{font-size:26px; margin:0 0 6px}
+.subtitle{color:var(--dark2); margin:0 0 24px; font-size:14px}
+.status-banner{
+  background:#fff; border:1px solid var(--border); border-radius:10px;
+  padding:14px 18px; margin-bottom:24px; font-size:13.5px; color:var(--dark2); line-height:1.5;
+}
+.status-banner b{color:var(--dark)}
+.toolbar{display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; align-items:center}
+select,input[type=text]{
+  padding:9px 12px; border:1px solid var(--border); border-radius:8px;
+  background:#fff; color:var(--dark); font-size:13.5px;
+}
+button{
+  cursor:pointer; border:none; border-radius:8px; font-size:13.5px; font-weight:600;
+  padding:10px 16px; transition:opacity .15s ease;
+}
+button:hover{opacity:.88}
+button:disabled{opacity:.45; cursor:not-allowed}
+.btn-gold{background:var(--gold); color:#fff}
+.btn-outline{background:#fff; color:var(--dark); border:1px solid var(--border)}
+.btn-danger{background:#b3452f; color:#fff}
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px}
+.card{
+  background:var(--card); border:1px solid var(--border); border-radius:14px;
+  padding:18px; display:flex; flex-direction:column; gap:10px;
+}
+.card img.thumb{width:100%; height:160px; object-fit:cover; border-radius:8px; background:#eee}
+.card .caption{font-size:13.5px; color:var(--dark); line-height:1.4; max-height:60px; overflow:hidden}
+.pill-row{display:flex; gap:6px; flex-wrap:wrap}
+.pill{
+  font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase;
+  padding:3px 9px; border-radius:999px; background:rgba(166,127,52,.12); color:var(--gold);
+}
+.pill.status-draft{background:rgba(90,74,42,.12); color:var(--dark2)}
+.pill.status-ready_to_review{background:rgba(166,127,34,.18); color:#8a6a1f}
+.pill.status-approved{background:rgba(52,120,90,.15); color:#2f6e50}
+.pill.status-published{background:rgba(40,120,60,.18); color:#227a3f}
+.pill.status-archived{background:rgba(150,150,150,.18); color:#777}
+.card-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:auto}
+.card-actions button{flex:1; min-width:110px}
+.post-status-line{font-size:12px; color:var(--dark2); min-height:16px}
+.post-status-line.error{color:#b3452f}
+.post-status-line.ok{color:#227a3f}
+.empty{color:var(--dark2); font-size:14px; padding:40px 0; text-align:center}
+
+/* Modal */
+.modal-overlay{
+  display:none; position:fixed; inset:0; background:rgba(60,45,21,.45); z-index:50;
+  align-items:center; justify-content:center; padding:20px;
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:#fff; border-radius:14px; max-width:640px; width:100%;
+  max-height:90vh; overflow-y:auto; padding:26px;
+}
+.modal h2{margin-top:0; font-size:19px}
+.field{margin-bottom:14px}
+.field label{display:block; font-size:12.5px; font-weight:700; color:var(--dark2); margin-bottom:5px}
+.field textarea, .field input[type=text], .field input[type=url]{
+  width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit;
+}
+.field textarea{min-height:90px; resize:vertical}
+.checkbox-row{display:flex; gap:18px; align-items:center; margin-bottom:14px}
+.checkbox-row label{display:flex; align-items:center; gap:6px; font-size:13.5px}
+.modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:18px}
+.preview-frame-wrap{border:1px solid var(--border); border-radius:10px; overflow:hidden; min-height:200px; display:flex; align-items:center; justify-content:center; background:#faf7f1}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">IMMONOVA · Post Social</div>
+  <a class="back" href="dashboard.html">&larr; Torna alla Dashboard</a>
+</header>
+
+<main>
+  <h1>Post Social</h1>
+  <p class="subtitle">Crea un contenuto una sola volta e pubblicalo su Facebook e Instagram — sempre con anteprima e approvazione manuale prima della pubblicazione.</p>
+
+  <div class="status-banner">
+    <b>Come funziona:</b> crea un post in bozza, guarda l'anteprima, poi premi "Pubblica" quando sei pronto — il post va live immediatamente su tutte le destinazioni selezionate (nessuno stato "in pausa" qui, a differenza degli annunci a pagamento: un post organico o è pubblicato o non lo è). Instagram richiede sempre un'immagine (non pubblica post di solo testo). Le storie restano visibili 24 ore.
+  </div>
+
+  <div class="toolbar">
+    <button class="btn-gold" id="newPostBtn">+ Nuovo post</button>
+    <select id="statusFilter">
+      <option value="">Tutti gli stati</option>
+      <option value="draft">Bozza</option>
+      <option value="ready_to_review">Da rivedere</option>
+      <option value="approved">Approvato</option>
+      <option value="published">Pubblicato</option>
+      <option value="archived">Archiviato</option>
+    </select>
+  </div>
+
+  <div class="grid" id="postsGrid"></div>
+  <div class="empty" id="emptyState" style="display:none">Nessun post trovato. Creane uno nuovo per iniziare.</div>
+</main>
+
+<!-- Modal creazione/modifica -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h2 id="modalTitle">Nuovo post</h2>
+    <input type="hidden" id="editId">
+    <div class="field">
+      <label>Testo (caption)</label>
+      <textarea id="fCaption" placeholder="Scrivi il testo del post..."></textarea>
+    </div>
+    <div class="field">
+      <label>URL immagine</label>
+      <input type="url" id="fImage" placeholder="https://...">
+    </div>
+    <div class="field">
+      <label>Link (opzionale, solo Facebook)</label>
+      <input type="url" id="fLink" placeholder="https://immonova-consulting.it/opportunity.html?id=26">
+    </div>
+    <div class="field">
+      <label>Tipo</label>
+      <select id="fType">
+        <option value="feed">Post nel feed</option>
+        <option value="story">Storia (24h)</option>
+      </select>
+    </div>
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="fFacebook" checked> Pubblica su Facebook</label>
+      <label><input type="checkbox" id="fInstagram" checked> Pubblica su Instagram</label>
+    </div>
+    <div class="field">
+      <label>Stato</label>
+      <select id="fStatus">
+        <option value="draft">Bozza</option>
+        <option value="ready_to_review">Da rivedere</option>
+        <option value="approved">Approvato</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" id="cancelEditBtn">Annulla</button>
+      <button class="btn-gold" id="saveEditBtn">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal anteprima -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal">
+    <h2>Anteprima</h2>
+    <div class="preview-frame-wrap" id="previewFrameWrap">
+      <span style="color:#5a4a2a;font-size:13px">Caricamento anteprima...</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" id="closePreviewBtn">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let posts = [];
+let currentUser = null;
+
+async function checkAuth(){
+  const {data:{session}, error} = await client.auth.getSession();
+  if(error || !session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function escapeHTML(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function statusLabel(s){
+  return {draft:"Bozza", ready_to_review:"Da rivedere", approved:"Approvato", published:"Pubblicato", archived:"Archiviato"}[s] || s;
+}
+
+async function loadPosts(){
+  const {data, error} = await client
+    .from("immonova_social_posts")
+    .select("*")
+    .order("created_at", {ascending:false});
+  if(error){ console.error(error); return; }
+  posts = data || [];
+  renderPosts();
+}
+
+function renderPosts(){
+  const filter = document.getElementById("statusFilter").value;
+  const grid = document.getElementById("postsGrid");
+  const empty = document.getElementById("emptyState");
+  const filtered = filter ? posts.filter(p => p.status === filter) : posts;
+
+  if(!filtered.length){
+    grid.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+
+  grid.innerHTML = filtered.map(p => renderCard(p)).join("");
+
+  grid.querySelectorAll(".edit-btn").forEach(btn => btn.addEventListener("click", () => openEditModal(btn.dataset.id)));
+  grid.querySelectorAll(".delete-btn").forEach(btn => btn.addEventListener("click", () => deletePost(btn.dataset.id)));
+  grid.querySelectorAll(".preview-btn").forEach(btn => btn.addEventListener("click", () => openPreviewModal(btn.dataset.id)));
+  grid.querySelectorAll(".publish-btn").forEach(btn => btn.addEventListener("click", () => publishPost(btn.dataset.id, btn)));
+}
+
+function renderCard(p){
+  const destinations = [];
+  if(p.publish_to_facebook) destinations.push("Facebook");
+  if(p.publish_to_instagram) destinations.push("Instagram");
+  const alreadyPublished = p.status === "published";
+  const errorLine = p.publish_error ? `<div class="post-status-line error">${escapeHTML(p.publish_error)}</div>` : "";
+  const okLine = (!p.publish_error && alreadyPublished) ? `<div class="post-status-line ok">Pubblicato${p.published_at ? " · " + new Date(p.published_at).toLocaleString("it-IT") : ""}</div>` : "";
+
+  return `
+  <div class="card" data-id="${escapeHTML(p.id)}">
+    ${p.image_url ? `<img class="thumb" src="${escapeHTML(p.image_url)}" alt="Immagine post">` : ""}
+    <div class="pill-row">
+      <span class="pill status-${escapeHTML(p.status)}">${escapeHTML(statusLabel(p.status))}</span>
+      <span class="pill">${escapeHTML(p.post_type === "story" ? "Storia" : "Feed")}</span>
+      <span class="pill">${escapeHTML(destinations.join(" + ") || "Nessuna destinazione")}</span>
+    </div>
+    <div class="caption">${escapeHTML(p.caption || "(nessun testo)")}</div>
+    <div class="post-status-line" id="postStatusLine-${escapeHTML(p.id)}">${errorLine}${okLine}</div>
+    <div class="card-actions">
+      <button class="btn-outline edit-btn" data-id="${escapeHTML(p.id)}">Modifica</button>
+      <button class="btn-outline preview-btn" data-id="${escapeHTML(p.id)}">Anteprima</button>
+      <button class="btn-gold publish-btn" data-id="${escapeHTML(p.id)}" ${alreadyPublished ? "disabled" : ""}>${alreadyPublished ? "Già pubblicato" : "Pubblica"}</button>
+      <button class="btn-danger delete-btn" data-id="${escapeHTML(p.id)}">Elimina</button>
+    </div>
+  </div>`;
+}
+
+function openEditModal(id){
+  const p = id ? posts.find(x => x.id === id) : null;
+  document.getElementById("modalTitle").textContent = p ? "Modifica post" : "Nuovo post";
+  document.getElementById("editId").value = p ? p.id : "";
+  document.getElementById("fCaption").value = p ? (p.caption || "") : "";
+  document.getElementById("fImage").value = p ? (p.image_url || "") : "";
+  document.getElementById("fLink").value = p ? (p.link_url || "") : "";
+  document.getElementById("fType").value = p ? p.post_type : "feed";
+  document.getElementById("fFacebook").checked = p ? !!p.publish_to_facebook : true;
+  document.getElementById("fInstagram").checked = p ? !!p.publish_to_instagram : true;
+  document.getElementById("fStatus").value = p ? p.status : "draft";
+  document.getElementById("editModal").classList.add("open");
+}
+
+function closeEditModal(){
+  document.getElementById("editModal").classList.remove("open");
+}
+
+async function savePost(){
+  const id = document.getElementById("editId").value;
+  const payload = {
+    caption: document.getElementById("fCaption").value.trim(),
+    image_url: document.getElementById("fImage").value.trim() || null,
+    link_url: document.getElementById("fLink").value.trim() || null,
+    post_type: document.getElementById("fType").value,
+    publish_to_facebook: document.getElementById("fFacebook").checked,
+    publish_to_instagram: document.getElementById("fInstagram").checked,
+    status: document.getElementById("fStatus").value,
+  };
+
+  if(id){
+    const {error} = await client.from("immonova_social_posts").update(payload).eq("id", id);
+    if(error){ alert("Errore salvataggio: " + error.message); return; }
+  } else {
+    payload.created_by = currentUser ? currentUser.id : null;
+    const {error} = await client.from("immonova_social_posts").insert(payload);
+    if(error){ alert("Errore creazione: " + error.message); return; }
+  }
+  closeEditModal();
+  await loadPosts();
+}
+
+async function deletePost(id){
+  if(!confirm("Eliminare questo post definitivamente?")) return;
+  const {error} = await client.from("immonova_social_posts").delete().eq("id", id);
+  if(error){ alert("Errore eliminazione: " + error.message); return; }
+  await loadPosts();
+}
+
+function extractEdgeFunctionErrorMessage(error){
+  if(error && error.context && error.context.error) return error.context.error;
+  if(error && error.message) return error.message;
+  return "Errore sconosciuto";
+}
+
+async function openPreviewModal(id){
+  const p = posts.find(x => x.id === id);
+  const wrap = document.getElementById("previewFrameWrap");
+  wrap.innerHTML = '<span style="color:#5a4a2a;font-size:13px">Caricamento anteprima...</span>';
+  document.getElementById("previewModal").classList.add("open");
+
+  if(!p){ wrap.innerHTML = '<span style="color:#b3452f;font-size:13px">Post non trovato.</span>'; return; }
+
+  // Anteprima locale semplice (non chiama Meta: i post organici non hanno un
+  // endpoint di preview come gli ads — mostriamo una ricostruzione fedele
+  // del layout invece di una vera generatepreviews).
+  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover;border-radius:8px 8px 0 0">` : "";
+  wrap.innerHTML = `
+    <div style="width:100%;text-align:left">
+      ${img}
+      <div style="padding:14px">
+        <div style="font-weight:700;font-size:13px;color:#3c2d15;margin-bottom:6px">IMMONOVA</div>
+        <div style="font-size:13.5px;color:#3c2d15;white-space:pre-wrap">${escapeHTML(p.caption || "(nessun testo)")}</div>
+        ${p.link_url ? `<div style="margin-top:8px;font-size:12px;color:#a67f34">${escapeHTML(p.link_url)}</div>` : ""}
+      </div>
+    </div>`;
+}
+
+async function publishPost(id, btn){
+  if(!confirm("Pubblicare questo post ora? Diventerà visibile immediatamente sulle destinazioni selezionate.")) return;
+  btn.disabled = true;
+  const statusLine = document.getElementById("postStatusLine-" + id);
+  if(statusLine) statusLine.innerHTML = '<span style="color:#5a4a2a">Pubblicazione in corso...</span>';
+
+  const {data, error} = await client.functions.invoke("immonova-social-publish", {
+    body: {action:"publish", post_id:id}
+  });
+
+  if(error || !data || !data.ok){
+    const msg = error ? extractEdgeFunctionErrorMessage(error) : (data && data.error ? data.error : "Errore sconosciuto");
+    if(statusLine) statusLine.innerHTML = `<span style="color:#b3452f">${escapeHTML(msg)}</span>`;
+    btn.disabled = false;
+    return;
+  }
+
+  await loadPosts();
+}
+
+document.getElementById("newPostBtn").addEventListener("click", () => openEditModal(null));
+document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
+document.getElementById("saveEditBtn").addEventListener("click", savePost);
+document.getElementById("statusFilter").addEventListener("change", renderPosts);
+document.getElementById("closePreviewBtn").addEventListener("click", () => document.getElementById("previewModal").classList.remove("open"));
+document.getElementById("editModal").addEventListener("click", (e) => { if(e.target.id === "editModal") closeEditModal(); });
+document.getElementById("previewModal").addEventListener("click", (e) => { if(e.target.id === "previewModal") document.getElementById("previewModal").classList.remove("open"); });
+
+(async function init(){
+  if(!(await checkAuth())) return;
+  await loadPosts();
+})();
+</script>
+</body>
+</html>
