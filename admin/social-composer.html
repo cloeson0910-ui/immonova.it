@@ -349,8 +349,22 @@ async function deletePost(id){
   await loadPosts();
 }
 
-function extractEdgeFunctionErrorMessage(error){
-  if(error && error.context && error.context.error) return error.context.error;
+async function extractEdgeFunctionErrorMessage(error){
+  // error.context è la Response HTTP grezza restituita dalla Edge Function
+  // (non ancora letta) quando lo status non è 2xx — va letta esplicitamente
+  // per arrivare al vero messaggio scritto dalla funzione (result.error.context,
+  // non result.error.message, che qui è solo "Edge Function returned a non-2xx status code").
+  if(error && error.context && typeof error.context.json === "function"){
+    try{
+      const body = await error.context.clone().json();
+      if(body && body.error) return body.error;
+    }catch(parseErr){
+      try{
+        const text = await error.context.clone().text();
+        if(text) return text;
+      }catch(textErr){ /* ignora, cade sul fallback sotto */ }
+    }
+  }
   if(error && error.message) return error.message;
   return "Errore sconosciuto";
 }
@@ -389,7 +403,7 @@ async function publishPost(id, btn){
   });
 
   if(error || !data || !data.ok){
-    const msg = error ? extractEdgeFunctionErrorMessage(error) : (data && data.error ? data.error : "Errore sconosciuto");
+    const msg = error ? await extractEdgeFunctionErrorMessage(error) : (data && data.error ? data.error : "Errore sconosciuto");
     if(statusLine) statusLine.innerHTML = `<span style="color:#b3452f">${escapeHTML(msg)}</span>`;
     btn.disabled = false;
     return;
