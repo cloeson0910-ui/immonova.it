@@ -180,6 +180,40 @@ button:disabled{opacity:.45; cursor:not-allowed}
         <option value="story">Storia (24h)</option>
       </select>
     </div>
+
+    <div id="storyStyleBlock" style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;display:none">
+      <div style="font-size:12.5px;font-weight:700;color:var(--dark2);margin-bottom:10px">Stile testo sulla Storia (scritto direttamente sull'immagine)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
+        <div class="field" style="margin-bottom:0">
+          <label>Font</label>
+          <select id="fTextFont">
+            <option value="montserrat">Montserrat (moderno)</option>
+            <option value="playfair">Playfair Display (elegante)</option>
+            <option value="opensans">Open Sans (neutro)</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Colore testo</label>
+          <input type="color" id="fTextColor" value="#d6ab4b" style="height:40px;padding:4px">
+        </div>
+      </div>
+      <div class="checkbox-row" style="margin-bottom:10px">
+        <label><input type="checkbox" id="fTextBold" checked> Grassetto</label>
+        <label><input type="checkbox" id="fTextUnderline"> Sottolineato</label>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Effetto immagine</label>
+        <select id="fImageFilter">
+          <option value="none">Nessuno (originale)</option>
+          <option value="grayscale">Bianco e nero</option>
+          <option value="sepia">Seppia</option>
+          <option value="warm">Tonalità calda</option>
+          <option value="cool">Tonalità fredda</option>
+          <option value="vivid">Colori vivaci</option>
+        </select>
+      </div>
+    </div>
+
     <div class="checkbox-row">
       <label><input type="checkbox" id="fFacebook" checked> Pubblica su Facebook</label>
       <label><input type="checkbox" id="fInstagram" checked> Pubblica su Instagram</label>
@@ -341,8 +375,19 @@ function openEditModal(id){
   document.getElementById("fFacebook").checked = p ? !!p.publish_to_facebook : true;
   document.getElementById("fInstagram").checked = p ? !!p.publish_to_instagram : true;
   document.getElementById("fLinkedin").checked = p ? !!p.publish_to_linkedin : false;
+  document.getElementById("fTextFont").value = p ? (p.text_font || "montserrat") : "montserrat";
+  document.getElementById("fTextColor").value = p ? (p.text_color || "#d6ab4b") : "#d6ab4b";
+  document.getElementById("fTextBold").checked = p ? (p.text_bold !== false) : true;
+  document.getElementById("fTextUnderline").checked = p ? !!p.text_underline : false;
+  document.getElementById("fImageFilter").value = p ? (p.image_filter || "none") : "none";
   document.getElementById("fStatus").value = p ? p.status : "draft";
+  toggleStoryStyleBlock();
   document.getElementById("editModal").classList.add("open");
+}
+
+function toggleStoryStyleBlock(){
+  const isStory = document.getElementById("fType").value === "story";
+  document.getElementById("storyStyleBlock").style.display = isStory ? "block" : "none";
 }
 
 function closeEditModal(){
@@ -359,6 +404,11 @@ async function savePost(){
     publish_to_facebook: document.getElementById("fFacebook").checked,
     publish_to_instagram: document.getElementById("fInstagram").checked,
     publish_to_linkedin: document.getElementById("fLinkedin").checked,
+    text_font: document.getElementById("fTextFont").value,
+    text_color: document.getElementById("fTextColor").value,
+    text_bold: document.getElementById("fTextBold").checked,
+    text_underline: document.getElementById("fTextUnderline").checked,
+    image_filter: document.getElementById("fImageFilter").value,
     status: document.getElementById("fStatus").value,
   };
 
@@ -421,6 +471,50 @@ function buildFacebookPreview(p){
 }
 
 function buildInstagramPreview(p){
+  const isStory = p.post_type === "story";
+
+  if(isStory){
+    // Le Storie NON mostrano la caption come testo separato (a differenza
+    // del feed): il backend scrive il testo DIRETTAMENTE sui pixel
+    // dell'immagine prima di pubblicare, usando font/colore/grassetto/
+    // sottolineato ed effetto immagine scelti nel form — qui replichiamo
+    // lo stesso stile con CSS (filter/font-family/text-decoration) per
+    // un'anteprima fedele, anche se non pixel-perfect rispetto al render
+    // reale fatto dal backend con ImageScript.
+    const FONT_STACKS = {
+      montserrat: "'Montserrat','Avenir Next',sans-serif",
+      playfair: "'Playfair Display',Georgia,serif",
+      opensans: "'Open Sans','Avenir Next',sans-serif",
+    };
+    const CSS_FILTERS = {
+      none: "none",
+      grayscale: "grayscale(1)",
+      sepia: "sepia(0.85)",
+      warm: "saturate(1.15) sepia(0.15) hue-rotate(-8deg)",
+      cool: "saturate(1.1) hue-rotate(12deg)",
+      vivid: "saturate(1.5)",
+    };
+    const fontStack = FONT_STACKS[p.text_font] || FONT_STACKS.montserrat;
+    const cssFilter = CSS_FILTERS[p.image_filter] || "none";
+    const textColor = p.text_color || "#d6ab4b";
+    const bg = p.image_url
+      ? `background-image:url('${escapeHTML(p.image_url)}');background-size:cover;background-position:center;filter:${cssFilter}`
+      : "background:#f0f0f0";
+    return `
+      <div class="ig-mock" style="position:relative;aspect-ratio:9/16;max-height:520px;${bg};display:flex;align-items:flex-end">
+        <div style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:8px">
+          <div class="ig-avatar" style="border:2px solid #fff"></div>
+          <div style="color:#fff;font-weight:700;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6)">immonova</div>
+        </div>
+        ${p.caption ? `
+          <div style="width:100%;padding:18px 16px;background:rgba(0,0,0,.6);text-align:center">
+            <div style="color:${escapeHTML(textColor)};font-weight:${p.text_bold === false ? 400 : 700};font-family:${fontStack};text-decoration:${p.text_underline ? "underline" : "none"};font-size:15px;line-height:1.4">${escapeHTML(p.caption)}</div>
+          </div>` : `
+          <div style="width:100%;padding:14px 16px;color:#fff;font-size:12px;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.6)">(nessun testo — la storia verrà pubblicata senza overlay)</div>`
+        }
+      </div>`;
+  }
+
   const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover">` : `<div style="width:100%;aspect-ratio:1/1;background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">Instagram richiede un'immagine</div>`;
   return `
     <div class="ig-mock">
@@ -516,6 +610,7 @@ document.getElementById("fImageFile").addEventListener("change", (e) => {
   if(file) uploadImageFile(file);
 });
 document.getElementById("fImage").addEventListener("input", (e) => renderImagePreview(e.target.value.trim()));
+document.getElementById("fType").addEventListener("change", toggleStoryStyleBlock);
 document.getElementById("newPostBtn").addEventListener("click", () => openEditModal(null));
 document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
 document.getElementById("saveEditBtn").addEventListener("click", savePost);
