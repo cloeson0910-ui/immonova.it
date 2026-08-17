@@ -415,16 +415,8 @@ body::after{
 
         <div class="field full">
           <label>Nazioni (queste sono i valori effettivamente usati alla pubblicazione)</label>
-          <div id="countryCheckboxes" style="display:flex;flex-wrap:wrap;gap:14px;padding:10px 0">
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="IT" checked> Italia</label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="DE"> Germania</label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="FR"> Francia</label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="SE"> Svezia</label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="NO"> Norvegia</label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="CH"> Svizzera</label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="GB"> Regno Unito</label>
-            <label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="US"> Stati Uniti</label>
-          </div>
+          <div id="regionQuickSelect" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 4px"></div>
+          <div id="countryCheckboxes" style="padding:10px 0"></div>
         </div>
         <div class="field">
           <label>Età minima</label>
@@ -598,6 +590,96 @@ function resetForm(){
   document.getElementById("ageMin").value = 18;
   document.getElementById("ageMax").value = "";
   document.getElementById("targetInterests").value = "";
+}
+
+// Nazioni raggruppate per area geografica, coerenti coi codici ISO a 2
+// lettere accettati da Meta in geo_locations.countries. Ogni gruppo qui
+// sotto diventa sia una sezione di checkbox sia un pulsante di selezione
+// rapida ("Unione Europea", "Nord America", ecc.) — cliccando il pulsante
+// si spuntano/tolgono TUTTE le nazioni di quel gruppo in un colpo solo,
+// senza toccare le altre già selezionate fuori dal gruppo.
+const COUNTRY_REGIONS = [
+  {
+    key: "eu",
+    label: "Unione Europea",
+    countries: [
+      ["IT","Italia"],["DE","Germania"],["FR","Francia"],["ES","Spagna"],["PT","Portogallo"],
+      ["NL","Paesi Bassi"],["BE","Belgio"],["LU","Lussemburgo"],["AT","Austria"],["IE","Irlanda"],
+      ["SE","Svezia"],["DK","Danimarca"],["FI","Finlandia"],["PL","Polonia"],["CZ","Rep. Ceca"],
+      ["SK","Slovacchia"],["HU","Ungheria"],["RO","Romania"],["BG","Bulgaria"],["GR","Grecia"],
+      ["HR","Croazia"],["SI","Slovenia"],["EE","Estonia"],["LV","Lettonia"],["LT","Lituania"],
+      ["CY","Cipro"],["MT","Malta"]
+    ]
+  },
+  {
+    key: "europe_other",
+    label: "Europa (extra-UE)",
+    countries: [["GB","Regno Unito"],["CH","Svizzera"],["NO","Norvegia"],["IS","Islanda"]]
+  },
+  {
+    key: "north_america",
+    label: "Nord America",
+    countries: [["US","Stati Uniti"],["CA","Canada"],["MX","Messico"]]
+  },
+  {
+    key: "south_america",
+    label: "Sud America",
+    countries: [["BR","Brasile"],["AR","Argentina"],["CL","Cile"],["CO","Colombia"]]
+  },
+  {
+    key: "asia_gulf",
+    label: "Asia / Golfo",
+    countries: [["AE","Emirati Arabi Uniti"],["SA","Arabia Saudita"],["QA","Qatar"],["SG","Singapore"],["JP","Giappone"],["CN","Cina"],["IN","India"],["HK","Hong Kong"]]
+  },
+  {
+    key: "oceania",
+    label: "Oceania",
+    countries: [["AU","Australia"],["NZ","Nuova Zelanda"]]
+  }
+];
+
+function renderCountryUI(){
+  const quickWrap = document.getElementById("regionQuickSelect");
+  const listWrap = document.getElementById("countryCheckboxes");
+
+  quickWrap.innerHTML = COUNTRY_REGIONS.map(r =>
+    `<button type="button" class="region-btn" data-region="${r.key}" style="padding:6px 12px;border:1px solid rgba(166,127,52,.35);background:rgba(255,255,255,.3);color:#a67f34;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit">${r.label}</button>`
+  ).join("") +
+  `<button type="button" id="clearCountriesBtn" style="padding:6px 12px;border:1px solid rgba(156,47,47,.35);background:rgba(255,255,255,.3);color:#9c2f2f;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit">Svuota selezione</button>`;
+
+  listWrap.innerHTML = COUNTRY_REGIONS.map(r => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;margin-bottom:6px">${r.label}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:12px">
+        ${r.countries.map(([code, name]) =>
+          `<label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:normal;font-size:13px"><input type="checkbox" class="countryCb" value="${code}"> ${name}</label>`
+        ).join("")}
+      </div>
+    </div>
+  `).join("");
+
+  quickWrap.querySelectorAll(".region-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const region = COUNTRY_REGIONS.find(r => r.key === btn.dataset.region);
+      if(!region) return;
+      const codes = region.countries.map(([code]) => code);
+      // Se sono già tutte selezionate, il click le deseleziona (toggle);
+      // altrimenti le seleziona tutte — così il pulsante fa sia da
+      // "seleziona area" sia da "deseleziona area" senza bisogno di due tasti.
+      const allChecked = codes.every(code => {
+        const cb = document.querySelector(`.countryCb[value="${code}"]`);
+        return cb && cb.checked;
+      });
+      codes.forEach(code => {
+        const cb = document.querySelector(`.countryCb[value="${code}"]`);
+        if(cb) cb.checked = !allChecked;
+      });
+    });
+  });
+
+  document.getElementById("clearCountriesBtn").addEventListener("click", () => {
+    document.querySelectorAll(".countryCb").forEach(cb => cb.checked = false);
+  });
 }
 
 function setCountryCheckboxes(countries){
@@ -1171,6 +1253,8 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   await client.auth.signOut();
   window.location.href = "../index.html";
 });
+
+renderCountryUI();
 
 (async function init(){
   if(await checkAuth()){
