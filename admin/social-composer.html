@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Post Social — IMMONOVA Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Caricati solo per rendere l'ANTEPRIMA nel browser fedele ai font usati
+     davvero dal backend per scrivere il testo sulle Storie (Poppins,
+     Crimson Text, Lato, Cinzel, Italiana, Dancing Script, Abril Fatface) -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&family=Crimson+Text:wght@400;700&family=Lato:wght@400;700&family=Cinzel:wght@400;700&family=Italiana&family=Dancing+Script&family=Abril+Fatface&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f4ecdf; --gold:#a67f34; --dark:#3c2d15; --dark2:#5a4a2a;
@@ -187,9 +193,13 @@ button:disabled{opacity:.45; cursor:not-allowed}
         <div class="field" style="margin-bottom:0">
           <label>Font</label>
           <select id="fTextFont">
-            <option value="montserrat">Poppins (moderno)</option>
-            <option value="playfair">Crimson Text (elegante)</option>
-            <option value="opensans">Lato (neutro)</option>
+            <option value="poppins">Poppins (moderno)</option>
+            <option value="crimson">Crimson Text (elegante, serif)</option>
+            <option value="lato">Lato (neutro)</option>
+            <option value="cinzel">Cinzel (lusso, maiuscolo)</option>
+            <option value="italiana">Italiana (sottile, chic)</option>
+            <option value="dancingscript">Dancing Script (corsivo)</option>
+            <option value="abrilfatface">Abril Fatface (display, deciso)</option>
           </select>
         </div>
         <div class="field" style="margin-bottom:0">
@@ -201,7 +211,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
         <label><input type="checkbox" id="fTextBold" checked> Grassetto</label>
         <label><input type="checkbox" id="fTextUnderline"> Sottolineato</label>
       </div>
-      <div class="field" style="margin-bottom:0">
+      <div class="field" style="margin-bottom:10px">
         <label>Effetto immagine</label>
         <select id="fImageFilter">
           <option value="none">Nessuno (originale)</option>
@@ -212,6 +222,8 @@ button:disabled{opacity:.45; cursor:not-allowed}
           <option value="vivid">Colori vivaci</option>
         </select>
       </div>
+      <div style="font-size:10.5px;color:var(--dark2);margin-bottom:8px">Anteprima live (aggiornata mentre modifichi — non pixel-perfect rispetto al risultato reale, ma vicina):</div>
+      <div id="liveStoryPreview" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:220px;margin:0 auto"></div>
     </div>
 
     <div class="checkbox-row">
@@ -357,6 +369,7 @@ async function uploadImageFile(file){
   const {data} = client.storage.from("social-media").getPublicUrl(path);
   document.getElementById("fImage").value = data.publicUrl;
   renderImagePreview(data.publicUrl);
+  renderLiveStoryPreview();
   statusEl.textContent = "Immagine caricata.";
   statusEl.style.color = "#227a3f";
 }
@@ -388,6 +401,28 @@ function openEditModal(id){
 function toggleStoryStyleBlock(){
   const isStory = document.getElementById("fType").value === "story";
   document.getElementById("storyStyleBlock").style.display = isStory ? "block" : "none";
+  if(isStory) renderLiveStoryPreview();
+}
+
+// Anteprima live dentro al form stesso: si aggiorna ad ogni modifica di
+// font/colore/grassetto/sottolineato/effetto immagine/testo/immagine,
+// così si vede subito il risultato senza dover aprire la modale
+// "Anteprima" separata. Usa lo stesso buildInstagramPreview() dell'anteprima
+// a tutto schermo, passando i valori letti live dai campi del form.
+function renderLiveStoryPreview(){
+  const wrap = document.getElementById("liveStoryPreview");
+  if(!wrap) return;
+  const fakePost = {
+    post_type: "story",
+    caption: document.getElementById("fCaption").value,
+    image_url: document.getElementById("fImage").value.trim(),
+    text_font: document.getElementById("fTextFont").value,
+    text_color: document.getElementById("fTextColor").value,
+    text_bold: document.getElementById("fTextBold").checked,
+    text_underline: document.getElementById("fTextUnderline").checked,
+    image_filter: document.getElementById("fImageFilter").value,
+  };
+  wrap.innerHTML = buildInstagramPreview(fakePost);
 }
 
 function closeEditModal(){
@@ -470,6 +505,28 @@ function buildFacebookPreview(p){
     </div>`;
 }
 
+// Condivise tra l'anteprima live nel form e la modale "Anteprima" a
+// tutto schermo — stessi font/effetti realmente usati dal backend
+// (vedi FONT_URLS in immonova-social-publish/index.ts), qui solo
+// tradotti in equivalenti CSS per il rendering nel browser.
+const FONT_STACKS = {
+  poppins: "'Poppins','Avenir Next',sans-serif",
+  crimson: "'Crimson Text',Georgia,serif",
+  lato: "'Lato','Avenir Next',sans-serif",
+  cinzel: "'Cinzel',Georgia,serif",
+  italiana: "'Italiana',Georgia,serif",
+  dancingscript: "'Dancing Script',cursive",
+  abrilfatface: "'Abril Fatface',Georgia,serif",
+};
+const CSS_FILTERS = {
+  none: "none",
+  grayscale: "grayscale(1)",
+  sepia: "sepia(0.85)",
+  warm: "saturate(1.15) sepia(0.15) hue-rotate(-8deg)",
+  cool: "saturate(1.1) hue-rotate(12deg)",
+  vivid: "saturate(1.5)",
+};
+
 function buildInstagramPreview(p){
   const isStory = p.post_type === "story";
 
@@ -481,20 +538,7 @@ function buildInstagramPreview(p){
     // lo stesso stile con CSS (filter/font-family/text-decoration) per
     // un'anteprima fedele, anche se non pixel-perfect rispetto al render
     // reale fatto dal backend con ImageScript.
-    const FONT_STACKS = {
-      montserrat: "'Poppins','Avenir Next',sans-serif",
-      playfair: "'Crimson Text',Georgia,serif",
-      opensans: "'Lato','Avenir Next',sans-serif",
-    };
-    const CSS_FILTERS = {
-      none: "none",
-      grayscale: "grayscale(1)",
-      sepia: "sepia(0.85)",
-      warm: "saturate(1.15) sepia(0.15) hue-rotate(-8deg)",
-      cool: "saturate(1.1) hue-rotate(12deg)",
-      vivid: "saturate(1.5)",
-    };
-    const fontStack = FONT_STACKS[p.text_font] || FONT_STACKS.montserrat;
+    const fontStack = FONT_STACKS[p.text_font] || FONT_STACKS.poppins;
     const cssFilter = CSS_FILTERS[p.image_filter] || "none";
     const textColor = p.text_color || "#d6ab4b";
     const bg = p.image_url
@@ -609,8 +653,14 @@ document.getElementById("fImageFile").addEventListener("change", (e) => {
   const file = e.target.files && e.target.files[0];
   if(file) uploadImageFile(file);
 });
-document.getElementById("fImage").addEventListener("input", (e) => renderImagePreview(e.target.value.trim()));
+document.getElementById("fImage").addEventListener("input", (e) => { renderImagePreview(e.target.value.trim()); renderLiveStoryPreview(); });
 document.getElementById("fType").addEventListener("change", toggleStoryStyleBlock);
+document.getElementById("fCaption").addEventListener("input", renderLiveStoryPreview);
+document.getElementById("fTextFont").addEventListener("change", renderLiveStoryPreview);
+document.getElementById("fTextColor").addEventListener("input", renderLiveStoryPreview);
+document.getElementById("fTextBold").addEventListener("change", renderLiveStoryPreview);
+document.getElementById("fTextUnderline").addEventListener("change", renderLiveStoryPreview);
+document.getElementById("fImageFilter").addEventListener("change", renderLiveStoryPreview);
 document.getElementById("newPostBtn").addEventListener("click", () => openEditModal(null));
 document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
 document.getElementById("saveEditBtn").addEventListener("click", savePost);
