@@ -222,6 +222,19 @@ button:disabled{opacity:.45; cursor:not-allowed}
           <option value="vivid">Colori vivaci</option>
         </select>
       </div>
+      <div class="field" style="margin-bottom:8px">
+        <label>Sticker (originale in stile IMMONOVA — non è uno sticker ufficiale Instagram, che è un asset protetto da copyright e non riutilizzabile)</label>
+        <select id="fStorySticker">
+          <option value="none">Nessuno</option>
+          <option value="cta_arrow">Freccia + "Scopri di più"</option>
+          <option value="new_badge">Badge "Nuovo annuncio"</option>
+          <option value="price_tag">Tag prezzo</option>
+        </select>
+      </div>
+      <div class="field" id="fStorySickerTextWrap" style="margin-bottom:10px;display:none">
+        <label>Testo personalizzato per lo sticker (facoltativo)</label>
+        <input type="text" id="fStorySickerText" placeholder="Es. € 450.000 oppure NUOVO ANNUNCIO">
+      </div>
       <div style="font-size:10.5px;color:var(--dark2);margin-bottom:8px">Anteprima live (aggiornata mentre modifichi — non pixel-perfect rispetto al risultato reale, ma vicina):</div>
       <div id="liveStoryPreview" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:220px;margin:0 auto"></div>
     </div>
@@ -388,14 +401,22 @@ function openEditModal(id){
   document.getElementById("fFacebook").checked = p ? !!p.publish_to_facebook : true;
   document.getElementById("fInstagram").checked = p ? !!p.publish_to_instagram : true;
   document.getElementById("fLinkedin").checked = p ? !!p.publish_to_linkedin : false;
-  document.getElementById("fTextFont").value = p ? (p.text_font || "montserrat") : "montserrat";
+  document.getElementById("fTextFont").value = p ? (p.text_font || "poppins") : "poppins";
   document.getElementById("fTextColor").value = p ? (p.text_color || "#d6ab4b") : "#d6ab4b";
   document.getElementById("fTextBold").checked = p ? (p.text_bold !== false) : true;
   document.getElementById("fTextUnderline").checked = p ? !!p.text_underline : false;
   document.getElementById("fImageFilter").value = p ? (p.image_filter || "none") : "none";
+  document.getElementById("fStorySticker").value = p ? (p.story_sticker || "none") : "none";
+  document.getElementById("fStorySickerText").value = p ? (p.story_sticker_text || "") : "";
   document.getElementById("fStatus").value = p ? p.status : "draft";
   toggleStoryStyleBlock();
+  toggleStickerTextField();
   document.getElementById("editModal").classList.add("open");
+}
+
+function toggleStickerTextField(){
+  const sticker = document.getElementById("fStorySticker").value;
+  document.getElementById("fStorySickerTextWrap").style.display = (sticker === "new_badge" || sticker === "price_tag") ? "block" : "none";
 }
 
 function toggleStoryStyleBlock(){
@@ -421,6 +442,8 @@ function renderLiveStoryPreview(){
     text_bold: document.getElementById("fTextBold").checked,
     text_underline: document.getElementById("fTextUnderline").checked,
     image_filter: document.getElementById("fImageFilter").value,
+    story_sticker: document.getElementById("fStorySticker").value,
+    story_sticker_text: document.getElementById("fStorySickerText").value,
   };
   wrap.innerHTML = buildInstagramPreview(fakePost);
 }
@@ -444,6 +467,8 @@ async function savePost(){
     text_bold: document.getElementById("fTextBold").checked,
     text_underline: document.getElementById("fTextUnderline").checked,
     image_filter: document.getElementById("fImageFilter").value,
+    story_sticker: document.getElementById("fStorySticker").value,
+    story_sticker_text: document.getElementById("fStorySickerText").value.trim() || null,
     status: document.getElementById("fStatus").value,
   };
 
@@ -544,12 +569,34 @@ function buildInstagramPreview(p){
     const bg = p.image_url
       ? `background-image:url('${escapeHTML(p.image_url)}');background-size:cover;background-position:center;filter:${cssFilter}`
       : "background:#f0f0f0";
+
+    // Sticker ORIGINALE in stile IMMONOVA (non uno sticker ufficiale
+    // Instagram) — stessa posizione/logica del rendering reale lato
+    // backend (vedi renderSticker() nell'Edge Function).
+    let stickerHtml = "";
+    if(p.story_sticker === "cta_arrow"){
+      stickerHtml = `
+        <div style="position:absolute;left:50%;top:58%;transform:translate(-50%,0);text-align:center">
+          <div style="width:0;height:0;margin:0 auto 4px;border-left:17px solid transparent;border-right:17px solid transparent;border-bottom:20px solid #d6ab4b"></div>
+          <div style="background:#d6ab4b;color:#3c2d15;font-weight:700;font-size:13px;letter-spacing:.04em;padding:10px 20px;font-family:'Lato',sans-serif">SCOPRI DI PIÙ</div>
+        </div>`;
+    } else if(p.story_sticker === "new_badge"){
+      const label = (p.story_sticker_text && p.story_sticker_text.trim()) || "NUOVO ANNUNCIO";
+      stickerHtml = `
+        <div style="position:absolute;left:16px;top:64px;background:#3c2d15;color:#fff;font-weight:700;font-size:12px;letter-spacing:.03em;padding:8px 14px;font-family:'Lato',sans-serif">${escapeHTML(label)}</div>`;
+    } else if(p.story_sticker === "price_tag"){
+      const label = (p.story_sticker_text && p.story_sticker_text.trim()) || "PREZZO SU RICHIESTA";
+      stickerHtml = `
+        <div style="position:absolute;left:50%;top:68px;transform:translateX(-50%);background:#d6ab4b;color:#3c2d15;font-weight:700;font-size:13px;letter-spacing:.03em;padding:9px 18px;font-family:'Lato',sans-serif;white-space:nowrap">${escapeHTML(label)}</div>`;
+    }
+
     return `
       <div class="ig-mock" style="position:relative;aspect-ratio:9/16;max-height:520px;${bg};display:flex;align-items:flex-end">
         <div style="position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:8px">
           <div class="ig-avatar" style="border:2px solid #fff"></div>
           <div style="color:#fff;font-weight:700;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6)">immonova</div>
         </div>
+        ${stickerHtml}
         ${p.caption ? `
           <div style="width:100%;padding:18px 16px;background:rgba(0,0,0,.6);text-align:center">
             <div style="color:${escapeHTML(textColor)};font-weight:${p.text_bold === false ? 400 : 700};font-family:${fontStack};text-decoration:${p.text_underline ? "underline" : "none"};font-size:15px;line-height:1.4">${escapeHTML(p.caption)}</div>
@@ -661,6 +708,8 @@ document.getElementById("fTextColor").addEventListener("input", renderLiveStoryP
 document.getElementById("fTextBold").addEventListener("change", renderLiveStoryPreview);
 document.getElementById("fTextUnderline").addEventListener("change", renderLiveStoryPreview);
 document.getElementById("fImageFilter").addEventListener("change", renderLiveStoryPreview);
+document.getElementById("fStorySticker").addEventListener("change", () => { toggleStickerTextField(); renderLiveStoryPreview(); });
+document.getElementById("fStorySickerText").addEventListener("input", renderLiveStoryPreview);
 document.getElementById("newPostBtn").addEventListener("click", () => openEditModal(null));
 document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
 document.getElementById("saveEditBtn").addEventListener("click", savePost);
