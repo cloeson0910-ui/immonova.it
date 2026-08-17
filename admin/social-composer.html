@@ -169,6 +169,10 @@ button:disabled{opacity:.45; cursor:not-allowed}
       <textarea id="fCaption" placeholder="Scrivi il testo del post..."></textarea>
     </div>
     <div class="field">
+      <label>Hashtag (aggiunti automaticamente in fondo al testo — solo per i post nel feed, non per le Storie)</label>
+      <textarea id="fHashtags" placeholder="#immobililusso #realestate #salento #investimenti" style="min-height:50px"></textarea>
+    </div>
+    <div class="field">
       <label>Immagine</label>
       <input type="file" id="fImageFile" accept="image/*">
       <div style="font-size:12px;color:#5a4a2a;margin-top:6px" id="uploadStatus"></div>
@@ -392,6 +396,7 @@ function openEditModal(id){
   document.getElementById("modalTitle").textContent = p ? "Modifica post" : "Nuovo post";
   document.getElementById("editId").value = p ? p.id : "";
   document.getElementById("fCaption").value = p ? (p.caption || "") : "";
+  document.getElementById("fHashtags").value = p ? (p.hashtags || "") : "";
   document.getElementById("fImage").value = p ? (p.image_url || "") : "";
   document.getElementById("fImageFile").value = "";
   document.getElementById("uploadStatus").textContent = "";
@@ -456,6 +461,7 @@ async function savePost(){
   const id = document.getElementById("editId").value;
   const payload = {
     caption: document.getElementById("fCaption").value.trim(),
+    hashtags: document.getElementById("fHashtags").value.trim() || null,
     image_url: document.getElementById("fImage").value.trim() || null,
     link_url: document.getElementById("fLink").value.trim() || null,
     post_type: document.getElementById("fType").value,
@@ -511,6 +517,17 @@ async function extractEdgeFunctionErrorMessage(error){
   return "Errore sconosciuto";
 }
 
+// Rispecchia buildFeedCaption() lato backend (immonova-social-publish/
+// index.ts): gli hashtag vengono aggiunti in coda al testo SOLO per i
+// post nel feed, mai per le Storie (dove il testo finisce disegnato sui
+// pixel, quindi un hashtag lì non sarebbe comunque cliccabile).
+function feedCaptionText(p){
+  const base = p.caption || "";
+  const tags = (p.hashtags || "").trim();
+  if(p.post_type === "story" || !tags) return base;
+  return base ? `${base}\n\n${tags}` : tags;
+}
+
 function buildFacebookPreview(p){
   const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "";
   let domain = "";
@@ -524,7 +541,7 @@ function buildFacebookPreview(p){
           <div class="fb-sub">${p.post_type === "story" ? "Storia · ora" : "Ora · 🌐"}</div>
         </div>
       </div>
-      <div class="fb-body">${escapeHTML(p.caption || "(nessun testo)")}</div>
+      <div class="fb-body">${escapeHTML(feedCaptionText(p) || "(nessun testo)")}</div>
       ${img}
       ${p.link_url ? `<div class="fb-link">${escapeHTML(domain)}</div>` : ""}
     </div>`;
@@ -614,7 +631,7 @@ function buildInstagramPreview(p){
         <div class="ig-name">immonova</div>
       </div>
       ${img}
-      <div class="ig-body"><b>immonova</b> ${escapeHTML(p.caption || "(nessun testo)")}</div>
+      <div class="ig-body"><b>immonova</b> ${escapeHTML(feedCaptionText(p) || "(nessun testo)")}</div>
     </div>`;
 }
 
@@ -629,7 +646,7 @@ function buildLinkedinPreview(p){
           <div class="li-sub">Pagina aziendale · Ora</div>
         </div>
       </div>
-      <div class="li-body">${escapeHTML(p.caption || "(nessun testo)")}</div>
+      <div class="li-body">${escapeHTML(feedCaptionText(p) || "(nessun testo)")}</div>
       ${img}
       ${(!p.image_url && p.link_url) ? `<div style="border-top:1px solid #e7e7e7;padding:8px 14px;font-size:12px;color:#666">${escapeHTML(p.link_url)}</div>` : ""}
     </div>`;
