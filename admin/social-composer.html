@@ -173,12 +173,39 @@ button:disabled{opacity:.45; cursor:not-allowed}
       <textarea id="fHashtags" placeholder="#immobililusso #realestate #salento #investimenti" style="min-height:50px"></textarea>
     </div>
     <div class="field">
+      <label>Formato</label>
+      <select id="fMediaType">
+        <option value="image">Foto singola</option>
+        <option value="video">Video (Reel su Instagram)</option>
+        <option value="carousel">Slideshow / carosello (più immagini)</option>
+      </select>
+      <div style="font-size:11px;color:var(--dark2);margin-top:4px">Video e slideshow non sono ancora supportati su LinkedIn — se selezionati, LinkedIn viene escluso automaticamente da quel post.</div>
+    </div>
+
+    <div class="field" id="fImageBlock">
       <label>Immagine</label>
       <input type="file" id="fImageFile" accept="image/*">
       <div style="font-size:12px;color:#5a4a2a;margin-top:6px" id="uploadStatus"></div>
       <input type="url" id="fImage" placeholder="oppure incolla un URL immagine già esistente" style="margin-top:8px">
       <div id="imagePreviewWrap" style="margin-top:8px"></div>
     </div>
+
+    <div class="field" id="fVideoBlock" style="display:none">
+      <label>Video</label>
+      <input type="file" id="fVideoFile" accept="video/*">
+      <div style="font-size:12px;color:#5a4a2a;margin-top:6px" id="videoUploadStatus"></div>
+      <input type="url" id="fVideoUrl" placeholder="oppure incolla un URL video già esistente" style="margin-top:8px">
+      <div style="font-size:11px;color:var(--dark2);margin-top:6px">Il testo sovrapposto e gli sticker (per le Storie) non si applicano ai video — solo alle foto.</div>
+    </div>
+
+    <div class="field" id="fCarouselBlock" style="display:none">
+      <label>Immagini dello slideshow (min 2, max 10 — una per riga, in ordine)</label>
+      <input type="file" id="fCarouselFiles" accept="image/*" multiple>
+      <div style="font-size:12px;color:#5a4a2a;margin-top:6px" id="carouselUploadStatus"></div>
+      <textarea id="fCarouselUrls" placeholder="Incolla o carica gli URL delle immagini, uno per riga" style="margin-top:8px;min-height:80px;font-family:monospace;font-size:12px"></textarea>
+      <div style="font-size:11px;color:var(--dark2);margin-top:6px">Solo per il feed — le Storie non supportano lo slideshow.</div>
+    </div>
+
     <div class="field">
       <label>Link (opzionale, solo Facebook)</label>
       <input type="url" id="fLink" placeholder="https://immonova-consulting.it/opportunity.html?id=26">
@@ -339,12 +366,17 @@ function renderCard(p){
   const errorLine = p.publish_error ? `<div class="post-status-line error">${escapeHTML(p.publish_error)}</div>` : "";
   const okLine = (!p.publish_error && alreadyPublished) ? `<div class="post-status-line ok">Pubblicato${p.published_at ? " · " + new Date(p.published_at).toLocaleString("it-IT") : ""}</div>` : "";
 
+  const mediaType = p.media_type || "image";
+  const mediaLabel = mediaType === "video" ? "Video" : (mediaType === "carousel" ? `Carosello${Array.isArray(p.carousel_image_urls) ? " (" + p.carousel_image_urls.length + ")" : ""}` : "Immagine");
+  const thumbSrc = mediaType === "carousel" && Array.isArray(p.carousel_image_urls) && p.carousel_image_urls.length ? p.carousel_image_urls[0] : p.image_url;
+
   return `
   <div class="card" data-id="${escapeHTML(p.id)}">
-    ${p.image_url ? `<img class="thumb" src="${escapeHTML(p.image_url)}" alt="Immagine post">` : ""}
+    ${mediaType === "video" ? `<div class="thumb" style="display:flex;align-items:center;justify-content:center;background:#1a1a1a;color:#fff;font-size:2rem">▶</div>` : (thumbSrc ? `<img class="thumb" src="${escapeHTML(thumbSrc)}" alt="Immagine post">` : "")}
     <div class="pill-row">
       <span class="pill status-${escapeHTML(p.status)}">${escapeHTML(statusLabel(p.status))}</span>
       <span class="pill">${escapeHTML(p.post_type === "story" ? "Storia" : "Feed")}</span>
+      <span class="pill">${escapeHTML(mediaLabel)}</span>
       <span class="pill">${escapeHTML(destinations.join(" + ") || "Nessuna destinazione")}</span>
     </div>
     <div class="caption">${escapeHTML(p.caption || "(nessun testo)")}</div>
@@ -391,6 +423,80 @@ async function uploadImageFile(file){
   statusEl.style.color = "#227a3f";
 }
 
+async function uploadVideoFile(file){
+  const statusEl = document.getElementById("videoUploadStatus");
+  statusEl.textContent = "Caricamento video in corso... (può richiedere qualche minuto per file grandi)";
+  statusEl.style.color = "#5a4a2a";
+
+  const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+  const safeExt = /^[a-z0-9]+$/.test(ext) ? ext : "mp4";
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+
+  const {error: uploadError} = await client.storage.from("social-media").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+
+  if(uploadError){
+    statusEl.textContent = "Errore caricamento: " + uploadError.message;
+    statusEl.style.color = "#b3452f";
+    return;
+  }
+
+  const {data} = client.storage.from("social-media").getPublicUrl(path);
+  document.getElementById("fVideoUrl").value = data.publicUrl;
+  statusEl.textContent = "Video caricato.";
+  statusEl.style.color = "#227a3f";
+}
+
+async function uploadCarouselFiles(files){
+  const statusEl = document.getElementById("carouselUploadStatus");
+  const urlsField = document.getElementById("fCarouselUrls");
+  statusEl.textContent = `Caricamento di ${files.length} immagini in corso...`;
+  statusEl.style.color = "#5a4a2a";
+
+  const uploadedUrls = [];
+  for(const file of files){
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+    const safeExt = /^[a-z0-9]+$/.test(ext) ? ext : "jpg";
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+    const {error: uploadError} = await client.storage.from("social-media").upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if(uploadError){
+      statusEl.textContent = "Errore caricamento di " + file.name + ": " + uploadError.message;
+      statusEl.style.color = "#b3452f";
+      continue;
+    }
+    const {data} = client.storage.from("social-media").getPublicUrl(path);
+    uploadedUrls.push(data.publicUrl);
+  }
+
+  const existing = urlsField.value.split("\n").map(s => s.trim()).filter(Boolean);
+  urlsField.value = [...existing, ...uploadedUrls].join("\n");
+  statusEl.textContent = `${uploadedUrls.length} immagini caricate (totale ${existing.length + uploadedUrls.length}).`;
+  statusEl.style.color = "#227a3f";
+}
+
+function toggleMediaTypeBlocks(){
+  const type = document.getElementById("fMediaType").value;
+  document.getElementById("fImageBlock").style.display = type === "image" ? "block" : "none";
+  document.getElementById("fVideoBlock").style.display = type === "video" ? "block" : "none";
+  document.getElementById("fCarouselBlock").style.display = type === "carousel" ? "block" : "none";
+
+  // Video e carosello non sono supportati su LinkedIn con questo sistema
+  // (vedi publishToLinkedIn nell'Edge Function) — disabilitiamo la
+  // checkbox per evitare un tentativo di pubblicazione che fallirebbe.
+  const linkedinCb = document.getElementById("fLinkedin");
+  if(type === "video" || type === "carousel"){
+    linkedinCb.checked = false;
+    linkedinCb.disabled = true;
+  } else {
+    linkedinCb.disabled = false;
+  }
+}
+
 function openEditModal(id){
   const p = id ? posts.find(x => x.id === id) : null;
   document.getElementById("modalTitle").textContent = p ? "Modifica post" : "Nuovo post";
@@ -401,11 +507,19 @@ function openEditModal(id){
   document.getElementById("fImageFile").value = "";
   document.getElementById("uploadStatus").textContent = "";
   renderImagePreview(p ? (p.image_url || "") : "");
+  document.getElementById("fMediaType").value = p ? (p.media_type || "image") : "image";
+  document.getElementById("fVideoUrl").value = p ? (p.video_url || "") : "";
+  document.getElementById("fVideoFile").value = "";
+  document.getElementById("videoUploadStatus").textContent = "";
+  document.getElementById("fCarouselUrls").value = p && Array.isArray(p.carousel_image_urls) ? p.carousel_image_urls.join("\n") : "";
+  document.getElementById("fCarouselFiles").value = "";
+  document.getElementById("carouselUploadStatus").textContent = "";
   document.getElementById("fLink").value = p ? (p.link_url || "") : "";
   document.getElementById("fType").value = p ? p.post_type : "feed";
   document.getElementById("fFacebook").checked = p ? !!p.publish_to_facebook : true;
   document.getElementById("fInstagram").checked = p ? !!p.publish_to_instagram : true;
   document.getElementById("fLinkedin").checked = p ? !!p.publish_to_linkedin : false;
+  toggleMediaTypeBlocks(); // dopo aver impostato i checkbox: se il post è video/carosello disattiva comunque LinkedIn
   document.getElementById("fTextFont").value = p ? (p.text_font || "poppins") : "poppins";
   document.getElementById("fTextColor").value = p ? (p.text_color || "#d6ab4b") : "#d6ab4b";
   document.getElementById("fTextBold").checked = p ? (p.text_bold !== false) : true;
@@ -459,10 +573,35 @@ function closeEditModal(){
 
 async function savePost(){
   const id = document.getElementById("editId").value;
+
+  const mediaType = document.getElementById("fMediaType").value;
+  if(mediaType === "video" && !document.getElementById("fVideoUrl").value.trim()){
+    alert("Formato \"Video\" selezionato: carica un video o incolla un URL video prima di salvare.");
+    return;
+  }
+  if(mediaType === "carousel"){
+    const urls = document.getElementById("fCarouselUrls").value.split("\n").map(s => s.trim()).filter(Boolean);
+    if(urls.length < 2){
+      alert("Formato \"Slideshow/Carosello\" selezionato: servono almeno 2 immagini (ne hai " + urls.length + ").");
+      return;
+    }
+    if(urls.length > 10){
+      alert("Il carosello supporta al massimo 10 immagini (ne hai " + urls.length + ").");
+      return;
+    }
+    if(document.getElementById("fType").value === "story"){
+      alert("Il formato Slideshow/Carosello non è supportato per le Storie. Cambia \"Tipo\" in Feed oppure il formato in Immagine/Video.");
+      return;
+    }
+  }
+
   const payload = {
     caption: document.getElementById("fCaption").value.trim(),
     hashtags: document.getElementById("fHashtags").value.trim() || null,
     image_url: document.getElementById("fImage").value.trim() || null,
+    media_type: document.getElementById("fMediaType").value,
+    video_url: document.getElementById("fVideoUrl").value.trim() || null,
+    carousel_image_urls: document.getElementById("fCarouselUrls").value.split("\n").map(s => s.trim()).filter(Boolean),
     link_url: document.getElementById("fLink").value.trim() || null,
     post_type: document.getElementById("fType").value,
     publish_to_facebook: document.getElementById("fFacebook").checked,
@@ -528,8 +667,41 @@ function feedCaptionText(p){
   return base ? `${base}\n\n${tags}` : tags;
 }
 
+// Anteprima del blocco media (immagine/video/carosello) condivisa dai tre
+// build*Preview() — rispecchia i tre rami di publishToFacebook()/
+// publishToInstagram() nell'Edge Function (image/video/carousel).
+function buildMediaBlockHTML(p, opts){
+  opts = opts || {};
+  const aspect = opts.aspect || "1/1";
+  const mediaType = p.media_type || "image";
+
+  if(mediaType === "video"){
+    if(!p.video_url) return `<div style="width:100%;aspect-ratio:${aspect};background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">Nessun video caricato</div>`;
+    return `<div style="position:relative;width:100%;aspect-ratio:${aspect};background:#111;overflow:hidden">
+      <video src="${escapeHTML(p.video_url)}" style="width:100%;height:100%;object-fit:cover" muted></video>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:2.2rem;text-shadow:0 1px 4px rgba(0,0,0,.5)">▶</div>
+      ${p.post_type !== "story" ? `<div style="position:absolute;bottom:6px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px">Reel/Video</div>` : ""}
+    </div>`;
+  }
+
+  if(mediaType === "carousel"){
+    const urls = Array.isArray(p.carousel_image_urls) ? p.carousel_image_urls : [];
+    if(!urls.length) return `<div style="width:100%;aspect-ratio:${aspect};background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">Nessuna immagine caricata</div>`;
+    return `<div style="position:relative;width:100%;aspect-ratio:${aspect};overflow:hidden">
+      <img src="${escapeHTML(urls[0])}" style="width:100%;height:100%;object-fit:cover">
+      <div style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">1/${urls.length}</div>
+      <div style="position:absolute;top:10px;left:0;right:0;display:flex;gap:4px;justify-content:center">
+        ${urls.map((u,i) => `<span style="width:${i===0?16:6}px;height:6px;border-radius:3px;background:rgba(255,255,255,${i===0?0.95:0.55})"></span>`).join("")}
+      </div>
+    </div>`;
+  }
+
+  if(!p.image_url) return "";
+  return `<img src="${escapeHTML(p.image_url)}" style="width:100%;aspect-ratio:${aspect};object-fit:cover">`;
+}
+
 function buildFacebookPreview(p){
-  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "";
+  const img = (p.media_type === "video" || p.media_type === "carousel") ? buildMediaBlockHTML(p, {aspect:"4/3"}) : (p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "");
   let domain = "";
   if(p.link_url){ try{ domain = new URL(p.link_url).hostname.replace(/^www\./,""); }catch(e){ domain = p.link_url; } }
   return `
@@ -623,7 +795,7 @@ function buildInstagramPreview(p){
       </div>`;
   }
 
-  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;aspect-ratio:1/1;object-fit:cover">` : `<div style="width:100%;aspect-ratio:1/1;background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">Instagram richiede un'immagine</div>`;
+  const img = buildMediaBlockHTML(p, {aspect:"1/1"}) || `<div style="width:100%;aspect-ratio:1/1;background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">Instagram richiede un'immagine</div>`;
   return `
     <div class="ig-mock">
       <div class="ig-head">
@@ -637,6 +809,10 @@ function buildInstagramPreview(p){
 
 function buildLinkedinPreview(p){
   const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "";
+  // Nota: video/carosello non sono supportati su LinkedIn con questo sistema
+  // (vedi publishToLinkedIn nell'Edge Function) — la checkbox LinkedIn viene
+  // disattivata automaticamente per questi formati, quindi qui p.image_url
+  // resta l'unico caso rilevante.
   return `
     <div class="li-mock">
       <div class="li-head">
@@ -713,6 +889,15 @@ async function publishPost(id, btn){
   await loadPosts();
 }
 
+document.getElementById("fMediaType").addEventListener("change", toggleMediaTypeBlocks);
+document.getElementById("fVideoFile").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if(file) uploadVideoFile(file);
+});
+document.getElementById("fCarouselFiles").addEventListener("change", (e) => {
+  const files = Array.from(e.target.files || []);
+  if(files.length) uploadCarouselFiles(files);
+});
 document.getElementById("fImageFile").addEventListener("change", (e) => {
   const file = e.target.files && e.target.files[0];
   if(file) uploadImageFile(file);
