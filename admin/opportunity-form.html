@@ -1028,7 +1028,7 @@ button.danger{
 
       <div class="field full room-inventory">
         <label data-i18n="label_room_inventory">Composizione camere / corpi di fabbrica</label>
-        <div class="room-inventory-note" data-i18n="note_room_inventory">Se la struttura è composta da più edifici/corpi di fabbrica (es. Corpo 1, Corpo 2...) e/o da diverse tipologie di camere o appartamenti, aggiungi qui il dettaglio con i relativi numeri: viene usato anche per il calcolo automatico dell'ADR e delle unità totali. Se lasci vuoto, per il calcolo verrà usato il campo "Camere" qui sopra.</div>
+        <div class="room-inventory-note" data-i18n="note_room_inventory">Se la struttura è composta da più edifici/corpi di fabbrica (es. Corpo 1, Corpo 2...) e/o da diverse tipologie di camere o appartamenti, aggiungi qui il dettaglio con i relativi numeri: viene usato anche per il calcolo automatico dell'ADR e delle unità totali. Se lasci vuoto, per il calcolo verrà usato il campo "Camere" qui sopra. Per spazi comuni che non generano fatturato ma fanno parte della vendita (reception, hall, sala colazioni, taverna, sala colazioni...), scegli "Altro", scrivi il nome e lascia il numero vuoto: compariranno comunque nel dossier, senza entrare nel totale unità.</div>
         <div id="buildingsContainer"></div>
         <button type="button" class="soft" id="addBuildingBtn" data-i18n="btn_add_building">+ Aggiungi corpo di fabbrica</button>
         <div class="room-inventory-total" id="roomInventoryTotal"></div>
@@ -2140,7 +2140,7 @@ function renderRoomInventory(){
         '<div class="room-type-row" data-room-id="' + rt.id + '">' +
           '<select class="room-type-select" data-building="' + b.id + '" data-room="' + rt.id + '">' + roomTypeOptionsHTML(rt.type) + '</select>' +
           '<input type="text" class="room-type-custom" data-building="' + b.id + '" data-room="' + rt.id + '" placeholder="Etichetta (solo se \'Altro\')" value="' + escapeHTML(rt.customLabel || "") + '" style="' + (rt.type === "altro" ? "" : "visibility:hidden") + '">' +
-          '<input type="number" min="0" class="room-type-count" data-building="' + b.id + '" data-room="' + rt.id + '" placeholder="N°" value="' + escapeHTML(rt.count === "" ? "" : String(rt.count)) + '">' +
+          '<input type="number" min="0" class="room-type-count" data-building="' + b.id + '" data-room="' + rt.id + '" placeholder="N° (vuoto = spazio senza numero)" value="' + escapeHTML(rt.count === "" ? "" : String(rt.count)) + '">' +
           '<button type="button" class="danger remove-room-type-btn" data-building="' + b.id + '" data-room="' + rt.id + '">Rimuovi</button>' +
         '</div>';
     }).join("");
@@ -2225,12 +2225,22 @@ function getRoomInventoryPayload(){
       return {
         name: (b.name || "").trim(),
         roomTypes: b.roomTypes
-          .filter(function(rt){ return rt.count !== "" && !isNaN(Number(rt.count)) && Number(rt.count) > 0; })
+          // Una riga standard (singola/doppia/ecc.) richiede un numero per avere senso.
+          // "Altro" invece può restare senza numero: serve anche per spazi comuni che
+          // NON generano fatturato (reception, hall, sala colazioni, taverna...) ma che
+          // fanno comunque parte di ciò che si vende — se non compaiono nel dossier,
+          // il compratore pensa che si vendano solo i piani con le camere numerate.
+          .filter(function(rt){
+            var hasCount = rt.count !== "" && !isNaN(Number(rt.count)) && Number(rt.count) > 0;
+            var isNamedSpace = rt.type === "altro" && (rt.customLabel || "").trim();
+            return hasCount || isNamedSpace;
+          })
           .map(function(rt){
+            var hasCount = rt.count !== "" && !isNaN(Number(rt.count)) && Number(rt.count) > 0;
             return {
               type: rt.type || "singola",
               customLabel: rt.type === "altro" ? (rt.customLabel || "").trim() : "",
-              count: Number(rt.count)
+              count: hasCount ? Number(rt.count) : null
             };
           })
       };
