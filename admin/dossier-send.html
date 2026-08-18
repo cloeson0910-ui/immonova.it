@@ -165,6 +165,14 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
     <input type="number" id="dossierRadiusInput" value="30" min="1" step="1">
     <p class="dossier-options-hint">Aeroporti/porti/marine cercano comunque più lontano se serve.</p>
 
+    <label for="dossierMinCityPopInput">Popolazione minima città da segnalare nel raggio</label>
+    <input type="number" id="dossierMinCityPopInput" value="1000" min="0" step="500">
+    <p class="dossier-options-hint">Abbassa la soglia per includere anche centri piccoli ma importanti (es. Assisi) che altrimenti resterebbero fuori da un filtro fisso per popolazione.</p>
+
+    <label for="dossierCityRadiusInput">Raggio ricerca città importanti (km)</label>
+    <input type="number" id="dossierCityRadiusInput" value="30" min="1" step="1">
+    <p class="dossier-options-hint">Indipendente dal raggio Discovery Engine qui sopra: puoi cercare le città importanti anche più lontano (o più vicino) rispetto al raggio usato per hotel/ristoranti/spiagge ecc.</p>
+
     <label for="dossierLangSelect">Lingua di output del dossier</label>
     <select id="dossierLangSelect">
       <option value="it">Italiano</option>
@@ -369,6 +377,10 @@ var UI_STRINGS = {
   kicker_hospitality_pricing:"Hospitality pricing", title_adr:"ADR di riferimento",
   kicker_commercial_rent:"Commercial pricing", title_commercial_rent:"Canone di riferimento", label_rent_m2_month:"Canone \u2014 \u20ac/mq/mese",
   label_adr_room_night:"ADR \u2014 tariffa media camera/notte",
+  kicker_nearby_cities:"Territorial context", title_nearby_cities:"Citt\u00e0 principali nel raggio di ricerca",
+  label_nearby_city_distance:"Distanza", label_nearby_city_population:"Abitanti",
+  note_nearby_cities:"Elenco delle localit\u00e0 con maggiore popolazione trovate entro il raggio di ricerca impostato per questo dossier, utile per inquadrare il contesto territoriale dell'immobile oltre al singolo comune di riferimento.",
+  no_nearby_cities:"Nessuna citt\u00e0 rilevante trovata entro il raggio impostato con la soglia di popolazione minima scelta.",
   kicker_tourism_history:"Tourism history", title_tourism_history:"Turismo \u2014 Serie Storica",
   presences_arrivals_label:"Presenze/arrivi per anno · livello: ", th_value:"Valore", th_yoy:"Crescita YoY",
   cagr_calculated:"CAGR calcolato sul periodo disponibile: ", per_year:" /anno.",
@@ -601,11 +613,11 @@ function getStoredDossier(){
   if(j && j.dossier_data && typeof j.dossier_data==="object" && Object.keys(j.dossier_data).length) return j.dossier_data;
   return null;
 }
-async function fetchLiveDossier(radiusKm){
+async function fetchLiveDossier(radiusKm,minCityPopulation,cityRadiusKm){
   lastDiscoveryFetchError=null;
   try{
     var url=String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/immonova-discovery-engine";
-    var payload={opportunity_id:Number(opportunityId),radius_km:radiusKm||30,year:new Date().getFullYear()};
+    var payload={opportunity_id:Number(opportunityId),radius_km:radiusKm||30,min_city_population:(minCityPopulation===0||minCityPopulation)?Number(minCityPopulation):1000,city_radius_km:cityRadiusKm||radiusKm||30,year:new Date().getFullYear()};
     var res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify(payload)});
     var rawText=await res.text();
     var json=null;
@@ -641,11 +653,15 @@ function askDossierOptions(){
   return new Promise(function(resolve){
     var overlay=document.getElementById("dossierOptionsOverlay");
     var radiusInput=document.getElementById("dossierRadiusInput");
+    var minCityPopInput=document.getElementById("dossierMinCityPopInput");
+    var cityRadiusInput=document.getElementById("dossierCityRadiusInput");
     var langSelect=document.getElementById("dossierLangSelect");
     var confirmBtn=document.getElementById("dossierOptionsConfirm");
     var cancelBtn=document.getElementById("dossierOptionsCancel");
 
     radiusInput.value="30";
+    minCityPopInput.value="1000";
+    cityRadiusInput.value="30";
     langSelect.value=params.get("lang")||CURRENT_LANG||"it";
     overlay.classList.add("active");
 
@@ -657,9 +673,13 @@ function askDossierOptions(){
     function onConfirm(){
       var n=Number(radiusInput.value);
       var radius=(Number.isFinite(n)&&n>0)?n:30;
+      var p=Number(minCityPopInput.value);
+      var minCityPopulation=(Number.isFinite(p)&&p>=0)?p:1000;
+      var cr=Number(cityRadiusInput.value);
+      var cityRadiusKm=(Number.isFinite(cr)&&cr>0)?cr:30;
       var lang=langSelect.value||"it";
       cleanup();
-      resolve({radius:radius,lang:lang});
+      resolve({radius:radius,minCityPopulation:minCityPopulation,cityRadiusKm:cityRadiusKm,lang:lang});
     }
     function onCancel(){
       cleanup();
@@ -786,7 +806,7 @@ async function ensureDossier(){
   var qls=document.getElementById("quickLangSwitch");
   if(qls) qls.value=options.lang;
   setStatus("Nessun dato territoriale salvato nel report: recupero in tempo reale dal Discovery Engine con raggio "+radius+" km (può richiedere qualche secondo)...","");
-  dossierData=await fetchLiveDossier(radius);
+  dossierData=await fetchLiveDossier(radius,options.minCityPopulation,options.cityRadiusKm);
   if(dossierData){
     dossierSource="live";
     setStatus("Dati territoriali recuperati dal Discovery Engine: salvataggio in corso per non richiederli più in futuro...","");
@@ -811,7 +831,7 @@ async function forceRefreshDossier(){
   var qls=document.getElementById("quickLangSwitch");
   if(qls) qls.value=options.lang;
   setStatus("Aggiornamento forzato dei dati territoriali dal Discovery Engine in corso...","");
-  var fresh=await fetchLiveDossier(radius);
+  var fresh=await fetchLiveDossier(radius,options.minCityPopulation,options.cityRadiusKm);
   if(!fresh){
     var refreshedNoDataMarker={_no_territorial_data:true,_checked_at:new Date().toISOString(),_last_error:lastDiscoveryFetchError||null};
     await persistDossierData(refreshedNoDataMarker);
@@ -1130,12 +1150,24 @@ function renderPricingPage(){
     +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>';
 }
+function renderNearbyCitiesPage(){
+  var d=dossierData||{};
+  var bucket=d.nearby_major_cities||{};
+  var cities=Array.isArray(bucket.items)?bucket.items:[];
+  if(!cities.length)return "";
+  var cards=cities.slice(0,12).map(function(c){
+    return '<div class="metric-card"><div class="metric-label">'+escapeHTML(c.name||"-")+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(number(c.population))+'</div><div class="metric-note">'+escapeHTML(T.label_nearby_city_population)+' · '+escapeHTML(String(c.distance_km!=null?c.distance_km:"-"))+' km</div></div>';
+  }).join('');
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.note_nearby_cities)+'</p>';
+}
 function renderTerritorialAndTourismPage(){
   var terr=renderTerritorialPage();
   var tour=renderTourismMetricsPage();
-  if(!terr&&!tour)return "";
+  var nearby=renderNearbyCitiesPage();
+  if(!terr&&!tour&&!nearby)return "";
   return '<article class="report-page"><div class="page-inner">'
     +(terr?'<div class="merge-block">'+terr+'</div>':'')
+    +(nearby?'<div class="merge-block">'+nearby+'</div>':'')
     +(tour?'<div class="merge-block">'+tour+'</div>':'')
     +'</div></article>';
 }
