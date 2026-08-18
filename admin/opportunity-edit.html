@@ -212,6 +212,30 @@ textarea{
   border:1px solid rgba(165,129,57,.20);
   background:rgba(255,255,255,.12);
   padding:8px;
+  position:relative;
+  cursor:grab;
+}
+
+.gallery-item.dragging{
+  opacity:.4;
+}
+
+.gallery-item.drag-over{
+  border-color:#a58139;
+  box-shadow:0 0 0 2px rgba(165,129,57,.35) inset;
+}
+
+.gallery-item .order-badge{
+  position:absolute;
+  top:14px;
+  left:14px;
+  background:#a58139;
+  color:#fff;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.04em;
+  padding:3px 8px;
+  z-index:2;
 }
 
 .gallery-item img{
@@ -221,9 +245,32 @@ textarea{
   display:block;
 }
 
-.gallery-item button{
-  width:100%;
+.gallery-item-actions{
+  display:flex;
+  gap:6px;
   margin-top:8px;
+}
+
+.gallery-item-actions button{
+  flex:1;
+  padding:9px 6px;
+  border:1px solid rgba(165,129,57,.35);
+  background:rgba(255,252,244,.22);
+  color:#a58139;
+  text-transform:uppercase;
+  font-size:9px;
+  letter-spacing:.10em;
+  cursor:pointer;
+}
+
+.gallery-item-actions button:disabled{
+  opacity:.3;
+  cursor:not-allowed;
+}
+
+.gallery-item button.remove-gallery-btn{
+  width:100%;
+  margin-top:6px;
   padding:9px 10px;
   border:1px solid rgba(156,47,47,.35);
   background:rgba(255,252,244,.22);
@@ -1168,6 +1215,7 @@ button.danger{
 
       <div class="field full">
         <label data-i18n="label_current_gallery">Gallery attuale</label>
+        <div class="file-note" data-i18n="note_gallery_order">L'ordine qui sotto è l'ordine di stampa nel dossier (2 foto per pagina, nell'ordine indicato dal numero). Trascina le foto per riordinarle, oppure usa le frecce ◀ ▶.</div>
         <div id="galleryPreview" class="gallery-preview"></div>
         <div id="noGalleryText" class="file-note" data-i18n="no_gallery_text">Nessuna immagine gallery caricata.</div>
       </div>
@@ -2892,22 +2940,92 @@ function renderGallery(){
   noGalleryText.style.display = "none";
 
   var html = "";
+  var last = galleryImages.length - 1;
 
   for(var i = 0; i < galleryImages.length; i++){
     html += `
-      <div class="gallery-item">
+      <div class="gallery-item" draggable="true" data-index="${i}">
+        <span class="order-badge">${i + 1}</span>
         <img src="${galleryImages[i]}" alt="Gallery image ${i + 1}">
-        <button type="button" onclick="removeGalleryImage(${i})">Rimuovi</button>
+        <div class="gallery-item-actions">
+          <button type="button" title="Sposta indietro" onclick="moveGalleryImage(${i}, ${i - 1})" ${i === 0 ? "disabled" : ""}>◀</button>
+          <button type="button" title="Sposta avanti" onclick="moveGalleryImage(${i}, ${i + 1})" ${i === last ? "disabled" : ""}>▶</button>
+        </div>
+        <button type="button" class="remove-gallery-btn" onclick="removeGalleryImage(${i})">Rimuovi</button>
       </div>
     `;
   }
 
   galleryPreview.innerHTML = html;
+  bindGalleryDragEvents();
 }
 
 function removeGalleryImage(index){
   galleryImages.splice(index, 1);
   renderGallery();
+}
+
+/* Riordino gallery: l'ordine dell'array galleryImages è l'ordine di stampa nel
+   dossier (2 foto per pagina), quindi qui non tocchiamo solo la UI ma lo stato
+   che poi viene salvato in gallery_images — frecce ◀ ▶ per accessibilità/mobile,
+   drag&drop come alternativa più rapida su desktop. */
+function moveGalleryImage(fromIndex, toIndex){
+  if(toIndex < 0 || toIndex >= galleryImages.length || fromIndex === toIndex) return;
+  var moved = galleryImages.splice(fromIndex, 1)[0];
+  galleryImages.splice(toIndex, 0, moved);
+  renderGallery();
+}
+
+function bindGalleryDragEvents(){
+  var galleryPreview = document.getElementById("galleryPreview");
+  if(!galleryPreview || galleryPreview._dragBound) return;
+  galleryPreview._dragBound = true;
+
+  var dragFromIndex = null;
+
+  galleryPreview.addEventListener("dragstart", function(e){
+    var item = e.target.closest(".gallery-item");
+    if(!item) return;
+    dragFromIndex = Number(item.getAttribute("data-index"));
+    item.classList.add("dragging");
+    if(e.dataTransfer){
+      e.dataTransfer.effectAllowed = "move";
+      try{ e.dataTransfer.setData("text/plain", String(dragFromIndex)); }catch(err){}
+    }
+  });
+
+  galleryPreview.addEventListener("dragover", function(e){
+    var item = e.target.closest(".gallery-item");
+    if(!item) return;
+    e.preventDefault();
+    if(e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    item.classList.add("drag-over");
+  });
+
+  galleryPreview.addEventListener("dragleave", function(e){
+    var item = e.target.closest(".gallery-item");
+    if(item) item.classList.remove("drag-over");
+  });
+
+  galleryPreview.addEventListener("drop", function(e){
+    var item = e.target.closest(".gallery-item");
+    if(!item) return;
+    e.preventDefault();
+    item.classList.remove("drag-over");
+    var toIndex = Number(item.getAttribute("data-index"));
+    if(dragFromIndex !== null && !isNaN(toIndex)){
+      moveGalleryImage(dragFromIndex, toIndex);
+    }
+    dragFromIndex = null;
+  });
+
+  galleryPreview.addEventListener("dragend", function(e){
+    var item = e.target.closest(".gallery-item");
+    if(item) item.classList.remove("dragging");
+    var overItems = galleryPreview.querySelectorAll(".drag-over");
+    for(var i = 0; i < overItems.length; i++) overItems[i].classList.remove("drag-over");
+    dragFromIndex = null;
+  });
 }
 
 
