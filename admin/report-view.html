@@ -1358,6 +1358,14 @@ function renderSourcesPage(){
       rows.push({label:sec+" · "+field,provider:s.provider_name||"-",url:s.source_url||""});
     });
   });
+  // price_index_trend ha una forma diversa dagli altri campi (niente "value"/"source"
+  // annidati, ma provider_name/source_url diretti sul blocco) quindi il ciclo sopra
+  // non lo intercetta: va aggiunto esplicitamente, altrimenti il grafico del trend
+  // storico compare nel report ma la sua fonte (Eurostat) resta assente dalla pagina fonti.
+  var trend=d.real_estate_market&&d.real_estate_market.price_index_trend;
+  if(trend&&(trend.provider_name||trend.source_url)){
+    rows.push({label:"real_estate_market · price_index_trend",provider:trend.provider_name||"-",url:trend.source_url||""});
+  }
   if(!rows.length)return "";
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_data_sources)+'</div><h2 class="section-title">'+escapeHTML(T.title_data_sources)+'</h2><div class="lux-rule"></div><div class="source-list">'
     +rows.map(function(r){return '<div class="source-row"><span>'+escapeHTML(r.label)+'</span><span>'+escapeHTML(r.provider)+(r.url?" — "+r.url:"")+'</span></div>';}).join("")
