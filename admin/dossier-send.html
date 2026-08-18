@@ -348,6 +348,9 @@ var UI_STRINGS = {
   kicker_asset_characteristics:"Asset characteristics", title_asset_characteristics:"Caratteristiche dell\u2019immobile",
   label_internal_size:"Superficie interna", label_land_size:"Superficie terreno", label_rooms_count:"Numero locali",
   label_bathrooms_count:"Numero bagni", label_construction_year:"Anno costruzione", label_energy_class:"Classe energetica", label_property_condition:"Stato immobile",
+  title_room_inventory:"Composizione camere e corpi di fabbrica", label_room_inventory_total:"Totale unit\u00e0",
+  room_type_singola:"Singola", room_type_doppia:"Doppia", room_type_tripla:"Tripla", room_type_quadrupla:"Quadrupla",
+  room_type_suite:"Suite", room_type_junior_suite:"Junior Suite", room_type_appartamento:"Appartamento", room_type_altro:"Altro",
   label_address_row:"Indirizzo", label_locality_row:"Località / Contrada", label_zip_row:"CAP",
   label_city_row:"Comune", label_province_row:"Provincia", label_region_row:"Regione",
   kicker_territorial_profile:"Territorial profile", title_territorial_profile:"Profilo territoriale",
@@ -1106,15 +1109,57 @@ function renderEnvironmentPage(){
 
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_environment)+'</div><h2 class="section-title">'+escapeHTML(T.title_environment)+'</h2><div class="lux-rule"></div>'+airBlock+seaBlock+'</div></article>';
 }
+/* Grafico storico del valore immobiliare (indice Eurostat prc_hpi_a, dato reale
+   ufficiale, MAI inventato — se il paese non è coperto o non c'è nessun dato
+   utile questa funzione restituisce stringa vuota e il grafico non compare). */
+function priceTrendChartSVG(trend){
+  if(!trend||!Array.isArray(trend.series)||trend.series.length<2)return "";
+  var series=trend.series;
+  var W=640,H=200,padL=42,padR=16,padT=16,padB=30;
+  var values=series.map(function(p){return p.index;});
+  var minV=Math.min.apply(null,values),maxV=Math.max.apply(null,values);
+  if(minV===maxV){minV=minV-1;maxV=maxV+1;}
+  var innerW=W-padL-padR,innerH=H-padT-padB;
+  function xFor(i){return padL+(innerW*(series.length===1?0:i/(series.length-1)));}
+  function yFor(v){return padT+innerH-((v-minV)/(maxV-minV))*innerH;}
+  var points=series.map(function(p,i){return xFor(i)+","+yFor(p.index);}).join(" ");
+  var dots=series.map(function(p,i){
+    var showLabel=(i===0||i===series.length-1||i%3===0);
+    return '<circle cx="'+xFor(i)+'" cy="'+yFor(p.index)+'" r="2.6" fill="#a67f34"></circle>'
+      +(showLabel?'<text x="'+xFor(i)+'" y="'+(H-8)+'" font-size="9" fill="#8f7643" text-anchor="middle">'+escapeHTML(String(p.year))+'</text>':'');
+  }).join("");
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-width:640px" role="img" aria-label="Trend indice prezzi immobiliari">'
+    +'<polyline points="'+points+'" fill="none" stroke="#a67f34" stroke-width="2"></polyline>'
+    +dots
+    +'</svg>';
+}
+function renderPriceTrendBlock(trend){
+  if(!trend)return "";
+  var chart=priceTrendChartSVG(trend);
+  if(!chart)return "";
+  var change5=trend.change_5y_pct,change10=trend.change_10y_pct;
+  var chips='<div class="metric-grid" style="grid-template-columns:1fr 1fr;margin-top:14px">'
+    +'<div class="metric-card"><div class="metric-label">Variazione 5 anni</div><div class="metric-value">'+(change5!=null?(change5>0?"+":"")+escapeHTML(String(change5))+"%":"-")+'</div></div>'
+    +'<div class="metric-card"><div class="metric-label">Variazione 10 anni</div><div class="metric-value">'+(change10!=null?(change10>0?"+":"")+escapeHTML(String(change10))+"%":"-")+'</div></div>'
+    +'</div>';
+  return '<div style="margin-top:24px"><h3 class="pop-comp-title">Andamento storico — '+escapeHTML(trend.indicator||"Indice prezzi immobiliari")+'</h3>'
+    +chart+chips
+    +'<p class="info-text" style="margin-top:10px">'+escapeHTML(T.source_prefix)+escapeHTML(trend.provider_name||"Eurostat")+' — '+escapeHTML(trend.note||"")+'</p>'
+    +'</div>';
+}
 function renderRealEstatePage(){
   var min=metricFromDossier("real_estate_market","residential_sale_per_m2_min");
   var max=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
-  if(!min&&!max)return "";
-  var src=(min||max).source||{};
-  return '<div class="section-kicker">'+escapeHTML(T.kicker_real_estate)+'</div><h2 class="section-title">'+escapeHTML(T.title_real_estate)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
+  var trend=dossierData&&dossierData.real_estate_market&&dossierData.real_estate_market.price_index_trend;
+  var trendBlock=renderPriceTrendBlock(trend);
+  if(!min&&!max&&!trendBlock)return "";
+  var src=(min||max)?(min||max).source||{}:null;
+  var valueBlock=(min||max)?('<div class="metric-grid" style="grid-template-columns:1fr 1fr">'
     +rangeCardHTML(T.label_market_value_m2,min,max,"eur_per_m2")
     +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
-    +'</div>';
+    +'</div>'):'';
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_real_estate)+'</div><h2 class="section-title">'+escapeHTML(T.title_real_estate)+'</h2><div class="lux-rule"></div>'
+    +valueBlock+trendBlock;
 }
 function renderPricingPage(){
   if(isCommercialCategory()){
@@ -1176,6 +1221,31 @@ function renderPopulationCompositionPageWrapper(){
   if(!comp)return "";
   return '<article class="report-page"><div class="page-inner"><div class="merge-block">'+comp+'</div></div></article>';
 }
+/* Composizione camere/corpi di fabbrica: mostra al cliente/investitore la
+   struttura reale dell'immobile (uno o più edifici, con le tipologie di
+   camere/alloggi e i relativi numeri) — compilata in Opportunity Edit/Form,
+   altrimenti resterebbe visibile solo internamente e mai nel dossier. */
+function roomTypeLabelReport(type){
+  var key="room_type_"+(type||"altro");
+  return T[key]||UI_STRINGS[key]||type||"-";
+}
+function renderRoomInventoryBlock(){
+  var o=opportunity||{};
+  var buildings=Array.isArray(o.room_inventory)?o.room_inventory:[];
+  var withData=buildings.filter(function(b){return b&&Array.isArray(b.roomTypes)&&b.roomTypes.length;});
+  if(!withData.length) return "";
+  var total=0;
+  var blocks=withData.map(function(b){
+    var rows=(b.roomTypes||[]).map(function(rt){
+      total+=Number(rt.count)||0;
+      var label=rt.type==="altro"&&rt.customLabel?rt.customLabel:roomTypeLabelReport(rt.type);
+      return '<div class="cost-row"><span>'+escapeHTML(label)+'</span><strong>'+escapeHTML(String(rt.count))+'</strong></div>';
+    }).join("");
+    return '<div class="cost-box" style="margin-bottom:14px"><div class="cost-title">'+escapeHTML(b.name||"-")+'</div>'+rows+'</div>';
+  }).join("");
+  return '<div style="margin-top:24px"><h3 class="pop-comp-title">'+escapeHTML(T.title_room_inventory)+'</h3>'+blocks
+    +'<p class="info-text" style="margin-top:10px"><strong>'+escapeHTML(T.label_room_inventory_total)+':</strong> '+escapeHTML(String(total))+'</p></div>';
+}
 function renderAssetCharacteristicsPage(){
   var o=opportunity||{};
   var rows=[];
@@ -1193,9 +1263,11 @@ function renderAssetCharacteristicsPage(){
   if(constructionYear) rows.push([T.label_construction_year, formatMetricVal(constructionYear)]);
   if(energyClass && energyClass!=="Non disponibile") rows.push([T.label_energy_class, energyClass]);
   if(propertyCondition) rows.push([T.label_property_condition, propertyCondition]);
-  if(!rows.length) return "";
+  var roomInventoryBlock=renderRoomInventoryBlock();
+  if(!rows.length && !roomInventoryBlock) return "";
   var cards = rows.map(function(r){return '<div class="metric-card"><div class="metric-label">'+escapeHTML(r[0])+'</div><div class="metric-value">'+escapeHTML(r[1])+'</div></div>';}).join("");
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_asset_characteristics)+'</div><h2 class="section-title">'+escapeHTML(T.title_asset_characteristics)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div></div></article>';
+  var cardsBlock=rows.length?('<div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div>'):'';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_asset_characteristics)+'</div><h2 class="section-title">'+escapeHTML(T.title_asset_characteristics)+'</h2><div class="lux-rule"></div>'+cardsBlock+roomInventoryBlock+'</div></article>';
 }
 function renderMarketAndADRPage(){
   var mkt=renderRealEstatePage();
