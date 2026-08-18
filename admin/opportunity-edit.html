@@ -317,6 +317,63 @@ button.danger{
   color:#8f7643;
 }
 
+.room-inventory{
+  grid-column:1 / -1;
+  gap:12px;
+}
+
+.room-inventory-note{
+  font-size:12px;
+  line-height:1.6;
+  color:#8f7643;
+}
+
+.building-card{
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,252,244,.25);
+  padding:18px;
+  margin-bottom:14px;
+}
+
+.building-head{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-bottom:14px;
+}
+
+.building-head input{
+  flex:1;
+}
+
+.room-type-row{
+  display:grid;
+  grid-template-columns:1fr 1fr 90px auto;
+  gap:10px;
+  align-items:center;
+  margin-bottom:10px;
+}
+
+.room-type-row input,
+.room-type-row select{
+  margin:0;
+  padding:11px 12px;
+  font-size:13px;
+}
+
+.room-type-row button{
+  padding:11px 14px;
+  font-size:10px;
+}
+
+.room-inventory-total{
+  font-size:12px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#a58139;
+  margin-top:4px;
+}
+
 
 .renovation-box{
   grid-column:1 / -1;
@@ -1156,6 +1213,14 @@ button.danger{
       <div class="field">
         <label for="bathrooms" data-i18n="label_bathrooms">Bagni</label>
         <input type="number" id="bathrooms">
+      </div>
+
+      <div class="field full room-inventory">
+        <label data-i18n="label_room_inventory">Composizione camere / corpi di fabbrica</label>
+        <div class="room-inventory-note" data-i18n="note_room_inventory">Se la struttura è composta da più edifici/corpi di fabbrica (es. Corpo 1, Corpo 2...) e/o da diverse tipologie di camere o appartamenti, aggiungi qui il dettaglio con i relativi numeri: viene usato anche per il calcolo automatico dell'ADR e delle unità totali. Se lasci vuoto, per il calcolo verrà usato il campo "Camere" qui sopra.</div>
+        <div id="buildingsContainer"></div>
+        <button type="button" class="soft" id="addBuildingBtn" data-i18n="btn_add_building">+ Aggiungi corpo di fabbrica</button>
+        <div class="room-inventory-total" id="roomInventoryTotal"></div>
       </div>
 
       <div class="field">
@@ -2300,6 +2365,7 @@ function bindGeoTools(){
 }
 
 document.addEventListener("DOMContentLoaded", bindGeoTools);
+document.addEventListener("DOMContentLoaded", bindRoomInventoryEvents);
 
 /* ---- Timeline / Milestone (tabella opportunity_timeline) ----
    Alimenta la timeline mostrata su opportunity.html e success-story.html. Le milestone con
@@ -2567,6 +2633,209 @@ function setValue(id,value){
   var el = document.getElementById(id);
   if(el && value !== null && value !== undefined){
     el.value = value;
+  }
+}
+
+// ---- Composizione camere / corpi di fabbrica --------------------------
+// Stato in memoria: array di "corpi di fabbrica" (edifici), ognuno con un
+// nome/numero libero (es. "Corpo 1", "Villa principale") e un elenco di
+// tipologie di camere/alloggi con relativo conteggio. Salvato come JSON
+// nella colonna room_inventory di opportunities. Il totale unità calcolato
+// qui viene usato dal report (getAssetUnits) per l'ADR, con fallback sul
+// campo "Camere" se questa sezione resta vuota.
+var ROOM_TYPE_OPTIONS = [
+  {value:"singola", label:"Singola"},
+  {value:"doppia", label:"Doppia"},
+  {value:"tripla", label:"Tripla"},
+  {value:"quadrupla", label:"Quadrupla"},
+  {value:"suite", label:"Suite"},
+  {value:"junior_suite", label:"Junior Suite"},
+  {value:"appartamento", label:"Appartamento"},
+  {value:"altro", label:"Altro"}
+];
+var roomInventoryState = [];
+
+function genLocalId(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function findBuilding(buildingId){
+  return roomInventoryState.find(function(b){ return b.id === buildingId; });
+}
+
+function addBuilding(initial){
+  var b = {
+    id: genLocalId(),
+    name: (initial && initial.name) || "",
+    roomTypes: []
+  };
+  roomInventoryState.push(b);
+  if(initial && Array.isArray(initial.roomTypes) && initial.roomTypes.length){
+    initial.roomTypes.forEach(function(rt){
+      b.roomTypes.push({
+        id: genLocalId(),
+        type: rt.type || "singola",
+        customLabel: rt.customLabel || "",
+        count: (rt.count === 0 || rt.count) ? rt.count : ""
+      });
+    });
+  } else {
+    b.roomTypes.push({id: genLocalId(), type:"singola", customLabel:"", count:""});
+  }
+  renderRoomInventory();
+}
+
+function removeBuilding(buildingId){
+  roomInventoryState = roomInventoryState.filter(function(b){ return b.id !== buildingId; });
+  renderRoomInventory();
+}
+
+function addRoomType(buildingId){
+  var b = findBuilding(buildingId);
+  if(!b) return;
+  b.roomTypes.push({id: genLocalId(), type:"singola", customLabel:"", count:""});
+  renderRoomInventory();
+}
+
+function removeRoomType(buildingId, roomId){
+  var b = findBuilding(buildingId);
+  if(!b) return;
+  b.roomTypes = b.roomTypes.filter(function(rt){ return rt.id !== roomId; });
+  renderRoomInventory();
+}
+
+function roomTypeOptionsHTML(selected){
+  return ROOM_TYPE_OPTIONS.map(function(o){
+    return '<option value="' + o.value + '"' + (o.value === selected ? " selected" : "") + '>' + o.label + '</option>';
+  }).join("");
+}
+
+function computeRoomInventoryTotal(){
+  var total = 0;
+  roomInventoryState.forEach(function(b){
+    b.roomTypes.forEach(function(rt){
+      var n = Number(rt.count);
+      if(!isNaN(n) && n > 0) total += n;
+    });
+  });
+  return total;
+}
+
+function renderRoomInventory(){
+  var container = document.getElementById("buildingsContainer");
+  if(!container) return;
+
+  container.innerHTML = roomInventoryState.map(function(b){
+    var rowsHTML = b.roomTypes.map(function(rt){
+      return '' +
+        '<div class="room-type-row" data-room-id="' + rt.id + '">' +
+          '<select class="room-type-select" data-building="' + b.id + '" data-room="' + rt.id + '">' + roomTypeOptionsHTML(rt.type) + '</select>' +
+          '<input type="text" class="room-type-custom" data-building="' + b.id + '" data-room="' + rt.id + '" placeholder="Etichetta (solo se \'Altro\')" value="' + escapeHTML(rt.customLabel || "") + '" style="' + (rt.type === "altro" ? "" : "visibility:hidden") + '">' +
+          '<input type="number" min="0" class="room-type-count" data-building="' + b.id + '" data-room="' + rt.id + '" placeholder="N°" value="' + escapeHTML(rt.count === "" ? "" : String(rt.count)) + '">' +
+          '<button type="button" class="danger remove-room-type-btn" data-building="' + b.id + '" data-room="' + rt.id + '">Rimuovi</button>' +
+        '</div>';
+    }).join("");
+
+    return '' +
+      '<div class="building-card" data-building-id="' + b.id + '">' +
+        '<div class="building-head">' +
+          '<input type="text" class="building-name" data-building="' + b.id + '" placeholder="Es. Corpo 1 - Villa principale" value="' + escapeHTML(b.name || "") + '">' +
+          '<button type="button" class="danger remove-building-btn" data-building="' + b.id + '">Rimuovi corpo</button>' +
+        '</div>' +
+        rowsHTML +
+        '<button type="button" class="soft add-room-type-btn" data-building="' + b.id + '">+ Aggiungi tipologia</button>' +
+      '</div>';
+  }).join("");
+
+  var totalEl = document.getElementById("roomInventoryTotal");
+  if(totalEl){
+    var total = computeRoomInventoryTotal();
+    totalEl.textContent = total > 0
+      ? ("Totale unità dalla composizione: " + total + " (usato per l'ADR al posto del campo \"Camere\")")
+      : "";
+  }
+}
+
+function bindRoomInventoryEvents(){
+  var container = document.getElementById("buildingsContainer");
+  if(!container) return;
+
+  document.getElementById("addBuildingBtn").addEventListener("click", function(){
+    addBuilding();
+  });
+
+  container.addEventListener("click", function(e){
+    var addRoomBtn = e.target.closest(".add-room-type-btn");
+    if(addRoomBtn){ addRoomType(addRoomBtn.dataset.building); return; }
+
+    var removeRoomBtn = e.target.closest(".remove-room-type-btn");
+    if(removeRoomBtn){ removeRoomType(removeRoomBtn.dataset.building, removeRoomBtn.dataset.room); return; }
+
+    var removeBuildingBtn = e.target.closest(".remove-building-btn");
+    if(removeBuildingBtn){ removeBuilding(removeBuildingBtn.dataset.building); return; }
+  });
+
+  container.addEventListener("input", function(e){
+    var target = e.target;
+    var b = target.dataset.building ? findBuilding(target.dataset.building) : null;
+
+    if(target.classList.contains("building-name") && b){
+      b.name = target.value;
+    } else if(target.classList.contains("room-type-count") && b){
+      var rt = b.roomTypes.find(function(r){ return r.id === target.dataset.room; });
+      if(rt){ rt.count = target.value === "" ? "" : Number(target.value); }
+      var totalEl = document.getElementById("roomInventoryTotal");
+      if(totalEl){
+        var total = computeRoomInventoryTotal();
+        totalEl.textContent = total > 0
+          ? ("Totale unità dalla composizione: " + total + " (usato per l'ADR al posto del campo \"Camere\")")
+          : "";
+      }
+    } else if(target.classList.contains("room-type-custom") && b){
+      var rt2 = b.roomTypes.find(function(r){ return r.id === target.dataset.room; });
+      if(rt2){ rt2.customLabel = target.value; }
+    }
+  });
+
+  container.addEventListener("change", function(e){
+    var target = e.target;
+    if(target.classList.contains("room-type-select")){
+      var b = findBuilding(target.dataset.building);
+      var rt = b ? b.roomTypes.find(function(r){ return r.id === target.dataset.room; }) : null;
+      if(rt){
+        rt.type = target.value;
+        renderRoomInventory();
+      }
+    }
+  });
+}
+
+function getRoomInventoryPayload(){
+  return roomInventoryState
+    .map(function(b){
+      return {
+        name: (b.name || "").trim(),
+        roomTypes: b.roomTypes
+          .filter(function(rt){ return rt.count !== "" && !isNaN(Number(rt.count)) && Number(rt.count) > 0; })
+          .map(function(rt){
+            return {
+              type: rt.type || "singola",
+              customLabel: rt.type === "altro" ? (rt.customLabel || "").trim() : "",
+              count: Number(rt.count)
+            };
+          })
+      };
+    })
+    .filter(function(b){ return b.name || b.roomTypes.length; });
+}
+
+function loadRoomInventoryFromOpportunity(data){
+  var stored = Array.isArray(data && data.room_inventory) ? data.room_inventory : [];
+  roomInventoryState = [];
+  if(stored.length){
+    stored.forEach(function(b){ addBuilding(b); });
+  } else {
+    addBuilding();
   }
 }
 
@@ -3314,6 +3583,7 @@ async function loadOpportunity(){
 
   setValue("bedrooms", data.bedrooms);
   setValue("bathrooms", data.bathrooms);
+  loadRoomInventoryFromOpportunity(data);
   setValue("internal_size", data.internal_size);
   setValue("land_size", data.land_size);
   setValue("construction_year", data.construction_year);
@@ -4213,6 +4483,7 @@ form.addEventListener("submit", async function(e){
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
+      room_inventory:getRoomInventoryPayload(),
       internal_size:numberOrNull("internal_size"),
       land_size:numberOrNull("land_size"),
       construction_year:numberOrNull("construction_year"),

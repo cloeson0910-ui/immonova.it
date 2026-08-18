@@ -1951,8 +1951,25 @@ function isLandCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("terreni")>=0 || c.indexOf("terreno")>=0 || c.indexOf("land")>=0; // un terreno non ha una proiezione di rendita: niente ADR/ROI/cashflow per questa categoria
 }
+// Se in Opportunity Edit è stata compilata la composizione camere/corpi di
+// fabbrica (room_inventory), il totale unità per l'ADR viene da lì —
+// altrimenti fallback sul vecchio campo singolo "Camere" (bedrooms).
+function getRoomInventoryUnitsTotal(){
+  var o=opportunity||{};
+  var buildings=Array.isArray(o.room_inventory)?o.room_inventory:[];
+  var total=0;
+  buildings.forEach(function(b){
+    (Array.isArray(b&&b.roomTypes)?b.roomTypes:[]).forEach(function(rt){
+      var n=Number(rt&&rt.count);
+      if(!isNaN(n)&&n>0) total+=n;
+    });
+  });
+  return total;
+}
 function getAssetUnits(){
   var o=opportunity||{};
+  var fromInventory=getRoomInventoryUnitsTotal();
+  if(fromInventory>0) return fromInventory;
   var n=firstFiniteOpp(o.bedrooms);
   return n && n>0 ? n : 1;
 }
