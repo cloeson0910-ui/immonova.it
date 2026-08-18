@@ -144,6 +144,16 @@ body::after{
   color:#5a4a2a;
   line-height:1.7;
 }
+.cadastral-value-box{
+  margin-top:16px;
+  padding:24px;
+  background:rgba(166,127,52,.10);
+  border:1px solid rgba(166,127,52,.25);
+}
+.cadastral-value-label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8f7643;margin-bottom:8px}
+.cadastral-value-amount{font-size:24px;color:#a67f34;font-weight:300;margin-bottom:8px}
+.cadastral-value-detail{font-size:12px;color:#8f7643;line-height:1.7}
+.trend-block{margin-top:18px}
 
 .empty-state{
   padding:30px;
@@ -211,6 +221,44 @@ function formatDate(v){
   if(!v) return "";
   try{ return new Date(v).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}); }
   catch(e){ return v; }
+}
+
+/* ---- Grafico andamento prezzi (indice Eurostat prc_hpi_a, dato reale, MAI inventato) --
+   stessa funzione gia' usata nel dossier di vendita, qui riusata identica per coerenza
+   visiva tra i due documenti. Se il paese non e' coperto la funzione ritorna stringa vuota
+   e il blocco semplicemente non compare. ---- */
+function priceTrendChartSVG(trend){
+  if(!trend || !Array.isArray(trend.series) || trend.series.length < 2) return "";
+  var series = trend.series;
+  var W = 640, H = 190, padL = 42, padR = 16, padT = 16, padB = 28;
+  var values = series.map(function(p){ return p.index; });
+  var minV = Math.min.apply(null, values), maxV = Math.max.apply(null, values);
+  if(minV === maxV){ minV -= 1; maxV += 1; }
+  var innerW = W - padL - padR, innerH = H - padT - padB;
+  function xFor(i){ return padL + (innerW * (series.length === 1 ? 0 : i / (series.length - 1))); }
+  function yFor(v){ return padT + innerH - ((v - minV) / (maxV - minV)) * innerH; }
+  var points = series.map(function(p,i){ return xFor(i) + "," + yFor(p.index); }).join(" ");
+  var dots = series.map(function(p,i){
+    var showLabel = (i === 0 || i === series.length-1 || i % 3 === 0);
+    return '<circle cx="'+xFor(i)+'" cy="'+yFor(p.index)+'" r="2.6" fill="#a67f34"></circle>'
+      + (showLabel ? '<text x="'+xFor(i)+'" y="'+(H-8)+'" font-size="9" fill="#8f7643" text-anchor="middle">'+escapeHTML(String(p.year))+'</text>' : '');
+  }).join("");
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-width:640px" role="img" aria-label="Andamento prezzi immobiliari">'
+    + '<polyline points="'+points+'" fill="none" stroke="#a67f34" stroke-width="2"></polyline>' + dots + '</svg>';
+}
+
+function renderPriceTrendHTML(trend){
+  var chart = priceTrendChartSVG(trend);
+  if(!trend || !chart) return "";
+  var c5 = trend.change_5y_pct, c10 = trend.change_10y_pct;
+  return '<div class="trend-block">'
+    + '<p class="method-text" style="font-weight:600;margin-bottom:8px">Andamento storico — ' + escapeHTML(trend.indicator || "Indice prezzi immobiliari") + '</p>'
+    + chart
+    + '<p class="method-text" style="margin-top:10px;font-size:12px">'
+    + (c5 != null ? 'Variazione 5 anni: <strong>' + (c5>0?"+":"") + escapeHTML(String(c5)) + '%</strong> · ' : '')
+    + (c10 != null ? 'Variazione 10 anni: <strong>' + (c10>0?"+":"") + escapeHTML(String(c10)) + '%</strong> · ' : '')
+    + 'Fonte: ' + escapeHTML(trend.provider_name || "Eurostat") + (trend.source_url ? ' — ' + escapeHTML(trend.source_url) : '')
+    + '</p></div>';
 }
 
 function infoItem(label, value){
@@ -363,6 +411,7 @@ async function loadAndRender(){
   html += hasComparativo
     ? '<p class="method-text" style="margin-top:14px"><strong>Intervallo metodo comparativo: ' + formatEuro(v.valuation_comparativo_min) + ' – ' + formatEuro(v.valuation_comparativo_max) + '</strong><br>Valore centrale indicativo: <strong>' + formatEuro((v.valuation_comparativo_min+v.valuation_comparativo_max)/2) + '</strong></p>'
     : '<p class="method-text" style="margin-top:14px">Dati insufficienti per il metodo comparativo.</p>';
+  html += renderPriceTrendHTML(v.price_index_trend || snap.price_index_trend);
   html += '</div>';
 
   // 6. Metodo reddituale (solo se locato)
@@ -506,8 +555,19 @@ async function loadAndRender(){
       + infoItem("Foglio", v.cadastral_sheet)
       + infoItem("Particella", v.cadastral_parcel)
       + infoItem("Subalterno", v.cadastral_subalterno)
-      + '</div>'
+      + (v.cadastral_is_prima_casa ? infoItem("Agevolazione", "Prima casa") : "")
       + '</div>';
+    if(v.cadastral_value){
+      html += '<div class="cadastral-value-box">'
+        + '<div class="cadastral-value-label">Valore catastale</div>'
+        + '<div class="cadastral-value-amount">' + formatEuro(v.cadastral_value) + '</div>'
+        + '<div class="cadastral-value-detail">Rendita catastale ' + formatEuro(v.cadastral_income) + ' × 1,05 (rivalutazione) × '
+        + escapeHTML(String(v.cadastral_multiplier)) + ' (moltiplicatore categoria ' + escapeHTML(v.cadastral_category||"-") + (v.cadastral_is_prima_casa ? ", prima casa" : "") + ').'
+        + '<br>Dato fiscale (D.L. 262/2006, art. 2 c. 45) usato per imposte e tasse: distinto dal valore di mercato riportato in apertura di documento.</div>'
+        + '</div>';
+    }
+    html += renderPriceTrendHTML(v.price_index_trend || snap.price_index_trend);
+    html += '</div>';
   }
 
   // Disclaimer
