@@ -109,7 +109,6 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
 .cadastral-value-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a67f34;margin-bottom:8px}
 .cadastral-value-amount{font-size:22px;color:#7f6430;margin-bottom:6px}
 .cadastral-value-detail{font-size:12px;color:#8f7643;line-height:1.7}
-.trend-chart-box{margin-top:18px}
 
 .result-box{
   margin-top:24px;
@@ -397,11 +396,6 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
           <div class="cadastral-value-amount" id="cadastralValueAmount">—</div>
           <div class="cadastral-value-detail" id="cadastralValueDetail"></div>
         </div>
-        <div class="trend-chart-box" id="trendChartBox" style="display:none">
-          <div class="cadastral-value-title" data-i18n="label_market_trend">Andamento prezzi di mercato (zona/paese)</div>
-          <div id="trendChartSvg"></div>
-          <div class="cadastral-value-detail" id="trendChartDetail"></div>
-        </div>
       </div>
     </div>
 
@@ -488,7 +482,7 @@ var UI_STRINGS = {
   label_cadastral_income:"Rendita catastale (€)", label_cadastral_surface:"Superficie catastale (mq)",
   label_cadastral_sheet:"Foglio", label_cadastral_parcel:"Particella", label_cadastral_subalterno:"Subalterno",
   label_is_prima_casa:"Prima casa (abitazione principale, non di lusso)",
-  label_cadastral_value:"Valore catastale", label_market_trend:"Andamento prezzi di mercato (zona/paese)",
+  label_cadastral_value:"Valore catastale",
   section_notes:"Note", ph_notes:"Dettagli emersi dal sopralluogo, richieste del venditore...",
   btn_calculate:"Calcola Valutazione", result_title:"Valore di mercato stimato",
   btn_cancel:"Annulla", btn_save:"Salva Valutazione", btn_update:"Salva Modifiche",
@@ -821,61 +815,10 @@ function computeAndRenderCadastralValue(){
 });
 document.getElementById("cadastralIsPrimaCasa").addEventListener("change", computeAndRenderCadastralValue);
 
-/* ---- Andamento prezzi di mercato (Eurostat, indice prc_hpi_a, dato reale non inventato):
-   stesso motore gia' collegato nel Discovery Engine per il dossier di vendita, qui richiamato
-   direttamente per zona/paese dell'immobile in valutazione -- copertura solo a livello paese
-   (nessuna granularita' regionale nel dataset Eurostat), se il paese non e' coperto il grafico
-   semplicemente non compare, nessun dato inventato. ---- */
-var lastPriceTrend = null;
-
-function priceTrendChartSVG(trend){
-  if(!trend || !Array.isArray(trend.series) || trend.series.length < 2) return "";
-  var series = trend.series;
-  var W = 560, H = 170, padL = 40, padR = 14, padT = 14, padB = 26;
-  var values = series.map(function(p){ return p.index; });
-  var minV = Math.min.apply(null, values), maxV = Math.max.apply(null, values);
-  if(minV === maxV){ minV -= 1; maxV += 1; }
-  var innerW = W - padL - padR, innerH = H - padT - padB;
-  function xFor(i){ return padL + (innerW * (series.length === 1 ? 0 : i / (series.length - 1))); }
-  function yFor(v){ return padT + innerH - ((v - minV) / (maxV - minV)) * innerH; }
-  var points = series.map(function(p,i){ return xFor(i) + "," + yFor(p.index); }).join(" ");
-  var dots = series.map(function(p,i){
-    var showLabel = (i === 0 || i === series.length-1 || i % 3 === 0);
-    return '<circle cx="'+xFor(i)+'" cy="'+yFor(p.index)+'" r="2.4" fill="#a67f34"></circle>'
-      + (showLabel ? '<text x="'+xFor(i)+'" y="'+(H-6)+'" font-size="9" fill="#8f7643" text-anchor="middle">'+escapeHTML(String(p.year))+'</text>' : '');
-  }).join("");
-  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-width:560px" role="img" aria-label="Andamento prezzi immobiliari">'
-    + '<polyline points="'+points+'" fill="none" stroke="#a67f34" stroke-width="2"></polyline>' + dots + '</svg>';
-}
-
-async function fetchMarketPriceTrend(municipality, province, region){
-  try{
-    var result = await client.functions.invoke("immonova-global-data-provider", {
-      body:{ domain:"real_estate", municipality: municipality || null, province: province || null, region: region || null, country:"Italia", country_code:"IT" }
-    });
-    if(result.error) return null;
-    return (result.data && result.data.price_index_trend) || null;
-  }catch(e){
-    console.warn("Andamento prezzi di mercato non disponibile (non bloccante):", e);
-    return null;
-  }
-}
-
-function renderPriceTrendBox(trend){
-  var box = document.getElementById("trendChartBox");
-  var svg = priceTrendChartSVG(trend);
-  if(!trend || !svg){
-    box.style.display = "none";
-    return;
-  }
-  box.style.display = "block";
-  document.getElementById("trendChartSvg").innerHTML = svg;
-  var c5 = trend.change_5y_pct, c10 = trend.change_10y_pct;
-  document.getElementById("trendChartDetail").innerHTML =
-    (c5 != null ? "Variazione 5 anni: <strong>" + (c5>0?"+":"") + c5 + "%</strong> · " : "") +
-    (c10 != null ? "Variazione 10 anni: <strong>" + (c10>0?"+":"") + c10 + "%</strong> · " : "") +
-    "Fonte: " + escapeHTML(trend.provider_name || "Eurostat") + (trend.source_url ? " — " + escapeHTML(trend.source_url) : "");
-}
+/* ---- Andamento prezzi di mercato (Eurostat) RIMOSSO su richiesta esplicita: l'indice e'
+   solo a livello nazionale, un aggregato troppo generico rispetto al singolo comune per
+   essere difendibile davanti a un cliente -- rischio di essere contestato come dato
+   fuorviante. Non viene piu' richiamato ne' mostrato in nessuna parte del form. ---- */
 
 /* ---- Trova comparabili reali via AI (motore dedicato, separato -- immonova-ai-valuation-engine),
    con ricerca web attiva, stesso principio del resto del sistema: se non trova nulla di
@@ -933,8 +876,6 @@ calculateBtn.addEventListener("click", async function(){
     var internalResult = await findInternalComparables(category, province, municipality);
     var marketResult = await findMarketPricePerSqm(municipality, province, region);
     var populationComposition = await findPopulationComposition(municipality, province, region);
-    lastPriceTrend = await fetchMarketPriceTrend(municipality, province, region);
-    renderPriceTrendBox(lastPriceTrend);
     setProgress((T.msg_calculating||"") + " (ricerca AI comparabili...)", 65, "");
     var propertyCondition = val("propertyCondition");
     var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent);
@@ -1007,7 +948,7 @@ calculateBtn.addEventListener("click", async function(){
       setProgress(T.msg_no_data_at_all, 100, "error");
       lastCalculation = {
         comparables_snapshot: { internal: internalResult.comparables, internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
-        ai_comparables: aiResult.comparables || [], ai_narrative: aiResult, price_index_trend: lastPriceTrend,
+        ai_comparables: aiResult.comparables || [], ai_narrative: aiResult,
         valuation_comparativo_min:null, valuation_comparativo_max:null, valuation_reddituale_min:null, valuation_reddituale_max:null,
         estimated_value_min:null, estimated_value_max:null, estimated_value_per_sqm:null, suggested_listing_price:null
       };
@@ -1055,7 +996,6 @@ calculateBtn.addEventListener("click", async function(){
         generated_at: new Date().toISOString()
       },
       ai_comparables: aiResult.comparables || [],
-      price_index_trend: lastPriceTrend,
       ai_narrative: {
         position_analysis: aiResult.position_analysis || null,
         positive_elements: aiResult.positive_elements || [],
@@ -1150,8 +1090,6 @@ async function loadValuationForEdit(){
   document.getElementById("notes").value = data.notes || "";
   document.getElementById("cadastralIsPrimaCasa").checked = !!data.cadastral_is_prima_casa;
   computeAndRenderCadastralValue();
-  lastPriceTrend = data.price_index_trend || null;
-  renderPriceTrendBox(lastPriceTrend);
 
   PROPERTY_FEATURES.forEach(function(f){
     var el = document.getElementById(f.elementId);
@@ -1228,8 +1166,7 @@ form.addEventListener("submit", async function(event){
     notes: val("notes") || null,
     cadastral_is_prima_casa: document.getElementById("cadastralIsPrimaCasa").checked,
     cadastral_value: lastCadastralCalc ? lastCadastralCalc.cadastral_value : null,
-    cadastral_multiplier: lastCadastralCalc ? lastCadastralCalc.cadastral_multiplier : null,
-    price_index_trend: lastPriceTrend
+    cadastral_multiplier: lastCadastralCalc ? lastCadastralCalc.cadastral_multiplier : null
   };
 
   PROPERTY_FEATURES.forEach(function(f){
