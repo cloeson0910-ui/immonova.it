@@ -1117,6 +1117,9 @@ button.danger{
           Gestisci anche dopo la creazione le foto ambiente per la generazione dei render IA.
           I costi stimati entrano nel dossier e vengono sommati all'investimento totale.
         </div>
+        <div id="renovationSaveFirstNote" class="file-note" data-i18n="renovation_save_first_note" style="display:none;color:#b23b3b">
+          Salva la proposta prima di caricare foto ambiente o generare render IA: senza un salvataggio iniziale non è possibile associarle correttamente.
+        </div>
 
         <div class="renovation-grid">
           <div class="field">
@@ -2667,6 +2670,7 @@ var UI_STRINGS = {
   cond_under_construction:"In costruzione", cond_project:"Progetto da sviluppare",
   renovation_title:"Ristrutturazione e Render IA",
   renovation_intro:"Gestisci anche dopo la creazione le foto ambiente per la generazione dei render IA. I costi stimati entrano nel dossier e vengono sommati all'investimento totale.",
+  renovation_save_first_note:"Salva la proposta prima di caricare foto ambiente o generare render IA: senza un salvataggio iniziale non è possibile associarle correttamente.",
   label_renovation_required:"Immobile da ristrutturare", opt_no:"No", opt_yes:"Si",
   label_renovation_level:"Livello degrado", level_light:"Leggero", level_medium:"Medio", level_heavy:"Pesante",
   label_renovation_style:"Stile valorizzazione", style_conservative:"Conservativo", style_normal:"Normale", style_luxury:"Lusso",
@@ -2792,6 +2796,7 @@ async function loadUserLanguage(){
   isAdmin = !!(result.data && result.data.role === "admin");
   currentUserName = (result.data && (result.data.full_name || result.data.email)) || "";
   applyAdminRestrictions();
+  applyRenovationSaveFirstGuard();
 
   if(result.error){
     await applyLanguage("it");
@@ -2859,6 +2864,20 @@ function applyAdminRestrictions(){
   }
 }
 
+/* Foto ambiente e render IA richiedono un opportunity_id reale (foreign key su
+   renovation_images): su questo form (solo creazione, mai un id in URL prima del primo
+   salvataggio) vanno disabilitati finché la proposta non è stata salvata almeno una volta,
+   altrimenti l'insert va in errore "violates foreign key constraint renovation_images_opportunity_id_fkey". */
+function applyRenovationSaveFirstGuard(){
+  if(id) return;
+  var filesInput = document.getElementById("renovationFiles");
+  var renderBtn = document.getElementById("generateRenderBtn");
+  var note = document.getElementById("renovationSaveFirstNote");
+  if(filesInput) filesInput.disabled = true;
+  if(renderBtn) renderBtn.disabled = true;
+  if(note) note.style.display = "";
+}
+
 
 async function checkAuth(){
   var result = await client.auth.getSession();
@@ -2917,6 +2936,9 @@ document.getElementById("renovationFiles").addEventListener("change", async func
   if(files.length === 0) return;
 
   try{
+    if(!id){
+      throw new Error("Salva la proposta prima di caricare foto ambiente.");
+    }
     if(!isRenovationRequired()){
       document.getElementById("renovation_required").value = "true";
       syncRenovationRequired();
@@ -2940,6 +2962,10 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
   try{
     if(!isAdmin){
       throw new Error(T.msg_admin_only_render || "Solo un admin può generare i render IA.");
+    }
+
+    if(!id){
+      throw new Error("Salva la proposta prima di generare i render IA.");
     }
 
     if(!isRenovationRequired()){
@@ -3048,19 +3074,9 @@ aiBtn.addEventListener("click", async function(){
 
     var ai = result.data.analysis || {};
 
-    setValue("municipality", ai.municipality);
-    setValue("province", ai.province);
-    setValue("region", ai.region);
-    setValue("address", ai.address);
-    setValue("locality", ai.locality);
-    setValue("postal_code", ai.postal_code);
-    setValue("formatted_address", ai.formatted_address);
-    setValue("latitude", ai.latitude);
-    setValue("longitude", ai.longitude);
-    setValue("distance_to_sea_km", ai.distance_to_sea_km);
-    setValue("nearest_airport", ai.nearest_airport);
-    setValue("distance_to_airport_km", ai.distance_to_airport_km);
-
+    /* v3: i dati geografici (comune/provincia/regione/coordinate/mare/aeroporto) li risolve
+       già il Discovery Engine con fonti verificate — analyze-opportunity ora genera solo
+       narrativa, quindi qui non li sovrascriviamo più con l'output IA. */
     setValue("short_description", ai.short_description);
     setValue("full_description", ai.full_description);
     setValue("location_summary", ai.location_summary);

@@ -313,6 +313,11 @@ var UI_STRINGS = {
   toc_kicker:"Contents", toc_title:"Sommario",
   chapter_financial:"Analisi finanziaria", chapter_property:"Immobile", chapter_territory:"Territorio & mercato",
   chapter_ecosystem:"Ecosistema & accessibilità", chapter_evaluation:"Valutazione IMMONOVA", chapter_sources:"Fonti & note",
+  chapter_presentation:"Presentazione",
+  kicker_presentation:"Editorial overview", title_presentation:"Presentazione della Proposta",
+  kicker_narrative_analysis:"Narrative analysis", title_narrative_analysis:"Analisi Narrativa",
+  narrative_label_location:"Attrattività della zona", narrative_label_tourism:"Contesto turistico",
+  narrative_label_market:"Mercato immobiliare", narrative_label_short_rental:"Potenziale affitto breve",
   divider_financial_title:"Analisi Finanziaria", divider_financial_kicker:"Executive summary",
   divider_property_title:"L'Immobile", divider_property_kicker:"Property overview",
   divider_territory_title:"Territorio & Mercato", divider_territory_kicker:"Location intelligence",
@@ -2216,6 +2221,34 @@ function renderCashflowPage(){
   return pages;
 }
 
+/* ---- Presentazione narrativa: testi editoriali generati da analyze-opportunity (colonna
+   diretta sulla riga opportunities, non dossier_data del Discovery). Prima assenti dal
+   dossier: la form li salvava ma nessuna pagina li stampava. Ogni blocco compare solo se
+   valorizzato, così proposte senza analisi IA non mostrano pagine vuote. ---- */
+function narrativeBlockHTML(label, text){
+  if(!text) return "";
+  return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(label)+'</div><p class="info-text" style="margin-top:0">'+escapeHTML(text)+'</p></div>';
+}
+function renderPresentationPage(){
+  var o=opportunity||{};
+  var full=clean(o.full_description);
+  var lead=clean(o.short_description);
+  if(!full && !lead) return "";
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_presentation)+'</div><h2 class="section-title">'+escapeHTML(T.title_presentation)+'</h2><div class="lux-rule"></div>'
+    +(lead?'<p class="info-text" style="font-size:14px;font-style:italic;margin-bottom:16px">'+escapeHTML(lead)+'</p>':'')
+    +(full?'<p class="info-text">'+escapeHTML(full)+'</p>':'')
+    +'</div></article>';
+}
+function renderNarrativeAnalysisPage(){
+  var o=opportunity||{};
+  var blocks=narrativeBlockHTML(T.narrative_label_location, clean(o.location_summary))
+    +narrativeBlockHTML(T.narrative_label_tourism, clean(o.tourism_summary))
+    +narrativeBlockHTML(T.narrative_label_market, clean(o.market_summary))
+    +narrativeBlockHTML(T.narrative_label_short_rental, clean(o.ai_short_rental_summary));
+  if(!blocks) return "";
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_narrative_analysis)+'</div><h2 class="section-title">'+escapeHTML(T.title_narrative_analysis)+'</h2><div class="lux-rule"></div>'+blocks+'</div></article>';
+}
+
 /* ---- Domanda turistica necessaria al break-even: 2 grafici a torta per scenario ADR
    (minimo/massimo), quindi 4 in totale. Orizzonte fisso a 5 anni (benchmark standard di
    payback immobiliare), stesse ipotesi di crescita ricavi (2%/anno) e opex (32% sui ricavi)
@@ -2345,6 +2378,9 @@ function renderBook(){
   function push(chapterLabel,html,isDivider){ if(html) chapters.push({label:chapterLabel,html:html,divider:!!isDivider}); }
 
   renderAdPagesForPosition("after_toc").forEach(function(p){ push("", p.html, p.divider); });
+
+  push(T.chapter_presentation, renderPresentationPage());
+  push(T.chapter_presentation, renderNarrativeAnalysisPage());
 
   if(!isLandCategory()){
     push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
