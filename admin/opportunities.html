@@ -1095,6 +1095,8 @@ async function changeReviewStatus(id, newStatus){
   }
 
   var title = findOpportunityTitle(id);
+  var previousOpportunity = allOpportunities.find(function(o){ return String(o.id) === String(id); });
+  var wasPublished = !!(previousOpportunity && previousOpportunity.published);
   var confirmed = confirm(T.confirm_status_change_prefix + "\"" + title + "\"" + T.confirm_status_change_review_suffix + statusLabel(newStatus) + "?");
   if(!confirmed) return;
 
@@ -1120,7 +1122,11 @@ async function changeReviewStatus(id, newStatus){
     return;
   }
 
-  await notifyStatusChange(id, T.notify_review_prefix + statusLabel(newStatus));
+  /* Notifica di cambio stato SOLO se l'opportunità era pubblicata: una proposta non pubblica
+     non deve generare email di cambio revisione/commerciale a collaboratori/investitori. */
+  if(wasPublished){
+    await notifyStatusChange(id, T.notify_review_prefix + statusLabel(newStatus));
+  }
 
   setStatus(T.msg_review_updated, "success");
   await loadOpportunities();
@@ -1190,7 +1196,11 @@ async function changeCommercialStatus(id, newStatus){
     });
   }
 
-  await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
+  /* Notifica di cambio stato SOLO se l'opportunità era pubblicata: una proposta non pubblica
+     non deve generare email di cambio revisione/commerciale a collaboratori/investitori. */
+  if(previousOpportunity && previousOpportunity.published){
+    await notifyStatusChange(id, T.notify_commercial_prefix + commercialStatusLabel(newStatus));
+  }
 
   /* Notifica chi ha questo immobile tra i preferiti (tabella immonova_favorite_opportunities),
      SOLO a chi l'ha salvato -- mai un broadcast a tutti come notifyStatusChange sopra.
