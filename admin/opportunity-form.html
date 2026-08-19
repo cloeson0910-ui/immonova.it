@@ -3053,27 +3053,54 @@ document.getElementById("generateRenderBtn").addEventListener("click", async fun
       throw new Error("Carica almeno una foto ambiente prima di generare i render.");
     }
 
-    setRenovationStatus("Generazione render IA in corso. Può richiedere tempo...", "");
     btn.disabled = true;
     btn.textContent = "Generazione...";
 
-    var result = await client.functions.invoke("generate-renovation-renders", {
-      body:{
-        opportunity_id:Number(id),
-        max_images:50
-      }
-    });
+    /* La edge genera al massimo 2 render per chiamata (limite server voluto, per non superare
+       il timeout di Supabase con chiamate a OpenAI troppo lunghe in un colpo solo). Qui il
+       client la richiama in loop finché non ha più nulla da generare, cosi l'utente clicca
+       una volta sola invece di dover ripetere manualmente finché non sono pronti tutti i render. */
+    var totalCreated = 0;
+    var lastErrors = [];
+    var round = 0;
+    var MAX_ROUNDS = 40;
 
-    if(result.error || !result.data || !result.data.success){
-      throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore generazione render IA.");
+    while(round < MAX_ROUNDS){
+      round++;
+      setRenovationStatus("Generazione render IA in corso (" + totalCreated + " generati finora)...", "");
+
+      var result = await client.functions.invoke("generate-renovation-renders", {
+        body:{
+          opportunity_id:Number(id),
+          max_renders:2
+        }
+      });
+
+      if(result.error || !result.data || !result.data.success){
+        throw new Error((result.data && result.data.message) || (result.error && result.error.message) || "Errore generazione render IA.");
+      }
+
+      var createdCount = Number(result.data.created_count || 0);
+      totalCreated += createdCount;
+      if(Array.isArray(result.data.errors) && result.data.errors.length){
+        lastErrors = result.data.errors;
+      }
+
+      if(createdCount === 0) break;
     }
 
     await loadRenovationRenders();
 
-    setRenovationStatus(
-      "Render IA generati correttamente. Anteprima aggiornata.",
-      "success"
-    );
+    if(totalCreated === 0 && lastErrors.length){
+      setRenovationStatus("Nessun render generato. " + lastErrors[0], "error");
+    }else if(lastErrors.length){
+      setRenovationStatus(totalCreated + " render generati, con qualche errore su alcuni elementi (" + lastErrors[0] + "). Anteprima aggiornata.", "success");
+    }else{
+      setRenovationStatus(
+        totalCreated > 0 ? (totalCreated + " render IA generati correttamente. Anteprima aggiornata.") : "Tutti i render risultavano già generati.",
+        "success"
+      );
+    }
 
   }catch(error){
     setRenovationStatus(error.message || "Errore generazione render IA.", "error");
