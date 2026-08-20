@@ -496,14 +496,29 @@ var UI_STRINGS = {
   default_dossier_title:"Dossier IMMONOVA"
 };
 
-function i18nCacheKey(lang){ return "immonova_i18n_report_view_" + lang + "_v1"; }
+/* v2: bump quando si aggiungono nuove chiavi a UI_STRINGS, cosi' le cache
+   di traduzione salvate nel browser PRIMA dell'aggiunta (che non hanno
+   quelle chiavi) vengono automaticamente scartate invece di essere usate
+   cosi' come sono — altrimenti T.chiave_nuova resta undefined per ogni
+   lingua diversa dall'italiano e qualunque fmt(T.chiave_nuova,...) esplode
+   con "Cannot read properties of undefined (reading 'split')". */
+function i18nCacheKey(lang){ return "immonova_i18n_report_view_" + lang + "_v2"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
   var cacheKey = i18nCacheKey(lang);
   try{
     var cached = localStorage.getItem(cacheKey);
-    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+    if(cached){
+      var parsed = JSON.parse(cached);
+      // Una cache valida deve avere TUTTE le chiavi attualmente in uso: se
+      // manca anche una sola chiave (perche' e' stata aggiunta dopo che la
+      // cache era stata salvata) la scartiamo e ritraduciamo da zero,
+      // invece di rischiare un T.chiave===undefined più avanti.
+      var hasAllKeys = parsed && typeof parsed === "object" &&
+        Object.keys(UI_STRINGS).every(function(k){ return Object.prototype.hasOwnProperty.call(parsed, k) && parsed[k] != null; });
+      if(hasAllKeys) return parsed;
+    }
   }catch(e){}
 
   var keys = Object.keys(UI_STRINGS);
@@ -560,7 +575,10 @@ function pluralPick(count, singularKey, pluralKey){
   return String(count) + (T[count===1?singularKey:pluralKey] || UI_STRINGS[count===1?singularKey:pluralKey]);
 }
 function fmt(template, vars){
-  var out = template;
+  // Difesa: se template e' undefined/null (es. chiave di traduzione mancante),
+  // non blocchiamo l'intero dossier — meglio una stringa vuota visibile che
+  // un crash che azzera tutta la pagina.
+  var out = template==null ? "" : String(template);
   Object.keys(vars||{}).forEach(function(k){ out = out.split("{"+k+"}").join(vars[k]); });
   return out;
 }

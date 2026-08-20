@@ -2448,6 +2448,28 @@ function buildDossierFilename(){
 /* ---- Genera il PDF "fotografando" ogni .report-page cosi' come e' gia' impaginata a schermo
    in modalita' stampa (classe .pdf-export-mode, stessa resa di @media print ma senza aprire
    il dialogo di stampa del browser — necessario per generarlo in automatico al click su Invia). ---- */
+/* html2canvas 1.4.1 ha un bug noto: durante la misurazione del testo usa
+   Range.setEnd() sul contenuto dei nodi, e se l'offset calcolato non
+   combacia più con la lunghezza reale del nodo (capita spesso con spazi
+   non-interrompibili nei numeri formattati, trattini tipografici, virgolette
+   curve, o testo che cambia leggermente durante il rendering) lancia
+   "Failed to execute 'setEnd' on 'Range': The offset N is larger than the
+   node's length M" e l'intera pagina/il PDF fallisce. foreignObjectRendering
+   evita del tutto questo percorso di codice (disegna il DOM nativamente via
+   SVG <foreignObject> invece di ricostruire manualmente ogni nodo di testo),
+   quindi lo usiamo come fallback automatico solo quando serve, per non
+   perdere la qualità/compatibilità della modalità normale sulle pagine che
+   funzionano già correttamente. */
+async function renderDossierPageToCanvas(pageEl){
+  try{
+    return await html2canvas(pageEl,{scale:2,useCORS:true,backgroundColor:"#ffffff"});
+  }catch(err){
+    var isRangeBug=err && /setEnd|Range/i.test(String(err.message||err));
+    if(!isRangeBug) throw err;
+    console.warn("html2canvas: bug noto Range.setEnd, ritento con foreignObjectRendering",err);
+    return await html2canvas(pageEl,{scale:2,useCORS:true,backgroundColor:"#ffffff",foreignObjectRendering:true});
+  }
+}
 async function generateDossierPdfBlob(){
   var mapImg=document.getElementById("locationMapImg");
   if(mapImg){
@@ -2464,7 +2486,7 @@ async function generateDossierPdfBlob(){
     if(!pages.length) throw new Error("Nessuna pagina del dossier trovata da esportare.");
     var pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
     for(var i=0;i<pages.length;i++){
-      var canvas=await html2canvas(pages[i],{scale:2,useCORS:true,backgroundColor:"#ffffff"});
+      var canvas=await renderDossierPageToCanvas(pages[i]);
       var imgData=canvas.toDataURL("image/jpeg",0.92);
       if(i>0) pdf.addPage();
       pdf.addImage(imgData,"JPEG",0,0,297,210);
