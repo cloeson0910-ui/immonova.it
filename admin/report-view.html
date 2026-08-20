@@ -1480,6 +1480,30 @@ function selectedNearbyCitiesPage2(){
     var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
     if(!seen[key]){seen[key]=true;selected.push(c);}
   });
+  // v10.11: con la soglia NEARBY_CITIES_PAGE2_MIN_POPULATION la fascia
+  // 30-200km a volte contiene meno di NEARBY_CITIES_PER_PAGE città (es.
+  // solo 9 su 16 richieste), perché in alcune zone non ci sono abbastanza
+  // centri sopra quella soglia di abitanti. In quel caso completiamo la
+  // pagina con le città della stessa fascia/paese subito sotto la soglia
+  // (le più popolose tra quelle escluse), invece di lasciare la pagina
+  // incompleta: l'utente vuole vedere NEARBY_CITIES_PER_PAGE risultati
+  // quando il pool li contiene, anche se non tutti superano i 15.000 ab.
+  if(selected.length<NEARBY_CITIES_PER_PAGE){
+    var extra=pool.filter(function(c){
+      var dist=Number(c.distance_km);
+      if(!Number.isFinite(dist)) return false;
+      if(dist<NEARBY_CITIES_PAGE2_MIN_KM || dist>NEARBY_CITIES_PAGE2_MAX_KM) return false;
+      if(propertyCountry && c.country_code && c.country_code!==propertyCountry) return false;
+      var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
+      return !page1Keys[key] && !seen[key];
+    }).sort(function(a,b){return (b.population||0)-(a.population||0);});
+    extra.forEach(function(c){
+      if(selected.length>=NEARBY_CITIES_PER_PAGE) return;
+      var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
+      if(!seen[key]){seen[key]=true;selected.push(c);}
+    });
+    selected.sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
+  }
   return selected;
 }
 function nearbyCityCardsHTML(list){
