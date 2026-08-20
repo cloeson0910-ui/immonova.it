@@ -1227,7 +1227,23 @@ function renderNearbyCitiesPage(){
   var bucket=d.nearby_major_cities||{};
   var cities=Array.isArray(bucket.items)?bucket.items:[];
   if(!cities.length)return "";
-  var cards=cities.slice(0,12).map(function(c){
+  /* v10.6: non ordinare più solo per popolazione prima di tagliare a 12 —
+     altrimenti paesi piccoli ma turisticamente rilevanti nel raggio
+     (es. Cisternino, Alberobello, Ostuni) restano fuori dal dossier
+     stampato anche quando il backend li ha già trovati, semplicemente
+     perché ci sono 12+ città più grandi nello stesso raggio. Uniamo le
+     più vicine in assoluto con le più popolose, poi ordiniamo per
+     distanza (contesto territoriale che si allarga dal comune verso
+     l'esterno è più utile per l'investitore). */
+  var byDistance=cities.slice().sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
+  var byPopulation=cities.slice().sort(function(a,b){return (b.population||0)-(a.population||0);});
+  var seen={},selected=[];
+  byDistance.slice(0,10).concat(byPopulation.slice(0,6)).forEach(function(c){
+    var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
+    if(!seen[key]){seen[key]=true;selected.push(c);}
+  });
+  selected.sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
+  var cards=selected.slice(0,14).map(function(c){
     return '<div class="metric-card"><div class="metric-label">'+escapeHTML(c.name||"-")+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(number(c.population))+'</div><div class="metric-note">'+escapeHTML(T.label_nearby_city_population)+' · '+escapeHTML(String(c.distance_km!=null?c.distance_km:"-"))+' km</div></div>';
   }).join('');
   return '<div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.note_nearby_cities)+'</p>';
