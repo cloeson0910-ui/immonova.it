@@ -1133,9 +1133,8 @@ function renderEnvironmentPage(){
   var pm10=metricFromDossier("environment","air_quality_pm10");
   var no2=metricFromDossier("environment","air_quality_no2");
   var o3=metricFromDossier("environment","air_quality_o3");
-  var swq=metricFromDossier("environment","sea_water_quality_status");
 
-  if(!aqi&&!pm25&&!pm10&&!no2&&!o3&&!swq)return "";
+  if(!aqi&&!pm25&&!pm10&&!no2&&!o3)return "";
 
   var d=dossierData||{};
   var envBucket=d.environment||{};
@@ -1143,32 +1142,34 @@ function renderEnvironmentPage(){
   var stationName=aqiField&&aqiField.coverage&&aqiField.coverage.used_name?aqiField.coverage.used_name:"";
   var stationDist=aqiField&&aqiField.coverage&&aqiField.coverage.distance_km!=null?aqiField.coverage.distance_km:null;
 
-  var airBlock="";
-  if(aqi){
-    airBlock='<div style="margin-bottom:16px">'+aqiBadgeHTML(aqi.value)+'</div>'
-      +'<div class="metric-grid">'
-      +metricCardHTML(T.label_air_quality_pm25,pm25,"µg/m³")
-      +metricCardHTML(T.label_air_quality_pm10,pm10,"µg/m³")
-      +metricCardHTML(T.label_air_quality_no2,no2,"µg/m³")
-      +'</div>'
-      +(stationName?'<p class="info-text" style="margin-top:12px">'+escapeHTML(T.air_quality_station_prefix)+escapeHTML(stationName)+(stationDist!=null?' — '+escapeHTML(String(stationDist))+escapeHTML(T.sea_water_distance_suffix):'')+'</p>':'')
-      +'<p class="info-text">'+escapeHTML(T.note_air_quality)+'</p>';
-  }
+  var airBlock='<div style="margin-bottom:16px">'+aqiBadgeHTML(aqi.value)+'</div>'
+    +'<div class="metric-grid">'
+    +metricCardHTML(T.label_air_quality_pm25,pm25,"µg/m³")
+    +metricCardHTML(T.label_air_quality_pm10,pm10,"µg/m³")
+    +metricCardHTML(T.label_air_quality_no2,no2,"µg/m³")
+    +'</div>'
+    +(stationName?'<p class="info-text" style="margin-top:12px">'+escapeHTML(T.air_quality_station_prefix)+escapeHTML(stationName)+(stationDist!=null?' — '+escapeHTML(String(stationDist))+escapeHTML(T.sea_water_distance_suffix):'')+'</p>':'')
+    +'<p class="info-text">'+escapeHTML(T.note_air_quality)+'</p>';
 
-  var seaBlock="";
-  if(swq){
-    var swqField=envBucket.sea_water_quality_status;
-    var pointName=swqField&&swqField.coverage?swqField.coverage.used_name:"";
-    var distKm=swqField&&swqField.coverage?swqField.coverage.distance_km:null;
-    var swCls=seaWaterStatusClass(swq.value);
-    seaBlock='<div class="cost-box" style="margin-top:'+(airBlock?'24px':'0')+'"><div class="cost-title" style="display:flex;align-items:center;gap:10px">'+waveIconSVG()+'<span>'+escapeHTML(T.label_sea_water_quality)+'</span></div>'
-      +'<div class="cost-row" style="border-bottom:0;align-items:center"><span class="aqi-badge '+swCls+'"><span class="aqi-dot"></span>'+escapeHTML(seaWaterStatusLabel(swq.value))+'</span><strong style="font-weight:400;font-size:13px;color:#8f7643">'+(pointName?escapeHTML(pointName):'')+(distKm!=null?' — '+escapeHTML(String(distKm))+escapeHTML(T.sea_water_distance_suffix):'')+'</strong></div>'
-      +'</div><p class="info-text" style="margin-top:12px">'+escapeHTML(T.note_sea_water)+'</p>';
-  }else if(airBlock){
-    seaBlock='<p class="info-text" style="margin-top:16px;font-style:italic">'+escapeHTML(T.no_sea_water_data)+'</p>';
-  }
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_environment)+'</div><h2 class="section-title">'+escapeHTML(T.title_environment)+'</h2><div class="lux-rule"></div>'+airBlock+'</div></article>';
+}
 
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_environment)+'</div><h2 class="section-title">'+escapeHTML(T.title_environment)+'</h2><div class="lux-rule"></div>'+airBlock+seaBlock+'</div></article>';
+/* ---- Qualità delle acque di balneazione: spostata dal capitolo Territorio (dove stava insieme
+   alla qualità dell'aria) al capitolo Ecosistema, subito dopo "Spiagge e costa" -- tematicamente
+   appartiene li, non alle metriche ambientali generiche del territorio. ---- */
+function renderSeaWaterQualityBlock(){
+  var swq=metricFromDossier("environment","sea_water_quality_status");
+  if(!swq) return "";
+
+  var d=dossierData||{};
+  var envBucket=d.environment||{};
+  var swqField=envBucket.sea_water_quality_status;
+  var pointName=swqField&&swqField.coverage?swqField.coverage.used_name:"";
+  var distKm=swqField&&swqField.coverage?swqField.coverage.distance_km:null;
+  var swCls=seaWaterStatusClass(swq.value);
+  return '<div class="cost-box" style="margin-top:20px"><div class="cost-title" style="display:flex;align-items:center;gap:10px">'+waveIconSVG()+'<span>'+escapeHTML(T.label_sea_water_quality)+'</span></div>'
+    +'<div class="cost-row" style="border-bottom:0;align-items:center"><span class="aqi-badge '+swCls+'"><span class="aqi-dot"></span>'+escapeHTML(seaWaterStatusLabel(swq.value))+'</span><strong style="font-weight:400;font-size:13px;color:#8f7643">'+(pointName?escapeHTML(pointName):'')+(distKm!=null?' — '+escapeHTML(String(distKm))+escapeHTML(T.sea_water_distance_suffix):'')+'</strong></div>'
+    +'</div><p class="info-text" style="margin-top:12px">'+escapeHTML(T.note_sea_water)+'</p>';
 }
 /* ---- Grafico andamento prezzi (Eurostat) RIMOSSO su richiesta esplicita: l'indice e' solo
    a livello nazionale, un aggregato troppo generico rispetto al singolo comune per essere
@@ -2435,7 +2436,22 @@ function renderBook(){
   if(airportsPage) ecoPages.push(airportsPage);
   var groundTransportPage=renderCategoryPageFiltered("transport",["railway_station","passenger_port","bus_station","taxi_shuttle","transport_node"],T.transport_title,T.transport_category);
   if(groundTransportPage) ecoPages.push(groundTransportPage);
-  ecoSections.forEach(function(s){ var p=renderCategoryPage(s[0],s[1],s[2]); if(p) ecoPages.push(p); });
+  ecoSections.forEach(function(s){
+    var p=renderCategoryPage(s[0],s[1],s[2]);
+    if(s[0]==="beaches"){
+      var waterBlock=renderSeaWaterQualityBlock();
+      if(waterBlock){
+        if(p){
+          /* Unita alla pagina "Spiagge e costa" invece di una pagina a se -- un solo dato
+             (qualita acque) non giustifica una pagina intera nel dossier stampato. */
+          p=p.replace('</div></article>', waterBlock+'</div></article>');
+        }else{
+          p='<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(s[2])+'</div><h2 class="section-title">'+escapeHTML(s[1])+'</h2><div class="lux-rule"></div>'+waterBlock+'</div></article>';
+        }
+      }
+    }
+    if(p) ecoPages.push(p);
+  });
   if(ecoPages.length){
     push(T.chapter_ecosystem, dividerPageHTML(T.divider_ecosystem_title,T.divider_ecosystem_kicker), true);
     ecoPages.forEach(function(p){push(T.chapter_ecosystem,p);});
