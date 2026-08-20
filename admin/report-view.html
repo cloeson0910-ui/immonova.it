@@ -344,7 +344,7 @@ var UI_STRINGS = {
   tag_verified_adr:" (da ADR verificato)", tag_estimated:" (stimato)", tag_verified_rent:" (da canone verificato)",
   years_suffix:" anni", extrapolated_note:" (proiezione estesa oltre i 15 anni in tabella)",
   extrapolated_note2:" (proiezione estesa oltre i 15 anni mostrati in tabella)",
-  scenario_min:"Scenario ADR minimo", scenario_max:"Scenario ADR massimo", scenario_real_data:"Scenario da dati reali", scenario_adr:"Scenario ADR",
+  scenario_min:"Scenario ADR minimo", scenario_max:"Scenario ADR massimo", scenario_avg:"Scenario ADR medio", scenario_real_data:"Scenario da dati reali", scenario_adr:"Scenario ADR",
   rule_range_note_verified:"Net Income, ROI e Break-even sono mostrati per entrambi gli scenari ADR verificati dall\u2019analista (minimo e massimo), qui sopra, senza dover scorrere fino alla tabella di proiezione 15 anni. Occupazione e costi operativi restano ipotesi dichiarate.",
   rule_range_note_market:"Net Income, ROI e Break-even sono mostrati per entrambi gli scenari ADR di mercato automatico (minimo e massimo), qui sopra, senza dover scorrere fino alla tabella di proiezione 15 anni. Occupazione e costi operativi restano ipotesi dichiarate.",
   rule_real_note:"Net Income e ROI calcolati su dati reali dal report interno.",
@@ -1595,7 +1595,7 @@ function renderFinancialSnapshot(){
 
   if(projs && projs.mode==="range" && (projs.min || projs.max)){
     hasAny=true;
-    leftColumn = scenarioBoxHTML(projs.min,T.scenario_min) + scenarioBoxHTML(projs.max,T.scenario_max);
+    leftColumn = scenarioBoxHTML(projs.min,T.scenario_min) + (projs.avg?scenarioBoxHTML(projs.avg,T.scenario_avg):"") + scenarioBoxHTML(projs.max,T.scenario_max);
     var minAdrVerified = projs.min && projs.min.adrVerified;
     if(isCommercial){
       ruleNote = minAdrVerified ? T.rule_range_note_verified_commercial : T.rule_range_note_market_commercial;
@@ -2167,7 +2167,18 @@ function buildCashflowProjections(){
   }
 
   if(adrMin || adrMax){
-    return {mode:"range", min:projFor(adrMin || adrMax, "ADR minimo"), max:projFor(adrMax || adrMin, "ADR massimo"), total:f.total};
+    var avgProj=null;
+    if(adrMin && adrMax){
+      var minVerified=!!(adrMin.source && String(adrMin.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+      var maxVerified=!!(adrMax.source && String(adrMax.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+      var avgMetric={
+        value:(Number(adrMin.value)+Number(adrMax.value))/2,
+        unit:adrMin.unit||adrMax.unit||"eur_per_room_night",
+        source:{provider_name:(minVerified&&maxVerified)?"ADR medio (analyst verified min/max)":"ADR medio (mercato, min/max)"}
+      };
+      avgProj=projFor(avgMetric, "ADR medio");
+    }
+    return {mode:"range", min:projFor(adrMin || adrMax, "ADR minimo"), avg:avgProj, max:projFor(adrMax || adrMin, "ADR massimo"), total:f.total};
   }
   if(adrSingle){
     return {mode:"single", single:projFor(adrSingle, "ADR unico"), total:f.total};
@@ -2214,7 +2225,8 @@ function renderCashflowPage(){
        intro paragraph, comfortably fits a single A4-landscape print page on its own, while both
        together routinely overflowed it. */
     if(projs.min) pages.push(page(T.scenario_min, tableBlock(projs.min,T.scenario_min), true));
-    if(projs.max) pages.push(page(T.scenario_max, tableBlock(projs.max,T.scenario_max), !projs.min));
+    if(projs.avg) pages.push(page(T.scenario_avg, tableBlock(projs.avg,T.scenario_avg), !projs.min));
+    if(projs.max) pages.push(page(T.scenario_max, tableBlock(projs.max,T.scenario_max), !projs.min && !projs.avg));
   }else{
     pages.push(page("", tableBlock(projs.single, projs.mode==="real" ? T.scenario_real_data : T.scenario_adr), true));
   }
@@ -2298,6 +2310,15 @@ function renderTourismDemandPage(){
   var scenarios=[];
   if(adrMin||adrMax){
     if(adrMin||adrMax) scenarios.push({adr:adrMin||adrMax, label:T.scenario_min});
+    if(adrMin && adrMax){
+      var minVerifiedTd=!!(adrMin.source && String(adrMin.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+      var maxVerifiedTd=!!(adrMax.source && String(adrMax.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+      scenarios.push({adr:{
+        value:(Number(adrMin.value)+Number(adrMax.value))/2,
+        unit:adrMin.unit||adrMax.unit||"eur_per_room_night",
+        source:{provider_name:(minVerifiedTd&&maxVerifiedTd)?"ADR medio (analyst verified min/max)":"ADR medio (mercato, min/max)"}
+      }, label:T.scenario_avg});
+    }
     if(adrMax||adrMin) scenarios.push({adr:adrMax||adrMin, label:T.scenario_max});
   }else if(adrSingle){
     scenarios.push({adr:adrSingle, label:T.scenario_adr});
