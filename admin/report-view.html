@@ -502,7 +502,7 @@ var UI_STRINGS = {
   unit_eur_per_m2:"€/m²", unit_eur_per_m2_month:"€/m²/mese", unit_eur_per_room_night:"€/camera/notte",
   unit_percent:"%", unit_years:"anni",
   kicker_nearby_cities_more:"Territorial context", title_nearby_cities_more:"Altre città nel raggio di ricerca",
-  note_nearby_cities_more:"Ulteriori località trovate entro il raggio impostato, oltre a quelle già mostrate nella pagina precedente."
+  note_nearby_cities_more:"Città importanti tra {min} e {max} km dall'immobile, oltre a quelle già mostrate nella pagina precedente."
 };
 
 /* v2: bump quando si aggiungono nuove chiavi a UI_STRINGS, cosi' le cache
@@ -582,10 +582,11 @@ function translationLooksSuspicious(source, candidate){
   if(srcLen > 20 && (candLen > srcLen*4 || candLen < srcLen*0.2)) return true;
   return false;
 }
-async function translateTextsSafe(lang, keys, texts, fallbackByKey, context){
-  var protectedItems = texts.map(function(t){ return protectPlaceholders(t); });
-  var protectedTexts = protectedItems.map(function(p){ return p.text; });
-
+/* Una singola chiamata alla edge function per UN SOLO testo — vedi la nota
+   sopra translateTextsSafe sul perché non si manda più un array con tutte
+   le stringhe insieme. */
+async function translateOneText(lang, text, context){
+  var protectedItem = protectPlaceholders(text);
   var result = null;
   try{
     var url = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/translate-public-content";
@@ -593,31 +594,45 @@ async function translateTextsSafe(lang, keys, texts, fallbackByKey, context){
       language: lang,
       source_language: "it",
       context: context || "",
-      texts: protectedTexts
+      texts: [protectedItem.text]
     })});
     result = await res.json();
   }catch(e){
-    console.error("Traduzione dossier non riuscita (rete), uso italiano come fallback:", e);
-    return Object.assign({}, fallbackByKey);
+    return null;
   }
-
-  if(!result || !result.success || !Array.isArray(result.translations)){
-    console.error("Traduzione dossier non riuscita, uso italiano come fallback:", result);
-    return Object.assign({}, fallbackByKey);
-  }
-
-  var translations = result.translations;
-  if(translations.length !== texts.length){
-    console.error("Traduzione dossier: numero di traduzioni ("+translations.length+") diverso dai testi inviati ("+texts.length+") — risultato scartato per evitare testi disallineati, uso italiano come fallback.");
-    return Object.assign({}, fallbackByKey);
-  }
-
+  if(!result || !result.success || !Array.isArray(result.translations) || result.translations.length !== 1) return null;
+  var raw = result.translations[0];
+  if(raw == null) return null;
+  return restorePlaceholders(raw, protectedItem.tokens);
+}
+/* v10.11: prima si mandava un'unica chiamata con TUTTE le stringhe insieme
+   (un array di ~150 testi) e ci si aspettava indietro un array della
+   stessa lunghezza, nello stesso ordine. Il servizio di traduzione a volte
+   disallinea questo array (unisce due righe corte in una, o ne salta una),
+   e da quel punto in poi OGNI chiave successiva riceve la traduzione
+   sbagliata — è la causa delle etichette scambiate viste nel dossier
+   (es. il testo di "nessuna città trovata" finito dentro il valore di una
+   card di popolazione). Mandare una chiamata separata per ogni singolo
+   testo elimina il problema alla radice: non c'è più nessun array da
+   disallineare. Il prezzo è più richieste HTTP, mitigato con un pool di
+   concorrenza limitata e — soprattutto — con la cache in localStorage che
+   rende questo costo una tantum per lingua. */
+async function translateTextsSafe(lang, keys, texts, fallbackByKey, context){
+  var CONCURRENCY = 6;
   var translated = {};
-  keys.forEach(function(k, i){
-    var raw = translations[i];
-    var restored = raw != null ? restorePlaceholders(raw, protectedItems[i].tokens) : null;
-    translated[k] = translationLooksSuspicious(texts[i], restored) ? fallbackByKey[k] : restored;
-  });
+  var index = 0;
+  async function worker(){
+    while(index < keys.length){
+      var i = index++;
+      var k = keys[i];
+      var source = texts[i];
+      var result = await translateOneText(lang, source, context);
+      translated[k] = translationLooksSuspicious(source, result) ? fallbackByKey[k] : result;
+    }
+  }
+  var workers = [];
+  for(var w=0; w<Math.min(CONCURRENCY, keys.length); w++) workers.push(worker());
+  await Promise.all(workers);
   return translated;
 }
 
@@ -1367,6 +1382,16 @@ function renderPricingPage(){
     +'</div>';
 }
 var NEARBY_CITIES_PER_PAGE = 14;
+/* Richiesta utente: la prima pagina mostra le città più vicine in assoluto
+   (contesto immediato del comune); la seconda pagina, invece di continuare
+   semplicemente la stessa lista ordinata per distanza (che con un raggio
+   ampio restava piena di paesini di Salento anche oltre la prima pagina),
+   mostra le città importanti in una FASCIA di distanza successiva — es. tra
+   30 e 200 km da Gallipoli prende Lecce, Bari, Brindisi, Ostuni, Martina
+   Franca ecc. La fascia è volutamente qui in cima al file, modificabile. */
+var NEARBY_CITIES_PAGE2_MIN_KM = 30;
+var NEARBY_CITIES_PAGE2_MAX_KM = 200;
+
 /* v10.6: non ordinare più solo per popolazione prima di tagliare — altrimenti
    paesi piccoli ma turisticamente rilevanti nel raggio (es. Cisternino,
    Alberobello, Ostuni) restano fuori dal dossier stampato anche quando il
@@ -1374,24 +1399,46 @@ var NEARBY_CITIES_PER_PAGE = 14;
    nello stesso raggio. Uniamo le più vicine in assoluto con le più
    popolose, poi ordiniamo per distanza (contesto territoriale che si
    allarga dal comune verso l'esterno è più utile per l'investitore). */
-function selectedNearbyCities(){
+function nearbyCitiesPool(){
   var d=dossierData||{};
   var bucket=d.nearby_major_cities||{};
-  var cities=Array.isArray(bucket.items)?bucket.items:[];
+  return Array.isArray(bucket.items)?bucket.items:[];
+}
+function selectedNearbyCities(){
+  var cities=nearbyCitiesPool();
   if(!cities.length)return [];
   var byDistance=cities.slice().sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
   var byPopulation=cities.slice().sort(function(a,b){return (b.population||0)-(a.population||0);});
   var seen={},selected=[];
-  // v10.9: raddoppiati i pool di raccolta (prima 10+6) per poter alimentare
-  // anche la seconda pagina "altre città" richiesta dall'utente — con un
-  // raggio di ricerca ampio (es. 250 km da Gallipoli) restavano fuori
-  // centri importanti che il Discovery Engine aveva già trovato ma che le
-  // due pagine non avevano spazio per mostrare.
   byDistance.slice(0,24).concat(byPopulation.slice(0,16)).forEach(function(c){
     var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
     if(!seen[key]){seen[key]=true;selected.push(c);}
   });
   selected.sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
+  return selected;
+}
+/* Città per la seconda pagina: solo quelle nella fascia di distanza
+   configurata sopra, ordinate per popolazione decrescente (in quella
+   fascia contano i centri importanti, non i più vicini in assoluto), e
+   comunque mai una città già mostrata in pagina 1. */
+function selectedNearbyCitiesPage2(){
+  var page1Keys={};
+  selectedNearbyCities().slice(0,NEARBY_CITIES_PER_PAGE).forEach(function(c){
+    page1Keys[(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"")]=true;
+  });
+  var cities=nearbyCitiesPool();
+  var inBand=cities.filter(function(c){
+    var dist=Number(c.distance_km);
+    if(!Number.isFinite(dist)) return false;
+    if(dist<NEARBY_CITIES_PAGE2_MIN_KM || dist>NEARBY_CITIES_PAGE2_MAX_KM) return false;
+    var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
+    return !page1Keys[key];
+  });
+  var seen={},selected=[];
+  inBand.sort(function(a,b){return (b.population||0)-(a.population||0);}).forEach(function(c){
+    var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
+    if(!seen[key]){seen[key]=true;selected.push(c);}
+  });
   return selected;
 }
 function nearbyCityCardsHTML(list){
@@ -1405,18 +1452,17 @@ function renderNearbyCitiesPage(){
   var cards=nearbyCityCardsHTML(selected.slice(0,NEARBY_CITIES_PER_PAGE));
   return '<div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.note_nearby_cities)+'</p>';
 }
-/* Richiesta utente: con raggi di ricerca ampi (es. 250 km da Gallipoli) la
-   prima pagina non basta a mostrare tutte le città importanti trovate dal
-   Discovery Engine — aggiungiamo una seconda pagina, subito dopo la prima,
-   con altrettanti risultati aggiuntivi (fino a NEARBY_CITIES_PER_PAGE),
-   solo se ce ne sono davvero oltre la prima pagina. */
+/* Richiesta utente: seconda pagina, subito dopo la prima, con le città
+   importanti nella fascia 30-200 km (configurabile sopra) — così Gallipoli
+   con raggio esteso a 250 km mostra anche Lecce, Bari, Brindisi, Ostuni,
+   Martina Franca ecc. invece di continuare a mostrare solo i paesini di
+   Salento più vicini. */
 function renderNearbyCitiesMorePage(){
-  var selected=selectedNearbyCities();
-  if(selected.length<=NEARBY_CITIES_PER_PAGE) return "";
-  var more=selected.slice(NEARBY_CITIES_PER_PAGE, NEARBY_CITIES_PER_PAGE*2);
+  var more=selectedNearbyCitiesPage2().slice(0,NEARBY_CITIES_PER_PAGE);
   if(!more.length) return "";
   var cards=nearbyCityCardsHTML(more);
-  return '<article class="report-page"><div class="page-inner"><div class="merge-block"><div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities_more)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities_more)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.note_nearby_cities_more)+'</p></div></div></article>';
+  var bandNote=fmt(T.note_nearby_cities_more,{min:NEARBY_CITIES_PAGE2_MIN_KM,max:NEARBY_CITIES_PAGE2_MAX_KM});
+  return '<article class="report-page"><div class="page-inner"><div class="merge-block"><div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities_more)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities_more)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(bandNote)+'</p></div></div></article>';
 }
 function renderTerritorialAndTourismPage(){
   var terr=renderTerritorialPage();
