@@ -69,6 +69,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
 .pill.status-draft{background:rgba(90,74,42,.12); color:var(--dark2)}
 .pill.status-ready_to_review{background:rgba(166,127,34,.18); color:#8a6a1f}
 .pill.status-approved{background:rgba(52,120,90,.15); color:#2f6e50}
+.pill.status-scheduled{background:rgba(166,127,34,.22); color:#8a6a1f}
 .pill.status-published{background:rgba(40,120,60,.18); color:#227a3f}
 .pill.status-archived{background:rgba(150,150,150,.18); color:#777}
 .card-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:auto}
@@ -140,7 +141,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
   <p class="subtitle">Crea un contenuto una sola volta e pubblicalo su Facebook e Instagram — sempre con anteprima e approvazione manuale prima della pubblicazione.</p>
 
   <div class="status-banner">
-    <b>Come funziona:</b> crea un post in bozza, guarda l'anteprima, poi premi "Pubblica" quando sei pronto — il post va live immediatamente su tutte le destinazioni selezionate (nessuno stato "in pausa" qui, a differenza degli annunci a pagamento: un post organico o è pubblicato o non lo è). Instagram richiede sempre un'immagine (non pubblica post di solo testo). Le storie restano visibili 24 ore.
+    <b>Come funziona:</b> crea un post in bozza, guarda l'anteprima, poi premi "Pubblica ora" quando sei pronto — il post va live immediatamente su tutte le destinazioni selezionate. In alternativa, nel form del post attiva "Programma la pubblicazione" e scegli data/ora: il post verrà pubblicato automaticamente a quell'orario, senza bisogno di tornare sul sito. Instagram richiede sempre un'immagine (non pubblica post di solo testo). Le storie restano visibili 24 ore.
   </div>
 
   <div class="toolbar">
@@ -150,6 +151,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
       <option value="draft">Bozza</option>
       <option value="ready_to_review">Da rivedere</option>
       <option value="approved">Approvato</option>
+      <option value="scheduled">Programmato</option>
       <option value="published">Pubblicato</option>
       <option value="archived">Archiviato</option>
     </select>
@@ -283,6 +285,13 @@ button:disabled{opacity:.45; cursor:not-allowed}
         <option value="approved">Approvato</option>
       </select>
     </div>
+    <div class="field">
+      <label><input type="checkbox" id="fScheduleEnabled"> Programma la pubblicazione per una data/ora specifica</label>
+      <div id="fScheduleWrap" style="display:none;margin-top:8px">
+        <input type="datetime-local" id="fScheduledAt">
+        <div style="font-size:11px;color:var(--dark2);margin-top:4px">Il post verrà pubblicato automaticamente su tutte le destinazioni selezionate all'orario indicato (fuso orario del tuo browser). Nessuna azione manuale richiesta a quell'ora — puoi comunque premere "Pubblica ora" in qualsiasi momento per anticiparlo, o annullare la programmazione tornando qui e deselezionando questa casella.</div>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn-outline" id="cancelEditBtn">Annulla</button>
       <button class="btn-gold" id="saveEditBtn">Salva</button>
@@ -323,7 +332,24 @@ function escapeHTML(s){
 }
 
 function statusLabel(s){
-  return {draft:"Bozza", ready_to_review:"Da rivedere", approved:"Approvato", published:"Pubblicato", archived:"Archiviato"}[s] || s;
+  return {draft:"Bozza", ready_to_review:"Da rivedere", approved:"Approvato", scheduled:"Programmato", published:"Pubblicato", archived:"Archiviato"}[s] || s;
+}
+
+// v1: converte un valore <input type="datetime-local"> (locale, senza fuso)
+// in un timestamp ISO UTC da salvare in DB, e viceversa per ripopolare il
+// campo in modifica. datetime-local non porta il fuso orario con sé, quindi
+// va sempre interpretato/costruito nel fuso del browser di chi programma.
+function localDatetimeToISO(v){
+  if(!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+function isoToLocalDatetime(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 async function loadPosts(){
@@ -365,6 +391,7 @@ function renderCard(p){
   const alreadyPublished = p.status === "published";
   const errorLine = p.publish_error ? `<div class="post-status-line error">${escapeHTML(p.publish_error)}</div>` : "";
   const okLine = (!p.publish_error && alreadyPublished) ? `<div class="post-status-line ok">Pubblicato${p.published_at ? " · " + new Date(p.published_at).toLocaleString("it-IT") : ""}</div>` : "";
+  const scheduledLine = (!alreadyPublished && p.status === "scheduled" && p.scheduled_publish_at) ? `<div class="post-status-line" style="color:#8a6a1f">Programmato per il ${new Date(p.scheduled_publish_at).toLocaleString("it-IT")}</div>` : "";
 
   const mediaType = p.media_type || "image";
   const mediaLabel = mediaType === "video" ? "Video" : (mediaType === "carousel" ? `Carosello${Array.isArray(p.carousel_image_urls) ? " (" + p.carousel_image_urls.length + ")" : ""}` : "Immagine");
@@ -380,11 +407,11 @@ function renderCard(p){
       <span class="pill">${escapeHTML(destinations.join(" + ") || "Nessuna destinazione")}</span>
     </div>
     <div class="caption">${escapeHTML(p.caption || "(nessun testo)")}</div>
-    <div class="post-status-line" id="postStatusLine-${escapeHTML(p.id)}">${errorLine}${okLine}</div>
+    <div class="post-status-line" id="postStatusLine-${escapeHTML(p.id)}">${errorLine}${okLine}${scheduledLine}</div>
     <div class="card-actions">
       <button class="btn-outline edit-btn" data-id="${escapeHTML(p.id)}">Modifica</button>
       <button class="btn-outline preview-btn" data-id="${escapeHTML(p.id)}">Anteprima</button>
-      <button class="btn-gold publish-btn" data-id="${escapeHTML(p.id)}" ${alreadyPublished ? "disabled" : ""}>${alreadyPublished ? "Già pubblicato" : "Pubblica"}</button>
+      <button class="btn-gold publish-btn" data-id="${escapeHTML(p.id)}" ${alreadyPublished ? "disabled" : ""}>${alreadyPublished ? "Già pubblicato" : "Pubblica ora"}</button>
       <button class="btn-danger delete-btn" data-id="${escapeHTML(p.id)}">Elimina</button>
     </div>
   </div>`;
@@ -527,10 +554,19 @@ function openEditModal(id){
   document.getElementById("fImageFilter").value = p ? (p.image_filter || "none") : "none";
   document.getElementById("fStorySticker").value = p ? (p.story_sticker || "none") : "none";
   document.getElementById("fStorySickerText").value = p ? (p.story_sticker_text || "") : "";
-  document.getElementById("fStatus").value = p ? p.status : "draft";
+  document.getElementById("fStatus").value = p && p.status !== "scheduled" ? p.status : "draft";
+  document.getElementById("fScheduleEnabled").checked = !!(p && p.scheduled_publish_at && p.status === "scheduled");
+  document.getElementById("fScheduledAt").value = p ? isoToLocalDatetime(p.scheduled_publish_at) : "";
+  toggleScheduleBlock();
   toggleStoryStyleBlock();
   toggleStickerTextField();
   document.getElementById("editModal").classList.add("open");
+}
+
+function toggleScheduleBlock(){
+  const on = document.getElementById("fScheduleEnabled").checked;
+  document.getElementById("fScheduleWrap").style.display = on ? "block" : "none";
+  document.getElementById("fStatus").disabled = on;
 }
 
 function toggleStickerTextField(){
@@ -595,6 +631,21 @@ async function savePost(){
     }
   }
 
+  const scheduleEnabled = document.getElementById("fScheduleEnabled").checked;
+  let scheduledAtISO = null;
+  if(scheduleEnabled){
+    const raw = document.getElementById("fScheduledAt").value;
+    if(!raw){
+      alert("Hai attivato la programmazione: scegli una data e un'ora di pubblicazione.");
+      return;
+    }
+    scheduledAtISO = localDatetimeToISO(raw);
+    if(!scheduledAtISO || new Date(scheduledAtISO).getTime() <= Date.now()){
+      alert("La data/ora programmata deve essere nel futuro.");
+      return;
+    }
+  }
+
   const payload = {
     caption: document.getElementById("fCaption").value.trim(),
     hashtags: document.getElementById("fHashtags").value.trim() || null,
@@ -614,7 +665,8 @@ async function savePost(){
     image_filter: document.getElementById("fImageFilter").value,
     story_sticker: document.getElementById("fStorySticker").value,
     story_sticker_text: document.getElementById("fStorySickerText").value.trim() || null,
-    status: document.getElementById("fStatus").value,
+    status: scheduleEnabled ? "scheduled" : document.getElementById("fStatus").value,
+    scheduled_publish_at: scheduledAtISO,
   };
 
   if(id){
@@ -889,6 +941,7 @@ async function publishPost(id, btn){
   await loadPosts();
 }
 
+document.getElementById("fScheduleEnabled").addEventListener("change", toggleScheduleBlock);
 document.getElementById("fMediaType").addEventListener("change", toggleMediaTypeBlocks);
 document.getElementById("fVideoFile").addEventListener("change", (e) => {
   const file = e.target.files[0];
