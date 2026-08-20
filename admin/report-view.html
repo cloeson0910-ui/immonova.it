@@ -502,7 +502,12 @@ var UI_STRINGS = {
   unit_eur_per_m2:"€/m²", unit_eur_per_m2_month:"€/m²/mese", unit_eur_per_room_night:"€/camera/notte",
   unit_percent:"%", unit_years:"anni",
   kicker_nearby_cities_more:"Territorial context", title_nearby_cities_more:"Altre città nel raggio di ricerca",
-  note_nearby_cities_more:"Città importanti tra {min} e {max} km dall'immobile, oltre a quelle già mostrate nella pagina precedente."
+  note_nearby_cities_more:"Città importanti tra {min} e {max} km dall'immobile, oltre a quelle già mostrate nella pagina precedente.",
+  /* v10.9: la fascia di reddito "oltre 120.000€" nel grafico di pagina 8
+     (composizione economica) veniva stampata sempre in italiano perché la
+     parola "oltre" era scritta a mano dentro l'array incomeBrackets, senza
+     passare da UI_STRINGS/T. Vedi renderPopulationCompositionPage(). */
+  label_bracket_over:"oltre"
 };
 
 /* v2: bump quando si aggiungono nuove chiavi a UI_STRINGS, cosi' le cache
@@ -511,7 +516,7 @@ var UI_STRINGS = {
    cosi' come sono — altrimenti T.chiave_nuova resta undefined per ogni
    lingua diversa dall'italiano e qualunque fmt(T.chiave_nuova,...) esplode
    con "Cannot read properties of undefined (reading 'split')". */
-function i18nCacheKey(lang){ return "immonova_i18n_report_view_" + lang + "_v3"; }
+function i18nCacheKey(lang){ return "immonova_i18n_report_view_" + lang + "_v4"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -964,11 +969,17 @@ async function ensurePopulationComposition(){
 }
 
 function populationBracketBarsHTML(distribution, brackets){
+  /* v10.9: "brackets" può essere un array di stringhe (chiave dato ===
+     etichetta stampata) oppure di coppie [chiaveDato, etichettaTradotta] —
+     serve per poter tradurre l'etichetta (es. "oltre") senza rompere il
+     lookup in distribution.percentages, che resta sempre in italiano. */
   if(!distribution || !distribution.percentages) return "";
   var rows = brackets.map(function(b){
-    var pct = distribution.percentages[b];
+    var key = Array.isArray(b) ? b[0] : b;
+    var label = Array.isArray(b) ? b[1] : b;
+    var pct = distribution.percentages[key];
     if(pct === undefined || pct === null) return "";
-    return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(b)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
+    return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(label)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
   }).filter(Boolean).join("");
   return rows;
 }
@@ -978,7 +989,8 @@ function renderPopulationCompositionPage(){
   if(!comp || (!comp.age_distribution && !comp.income_distribution)) return "";
 
   var ageBrackets = ["0-14","15-29","30-44","45-59","60-74","75+"];
-  var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€","oltre 120.000€"];
+  var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€",
+    ["oltre 120.000€", (T.label_bracket_over||"oltre")+" 120.000€"]];
 
   var ageHTML = comp.age_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_age_distribution||"Composizione per età")+'</h3>'+populationBracketBarsHTML(comp.age_distribution, ageBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(comp.age_distribution.provider_name||"ISTAT")+'</p></div>' : "";
   var incomeHTML = comp.income_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_income_distribution||"Distribuzione economica")+'</h3>'+populationBracketBarsHTML(comp.income_distribution, incomeBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(comp.income_distribution.provider_name||"MEF - Dipartimento delle Finanze")+'</p></div>' : "";
@@ -1381,7 +1393,7 @@ function renderPricingPage(){
     +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>';
 }
-var NEARBY_CITIES_PER_PAGE = 14;
+var NEARBY_CITIES_PER_PAGE = 16;
 /* Richiesta utente: la prima pagina mostra le città più vicine in assoluto
    (contesto immediato del comune); la seconda pagina, invece di continuare
    semplicemente la stessa lista ordinata per distanza (che con un raggio
@@ -1486,15 +1498,26 @@ function renderNearbyCitiesMorePage(){
   return '<article class="report-page"><div class="page-inner"><div class="merge-block"><div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities_more)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities_more)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(bandNote)+'</p></div></div></article>';
 }
 function renderTerritorialAndTourismPage(){
+  /* v10.9: la lista "città vicine" (pagina 1) NON viene più stampata qui in
+     mezzo — prima finiva incastrata tra questa pagina (che contiene anche i
+     dati turistici) e renderNearbyCitiesMorePage() (pagina 2 delle città),
+     per cui visivamente i dati turistici comparivano "tra una tabella di
+     città e l'altra". Ora questa pagina contiene solo territorio+turismo, e
+     le due pagine delle città vicine sono stampate una di seguito
+     all'altra da renderNearbyCitiesPageWrapper()/renderNearbyCitiesMorePage()
+     in renderBook(). */
   var terr=renderTerritorialPage();
   var tour=renderTourismMetricsPage();
-  var nearby=renderNearbyCitiesPage();
-  if(!terr&&!tour&&!nearby)return "";
+  if(!terr&&!tour)return "";
   return '<article class="report-page"><div class="page-inner">'
     +(terr?'<div class="merge-block">'+terr+'</div>':'')
-    +(nearby?'<div class="merge-block">'+nearby+'</div>':'')
     +(tour?'<div class="merge-block">'+tour+'</div>':'')
     +'</div></article>';
+}
+function renderNearbyCitiesPageWrapper(){
+  var nearby=renderNearbyCitiesPage();
+  if(!nearby)return "";
+  return '<article class="report-page"><div class="page-inner"><div class="merge-block">'+nearby+'</div></div></article>';
 }
 function renderPopulationCompositionPageWrapper(){
   var comp=renderPopulationCompositionPage();
@@ -2664,6 +2687,7 @@ function renderBook(){
   push(T.chapter_territory, dividerPageHTML(T.divider_territory_title,T.divider_territory_kicker), true);
   push(T.chapter_territory, renderLocationPage());
   push(T.chapter_territory, renderTerritorialAndTourismPage());
+  push(T.chapter_territory, renderNearbyCitiesPageWrapper());
   push(T.chapter_territory, renderNearbyCitiesMorePage());
   push(T.chapter_territory, renderPopulationCompositionPageWrapper());
   push(T.chapter_territory, renderMarketAndADRPage());
