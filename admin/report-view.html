@@ -511,7 +511,7 @@ var UI_STRINGS = {
    cosi' come sono — altrimenti T.chiave_nuova resta undefined per ogni
    lingua diversa dall'italiano e qualunque fmt(T.chiave_nuova,...) esplode
    con "Cannot read properties of undefined (reading 'split')". */
-function i18nCacheKey(lang){ return "immonova_i18n_report_view_" + lang + "_v2"; }
+function i18nCacheKey(lang){ return "immonova_i18n_report_view_" + lang + "_v3"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -1391,6 +1391,12 @@ var NEARBY_CITIES_PER_PAGE = 14;
    Franca ecc. La fascia è volutamente qui in cima al file, modificabile. */
 var NEARBY_CITIES_PAGE2_MIN_KM = 30;
 var NEARBY_CITIES_PAGE2_MAX_KM = 200;
+/* Soglia minima di popolazione per la pagina 2: senza questa, ordinare per
+   vicinanza dentro una fascia larga (30-200 km) riporterebbe di nuovo
+   decine di piccoli comuni prima di arrivare a città importanti. Con
+   15.000 abitanti si escludono le frazioni ma restano dentro Ostuni,
+   Martina Franca, Brindisi, Lecce, Taranto, Bari ecc. Modificabile. */
+var NEARBY_CITIES_PAGE2_MIN_POPULATION = 15000;
 
 /* v10.6: non ordinare più solo per popolazione prima di tagliare — altrimenti
    paesi piccoli ma turisticamente rilevanti nel raggio (es. Cisternino,
@@ -1422,20 +1428,35 @@ function selectedNearbyCities(){
    fascia contano i centri importanti, non i più vicini in assoluto), e
    comunque mai una città già mostrata in pagina 1. */
 function selectedNearbyCitiesPage2(){
+  var pool=nearbyCitiesPool();
   var page1Keys={};
   selectedNearbyCities().slice(0,NEARBY_CITIES_PER_PAGE).forEach(function(c){
     page1Keys[(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"")]=true;
   });
-  var cities=nearbyCitiesPool();
-  var inBand=cities.filter(function(c){
+  // Il paese dell'immobile: prendiamo il country_code della città più
+  // vicina in assoluto nel pool (di norma il comune stesso dell'immobile).
+  // Senza questo filtro, con raggi ampi che attraversano l'Adriatico, in
+  // fascia entravano anche grandi città straniere (es. Durrës, Vlorë,
+  // Berat in Albania) che per un investitore in Puglia non sono rilevanti
+  // quanto Ostuni, Martina Franca, Brindisi, Lecce, Taranto, Bari.
+  var byDistanceAll=pool.slice().sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
+  var propertyCountry=byDistanceAll.length?byDistanceAll[0].country_code:null;
+  var inBand=pool.filter(function(c){
     var dist=Number(c.distance_km);
     if(!Number.isFinite(dist)) return false;
     if(dist<NEARBY_CITIES_PAGE2_MIN_KM || dist>NEARBY_CITIES_PAGE2_MAX_KM) return false;
+    if((c.population||0)<NEARBY_CITIES_PAGE2_MIN_POPULATION) return false;
+    if(propertyCountry && c.country_code && c.country_code!==propertyCountry) return false;
     var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
     return !page1Keys[key];
   });
   var seen={},selected=[];
-  inBand.sort(function(a,b){return (b.population||0)-(a.population||0);}).forEach(function(c){
+  // Ordinate per vicinanza (non più per popolazione pura): così la lista
+  // riparte da dove finisce la pagina 1 e "prende Lecce e tutto il resto"
+  // nell'ordine in cui un investitore le incontrerebbe allontanandosi
+  // dall'immobile, invece di saltare dritta alla città più grande in
+  // assoluto della fascia.
+  inBand.sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);}).forEach(function(c){
     var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
     if(!seen[key]){seen[key]=true;selected.push(c);}
   });
