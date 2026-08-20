@@ -493,7 +493,16 @@ var UI_STRINGS = {
   eco_heritage:"Cultura e patrimonio", eco_heritage_kicker:"Heritage & culture",
   eco_nightlife:"Vita notturna", eco_nightlife_kicker:"Nightlife",
   eco_shopping:"Shopping & Retail", eco_shopping_kicker:"Luxury shopping & retail",
-  default_dossier_title:"Dossier IMMONOVA"
+  default_dossier_title:"Dossier IMMONOVA",
+  /* v10.8: etichette per i codici unità grezzi che arrivano dai dati del
+     Discovery Engine (es. "eur_per_m2", "people_per_km2") — prima venivano
+     stampati letteralmente così come sono, in nessuna lingua, perché non
+     passavano mai da UI_STRINGS/T. Vedi unitLabel(). */
+  unit_people:"abitanti", unit_km2:"km²", unit_people_per_km2:"ab./km²", unit_m:"m",
+  unit_eur_per_m2:"€/m²", unit_eur_per_m2_month:"€/m²/mese", unit_eur_per_room_night:"€/camera/notte",
+  unit_percent:"%", unit_years:"anni",
+  kicker_nearby_cities_more:"Territorial context", title_nearby_cities_more:"Altre città nel raggio di ricerca",
+  note_nearby_cities_more:"Ulteriori località trovate entro il raggio impostato, oltre a quelle già mostrate nella pagina precedente."
 };
 
 /* v2: bump quando si aggiungono nuove chiavi a UI_STRINGS, cosi' le cache
@@ -523,6 +532,59 @@ async function loadTranslatedStrings(lang){
 
   var keys = Object.keys(UI_STRINGS);
   var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+  var translated = await translateTextsSafe(lang, keys, texts, UI_STRINGS,
+    "IMMONOVA luxury real estate investment dossier delivered to an international investor: cover, table of contents, financial analysis, property section, territorial/market data, ecosystem listings, evaluation score, sources, legal disclaimer.");
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+/* v10.8: chiamata di traduzione condivisa (usata sia per le stringhe statiche
+   UI_STRINGS sia per i testi narrativi generati per singola proposta) con
+   tre protezioni contro i difetti osservati nei dossier tradotti:
+   1) i placeholder tipo "{growth}" vengono sostituiti con un segnaposto
+      neutro PRIMA di mandare il testo al traduttore AI e ripristinati DOPO
+      — altrimenti l'AI a volte "traduce" anche il contenuto delle parentesi
+      graffe e fmt() non trova più il placeholder da sostituire (es.
+      "{GROWTH}" rimasto letterale nel PDF finale).
+   2) se il numero di traduzioni tornate non combacia con quello dei testi
+      inviati, l'intero risultato viene scartato: un disallineamento anche
+      di un solo elemento fa scalare tutte le chiavi successive, producendo
+      frasi sbagliate concatenate tra loro (visto nel dossier: testo di una
+      chiave finito dentro un'altra, es. "9Keine verifizierten Daten...
+      RenovierungsübersichtVorher" — tre chiavi diverse incollate insieme).
+   3) per ogni singola chiave: se il testo originale conteneva un
+      placeholder e la traduzione non lo contiene più, oppure se la
+      lunghezza della traduzione è implausibile rispetto all'originale,
+      quella singola chiave torna all'italiano invece di mostrare testo
+      corrotto — meglio una frase in italiano ben formata che una frase
+      ibrida o troncata. */
+function protectPlaceholders(text){
+  var tokens = [];
+  var protectedText = String(text).replace(/\{[a-zA-Z0-9_]+\}/g, function(m){
+    tokens.push(m);
+    return "§" + (tokens.length-1) + "§";
+  });
+  return { text: protectedText, tokens: tokens };
+}
+function restorePlaceholders(text, tokens){
+  if(!tokens.length) return text;
+  return String(text).replace(/§(\d+)§/g, function(m, idx){
+    var t = tokens[Number(idx)];
+    return t != null ? t : m;
+  });
+}
+function translationLooksSuspicious(source, candidate){
+  if(candidate == null) return true;
+  var srcTokens = (String(source).match(/\{[a-zA-Z0-9_]+\}/g) || []);
+  for(var i=0;i<srcTokens.length;i++){ if(String(candidate).indexOf(srcTokens[i]) === -1) return true; }
+  var srcLen = String(source).length;
+  var candLen = String(candidate).length;
+  if(srcLen > 20 && (candLen > srcLen*4 || candLen < srcLen*0.2)) return true;
+  return false;
+}
+async function translateTextsSafe(lang, keys, texts, fallbackByKey, context){
+  var protectedItems = texts.map(function(t){ return protectPlaceholders(t); });
+  var protectedTexts = protectedItems.map(function(p){ return p.text; });
 
   var result = null;
   try{
@@ -530,24 +592,32 @@ async function loadTranslatedStrings(lang){
     var res = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify({
       language: lang,
       source_language: "it",
-      context: "IMMONOVA luxury real estate investment dossier delivered to an international investor: cover, table of contents, financial analysis, property section, territorial/market data, ecosystem listings, evaluation score, sources, legal disclaimer.",
-      texts: texts
+      context: context || "",
+      texts: protectedTexts
     })});
     result = await res.json();
   }catch(e){
     console.error("Traduzione dossier non riuscita (rete), uso italiano come fallback:", e);
-    return UI_STRINGS;
+    return Object.assign({}, fallbackByKey);
   }
 
   if(!result || !result.success || !Array.isArray(result.translations)){
     console.error("Traduzione dossier non riuscita, uso italiano come fallback:", result);
-    return UI_STRINGS;
+    return Object.assign({}, fallbackByKey);
   }
 
   var translations = result.translations;
+  if(translations.length !== texts.length){
+    console.error("Traduzione dossier: numero di traduzioni ("+translations.length+") diverso dai testi inviati ("+texts.length+") — risultato scartato per evitare testi disallineati, uso italiano come fallback.");
+    return Object.assign({}, fallbackByKey);
+  }
+
   var translated = {};
-  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
-  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  keys.forEach(function(k, i){
+    var raw = translations[i];
+    var restored = raw != null ? restorePlaceholders(raw, protectedItems[i].tokens) : null;
+    translated[k] = translationLooksSuspicious(texts[i], restored) ? fallbackByKey[k] : restored;
+  });
   return translated;
 }
 
@@ -566,6 +636,51 @@ async function applyLanguage(lang){
   buildRoomTypeLabels();
   buildRenovationStyleLabels();
   buildDocumentTypeLabels();
+  await loadNarrativeTranslations();
+}
+
+/* v10.8: full_description, short_description, location_summary,
+   tourism_summary, market_summary, ai_short_rental_summary sono testi
+   editoriali generati una volta sola (in italiano) da analyze-opportunity e
+   salvati sulla riga opportunities — NON fanno parte di UI_STRINGS, quindi
+   loadTranslatedStrings() non li ha mai toccati: restavano sempre in
+   italiano in ogni lingua del dossier (il bug segnalato dall'utente sui
+   "box descrittivi" non tradotti). Li traduciamo qui separatamente, con
+   cache per singola proposta+lingua (il testo cambia per ogni immobile,
+   quindi non può condividere la cache delle sole stringhe statiche). */
+var NARRATIVE_FIELDS = ["full_description","short_description","location_summary","tourism_summary","market_summary","ai_short_rental_summary"];
+var translatedNarrative = {};
+function narrativeCacheKey(lang){ return "immonova_i18n_narrative_report_view_" + lang + "_" + (opportunityId||"na") + "_v1"; }
+async function loadNarrativeTranslations(){
+  translatedNarrative = {};
+  var o = opportunity || {};
+  var present = NARRATIVE_FIELDS.filter(function(f){ return clean(o[f]); });
+  if(!present.length) return;
+  if(CURRENT_LANG === "it"){
+    present.forEach(function(f){ translatedNarrative[f] = clean(o[f]); });
+    return;
+  }
+  var fallbackByKey = {};
+  present.forEach(function(f){ fallbackByKey[f] = clean(o[f]); });
+
+  var cacheKey = narrativeCacheKey(CURRENT_LANG);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){
+      var parsed = JSON.parse(cached);
+      var hasAll = parsed && typeof parsed === "object" && present.every(function(f){ return Object.prototype.hasOwnProperty.call(parsed, f) && parsed[f] != null; });
+      if(hasAll){ translatedNarrative = parsed; return; }
+    }
+  }catch(e){}
+
+  var texts = present.map(function(f){ return clean(o[f]); });
+  translatedNarrative = await translateTextsSafe(CURRENT_LANG, present, texts, fallbackByKey,
+    "IMMONOVA luxury real estate investment dossier — editorial/narrative text describing a specific property proposal for an international investor (presentation overview and narrative analysis: location appeal, tourism context, real estate market, short-let potential).");
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translatedNarrative)); }catch(e){}
+}
+function narrativeField(name){
+  var o = opportunity || {};
+  return translatedNarrative[name] != null ? translatedNarrative[name] : clean(o[name]);
 }
 
 /* Sceglie tra due forme (singolare/plurale) di una frase gia' tradotta -- serve perche' le
@@ -935,9 +1050,20 @@ function metricFromDossier(section,field){
   return f;
 }
 function formatMetricVal(v){var n=Number(v);return Number.isFinite(n)?n.toLocaleString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG):String(v==null?"-":v);}
+/* v10.8: i dati del Discovery Engine portano codici unità grezzi non
+   localizzati ("eur_per_m2", "people_per_km2", "m", ...). Prima venivano
+   stampati così come sono in ogni lingua (anche in italiano): questa
+   funzione li traduce in un'etichetta leggibile, con fallback al codice
+   grezzo solo se non lo riconosciamo (meglio del niente, ma segnala che
+   manca una voce in UI_STRINGS). */
+function unitLabel(unit){
+  if(!unit) return "";
+  var key = "unit_" + String(unit).trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"");
+  return T[key] || UI_STRINGS[key] || unit;
+}
 function metricCardHTML(label,metric,unitFallback){
   if(!metric)return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(T.not_available)+'</div></div>';
-  return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+escapeHTML(formatMetricVal(metric.value))+'</div><div class="metric-note">'+escapeHTML(metric.unit||unitFallback||"")+'</div></div>';
+  return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+escapeHTML(formatMetricVal(metric.value))+'</div><div class="metric-note">'+escapeHTML(unitLabel(metric.unit||unitFallback))+'</div></div>';
 }
 function rangeCardHTML(label,minMetric,maxMetric,unitFallback){
   if(!minMetric&&!maxMetric)return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(T.not_available)+'</div></div>';
@@ -946,7 +1072,7 @@ function rangeCardHTML(label,minMetric,maxMetric,unitFallback){
   if(minMetric&&maxMetric)valueLine=formatMetricVal(minMetric.value)+" – "+formatMetricVal(maxMetric.value);
   else if(minMetric)valueLine=(T.range_from||"da ")+formatMetricVal(minMetric.value);
   else valueLine=(T.range_to||"fino a ")+formatMetricVal(maxMetric.value);
-  return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+escapeHTML(valueLine)+'</div><div class="metric-note">'+escapeHTML(unit)+'</div></div>';
+  return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+escapeHTML(valueLine)+'</div><div class="metric-note">'+escapeHTML(unitLabel(unit))+'</div></div>';
 }
 function sortedItems(section,limit){
   var d=dossierData||{};
@@ -1240,31 +1366,57 @@ function renderPricingPage(){
     +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>';
 }
-function renderNearbyCitiesPage(){
+var NEARBY_CITIES_PER_PAGE = 14;
+/* v10.6: non ordinare più solo per popolazione prima di tagliare — altrimenti
+   paesi piccoli ma turisticamente rilevanti nel raggio (es. Cisternino,
+   Alberobello, Ostuni) restano fuori dal dossier stampato anche quando il
+   backend li ha già trovati, semplicemente perché ci sono più città grandi
+   nello stesso raggio. Uniamo le più vicine in assoluto con le più
+   popolose, poi ordiniamo per distanza (contesto territoriale che si
+   allarga dal comune verso l'esterno è più utile per l'investitore). */
+function selectedNearbyCities(){
   var d=dossierData||{};
   var bucket=d.nearby_major_cities||{};
   var cities=Array.isArray(bucket.items)?bucket.items:[];
-  if(!cities.length)return "";
-  /* v10.6: non ordinare più solo per popolazione prima di tagliare a 12 —
-     altrimenti paesi piccoli ma turisticamente rilevanti nel raggio
-     (es. Cisternino, Alberobello, Ostuni) restano fuori dal dossier
-     stampato anche quando il backend li ha già trovati, semplicemente
-     perché ci sono 12+ città più grandi nello stesso raggio. Uniamo le
-     più vicine in assoluto con le più popolose, poi ordiniamo per
-     distanza (contesto territoriale che si allarga dal comune verso
-     l'esterno è più utile per l'investitore). */
+  if(!cities.length)return [];
   var byDistance=cities.slice().sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
   var byPopulation=cities.slice().sort(function(a,b){return (b.population||0)-(a.population||0);});
   var seen={},selected=[];
-  byDistance.slice(0,10).concat(byPopulation.slice(0,6)).forEach(function(c){
+  // v10.9: raddoppiati i pool di raccolta (prima 10+6) per poter alimentare
+  // anche la seconda pagina "altre città" richiesta dall'utente — con un
+  // raggio di ricerca ampio (es. 250 km da Gallipoli) restavano fuori
+  // centri importanti che il Discovery Engine aveva già trovato ma che le
+  // due pagine non avevano spazio per mostrare.
+  byDistance.slice(0,24).concat(byPopulation.slice(0,16)).forEach(function(c){
     var key=(c.name||"")+"|"+(c.latitude||"")+"|"+(c.longitude||"");
     if(!seen[key]){seen[key]=true;selected.push(c);}
   });
   selected.sort(function(a,b){return (a.distance_km||0)-(b.distance_km||0);});
-  var cards=selected.slice(0,14).map(function(c){
+  return selected;
+}
+function nearbyCityCardsHTML(list){
+  return list.map(function(c){
     return '<div class="metric-card"><div class="metric-label">'+escapeHTML(c.name||"-")+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(number(c.population))+'</div><div class="metric-note">'+escapeHTML(T.label_nearby_city_population)+' · '+escapeHTML(String(c.distance_km!=null?c.distance_km:"-"))+' km</div></div>';
   }).join('');
+}
+function renderNearbyCitiesPage(){
+  var selected=selectedNearbyCities();
+  if(!selected.length)return "";
+  var cards=nearbyCityCardsHTML(selected.slice(0,NEARBY_CITIES_PER_PAGE));
   return '<div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.note_nearby_cities)+'</p>';
+}
+/* Richiesta utente: con raggi di ricerca ampi (es. 250 km da Gallipoli) la
+   prima pagina non basta a mostrare tutte le città importanti trovate dal
+   Discovery Engine — aggiungiamo una seconda pagina, subito dopo la prima,
+   con altrettanti risultati aggiuntivi (fino a NEARBY_CITIES_PER_PAGE),
+   solo se ce ne sono davvero oltre la prima pagina. */
+function renderNearbyCitiesMorePage(){
+  var selected=selectedNearbyCities();
+  if(selected.length<=NEARBY_CITIES_PER_PAGE) return "";
+  var more=selected.slice(NEARBY_CITIES_PER_PAGE, NEARBY_CITIES_PER_PAGE*2);
+  if(!more.length) return "";
+  var cards=nearbyCityCardsHTML(more);
+  return '<article class="report-page"><div class="page-inner"><div class="merge-block"><div class="section-kicker">'+escapeHTML(T.kicker_nearby_cities_more)+'</div><h2 class="section-title">'+escapeHTML(T.title_nearby_cities_more)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.note_nearby_cities_more)+'</p></div></div></article>';
 }
 function renderTerritorialAndTourismPage(){
   var terr=renderTerritorialPage();
@@ -2277,9 +2429,8 @@ function narrativeBlockHTML(label, text){
   return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(label)+'</div><p class="info-text" style="margin-top:0">'+escapeHTML(text)+'</p></div>';
 }
 function renderPresentationPage(){
-  var o=opportunity||{};
-  var full=clean(o.full_description);
-  var lead=clean(o.short_description);
+  var full=narrativeField("full_description");
+  var lead=narrativeField("short_description");
   if(!full && !lead) return "";
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_presentation)+'</div><h2 class="section-title">'+escapeHTML(T.title_presentation)+'</h2><div class="lux-rule"></div>'
     +(lead?'<p class="info-text" style="font-size:14px;font-style:italic;margin-bottom:16px">'+escapeHTML(lead)+'</p>':'')
@@ -2287,11 +2438,10 @@ function renderPresentationPage(){
     +'</div></article>';
 }
 function renderNarrativeAnalysisPage(){
-  var o=opportunity||{};
-  var blocks=narrativeBlockHTML(T.narrative_label_location, clean(o.location_summary))
-    +narrativeBlockHTML(T.narrative_label_tourism, clean(o.tourism_summary))
-    +narrativeBlockHTML(T.narrative_label_market, clean(o.market_summary))
-    +narrativeBlockHTML(T.narrative_label_short_rental, clean(o.ai_short_rental_summary));
+  var blocks=narrativeBlockHTML(T.narrative_label_location, narrativeField("location_summary"))
+    +narrativeBlockHTML(T.narrative_label_tourism, narrativeField("tourism_summary"))
+    +narrativeBlockHTML(T.narrative_label_market, narrativeField("market_summary"))
+    +narrativeBlockHTML(T.narrative_label_short_rental, narrativeField("ai_short_rental_summary"));
   if(!blocks) return "";
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_narrative_analysis)+'</div><h2 class="section-title">'+escapeHTML(T.title_narrative_analysis)+'</h2><div class="lux-rule"></div>'+blocks+'</div></article>';
 }
@@ -2447,6 +2597,7 @@ function renderBook(){
   push(T.chapter_territory, dividerPageHTML(T.divider_territory_title,T.divider_territory_kicker), true);
   push(T.chapter_territory, renderLocationPage());
   push(T.chapter_territory, renderTerritorialAndTourismPage());
+  push(T.chapter_territory, renderNearbyCitiesMorePage());
   push(T.chapter_territory, renderPopulationCompositionPageWrapper());
   push(T.chapter_territory, renderMarketAndADRPage());
   push(T.chapter_territory, renderTourismSeriesPage());
@@ -2559,6 +2710,10 @@ async function init(){
     setStatus("Caricamento dati interni IMMONOVA...","");
     await checkAuth();
     await loadOpportunity();
+    // La prima applyLanguage() (sopra) e' avvenuta prima che l'opportunita'
+    // fosse caricata, quindi i testi narrativi non erano ancora disponibili
+    // da tradurre: li traduciamo ora che li abbiamo.
+    await loadNarrativeTranslations();
     await Promise.all([loadLatestReport(),loadPropertyDocuments(),loadRenovationImagesData(),loadRenovationRendersData(),loadDossierAds()]);
     destinationPhotos = await loadDestinationPhotos();
     destinationPhotoIndex = 0;
