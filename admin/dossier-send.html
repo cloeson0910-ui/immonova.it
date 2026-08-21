@@ -283,8 +283,20 @@ var UI_STRINGS = {
   cover_kicker:"Confidential Investment Dossier",
   generated_prefix:"Generato ",
   toc_kicker:"Contents", toc_title:"Sommario",
+  chapter_presentation:"Presentazione",
   chapter_financial:"Analisi finanziaria", chapter_property:"Immobile", chapter_territory:"Territorio & mercato",
   chapter_ecosystem:"Ecosistema & accessibilità", chapter_evaluation:"Valutazione IMMONOVA", chapter_sources:"Fonti & note",
+  kicker_presentation:"Editorial overview", title_presentation:"Presentazione della Proposta",
+  kicker_narrative_analysis:"Narrative analysis", title_narrative_analysis:"Analisi Narrativa",
+  narrative_label_location:"Attrattività della zona", narrative_label_tourism:"Contesto turistico",
+  narrative_label_market:"Mercato immobiliare", narrative_label_short_rental:"Potenziale affitto breve",
+  kicker_tourism_demand:"Tourism demand vs break-even", title_tourism_demand:"Domanda Turistica Necessaria al Break-Even",
+  scenario_avg:"Scenario ADR medio",
+  pie_market_share_note:"Pernottamenti annui richiesti sul totale dei pernottamenti turistici dell'area", pie_occupancy_note:"Notti vendute sul totale notti disponibili nell'anno",
+  pie_market_share_caption:"Quota di mercato turistico necessaria", pie_occupancy_caption:"Percentuale di riempimento richiesta",
+  tourism_demand_exceeds:"Con questo ADR il break-even entro {years} anni richiederebbe più pernottamenti di quanti l'immobile possa fisicamente vendere: valori superiori al 100% indicano che il break-even, a parità di ipotesi, arriva oltre l'orizzonte considerato.",
+  tourism_demand_source_prefix:"Flusso turistico di riferimento: ", tourism_demand_unavailable_note:"Dato non mostrato: mancano nel dossier arrivi/pernottamenti turistici verificati per quest'area.",
+  tourism_demand_intro:"Stima di quanta domanda turistica reale (arrivi e pernottamenti registrati nell'area) l'immobile dovrebbe intercettare per raggiungere il break-even entro {years} anni, ai due scenari ADR.",
   divider_financial_title:"Analisi Finanziaria", divider_financial_kicker:"Executive summary",
   divider_property_title:"L'Immobile", divider_property_kicker:"Property overview",
   divider_territory_title:"Territorio & Mercato", divider_territory_kicker:"Location intelligence",
@@ -618,6 +630,110 @@ async function loadNarrativeTranslations(){
 function narrativeField(name){
   var o = opportunity || {};
   return translatedNarrative[name] != null ? translatedNarrative[name] : clean(o[name]);
+}
+
+/* ---- Presentazione narrativa: testi editoriali generati da analyze-opportunity (colonna
+   diretta sulla riga opportunities, non dossier_data del Discovery). Portate da report-view.html
+   perché mancavano completamente in questo file (dossier-send.html), causando un dossier
+   inviato al cliente più corto di quello mostrato in anteprima. ---- */
+function narrativeBlockHTML(label, text){
+  if(!text) return "";
+  return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(label)+'</div><p class="info-text" style="margin-top:0">'+escapeHTML(text)+'</p></div>';
+}
+function renderPresentationPage(){
+  var full=narrativeField("full_description");
+  var lead=narrativeField("short_description");
+  if(!full && !lead) return "";
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_presentation)+'</div><h2 class="section-title">'+escapeHTML(T.title_presentation)+'</h2><div class="lux-rule"></div>'
+    +(lead?'<p class="info-text" style="font-size:14px;font-style:italic;margin-bottom:16px">'+escapeHTML(lead)+'</p>':'')
+    +(full?'<p class="info-text">'+escapeHTML(full)+'</p>':'')
+    +'</div></article>';
+}
+function renderNarrativeAnalysisPage(){
+  var blocks=narrativeBlockHTML(T.narrative_label_location, narrativeField("location_summary"))
+    +narrativeBlockHTML(T.narrative_label_tourism, narrativeField("tourism_summary"))
+    +narrativeBlockHTML(T.narrative_label_market, narrativeField("market_summary"))
+    +narrativeBlockHTML(T.narrative_label_short_rental, narrativeField("ai_short_rental_summary"));
+  if(!blocks) return "";
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_narrative_analysis)+'</div><h2 class="section-title">'+escapeHTML(T.title_narrative_analysis)+'</h2><div class="lux-rule"></div>'+blocks+'</div></article>';
+}
+
+/* ---- Domanda turistica necessaria al break-even: 2 grafici a torta per scenario ADR
+   (minimo/massimo), quindi 4 in totale. Portato da report-view.html per lo stesso motivo
+   sopra (funzione assente in dossier-send.html). ---- */
+var BREAK_EVEN_DEMAND_HORIZON_YEARS = 5;
+function getTourismDemandTotals(){
+  var overnight=metricFromDossier("tourism","overnight_stays");
+  if(overnight && overnight.value>0) return {pernottamenti:overnight.value, source:overnight.source||{}, fromArrivals:false};
+  var arrivals=metricFromDossier("tourism","arrivals");
+  var avgStay=metricFromDossier("tourism","average_stay");
+  if(arrivals && arrivals.value>0 && avgStay && avgStay.value>0){
+    return {pernottamenti:arrivals.value*avgStay.value, source:arrivals.source||{}, fromArrivals:true};
+  }
+  return null;
+}
+function computeBreakEvenDemand(adrMetric, units, totalCost, demandTotals){
+  if(!adrMetric || !adrMetric.value || !units || !totalCost) return null;
+  var baseSumAt100=0;
+  for(var y=1;y<=BREAK_EVEN_DEMAND_HORIZON_YEARS;y++){
+    var revenueAt100=adrMetric.value*365*units*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
+    baseSumAt100 += revenueAt100*(1-CASHFLOW_OPEX_RATIO);
+  }
+  if(!baseSumAt100) return null;
+  var occupancyRequired = totalCost/baseSumAt100;
+  var exceedsHorizon = occupancyRequired>1;
+  var occupancyDisplay = Math.min(1, occupancyRequired);
+  var roomNightsRequired = occupancyDisplay*365*units;
+  var marketSharePct = demandTotals ? Math.min(100,(roomNightsRequired/demandTotals.pernottamenti)*100) : null;
+  return {occupancyPct: occupancyDisplay*100, occupancyRawPct: occupancyRequired*100, exceedsHorizon: exceedsHorizon, roomNightsRequired: roomNightsRequired, marketSharePct: marketSharePct};
+}
+function pieChartHTML(pct, caption, note){
+  var p = (pct==null) ? 0 : Math.max(0, Math.min(100, pct));
+  var valueLabel = (pct==null) ? T.not_available : percent(p);
+  return '<div class="pie-block"><div class="pie-chart" style="background:conic-gradient(#c79c43 0 '+(p*3.6)+'deg,#ece3d0 '+(p*3.6)+'deg 360deg)"><div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
+}
+function renderTourismDemandPage(){
+  if(isLandCategory()||isCommercialCategory()) return "";
+  var f=buildFinance();
+  var units=getAssetUnits();
+  var demandTotals=getTourismDemandTotals();
+  var adrMin=metricFromDossier("adr","average_daily_rate_min");
+  var adrMax=metricFromDossier("adr","average_daily_rate_max");
+  var adrSingle=metricFromDossier("adr","average_daily_rate");
+  var scenarios=[];
+  if(adrMin||adrMax){
+    if(adrMin||adrMax) scenarios.push({adr:adrMin||adrMax, label:T.scenario_min});
+    if(adrMin && adrMax){
+      var minVerifiedTd=!!(adrMin.source && String(adrMin.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+      var maxVerifiedTd=!!(adrMax.source && String(adrMax.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
+      scenarios.push({adr:{
+        value:(Number(adrMin.value)+Number(adrMax.value))/2,
+        unit:adrMin.unit||adrMax.unit||"eur_per_room_night",
+        source:{provider_name:(minVerifiedTd&&maxVerifiedTd)?"ADR medio (analyst verified min/max)":"ADR medio (mercato, min/max)"}
+      }, label:T.scenario_avg});
+    }
+    if(adrMax||adrMin) scenarios.push({adr:adrMax||adrMin, label:T.scenario_max});
+  }else if(adrSingle){
+    scenarios.push({adr:adrSingle, label:T.scenario_adr});
+  }
+  if(!scenarios.length) return "";
+
+  var blocks=scenarios.map(function(sc){
+    var res=computeBreakEvenDemand(sc.adr, units, f.total, demandTotals);
+    if(!res) return "";
+    var marketNote=demandTotals ? T.pie_market_share_note : T.tourism_demand_unavailable_note;
+    var pies=pieChartHTML(res.marketSharePct, T.pie_market_share_caption, marketNote)
+      + pieChartHTML(res.occupancyPct, T.pie_occupancy_caption, T.pie_occupancy_note);
+    var exceedsNote = res.exceedsHorizon ? '<p class="info-text" style="font-style:italic">'+escapeHTML(fmt(T.tourism_demand_exceeds,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>' : '';
+    return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+exceedsNote+'</div>';
+  }).join("");
+  if(!blocks) return "";
+
+  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(demandTotals.source.provider_name||"-")+'</p>' : '';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+'</h2><div class="lux-rule"></div>'
+    +'<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_intro,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>'
+    +blocks+srcLine
+    +'</div></article>';
 }
 
 /* Sceglie tra due forme (singolare/plurale) di una frase gia' tradotta -- serve perche' le
@@ -2426,27 +2542,8 @@ function renderBook(){
 
   renderAdPagesForPosition("after_toc").forEach(function(p){ push("", p.html, p.divider); });
 
-  if(!isLandCategory()){
-    push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
-    push(T.chapter_financial, renderInternalFacts());
-    push(T.chapter_financial, renderFinancialSnapshot());
-    push(T.chapter_financial, renderInvestmentStructure());
-    renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
-    renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
-  }
-
-  var docPages = preparedDocumentPages;
-  var renovationPages = renderRenovationBeforeAfterPages();
-  var characteristicsPage = renderAssetCharacteristicsPage();
-  var hasMedia = normalizeGallery(opportunity&&opportunity.gallery_images).length || clean(opportunity&&opportunity.cover_image) || docPages.length || renovationPages.length;
-  if(hasMedia || characteristicsPage){
-    push(T.chapter_property, dividerPageHTML(T.divider_property_title,T.divider_property_kicker), true);
-    push(T.chapter_property, characteristicsPage);
-    renderMediaGalleryPage().forEach(function(p){ push(T.chapter_property, p); });
-    renovationPages.forEach(function(p){ push(T.chapter_property, p); });
-    docPages.forEach(function(p){ push(T.chapter_property, p); });
-    renderAdPagesForPosition("after_property").forEach(function(p){ push(T.chapter_property, p.html, p.divider); });
-  }
+  push(T.chapter_presentation, renderPresentationPage());
+  push(T.chapter_presentation, renderNarrativeAnalysisPage());
 
   push(T.chapter_territory, dividerPageHTML(T.divider_territory_title,T.divider_territory_kicker), true);
   push(T.chapter_territory, renderLocationPage());
@@ -2460,6 +2557,16 @@ function renderBook(){
   push(T.chapter_territory, renderEnvironmentPage());
   renderAdPagesForPosition("after_territory").forEach(function(p){ push(T.chapter_territory, p.html, p.divider); });
 
+  if(!isLandCategory()){
+    push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
+    push(T.chapter_financial, renderInternalFacts());
+    push(T.chapter_financial, renderInvestmentStructure());
+    push(T.chapter_financial, renderTourismDemandPage());
+    renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
+    push(T.chapter_financial, renderFinancialSnapshot());
+    renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider); });
+  }
+
   var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["shopping",T.eco_shopping,T.eco_shopping_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
   var ecoPages=[];
   var airportsPage=renderCategoryPageFiltered("transport",["commercial_airport"],T.airport_title,T.airport_category);
@@ -2471,6 +2578,19 @@ function renderBook(){
     push(T.chapter_ecosystem, dividerPageHTML(T.divider_ecosystem_title,T.divider_ecosystem_kicker), true);
     ecoPages.forEach(function(p){push(T.chapter_ecosystem,p);});
     renderAdPagesForPosition("after_ecosystem").forEach(function(p){ push(T.chapter_ecosystem, p.html, p.divider); });
+  }
+
+  var docPages = preparedDocumentPages;
+  var renovationPages = renderRenovationBeforeAfterPages();
+  var characteristicsPage = renderAssetCharacteristicsPage();
+  var hasMedia = normalizeGallery(opportunity&&opportunity.gallery_images).length || clean(opportunity&&opportunity.cover_image) || docPages.length || renovationPages.length;
+  if(hasMedia || characteristicsPage){
+    push(T.chapter_property, dividerPageHTML(T.divider_property_title,T.divider_property_kicker), true);
+    push(T.chapter_property, characteristicsPage);
+    renderMediaGalleryPage().forEach(function(p){ push(T.chapter_property, p); });
+    renovationPages.forEach(function(p){ push(T.chapter_property, p); });
+    docPages.forEach(function(p){ push(T.chapter_property, p); });
+    renderAdPagesForPosition("after_property").forEach(function(p){ push(T.chapter_property, p.html, p.divider); });
   }
 
   var narrHtml=renderNarrativePage();
