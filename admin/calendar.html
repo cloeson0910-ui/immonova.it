@@ -280,7 +280,15 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 <div class="legend-item"><span class="legend-swatch visita_posto"></span><span data-i18n="legend_visita">Visita sul posto</span></div>
 </div>
 
-<button type="button" class="btn secondary" id="refreshSyncBtn" data-i18n="btn_refresh_sync" style="margin-bottom:22px">Aggiorna disponibilità da iCloud ora</button>
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px;align-items:center">
+<button type="button" class="btn secondary" id="refreshSyncBtn" data-i18n="btn_refresh_sync">Aggiorna disponibilità da iCloud ora</button>
+<button type="button" class="btn secondary" id="enablePushBtn" data-i18n="btn_enable_push">Attiva notifiche push</button>
+</div>
+
+<div class="field" id="calendarOwnerField" style="max-width:340px;display:none">
+<label data-i18n="label_calendar_owner">Calendario di</label>
+<select id="calendarOwnerSelect"></select>
+</div>
 
 <div class="cal-toolbar">
 <div class="cal-nav">
@@ -352,9 +360,16 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 <textarea id="eventNotes"></textarea>
 </div>
 
+<div class="field" id="participantsField" style="display:none">
+<label data-i18n="label_participants">Collaboratori coinvolti (riceveranno una notifica push)</label>
+<div id="participantsList" style="display:flex;flex-direction:column;gap:6px"></div>
+</div>
+
 <div id="createdByInfo" style="display:none;margin-bottom:16px;font-size:12px;color:#8f7643"></div>
 
-<div class="modal-actions">
+<div id="readOnlyNotice" style="display:none;margin-bottom:16px;font-size:12px;color:#8f5b28"></div>
+
+<div class="modal-actions" id="modalActions">
 <button type="button" class="btn" id="confirmBookBtn" data-i18n="btn_confirm">Conferma appuntamento</button>
 <button type="button" class="btn secondary" id="cancelBookBtn" data-i18n="btn_cancel">Annulla</button>
 <button type="button" class="btn secondary" id="deleteBookBtn" data-i18n="btn_delete" style="display:none;color:#9c2f2f;border-color:rgba(156,47,47,.35)">Elimina appuntamento</button>
@@ -386,12 +401,34 @@ anchorDate.setHours(0,0,0,0);
 
 let currentUser = null;
 let currentUserLanguage = "it";
+let currentUserRole = "user";
+let currentUserIsAdmin = false;
 let busyBlocks = [];
 let bookedEvents = [];
 let allOpportunities = [];
 let profilesById = {};
+let allCollaborators = []; // [{id,name,role}] tutti gli utenti registrati (per il selettore admin e i checkbox partecipanti)
+let adminUserIds = []; // id dei profili con role="admin" (il calendario "occupato/iCloud" appartiene a loro)
+let eventParticipantsMap = {}; // event_id -> [user_id, ...] (chi e' stato invitato su quell'evento)
+let viewedUserId = null; // di chi e' il calendario che sto guardando ora (default: il proprio)
 let pendingSlotStart = null;
 let editingEvent = null;
+
+/* Stessa chiave pubblica VAPID gia' usata in notifications-consent.html per gli avvisi
+   preferiti (secret VAPID_PUBLIC_KEY lato server, gia' configurato su Supabase) -- qui
+   viene riusata per la sottoscrizione push dei collaboratori autenticati al calendario. */
+var VAPID_PUBLIC_KEY = "BKSNGyB_2rF1krXLKppDB022aJasOv2fIeogcpZykaMFOtXP4UAzMXgWpi7vBmSbkd3YCZ0s6hBO7GKtVDB8A7s";
+
+function urlBase64ToUint8Array(base64String){
+  var padding = "=".repeat((4 - base64String.length % 4) % 4);
+  var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  var rawData = window.atob(base64);
+  var outputArray = new Uint8Array(rawData.length);
+  for(var i = 0; i < rawData.length; ++i){
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 function pad2(n){ return String(n).padStart(2,"0"); }
 
@@ -439,7 +476,16 @@ var UI_STRINGS = {
   msg_saved_full:"Appuntamento fissato e sincronizzato con iCloud.",
   msg_saved_no_sync:"Appuntamento fissato su IMMONOVA. Sincronizzazione con iCloud non riuscita (comparirà comunque qui): ",
   msg_slot_taken:"Questo spazio non è più libero, aggiorna la pagina.",
-  occupied_label:"Occupato"
+  occupied_label:"Occupato",
+  label_calendar_owner:"Calendario di", opt_my_calendar:"Il mio calendario",
+  label_participants:"Collaboratori coinvolti (riceveranno una notifica push)",
+  btn_enable_push:"Attiva notifiche push", btn_push_enabled:"Notifiche push attive",
+  msg_push_enabling:"Attivazione notifiche in corso...",
+  msg_push_enabled:"Notifiche push attivate su questo dispositivo.",
+  msg_push_failed:"Attivazione notifiche non riuscita: ",
+  msg_push_unsupported:"Questo browser non supporta le notifiche push.",
+  readonly_notice:"Puoi vedere questo appuntamento perché ne fai parte, ma solo chi l'ha creato o un amministratore può modificarlo.",
+  msg_notify_failed_note:" (le notifiche push ai collaboratori potrebbero non essere state inviate)"
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
@@ -494,8 +540,11 @@ async function applyLanguage(lang){
 }
 
 async function loadUserLanguage(){
-  var result = await client.from("profiles").select("language").eq("id", currentUser.id).single();
+  var result = await client.from("profiles").select("language,role").eq("id", currentUser.id).single();
   if(result.error){ await applyLanguage("it"); return; }
+  currentUserRole = (result.data && result.data.role) || "user";
+  currentUserIsAdmin = currentUserRole === "admin";
+  viewedUserId = currentUser.id;
   await applyLanguage((result.data && result.data.language) || "it");
 }
 
@@ -626,12 +675,18 @@ async function loadStaticData(){
 
   var profilesResult = await client
     .from("profiles")
-    .select("id,full_name,email");
+    .select("id,full_name,email,role,active");
 
   allOpportunities = oppsResult.data || [];
   if(profilesResult.data){
     profilesById = {};
-    profilesResult.data.forEach(function(p){ profilesById[p.id] = p.full_name || p.email || p.id; });
+    allCollaborators = [];
+    adminUserIds = [];
+    profilesResult.data.forEach(function(p){
+      profilesById[p.id] = p.full_name || p.email || p.id;
+      allCollaborators.push({ id:p.id, name:p.full_name || p.email || p.id, role:p.role, active:p.active !== false });
+      if(p.role === "admin") adminUserIds.push(p.id);
+    });
   }
 
   var oppSelect = document.getElementById("eventOpportunity");
@@ -642,17 +697,67 @@ async function loadStaticData(){
     opt.textContent = o.title || ("Opportunità #" + o.id);
     oppSelect.appendChild(opt);
   });
+
+  renderCalendarOwnerSelector();
 }
+
+/* ---- Selettore "Calendario di": un admin vede tutti i collaboratori (puo' guardare
+   il calendario di chiunque, uno alla volta); un utente non-admin vede solo il proprio
+   calendario e quello di un amministratore (mai quello di un altro collaboratore, per
+   la regola di visibilita' confermata: "solo il proprio + il tuo"). ---- */
+function renderCalendarOwnerSelector(){
+  var field = document.getElementById("calendarOwnerField");
+  var select = document.getElementById("calendarOwnerSelect");
+
+  var options = [];
+  options.push({ id:currentUser.id, label:T.opt_my_calendar });
+
+  if(currentUserIsAdmin){
+    allCollaborators.forEach(function(c){
+      if(c.id === currentUser.id) return;
+      options.push({ id:c.id, label:c.name });
+    });
+  }else{
+    adminUserIds.forEach(function(id){
+      if(id === currentUser.id) return;
+      options.push({ id:id, label:profilesById[id] || T.unknown_collaborator });
+    });
+  }
+
+  select.innerHTML = "";
+  options.forEach(function(o){
+    var opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.label;
+    select.appendChild(opt);
+  });
+
+  // Il selettore ha senso solo se esiste almeno un altro calendario oltre al proprio.
+  field.style.display = options.length > 1 ? "block" : "none";
+  select.value = viewedUserId || currentUser.id;
+}
+
+document.getElementById("calendarOwnerSelect").addEventListener("change", function(){
+  viewedUserId = this.value;
+  loadCalendarData();
+});
 
 async function loadCalendarData(){
   var range = currentView === "month" ? getMonthGridRange() : getViewRange();
+  var owner = viewedUserId || currentUser.id;
+  var viewingAdminCalendar = adminUserIds.indexOf(owner) !== -1;
 
-  var busyResult = await client
-    .from("immonova_calendar_busy_blocks")
-    .select("start_at,end_at,title")
-    .gte("start_at", range.start.toISOString())
-    .lt("start_at", range.end.toISOString());
+  // Gli slot "occupato" iCloud appartengono al calendario personale di un amministratore
+  // (la tabella non distingue tra piu' admin, quindi si mostrano quando si guarda il
+  // calendario di un admin, come confermato: "anche gli slot iCloud occupati").
+  var busyResult = viewingAdminCalendar
+    ? await client.from("immonova_calendar_busy_blocks").select("start_at,end_at,title")
+        .gte("start_at", range.start.toISOString()).lt("start_at", range.end.toISOString())
+    : { data: [], error: null };
 
+  // La RLS lascia passare solo cio' che l'utente puo' vedere (i propri eventi, quelli di
+  // un admin, o quelli dove e' partecipante): qui prendiamo tutto cio' che e' visibile nel
+  // periodo, poi filtriamo lato client sul calendario scelto (owner) qui sotto.
   var eventsResult = await client
     .from("immonova_calendar_events")
     .select("id,event_type,title,start_at,end_at,notes,address,opportunity_id,icloud_uid,icloud_href,created_by")
@@ -667,7 +772,32 @@ async function loadCalendarData(){
   }
 
   busyBlocks = busyResult.data || [];
-  bookedEvents = eventsResult.data || [];
+  var rawEvents = eventsResult.data || [];
+
+  eventParticipantsMap = {};
+  var eventIds = rawEvents.map(function(ev){ return ev.id; });
+  if(eventIds.length){
+    var partsResult = await client
+      .from("immonova_calendar_event_participants")
+      .select("event_id,user_id")
+      .in("event_id", eventIds);
+    if(!partsResult.error && partsResult.data){
+      partsResult.data.forEach(function(row){
+        if(!eventParticipantsMap[row.event_id]) eventParticipantsMap[row.event_id] = [];
+        eventParticipantsMap[row.event_id].push(row.user_id);
+      });
+    }
+  }
+
+  // Un evento compare sul calendario "owner" se e' stato creato da lui, OPPURE se lui e'
+  // stato invitato come partecipante (evento condiviso: "compare su entrambi", come
+  // confermato) -- questo vale sia per il proprio calendario che per quello altrui che si
+  // sta guardando.
+  bookedEvents = rawEvents.filter(function(ev){
+    if(ev.created_by === owner) return true;
+    var parts = eventParticipantsMap[ev.id] || [];
+    return parts.indexOf(owner) !== -1;
+  });
 
   renderCalendar();
 }
@@ -967,6 +1097,60 @@ window.handleWeekCellClick = function(e, slotStartLocal){
   openBookingModal(toLocalInputValue(base));
 };
 
+/* Checkbox dei collaboratori da poter invitare su un evento (escluso se' stessi). Chi
+   viene spuntato ricevera' una notifica push e vedra' l'evento anche sul proprio
+   calendario ("compare su entrambi", come confermato). */
+function renderParticipantCheckboxes(selectedIds, disabled){
+  var list = document.getElementById("participantsList");
+  list.innerHTML = "";
+  var others = allCollaborators.filter(function(c){ return c.id !== currentUser.id; });
+  if(!others.length){
+    document.getElementById("participantsField").style.display = "none";
+    return;
+  }
+  others.forEach(function(c){
+    var id = "participant_" + c.id;
+    var wrap = document.createElement("label");
+    wrap.style.display = "flex";
+    wrap.style.alignItems = "center";
+    wrap.style.gap = "10px";
+    wrap.style.cursor = disabled ? "default" : "pointer";
+    wrap.style.fontSize = "13px";
+    wrap.style.textTransform = "none";
+    wrap.style.letterSpacing = "normal";
+
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = c.id;
+    cb.id = id;
+    cb.style.width = "auto";
+    cb.disabled = !!disabled;
+    cb.checked = (selectedIds || []).indexOf(c.id) !== -1;
+
+    var span = document.createElement("span");
+    span.textContent = c.name;
+
+    wrap.appendChild(cb);
+    wrap.appendChild(span);
+    list.appendChild(wrap);
+  });
+  document.getElementById("participantsField").style.display = "block";
+}
+
+function selectedParticipantIds(){
+  return Array.from(document.querySelectorAll("#participantsList input[type=checkbox]:checked")).map(function(cb){ return cb.value; });
+}
+
+function setModalReadOnly(readOnly){
+  ["eventType","eventStart","eventDuration","eventAllDay","eventOpportunity","eventAddress","eventNotes"].forEach(function(id){
+    document.getElementById(id).disabled = readOnly;
+  });
+  document.querySelectorAll("#participantsList input[type=checkbox]").forEach(function(cb){ cb.disabled = readOnly; });
+  document.getElementById("modalActions").style.display = readOnly ? "none" : "flex";
+  document.getElementById("readOnlyNotice").style.display = readOnly ? "block" : "none";
+  document.getElementById("readOnlyNotice").textContent = readOnly ? T.readonly_notice : "";
+}
+
 window.openBookingModal = function(localValue){
   editingEvent = null;
   pendingSlotStart = localValue;
@@ -983,6 +1167,8 @@ window.openBookingModal = function(localValue){
   deleteBookBtn.style.display = "none";
   document.getElementById("createdByInfo").style.display = "none";
   document.getElementById("mapsLink").style.display = "none";
+  renderParticipantCheckboxes([], false);
+  setModalReadOnly(false);
   modalStatus.textContent = "";
   modalStatus.className = "modal-status";
   modalOverlay.classList.add("active");
@@ -1021,9 +1207,16 @@ window.openEditModal = function(eventId){
     mapsLink.style.display = "none";
   }
 
+  // Solo il proprietario dell'evento o un admin possono modificarlo/eliminarlo (coerente
+  // con le policy RLS UPDATE/DELETE su immonova_calendar_events) -- chi lo vede solo perche'
+  // e' stato invitato come partecipante lo vede in sola lettura.
+  var canManage = ev.created_by === currentUser.id || currentUserIsAdmin;
+
   document.querySelector(".modal-title").textContent = T.modal_title_edit;
   confirmBookBtn.textContent = T.btn_save_changes;
-  deleteBookBtn.style.display = "inline-block";
+  deleteBookBtn.style.display = canManage ? "inline-block" : "none";
+  renderParticipantCheckboxes(eventParticipantsMap[ev.id] || [], !canManage);
+  setModalReadOnly(!canManage);
   modalStatus.textContent = "";
   modalStatus.className = "modal-status";
   modalOverlay.classList.add("active");
@@ -1125,30 +1318,72 @@ confirmBookBtn.addEventListener("click", async function(){
       eventId = insertResult.data.id;
     }
 
-    modalStatus.textContent = T.msg_syncing;
+    // La sincronizzazione con l'iCloud personale di Claudio ha senso solo per i SUOI
+    // appuntamenti (per evitare che si sovrappongano ai suoi impegni privati) -- gli
+    // appuntamenti creati dai collaboratori sul proprio calendario restano solo su
+    // IMMONOVA e non finiscono nell'iCloud di Claudio.
+    if(currentUserIsAdmin){
+      modalStatus.textContent = T.msg_syncing;
 
-    var syncResult = await client.functions.invoke("icloud-calendar-push", {
-      body:{
-        action:editingEvent ? "update" : "create",
-        event_id:eventId,
-        title:title,
-        event_type:eventType,
-        start_at:startDate.toISOString(),
-        end_at:endDate.toISOString(),
-        notes:notes,
-        address:address,
-        icloud_href:editingEvent ? editingEvent.icloud_href : null,
-        icloud_uid:editingEvent ? editingEvent.icloud_uid : null
+      var syncResult = await client.functions.invoke("icloud-calendar-push", {
+        body:{
+          action:editingEvent ? "update" : "create",
+          event_id:eventId,
+          title:title,
+          event_type:eventType,
+          start_at:startDate.toISOString(),
+          end_at:endDate.toISOString(),
+          notes:notes,
+          address:address,
+          icloud_href:editingEvent ? editingEvent.icloud_href : null,
+          icloud_uid:editingEvent ? editingEvent.icloud_uid : null
+        }
+      });
+
+      if(syncResult.error || !syncResult.data || syncResult.data.success !== true){
+        var syncMsg = (syncResult.data && syncResult.data.error) || (syncResult.error ? await extractEdgeFunctionErrorMessage(syncResult.error) : "errore sconosciuto");
+        modalStatus.className = "modal-status error";
+        modalStatus.textContent = (editingEvent ? T.msg_updated_no_sync : T.msg_saved_no_sync) + syncMsg;
+      }else{
+        modalStatus.className = "modal-status success";
+        modalStatus.textContent = editingEvent ? T.msg_updated_full : T.msg_saved_full;
       }
-    });
-
-    if(syncResult.error || !syncResult.data || syncResult.data.success !== true){
-      var syncMsg = (syncResult.data && syncResult.data.error) || (syncResult.error ? await extractEdgeFunctionErrorMessage(syncResult.error) : "errore sconosciuto");
-      modalStatus.className = "modal-status error";
-      modalStatus.textContent = (editingEvent ? T.msg_updated_no_sync : T.msg_saved_no_sync) + syncMsg;
     }else{
       modalStatus.className = "modal-status success";
       modalStatus.textContent = editingEvent ? T.msg_updated_full : T.msg_saved_full;
+    }
+
+    // Sincronizza i partecipanti (collaboratori invitati su questo evento) e notifica via
+    // push solo quelli appena aggiunti -- chi era gia' invitato prima non riceve una nuova
+    // notifica ad ogni modifica, solo al primo invito o se rimosso e reinvitato.
+    try{
+      var selectedIds = selectedParticipantIds();
+      var priorIds = editingEvent ? (eventParticipantsMap[editingEvent.id] || []) : [];
+      var addedIds = selectedIds.filter(function(id){ return priorIds.indexOf(id) === -1; });
+      var removedIds = priorIds.filter(function(id){ return selectedIds.indexOf(id) === -1; });
+
+      if(removedIds.length){
+        await client.from("immonova_calendar_event_participants").delete().eq("event_id", eventId).in("user_id", removedIds);
+      }
+      if(addedIds.length){
+        var rows = addedIds.map(function(id){ return { event_id:eventId, user_id:id }; });
+        await client.from("immonova_calendar_event_participants").insert(rows);
+
+        var timeLabel = formatSlotTime(startDate) + " – " + formatSlotTime(endDate);
+        var notifyResult = await client.functions.invoke("immonova-calendar-notify", {
+          body:{
+            user_ids: addedIds,
+            title:"IMMONOVA Calendario",
+            body: collaboratorName + ": " + (title || eventTypeLabel(eventType)) + " (" + timeLabel + ")",
+            url:"/admin/calendar.html"
+          }
+        });
+        if(notifyResult.error){
+          modalStatus.textContent += T.msg_notify_failed_note;
+        }
+      }
+    }catch(participantsError){
+      modalStatus.textContent += T.msg_notify_failed_note;
     }
 
     await loadCalendarData();
@@ -1175,17 +1410,21 @@ deleteBookBtn.addEventListener("click", async function(){
   modalStatus.textContent = T.msg_deleting;
 
   try{
-    var delResult = await client.functions.invoke("icloud-calendar-push", {
-      body:{
-        action:"delete",
-        event_id:editingEvent.id,
-        icloud_href:editingEvent.icloud_href
-      }
-    });
+    // Solo gli eventi di un admin vengono sincronizzati su iCloud alla creazione (vedi
+    // confirmBookBtn), quindi solo per quelli ha senso chiamare la rimozione su iCloud.
+    if(editingEvent.icloud_href){
+      var delResult = await client.functions.invoke("icloud-calendar-push", {
+        body:{
+          action:"delete",
+          event_id:editingEvent.id,
+          icloud_href:editingEvent.icloud_href
+        }
+      });
 
-    if(delResult.error || !delResult.data || delResult.data.success !== true){
-      var delMsg = (delResult.data && delResult.data.error) || (delResult.error ? await extractEdgeFunctionErrorMessage(delResult.error) : "errore sconosciuto");
-      throw new Error(delMsg);
+      if(delResult.error || !delResult.data || delResult.data.success !== true){
+        var delMsg = (delResult.data && delResult.data.error) || (delResult.error ? await extractEdgeFunctionErrorMessage(delResult.error) : "errore sconosciuto");
+        throw new Error(delMsg);
+      }
     }
 
     modalStatus.className = "modal-status success";
@@ -1225,6 +1464,47 @@ document.getElementById("refreshSyncBtn").addEventListener("click", async functi
 
   await loadCalendarData();
   btn.disabled = false;
+});
+
+document.getElementById("enablePushBtn").addEventListener("click", async function(){
+  var btn = this;
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    setStatus(T.msg_push_unsupported, "error");
+    return;
+  }
+
+  btn.disabled = true;
+  setStatus(T.msg_push_enabling, "");
+
+  try{
+    var registration = await navigator.serviceWorker.register("/service-worker.js");
+    await navigator.serviceWorker.ready;
+
+    var subscription = await registration.pushManager.getSubscription();
+    if(!subscription){
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+
+    var subJson = subscription.toJSON();
+    var upsertResult = await client.from("immonova_calendar_push_subscriptions").upsert({
+      user_id: currentUser.id,
+      endpoint: subJson.endpoint,
+      p256dh: subJson.keys.p256dh,
+      auth: subJson.keys.auth,
+      user_agent: navigator.userAgent
+    }, { onConflict:"user_id,endpoint" });
+
+    if(upsertResult.error) throw upsertResult.error;
+
+    setStatus(T.msg_push_enabled, "success");
+    btn.textContent = T.btn_push_enabled;
+  }catch(e){
+    setStatus(T.msg_push_failed + ((e && e.message) || e), "error");
+    btn.disabled = false;
+  }
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
