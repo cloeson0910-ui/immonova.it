@@ -118,6 +118,7 @@ text-transform:uppercase;
 .week-event-bar.telefonata{background:rgba(95,143,146,.34);color:#5f8f92}
 .week-event-bar.riunione{background:rgba(166,127,52,.34);color:#8a682c}
 .week-event-bar.visita_posto{background:rgba(79,127,69,.34);color:#4f7f45}
+.week-event-bar.busy{background:rgba(143,91,40,.34);color:#8f5b28;cursor:not-allowed}
 .week-cell-note{font-size:7px;line-height:1.2;letter-spacing:.02em;overflow:hidden}
 
 .status{margin-bottom:22px;min-height:20px;font-size:13px}
@@ -591,7 +592,7 @@ async function loadCalendarData(){
 
   var busyResult = await client
     .from("immonova_calendar_busy_blocks")
-    .select("start_at,end_at")
+    .select("start_at,end_at,title")
     .gte("start_at", range.start.toISOString())
     .lt("start_at", range.end.toISOString());
 
@@ -664,7 +665,7 @@ function renderMonthView(){
       var s = new Date(ev.start_at);
       return s >= dayStart && s < dayEnd;
     });
-    var hasBusy = busyBlocks.some(function(b){
+    var dayBusyBlocks = busyBlocks.filter(function(b){
       var s = new Date(b.start_at);
       return s >= dayStart && s < dayEnd;
     });
@@ -676,8 +677,16 @@ function renderMonthView(){
     if(dayBooked.length > 3){
       chips += '<div class="month-day-more">+' + (dayBooked.length - 3) + '</div>';
     }
-    if(hasBusy && !dayBooked.length){
-      chips += '<div class="month-day-chip busy">' + escapeHTML(T.occupied_label) + '</div>';
+    if(dayBusyBlocks.length && !dayBooked.length){
+      /* Titolo reale dell'evento importato da iCloud quando disponibile (colonna "title",
+         valorizzata dalla sync icloud-calendar-sync); fallback sull'etichetta generica solo
+         se l'evento iCloud non aveva un SUMMARY (caso raro ma possibile). */
+      dayBusyBlocks.slice(0,3).forEach(function(b){
+        chips += '<div class="month-day-chip busy" title="' + escapeHTML(b.title || T.occupied_label) + '">' + escapeHTML(b.title || T.occupied_label) + '</div>';
+      });
+      if(dayBusyBlocks.length > 3){
+        chips += '<div class="month-day-more">+' + (dayBusyBlocks.length - 3) + '</div>';
+      }
     }
 
     var cls = "month-day" + (isOtherMonth ? " other-month" : "") + (isToday ? " today" : "");
@@ -716,6 +725,10 @@ function renderWeekView(){
       });
       var blockingEvents = overlapping.filter(function(ev){ return ev.event_type !== "telefonata"; });
       var phoneEvents = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
+      var overlappingBusy = blockingEvents.length ? [] : busyBlocks.filter(function(b){
+        var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+        return slotStart < bEnd && slotEnd > bStart;
+      });
       var busy = !blockingEvents.length && isSlotBusy(slotStart, slotEnd);
       var isPast = slotEnd <= now;
 
@@ -745,6 +758,14 @@ function renderWeekView(){
           : "";
         cls += allInCell.length > 1 ? " split" : "";
         barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + positionStyle + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')"><div class="week-cell-note">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div></div>';
+      });
+
+      /* Titolo reale dell'evento importato da iCloud (colonna "title" su
+         immonova_calendar_busy_blocks) al posto del riquadro "occupato" senza testo. Non
+         cliccabile: è un evento del calendario personale di Claudio, non un appuntamento
+         IMMONOVA modificabile da qui. */
+      overlappingBusy.forEach(function(b){
+        barsHtml += '<div class="week-event-bar busy" style="' + barStyle(b) + '"><div class="week-cell-note">' + escapeHTML(b.title || T.occupied_label) + '</div></div>';
       });
 
       var cls = "week-cell";
