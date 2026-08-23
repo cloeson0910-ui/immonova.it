@@ -175,15 +175,29 @@ async function checkAuthAdmin(){
 
 async function loadAudienceCount(){
   var box = document.getElementById("audienceBox");
-  var countResult = await client.from("immonova_push_subscriptions").select("id", { count: "exact", head: true });
-  if(countResult.error){
-    box.textContent = "Destinatari: impossibile calcolare il numero di iscritti (" + countResult.error.message + ").";
-    return;
+  // NOTA: immonova_push_subscriptions non ha (volutamente, per privacy) una policy di
+  // SELECT per nessuno, nemmeno per gli admin — leggere direttamente da qui restituirebbe
+  // sempre 0 righe senza errore (RLS filtra silenziosamente). Il conteggio va quindi
+  // richiesto alla edge function, che lo legge lato server con la service_role key dopo
+  // aver verificato che il chiamante è admin.
+  try{
+    var result = await client.functions.invoke("immonova-broadcast-notify", {
+      body: { count_only: true },
+      headers: { Authorization: "Bearer " + currentSession.access_token }
+    });
+    if(result.error){
+      var msg = await extractEdgeFunctionErrorMessage(result.error);
+      throw new Error(msg);
+    }
+    var data = result.data || {};
+    if(data.success === false) throw new Error(data.error || "Errore sconosciuto.");
+    var n = data.count || 0;
+    box.textContent = n === 1
+      ? "Destinatari: 1 persona ha attivato le notifiche."
+      : "Destinatari: " + n + " persone hanno attivato le notifiche.";
+  }catch(e){
+    box.textContent = "Destinatari: impossibile calcolare il numero di iscritti (" + (e.message || e) + ").";
   }
-  var n = countResult.count || 0;
-  box.textContent = n === 1
-    ? "Destinatari: 1 persona ha attivato le notifiche."
-    : "Destinatari: " + n + " persone hanno attivato le notifiche.";
 }
 
 function updatePreview(){
