@@ -106,9 +106,12 @@ text-transform:uppercase;
 .week-grid{display:grid;grid-template-columns:64px repeat(7,1fr);gap:1px;background:rgba(166,127,52,.12);border:1px solid rgba(166,127,52,.15);overflow-x:auto}
 .week-corner{background:rgba(255,255,255,.35)}
 .week-day-head{padding:10px 4px;text-align:center;background:rgba(255,255,255,.35);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#a67f34}
+.week-day-head.clickable{cursor:pointer}
+.week-day-head.clickable:hover{background:rgba(166,127,52,.14)}
 .week-day-head .wk-num{display:block;font-size:16px;font-weight:600;margin-top:3px;text-transform:none}
 .week-hour-label{padding:8px 6px;font-size:10px;color:#8f7643;text-align:right;background:rgba(255,255,255,.24)}
 .week-cell{position:relative;height:52px;background:rgba(255,255,255,.32);cursor:pointer;padding:0;overflow:hidden}
+.hour-tick{position:absolute;left:0;width:9px;height:1px;background:rgba(166,127,52,.4);pointer-events:none;z-index:0}
 /* Vista giorno: stessa struttura a griglia della settimana ma con una sola colonna molto più
    larga e celle più alte -- pensata apposta per leggere chiaramente più impegni sovrapposti
    nella stessa fascia oraria, cosa che nella vista settimana (colonne strette) diventa illeggibile. */
@@ -734,7 +737,8 @@ function renderWeekView(){
 
   for(var i = 0; i < 7; i++){
     var d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i);
-    html += '<div class="week-day-head">' + escapeHTML(d.toLocaleDateString(locale, { weekday:"short" })) + '<span class="wk-num">' + d.getDate() + '</span></div>';
+    var dDateStr = d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate());
+    html += '<div class="week-day-head clickable" onclick="goToDayWeek(\'' + dDateStr + '\')">' + escapeHTML(d.toLocaleDateString(locale, { weekday:"short" })) + '<span class="wk-num">' + d.getDate() + '</span></div>';
   }
 
   for(var h = DAY_START_HOUR; h < DAY_END_HOUR; h++){
@@ -805,7 +809,8 @@ function renderWeekView(){
         onclick = 'onclick="handleWeekCellClick(event,\'' + toLocalInputValue(slotStart) + '\')"';
       }
 
-      html += '<div class="' + cls + '" ' + onclick + '>' + barsHtml + '</div>';
+      var tickHtml = '<div class="hour-tick" style="top:25%"></div><div class="hour-tick" style="top:50%"></div><div class="hour-tick" style="top:75%"></div>';
+      html += '<div class="' + cls + '" ' + onclick + '>' + tickHtml + barsHtml + '</div>';
     }
   }
 
@@ -888,7 +893,8 @@ function renderDayView(){
       onclick = 'onclick="handleWeekCellClick(event,\'' + toLocalInputValue(slotStart) + '\')"';
     }
 
-    html += '<div class="' + cls + '" ' + onclick + '>' + barsHtml + '</div>';
+    var tickHtml = '<div class="hour-tick" style="top:25%"></div><div class="hour-tick" style="top:50%"></div><div class="hour-tick" style="top:75%"></div>';
+    html += '<div class="' + cls + '" ' + onclick + '>' + tickHtml + barsHtml + '</div>';
   }
 
   html += '</div>';
