@@ -109,6 +109,22 @@ text-transform:uppercase;
 .week-day-head .wk-num{display:block;font-size:16px;font-weight:600;margin-top:3px;text-transform:none}
 .week-hour-label{padding:8px 6px;font-size:10px;color:#8f7643;text-align:right;background:rgba(255,255,255,.24)}
 .week-cell{position:relative;height:52px;background:rgba(255,255,255,.32);cursor:pointer;padding:0;overflow:hidden}
+/* Vista giorno: stessa struttura a griglia della settimana ma con una sola colonna molto più
+   larga e celle più alte -- pensata apposta per leggere chiaramente più impegni sovrapposti
+   nella stessa fascia oraria, cosa che nella vista settimana (colonne strette) diventa illeggibile. */
+.day-grid{display:grid;grid-template-columns:64px 1fr;gap:1px;background:rgba(166,127,52,.12);border:1px solid rgba(166,127,52,.15)}
+.day-cell{position:relative;height:88px;background:rgba(255,255,255,.32);cursor:pointer;padding:0;overflow:hidden}
+.day-cell.busy{background:rgba(143,91,40,.18);cursor:not-allowed}
+.day-cell.past{background:rgba(166,127,52,.06);cursor:default}
+.day-event-bar{position:absolute;overflow:hidden;cursor:pointer;padding:5px 10px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.5);border-radius:2px}
+.day-event-bar.split{border-right:1px solid rgba(255,255,255,.65)}
+.day-event-bar.split:last-child{border-right:0}
+.day-event-bar.telefonata{background:rgba(95,143,146,.34);color:#5f8f92}
+.day-event-bar.riunione{background:rgba(166,127,52,.34);color:#8a682c}
+.day-event-bar.visita_posto{background:rgba(79,127,69,.34);color:#4f7f45}
+.day-event-bar.busy{background:rgba(143,91,40,.34);color:#8f5b28;cursor:not-allowed}
+.day-cell-title{font-size:12px;font-weight:600;line-height:1.3;overflow:hidden}
+.day-cell-time{font-size:10px;opacity:.8;margin-top:2px}
 .week-cell:hover{background:rgba(166,127,52,.14)}
 .week-cell.busy{background:rgba(143,91,40,.18);cursor:not-allowed}
 .week-cell.past{background:rgba(127,100,48,.05);cursor:default}
@@ -273,6 +289,7 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 <div class="cal-view-switch">
 <button type="button" id="viewMonthBtn" data-i18n="btn_view_month">Mese</button>
 <button type="button" id="viewWeekBtn" data-i18n="btn_view_week">Settimana</button>
+<button type="button" id="viewDayBtn" data-i18n="btn_view_day">Giorno</button>
 </div>
 </div>
 
@@ -395,7 +412,7 @@ var UI_STRINGS = {
   legend_free:"Libero", legend_busy:"Occupato (iCloud)", legend_telefonata:"Telefonata",
   legend_riunione:"Riunione", legend_visita:"Visita sul posto",
   btn_refresh_sync:"Aggiorna disponibilità da iCloud ora",
-  btn_today:"Oggi", btn_view_month:"Mese", btn_view_week:"Settimana",
+  btn_today:"Oggi", btn_view_month:"Mese", btn_view_week:"Settimana", btn_view_day:"Giorno",
   msg_refreshing_sync:"Aggiornamento disponibilità da iCloud in corso (può richiedere qualche secondo)...",
   msg_refresh_sync_done:"Disponibilità aggiornata con i dati più recenti di iCloud.",
   msg_refresh_sync_failed:"Aggiornamento non riuscito: ",
@@ -545,6 +562,11 @@ function getViewRange(){
     var end = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1);
     return { start: start, end: end };
   }
+  if(currentView === "day"){
+    var start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+    var end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+    return { start: start, end: end };
+  }
   var start = startOfWeek(anchorDate);
   var end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
   return { start: start, end: end };
@@ -621,6 +643,8 @@ function updatePeriodLabel(){
 
   if(currentView === "month"){
     label.textContent = anchorDate.toLocaleDateString(locale, { month:"long", year:"numeric" });
+  }else if(currentView === "day"){
+    label.textContent = anchorDate.toLocaleDateString(locale, { weekday:"long", day:"2-digit", month:"long", year:"numeric" });
   }else{
     var range = getViewRange();
     var endDisplay = new Date(range.end.getTime() - 86400000);
@@ -632,11 +656,13 @@ function updatePeriodLabel(){
 function updateViewButtons(){
   document.getElementById("viewMonthBtn").classList.toggle("active", currentView === "month");
   document.getElementById("viewWeekBtn").classList.toggle("active", currentView === "week");
+  document.getElementById("viewDayBtn").classList.toggle("active", currentView === "day");
 }
 
 function renderCalendar(){
   updatePeriodLabel();
   if(currentView === "month") renderMonthView();
+  else if(currentView === "day") renderDayView();
   else renderWeekView();
 }
 
@@ -787,10 +813,92 @@ function renderWeekView(){
   calendarBody.innerHTML = html;
 }
 
+/* ---- Vista giorno: stessa logica di calcolo sovrapposizioni della vista settimana (divisione
+   in colonne uguali per QUALSIASI combinazione di eventi sovrapposti), ma su una sola colonna
+   molto più larga e celle più alte, con titolo e orario scritti per esteso in ogni riquadro --
+   pensata per i momenti con più impegni nella stessa fascia, dove la vista settimana (colonne
+   strette, solo poche parole visibili) non basta a capire cosa c'è senza cliccare uno per uno. ---- */
+function renderDayView(){
+  var now = new Date();
+  var day = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
+
+  var html = '<div class="day-grid"><div class="week-corner"></div>';
+  html += '<div class="week-day-head">' + escapeHTML(day.toLocaleDateString(locale, { weekday:"long" })) + '<span class="wk-num">' + day.getDate() + '</span></div>';
+
+  for(var h = DAY_START_HOUR; h < DAY_END_HOUR; h++){
+    html += '<div class="week-hour-label">' + pad2(h) + ':00</div>';
+
+    var slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, 0, 0);
+    var slotEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h + 1, 0, 0);
+
+    var overlapping = bookedEvents.filter(function(ev){
+      var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+      return slotStart < eEnd && slotEnd > eStart;
+    });
+    var blockingEvents = overlapping.filter(function(ev){ return ev.event_type !== "telefonata"; });
+    var phoneEvents = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
+    var overlappingBusy = blockingEvents.length ? [] : busyBlocks.filter(function(b){
+      var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+      return slotStart < bEnd && slotEnd > bStart;
+    });
+    var busy = !blockingEvents.length && isSlotBusy(slotStart, slotEnd);
+    var isPast = slotEnd <= now;
+
+    function barStyle(ev){
+      var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+      var overlapStart = eStart > slotStart ? eStart : slotStart;
+      var overlapEnd = eEnd < slotEnd ? eEnd : slotEnd;
+      var top = (overlapStart - slotStart) / 36000;
+      var height = (overlapEnd - overlapStart) / 36000;
+      return "top:" + top + "%;height:" + Math.max(height, 12) + "%;";
+    }
+
+    var barsHtml = "";
+    var allInCell = phoneEvents.concat(blockingEvents);
+    var columnWidth = allInCell.length > 1 ? (100 / allInCell.length) : 100;
+
+    allInCell.forEach(function(ev, idx){
+      var cls = "day-event-bar " + escapeHTML(ev.event_type);
+      var positionStyle = "left:" + (idx * columnWidth) + "%;width:" + columnWidth + "%;";
+      cls += allInCell.length > 1 ? " split" : "";
+      var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+      var timeLabel = formatSlotTime(eStart) + " – " + formatSlotTime(eEnd);
+      barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + positionStyle + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')">'
+        + '<div class="day-cell-title">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div>'
+        + '<div class="day-cell-time">' + escapeHTML(timeLabel) + '</div></div>';
+    });
+
+    overlappingBusy.forEach(function(b){
+      var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+      var timeLabel = formatSlotTime(bStart) + " – " + formatSlotTime(bEnd);
+      barsHtml += '<div class="day-event-bar busy" style="' + barStyle(b) + 'left:0;width:100%;">'
+        + '<div class="day-cell-title">' + escapeHTML(b.title || T.occupied_label) + '</div>'
+        + '<div class="day-cell-time">' + escapeHTML(timeLabel) + '</div></div>';
+    });
+
+    var cls = "day-cell";
+    var onclick = "";
+
+    if(busy){
+      cls += " busy";
+    }else if(isPast){
+      if(!phoneEvents.length) cls += " past";
+    }else{
+      onclick = 'onclick="handleWeekCellClick(event,\'' + toLocalInputValue(slotStart) + '\')"';
+    }
+
+    html += '<div class="' + cls + '" ' + onclick + '>' + barsHtml + '</div>';
+  }
+
+  html += '</div>';
+  calendarBody.innerHTML = html;
+}
+
 window.goToDayWeek = function(dateStr){
   var parts = dateStr.split("-");
   anchorDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-  currentView = "week";
+  currentView = "day";
   updateViewButtons();
   loadCalendarData();
 };
@@ -1081,6 +1189,8 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 document.getElementById("prevPeriodBtn").addEventListener("click", function(){
   if(currentView === "month"){
     anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 1, 1);
+  }else if(currentView === "day"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() - 1);
   }else{
     anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() - 7);
   }
@@ -1090,6 +1200,8 @@ document.getElementById("prevPeriodBtn").addEventListener("click", function(){
 document.getElementById("nextPeriodBtn").addEventListener("click", function(){
   if(currentView === "month"){
     anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1);
+  }else if(currentView === "day"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + 1);
   }else{
     anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + 7);
   }
@@ -1110,6 +1222,12 @@ document.getElementById("viewMonthBtn").addEventListener("click", function(){
 
 document.getElementById("viewWeekBtn").addEventListener("click", function(){
   currentView = "week";
+  updateViewButtons();
+  loadCalendarData();
+});
+
+document.getElementById("viewDayBtn").addEventListener("click", function(){
+  currentView = "day";
   updateViewButtons();
   loadCalendarData();
 });
