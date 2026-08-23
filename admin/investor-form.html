@@ -403,6 +403,38 @@ textarea{
     </div>
 
     <div class="section">
+      <h2 class="section-title" data-i18n="section_client_type">Tipo Cliente</h2>
+
+      <div class="checkbox-row">
+        <label class="check-card">
+          <input id="is_investor" type="checkbox">
+          <span data-i18n="check_is_investor">Investitore</span>
+        </label>
+
+        <label class="check-card">
+          <input id="is_seller" type="checkbox">
+          <span data-i18n="check_is_seller">Venditore</span>
+        </label>
+      </div>
+
+      <div class="field full" id="sellerStatusField" style="margin-top:18px;display:none">
+        <label data-i18n="label_seller_status">Stato Trattativa Venditore</label>
+        <select id="seller_status">
+          <option value="da_contattare" data-i18n="seller_status_da_contattare">Da contattare</option>
+          <option value="in_trattativa" data-i18n="seller_status_in_trattativa">In trattativa</option>
+          <option value="mandato_firmato" data-i18n="seller_status_mandato_firmato">Mandato firmato</option>
+          <option value="venduto" data-i18n="seller_status_venduto">Venduto</option>
+        </select>
+      </div>
+
+      <div class="field full" id="sellerPropertiesField" style="margin-top:18px;display:none">
+        <label data-i18n="label_seller_properties">Immobili Collegati (di proprietà del cliente)</label>
+        <select id="seller_properties" multiple size="6"></select>
+        <div class="muted" style="font-size:11.5px;margin-top:6px" data-i18n="hint_seller_properties">Tieni premuto Ctrl (o Cmd su Mac) per selezionare più immobili.</div>
+      </div>
+    </div>
+
+    <div class="section">
       <h2 class="section-title" data-i18n="section_investment_profile">Profilo Investimento</h2>
 
       <div class="grid-3">
@@ -473,6 +505,7 @@ textarea{
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
 
 <script>
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -503,6 +536,12 @@ var UI_STRINGS = {
   type_private_investor:"Private Investor", type_family_office:"Family Office", type_real_estate_operator:"Real Estate Operator",
   type_hospitality_group:"Hospitality Group", type_fund:"Investment Fund", type_advisor:"Advisor", type_other:"Altro",
   label_country:"Paese", label_city:"Città",
+  section_client_type:"Tipo Cliente", check_is_investor:"Investitore", check_is_seller:"Venditore",
+  label_seller_status:"Stato Trattativa Venditore",
+  seller_status_da_contattare:"Da contattare", seller_status_in_trattativa:"In trattativa",
+  seller_status_mandato_firmato:"Mandato firmato", seller_status_venduto:"Venduto",
+  label_seller_properties:"Immobili Collegati (di proprietà del cliente)",
+  hint_seller_properties:"Tieni premuto Ctrl (o Cmd su Mac) per selezionare più immobili.",
   section_contacts:"Contatti", label_email:"Email", label_phone:"Telefono", label_whatsapp:"WhatsApp",
   label_preferred_language:"Lingua Preferita",
   lang_it:"Italiano", lang_en:"Inglese", lang_fr:"Francese", lang_de:"Tedesco", lang_es:"Spagnolo",
@@ -702,7 +741,7 @@ async function loadInvestor(){
 
   const { data, error } = await client
     .from("investors")
-    .select("*, investor_categories(category), investor_areas(area)")
+    .select("*, investor_categories(category), investor_areas(area), investor_seller_properties(opportunity_id)")
     .eq("id", investorId)
     .single();
 
@@ -727,6 +766,16 @@ async function loadInvestor(){
   document.getElementById("budget_max").value = data.budget_max ?? "";
   document.getElementById("status_field").value = data.status || "active";
   document.getElementById("notes").value = data.notes || "";
+
+  document.getElementById("is_investor").checked = data.is_investor !== false;
+  document.getElementById("is_seller").checked = !!data.is_seller;
+  document.getElementById("seller_status").value = data.seller_status || "da_contattare";
+  updateSellerFieldsVisibility();
+
+  const linkedProperties = (data.investor_seller_properties || []).map(row => String(row.opportunity_id));
+  Array.from(document.getElementById("seller_properties").options).forEach(opt => {
+    opt.selected = linkedProperties.includes(opt.value);
+  });
 
   const areas = (data.investor_areas || []).map(row => row.area).filter(Boolean);
   document.getElementById("areas").value = areas.join(", ");
@@ -757,6 +806,9 @@ function collectInvestorPayload(){
     budget_max: numVal("budget_max"),
     status: val("status_field") || "active",
     notes: val("notes") || null,
+    is_investor: boolVal("is_investor"),
+    is_seller: boolVal("is_seller"),
+    seller_status: boolVal("is_seller") ? (val("seller_status") || "da_contattare") : null,
     updated_at: new Date().toISOString()
   };
 
@@ -867,7 +919,59 @@ async function saveRelations(id){
 
     if(error) throw error;
   }
+
+  const sellerProperties = collectSellerProperties();
+
+  const delProps = await client
+    .from("investor_seller_properties")
+    .delete()
+    .eq("investor_id", id);
+
+  if(delProps.error) throw delProps.error;
+
+  if(sellerProperties.length){
+    const rows = sellerProperties.map(opportunity_id => ({
+      investor_id:id,
+      opportunity_id
+    }));
+
+    const { error } = await client
+      .from("investor_seller_properties")
+      .insert(rows);
+
+    if(error) throw error;
+  }
 }
+
+function collectSellerProperties(){
+  if(!boolVal("is_seller")) return [];
+  return Array.from(document.getElementById("seller_properties").selectedOptions).map(opt => opt.value);
+}
+
+function updateSellerFieldsVisibility(){
+  const isSeller = boolVal("is_seller");
+  document.getElementById("sellerStatusField").style.display = isSeller ? "" : "none";
+  document.getElementById("sellerPropertiesField").style.display = isSeller ? "" : "none";
+}
+
+async function loadOpportunitiesForSelect(){
+  const select = document.getElementById("seller_properties");
+  const { data, error } = await client
+    .from("opportunities")
+    .select("id, title")
+    .order("title", { ascending:true });
+
+  if(error){
+    console.warn("Caricamento immobili non riuscito (non bloccante):", error.message);
+    return;
+  }
+
+  select.innerHTML = (data || []).map(opp =>
+    '<option value="'+String(opp.id)+'">'+(opp.title || ("Opportunità #"+opp.id)).replace(/</g,"&lt;")+'</option>'
+  ).join("");
+}
+
+document.getElementById("is_seller").addEventListener("change", updateSellerFieldsVisibility);
 
 form.addEventListener("submit", async event => {
   try{
@@ -902,7 +1006,12 @@ async function revealCapitalPartnersLinkIfAllowed(){
   if(await checkAuth()){
     const ok = await loadProfile();
     if(ok){
+      await loadOpportunitiesForSelect();
+      if(!investorId){
+        document.getElementById("is_investor").checked = true;
+      }
       await loadInvestor();
+      updateSellerFieldsVisibility();
       await revealCapitalPartnersLinkIfAllowed();
     }
   }

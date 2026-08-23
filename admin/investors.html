@@ -327,6 +327,10 @@ td{
       <div class="stat-label" data-i18n="stat_vip_pipeline">VIP / Active<br>Pipeline</div>
       <div class="stat-value" id="vipCount">0</div>
     </div>
+    <div class="stat">
+      <div class="stat-label" data-i18n="stat_sellers">Venditori</div>
+      <div class="stat-value" id="sellerCount">0</div>
+    </div>
   </div>
 
   <div class="toolbar">
@@ -352,6 +356,13 @@ td{
       <option value="email" data-i18n="filter_email_optin">Email opt-in</option>
       <option value="whatsapp" data-i18n="filter_whatsapp_optin">WhatsApp opt-in</option>
       <option value="both" data-i18n="filter_email_whatsapp">Email + WhatsApp</option>
+    </select>
+
+    <select id="clientTypeFilter" class="filter">
+      <option value="" data-i18n="filter_all_client_types">Tutti i tipi cliente</option>
+      <option value="investor" data-i18n="filter_investor_only">Solo investitore</option>
+      <option value="seller" data-i18n="filter_seller_only">Solo venditore</option>
+      <option value="both" data-i18n="filter_investor_seller">Investitore + Venditore</option>
     </select>
   </div>
 
@@ -379,6 +390,7 @@ td{
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
 
 <script>
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -390,6 +402,7 @@ const statusFilter = document.getElementById("statusFilter");
 const categoryFilter = document.getElementById("categoryFilter");
 const areaFilter = document.getElementById("areaFilter");
 const channelFilter = document.getElementById("channelFilter");
+const clientTypeFilter = document.getElementById("clientTypeFilter");
 
 let currentUser = null;
 let currentProfile = null;
@@ -408,12 +421,17 @@ var UI_STRINGS = {
   kicker:"Investor Relationship Management", title:"Investitori", btn_new_investor:"Nuovo Investitore",
   subtitle:"Anagrafica investitori IMMONOVA con preferenze di budget, aree, categorie, lingua e consenso per inviti email / WhatsApp.",
   stat_total:"Investitori<br>Totali", stat_email_optin:"Email<br>Opt-in", stat_whatsapp_optin:"WhatsApp<br>Opt-in",
-  stat_vip_pipeline:"VIP / Active<br>Pipeline",
+  stat_vip_pipeline:"VIP / Active<br>Pipeline", stat_sellers:"Venditori",
   ph_search:"Cerca nome, email, società, paese, zona...",
   filter_all_status:"Tutti gli stati", filter_active:"Attivi", filter_vip:"VIP", filter_inactive:"Inattivi",
   filter_all_categories:"Tutte le categorie", filter_all_areas:"Tutte le aree",
   filter_all_consents:"Tutti i consensi", filter_email_optin:"Email opt-in", filter_whatsapp_optin:"WhatsApp opt-in",
   filter_email_whatsapp:"Email + WhatsApp",
+  filter_all_client_types:"Tutti i tipi cliente", filter_investor_only:"Solo investitore", filter_seller_only:"Solo venditore",
+  filter_investor_seller:"Investitore + Venditore",
+  client_type_investor:"Investitore", client_type_seller:"Venditore",
+  seller_status_da_contattare:"Da contattare", seller_status_in_trattativa:"In trattativa",
+  seller_status_mandato_firmato:"Mandato firmato", seller_status_venduto:"Venduto",
   th_investor:"Investitore", th_contacts:"Contatti", th_profile:"Profilo", th_budget:"Budget",
   th_areas:"Aree", th_categories:"Categorie", th_consents:"Consensi", th_actions:"Azioni",
   loading:"Caricamento investitori...",
@@ -538,6 +556,16 @@ function statusLabel(status){
   return map[status] || status || T.status_active;
 }
 
+function sellerStatusLabel(status){
+  const map = {
+    da_contattare:T.seller_status_da_contattare,
+    in_trattativa:T.seller_status_in_trattativa,
+    mandato_firmato:T.seller_status_mandato_firmato,
+    venduto:T.seller_status_venduto
+  };
+  return map[status] || status || "";
+}
+
 async function checkAuth(){
   const { data:{ session }, error } = await client.auth.getSession();
 
@@ -590,7 +618,7 @@ async function loadInvestors(){
 
   const { data, error } = await client
     .from("investors")
-    .select("*, investor_categories(category), investor_areas(area)")
+    .select("*, investor_categories(category), investor_areas(area), investor_seller_properties(opportunity_id)")
     .order("created_at", { ascending:false });
 
   if(error){
@@ -631,6 +659,7 @@ function renderStats(){
   document.getElementById("emailCount").textContent = allInvestors.filter(i => i.email_opt_in).length;
   document.getElementById("whatsappCount").textContent = allInvestors.filter(i => i.whatsapp_opt_in).length;
   document.getElementById("vipCount").textContent = allInvestors.filter(i => i.status === "vip" || i.status === "active").length;
+  document.getElementById("sellerCount").textContent = allInvestors.filter(i => i.is_seller).length;
 }
 
 function investorSearchText(inv){
@@ -649,6 +678,7 @@ function investorSearchText(inv){
     inv.preferred_language,
     inv.investor_type,
     inv.status,
+    inv.seller_status,
     categories,
     areas,
     inv.notes
@@ -661,6 +691,7 @@ function applyFilters(){
   const category = categoryFilter.value;
   const area = areaFilter.value;
   const channel = channelFilter.value;
+  const clientType = clientTypeFilter.value;
 
   const filtered = allInvestors.filter(inv => {
     const matchesSearch = !query || investorSearchText(inv).includes(query);
@@ -677,7 +708,14 @@ function applyFilters(){
     if(channel === "whatsapp") matchesChannel = !!inv.whatsapp_opt_in;
     if(channel === "both") matchesChannel = !!inv.email_opt_in && !!inv.whatsapp_opt_in;
 
-    return matchesSearch && matchesStatus && matchesCategory && matchesArea && matchesChannel;
+    const isInvestor = inv.is_investor !== false;
+    const isSeller = !!inv.is_seller;
+    let matchesClientType = true;
+    if(clientType === "investor") matchesClientType = isInvestor && !isSeller;
+    if(clientType === "seller") matchesClientType = isSeller && !isInvestor;
+    if(clientType === "both") matchesClientType = isInvestor && isSeller;
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesArea && matchesChannel && matchesClientType;
   });
 
   renderTable(filtered);
@@ -708,6 +746,8 @@ function renderTable(data){
           <div class="name">${esc((inv.first_name || "") + " " + (inv.last_name || ""))}</div>
           <div class="muted">${esc(inv.company || "")}</div>
           <span class="badge ${statusClass}">${esc(statusLabel(inv.status))}</span>
+          ${inv.is_investor !== false ? '<span class="badge">'+esc(T.client_type_investor)+'</span>' : ""}
+          ${inv.is_seller ? '<span class="badge">'+esc(T.client_type_seller)+(inv.seller_status ? " · "+esc(sellerStatusLabel(inv.seller_status)) : "")+'</span>' : ""}
         </td>
 
         <td>
@@ -772,6 +812,7 @@ statusFilter.addEventListener("change", applyFilters);
 categoryFilter.addEventListener("change", applyFilters);
 areaFilter.addEventListener("change", applyFilters);
 channelFilter.addEventListener("change", applyFilters);
+clientTypeFilter.addEventListener("change", applyFilters);
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
   await client.auth.signOut();
