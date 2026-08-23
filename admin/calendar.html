@@ -543,6 +543,38 @@ function isSlotBusy(slotStart, slotEnd){
   });
 }
 
+/* Usata per decidere se un'INTERA cella-ora (griglia settimana/giorno) va resa non
+   cliccabile. Prima si usava isSlotBusy() sull'intera ora: bastava che una QUALSIASI
+   parte dell'ora avesse un conflitto (es. i primi 45 minuti) per bloccare il click su
+   tutta la cella, anche se l'ultimo quarto d'ora restava libero e visibile come tale.
+   Qui invece si uniscono gli intervalli occupati (eventi non-telefonata + blocchi iCloud)
+   dentro l'ora e si controlla se coprono l'ora PER INTERO: solo in quel caso il click va
+   disabilitato, altrimenti resta possibile cliccare sulla porzione libera (il calcolo
+   preciso del minuto lo fa già handleWeekCellClick in base alla posizione del click, e il
+   controllo di conflitto reale sull'orario esatto scelto avviene comunque al salvataggio). */
+function isHourFullyBusy(slotStart, slotEnd, blockingEvents, busyOverlap){
+  var intervals = [];
+  function addInterval(s, e){
+    if(s < slotStart) s = slotStart;
+    if(e > slotEnd) e = slotEnd;
+    if(s < e) intervals.push([s.getTime(), e.getTime()]);
+  }
+  (blockingEvents || []).forEach(function(ev){
+    addInterval(new Date(ev.start_at), new Date(ev.end_at));
+  });
+  (busyOverlap || []).forEach(function(b){
+    addInterval(new Date(b.start_at), new Date(b.end_at));
+  });
+  if(!intervals.length) return false;
+  intervals.sort(function(a, b){ return a[0] - b[0]; });
+  var covered = slotStart.getTime();
+  for(var i = 0; i < intervals.length; i++){
+    if(intervals[i][0] > covered) return false;
+    if(intervals[i][1] > covered) covered = intervals[i][1];
+  }
+  return covered >= slotEnd.getTime();
+}
+
 function bookedEventForSlot(slotStart, slotEnd, excludeId){
   return bookedEvents.find(function(ev){
     if(excludeId && Number(ev.id) === Number(excludeId)) return false;
@@ -759,7 +791,11 @@ function renderWeekView(){
         var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
         return slotStart < bEnd && slotEnd > bStart;
       });
-      var busy = !blockingEvents.length && isSlotBusy(slotStart, slotEnd);
+      var busyOverlapForFullCheck = busyBlocks.filter(function(b){
+        var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+        return slotStart < bEnd && slotEnd > bStart;
+      });
+      var busy = isHourFullyBusy(slotStart, slotEnd, blockingEvents, busyOverlapForFullCheck);
       var isPast = slotEnd <= now;
 
       // Ogni barra e' alta/posizionata in percentuale in base a quanto della durata reale
@@ -847,7 +883,11 @@ function renderDayView(){
       var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
       return slotStart < bEnd && slotEnd > bStart;
     });
-    var busy = !blockingEvents.length && isSlotBusy(slotStart, slotEnd);
+    var busyOverlapForFullCheck = busyBlocks.filter(function(b){
+      var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+      return slotStart < bEnd && slotEnd > bStart;
+    });
+    var busy = isHourFullyBusy(slotStart, slotEnd, blockingEvents, busyOverlapForFullCheck);
     var isPast = slotEnd <= now;
 
     function barStyle(ev){
