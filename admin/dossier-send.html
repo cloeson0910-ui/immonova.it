@@ -19,6 +19,12 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .send-banner strong{color:#a67f34}
 .send-banner .consent-ok{color:#4f7f45;font-weight:600}
 .send-banner .consent-no{color:#9c2f2f;font-weight:600}
+.dossier-link-row{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;letter-spacing:.04em;color:#7f6430}
+.dossier-link-row .link-label{color:#a67f34;font-weight:600;white-space:nowrap}
+.dossier-link-row input{flex:1;min-width:220px;padding:9px 10px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:12px;font-family:inherit}
+.dossier-link-row .copy-btn{padding:9px 14px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:10px;cursor:pointer}
+.dossier-link-row .copy-btn:hover{background:#8f6d2c}
+.dossier-link-row .copy-feedback{color:#4f7f45;font-weight:600}
 .btn.send-btn{background:#517a4f;border-color:#517a4f}
 .btn.send-btn:disabled{opacity:.55;cursor:not-allowed}
 @media print{.lang-switch{display:none!important}}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
@@ -224,6 +230,7 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
     </div>
   </div>
   <div id="sendBanner" class="send-banner"></div>
+  <div id="dossierLinkRow" class="dossier-link-row"></div>
   <div id="status" class="status"></div>
   <section id="book" class="book"><div class="empty" data-i18n="loading_dossier">Caricamento dossier...</div></section>
 </main>
@@ -240,6 +247,7 @@ var requestId = params.get("request_id");
 var investorRequest = null;
 var statusBox = document.getElementById("status");
 var sendBanner = document.getElementById("sendBanner");
+var dossierLinkRow = document.getElementById("dossierLinkRow");
 var sendDossierBtn = document.getElementById("sendDossierBtn");
 var book = document.getElementById("book");
 var pageTitle = document.getElementById("pageTitle");
@@ -2709,6 +2717,45 @@ function renderSendBanner(){
     " · NDA <span class=\""+(ndaOk?"consent-ok":"consent-no")+"\">"+(ndaOk?"✓":"✕")+"</span>"+
     " · Privacy <span class=\""+(privacyOk?"consent-ok":"consent-no")+"\">"+(privacyOk?"✓":"✕")+"</span>"+
     escapeHTML(sentNote);
+  renderDossierLinkRow();
+}
+/* Link diretto al PDF già caricato su Storage, sempre visibile e copiabile a mano —
+   utile quando il servizio email non riesce a recapitare il dossier (troppo pesante
+   per allegato, filtri anti-spam del destinatario, ecc.) e il link va incollato a
+   mano altrove (WhatsApp, chat, altra email). Compare solo dopo il primo invio,
+   quando investorRequest.dossier_pdf_url è valorizzato. */
+function renderDossierLinkRow(){
+  if(!dossierLinkRow) return;
+  var url = investorRequest && investorRequest.dossier_pdf_url;
+  if(!url){
+    dossierLinkRow.style.display="none";
+    dossierLinkRow.innerHTML="";
+    return;
+  }
+  dossierLinkRow.style.display="flex";
+  dossierLinkRow.innerHTML =
+    "<span class=\"link-label\">Link diretto al dossier:</span>"+
+    "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\">"+
+    "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">Copia link</button>"+
+    "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>";
+}
+async function copyDossierLink(){
+  var input = document.getElementById("dossierLinkInput");
+  var feedback = document.getElementById("copyFeedback");
+  if(!input) return;
+  var url = input.value;
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(url);
+    }else{
+      input.select();
+      document.execCommand("copy");
+    }
+    if(feedback){ feedback.textContent="Copiato ✓"; setTimeout(function(){ feedback.textContent=""; },2500); }
+  }catch(e){
+    input.select();
+    if(feedback) feedback.textContent="Seleziona e copia manualmente (Ctrl/Cmd+C)";
+  }
 }
 /* ---- Lezione riutilizzata da users.html: su errore non-2xx di una edge function supabase-js
    NON mette il corpo JSON in result.data — resta null — e result.error.message e' sempre il
@@ -2938,6 +2985,7 @@ async function sendDossierToClient(){
         client_name:investorRequest.full_name||[investorRequest.first_name,investorRequest.last_name].filter(Boolean).join(" ")||"",
         opportunity_title:getTitle(),
         pdf_url:pdfUrl,
+        cover_image_url:getCoverImage(),
         filename:filename,
         language:dossierLang,
         // v1: allegati Privacy Policy e NDA — gli stessi documenti che il
