@@ -201,6 +201,30 @@ select{
   font-family:inherit;
 }
 
+.checkbox-field{
+  flex-direction:row;
+  align-items:center;
+  gap:12px;
+}
+
+.checkbox-field input[type="checkbox"]{
+  width:auto;
+  accent-color:#a67f34;
+  cursor:pointer;
+}
+
+.checkbox-field label{
+  cursor:pointer;
+}
+
+.field-hint{
+  font-size:11px;
+  line-height:1.6;
+  color:#8f7643;
+  letter-spacing:normal;
+  text-transform:none;
+}
+
 button.primary{
   margin-top:8px;
   padding:14px 24px;
@@ -236,7 +260,7 @@ button.primary:disabled{
 table{
   width:100%;
   border-collapse:collapse;
-  min-width:1340px;
+  min-width:1480px;
 }
 
 th{
@@ -293,6 +317,13 @@ td{
 .badge.off{
   color:#9c2f2f;
   border-color:rgba(156,47,47,.35);
+}
+
+.small-checkbox{
+  width:18px;
+  height:18px;
+  accent-color:#a67f34;
+  cursor:pointer;
 }
 
 .empty{
@@ -419,6 +450,12 @@ td{
           </select>
         </div>
 
+        <div class="field checkbox-field">
+          <input type="checkbox" id="is_super_user">
+          <label for="is_super_user" data-i18n="label_super_user">Super User</label>
+        </div>
+        <p class="field-hint" data-i18n="hint_super_user">Vede tutto il sito ma modifica solo le proprie cose: niente clienti/investitori altrui, niente creazione ads/social, niente AI, valutazioni o statistiche. Non ha effetto se il ruolo accesso è Admin.</p>
+
         <div class="field">
           <label for="professional_role" data-i18n="label_professional_role">Incarico operativo</label>
           <select id="professional_role" required>
@@ -462,6 +499,7 @@ td{
               <th data-i18n="th_email">Email</th>
               <th data-i18n="th_phone">Telefono</th>
               <th data-i18n="th_access">Accesso</th>
+              <th data-i18n="th_super_user">Super User</th>
               <th data-i18n="th_role">Incarico</th>
               <th data-i18n="th_language">Lingua</th>
               <th data-i18n="th_status">Stato</th>
@@ -473,7 +511,7 @@ td{
 
           <tbody id="usersTable">
             <tr>
-              <td colspan="10" class="empty" data-i18n="empty_loading">Caricamento...</td>
+              <td colspan="11" class="empty" data-i18n="empty_loading">Caricamento...</td>
             </tr>
           </tbody>
         </table>
@@ -497,6 +535,8 @@ var userForm = document.getElementById("userForm");
 var statusBox = document.getElementById("status");
 var createBtn = document.getElementById("createBtn");
 var usersTable = document.getElementById("usersTable");
+var roleSelect = document.getElementById("role");
+var isSuperUserCheckbox = document.getElementById("is_super_user");
 
 var currentUser = null;
 var currentUserLanguage = "it";
@@ -513,13 +553,15 @@ var UI_STRINGS = {
   logout: "Logout",
   kicker: "Area Admin",
   title: "Utenti",
-  subtitle: "Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori. Il ruolo accesso regola i permessi; l\u2019incarico operativo identifica la funzione professionale.",
+  subtitle: "Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori. Il ruolo accesso regola i permessi; l’incarico operativo identifica la funzione professionale.",
   panel_new_user: "Nuovo Utente",
   label_full_name: "Nome completo",
   label_email: "Email",
   label_phone: "Telefono",
   label_password: "Password temporanea",
   label_role: "Ruolo accesso",
+  label_super_user: "Super User",
+  hint_super_user: "Vede tutto il sito ma modifica solo le proprie cose: niente clienti/investitori altrui, niente creazione ads/social, niente AI, valutazioni o statistiche. Non ha effetto se il ruolo accesso è Admin.",
   label_professional_role: "Incarico operativo",
   label_language: "Lingua",
   role_user: "User",
@@ -536,6 +578,7 @@ var UI_STRINGS = {
   th_email: "Email",
   th_phone: "Telefono",
   th_access: "Accesso",
+  th_super_user: "Super User",
   th_role: "Incarico",
   th_language: "Lingua",
   th_status: "Stato",
@@ -569,7 +612,7 @@ var UI_STRINGS = {
   prompt_new_password: "Inserisci nuova password temporanea per "
 };
 
-var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 
 /* T contiene sempre le stringhe da usare per RENDERIZZARE (italiano finché la traduzione
    non è pronta, poi sostituito con la versione tradotta). Le funzioni che costruiscono
@@ -734,18 +777,18 @@ function languageOptionsHTML(selected){
 async function loadUsers(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,phone,role,professional_role,language,active,created_at")
+    .select("id,email,full_name,phone,role,is_super_user,professional_role,language,active,created_at")
     .order("created_at", { ascending:false });
 
   if(result.error){
-    usersTable.innerHTML = '<tr><td colspan="10" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
     return;
   }
 
   var data = result.data || [];
 
   if(data.length === 0){
-    usersTable.innerHTML = '<tr><td colspan="10" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
     return;
   }
 
@@ -788,6 +831,16 @@ async function loadUsers(){
             <option value="user" ${user.role === "user" ? "selected" : ""}>${escapeHTML(T.role_user)}</option>
             <option value="admin" ${user.role === "admin" ? "selected" : ""}>${escapeHTML(T.role_admin)}</option>
           </select>
+        </td>
+
+        <td style="text-align:center">
+          <input
+            type="checkbox"
+            class="small-checkbox"
+            ${user.is_super_user ? "checked" : ""}
+            ${user.role === "admin" || user.id === currentUser.id ? "disabled" : ""}
+            onchange="updateUserField('${user.id}', 'is_super_user', this.checked)"
+          >
         </td>
 
         <td>
@@ -838,6 +891,13 @@ async function updateUserField(userId, field, value){
 
   var updateData = {};
   updateData[field] = value;
+
+  // Un admin non può avere il flag Super User attivo: se il ruolo passa ad admin,
+  // spegniamo qui anche il flag, così la tabella resta coerente senza bisogno di un
+  // secondo salvataggio separato.
+  if(field === "role" && value === "admin"){
+    updateData.is_super_user = false;
+  }
 
   var result = await client
     .from("profiles")
@@ -940,6 +1000,17 @@ async function resetPassword(userId, email){
   setStatus(T.msg_reset_done, "success");
 }
 
+// Il flag Super User non ha senso per un Admin: se si sceglie "Admin" nel form di
+// creazione, la checkbox viene spenta e disabilitata finché non si torna a "User".
+roleSelect.addEventListener("change", function(){
+  if(roleSelect.value === "admin"){
+    isSuperUserCheckbox.checked = false;
+    isSuperUserCheckbox.disabled = true;
+  }else{
+    isSuperUserCheckbox.disabled = false;
+  }
+});
+
 userForm.addEventListener("submit", async function(e){
   e.preventDefault();
 
@@ -954,6 +1025,7 @@ userForm.addEventListener("submit", async function(e){
   var role = document.getElementById("role").value;
   var professional_role = document.getElementById("professional_role").value;
   var language = document.getElementById("language").value;
+  var is_super_user = isSuperUserCheckbox.checked;
 
   var result = await client.functions.invoke("create-user", {
     body:{
@@ -963,7 +1035,8 @@ userForm.addEventListener("submit", async function(e){
       password:password,
       role:role,
       professional_role:professional_role,
-      language:language
+      language:language,
+      is_super_user:is_super_user
     }
   });
 
@@ -991,6 +1064,7 @@ userForm.addEventListener("submit", async function(e){
   }
 
   userForm.reset();
+  isSuperUserCheckbox.disabled = false;
   createBtn.disabled = false;
   createBtn.textContent = T.btn_create;
 
