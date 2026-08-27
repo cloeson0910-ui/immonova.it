@@ -258,7 +258,7 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
       <button class="btn secondary" id="refreshDossierBtn" type="button" data-i18n="btn_refresh_territorial">Aggiorna dati territoriali</button>
       <button class="btn secondary" id="editRealEstateValueBtn" type="button" data-i18n="btn_edit_real_estate_value">Modifica valori di mercato</button>
       <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
-      <button class="btn secondary" id="generateDossierLinkBtn" type="button">Genera link dossier</button>
+      <button class="btn secondary" id="generateDossierLinkBtn" type="button" title="Il link viene generato da solo alla prima apertura del dossier. Usa questo pulsante solo per rigenerarlo (es. dopo aver cambiato la copertina).">Rigenera link dossier</button>
       <a class="btn secondary" id="editLink" href="#" data-i18n="btn_back_to_proposal">Torna alla proposta</a>
     </div>
   </div>
@@ -2922,6 +2922,17 @@ async function init(){
     }else{
       setStatus("Dossier generato: "+srcNote+"; "+photoNote+". Nessun rating o testo inventato: solo dati reali e calcoli espliciti.","success");
     }
+    /* Link+immagine condivisibile: se questa opportunità ha già un link generato in passato
+       (salvato in opportunities.dossier_share_url) lo mostriamo subito, senza rigenerare nulla.
+       Altrimenti lo generiamo da soli in automatico qui, la primissima volta che il dossier
+       viene aperto -- non serve più cliccare un pulsante apposta ogni volta. Non blocca il resto
+       della pagina (non è awaited): il dossier è già visibile, il link compare appena pronto. */
+    if(opportunity && opportunity.dossier_share_url){
+      currentDossierPdfUrl = opportunity.dossier_share_url;
+      renderDossierLinkRow();
+    }else{
+      generateDossierLink();
+    }
   }catch(e){
     console.error(e);
     book.innerHTML='<div class="empty">Errore: '+escapeHTML(e.message||e)+'</div>';
@@ -3102,8 +3113,18 @@ function renderDossierLinkRow(){
     "<span class=\"link-label\">Link diretto al dossier:</span>"+
     "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\">"+
     "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">Copia link</button>"+
+    "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
     "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>";
   generateShareImage(url, getCoverImage());
+}
+/* Apre WhatsApp (app se su telefono, WhatsApp Web se su desktop) con il messaggio già scritto
+   -- titolo del dossier + link con anteprima. Senza numero: wa.me con solo "text" apre la
+   schermata di scelta del contatto a cui mandarlo, dato che qui non abbiamo un cliente
+   specifico collegato (a differenza di dossier-send, questa pagina non ha un investorRequest). */
+function sendDossierWhatsApp(){
+  if(!currentDossierPdfUrl) return;
+  var message = getTitle()+" — Dossier IMMONOVA\n"+currentDossierPdfUrl;
+  window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
 }
 async function copyDossierLink(){
   var input = document.getElementById("dossierLinkInput");
@@ -3226,12 +3247,23 @@ async function generateDossierLink(){
        (edge function dossier-share-page) con i tag Open Graph: solo così WhatsApp/email
        mostrano un'anteprima con copertina e titolo quando il link viene incollato. Un link
        diretto a un file PDF non può mai averla. La pagina reindirizza da sola al PDF vero. */
+    /* v2: link corto -- porta con sé solo l'id dell'opportunità (?opp=), la pagina
+       dossier-share-page cerca da sola titolo/copertina/PDF sul database. La versione
+       precedente incollava tre URL codificati nel link stesso, diventava lunghissima ed
+       era probabile causa per cui WhatsApp non riusciva a generarne l'anteprima. */
     var shareUrl = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/dossier-share-page"
-      +"?pdf="+encodeURIComponent(pub.data.publicUrl)
-      +"&cover="+encodeURIComponent(getCoverImage()||"")
-      +"&title="+encodeURIComponent(getTitle());
+      +"?opp="+encodeURIComponent(opportunityId||"");
     currentDossierPdfUrl = shareUrl;
     renderDossierLinkRow();
+    /* Salviamo sia il PDF grezzo (letto dalla pagina share) sia il link corto sull'opportunità
+       stessa: alla prossima apertura di questa pagina li trova già pronti (vedi init()) e non
+       li rigenera più da solo -- genera una volta sola, non una PDF nuova a ogni apertura. Se
+       questo salvataggio fallisce non è bloccante: il link resta comunque visibile e
+       funzionante per questa sessione, verrà solo rigenerato alla prossima apertura invece di
+       essere riletto. */
+    if(opportunity){ opportunity.dossier_share_url = shareUrl; opportunity.dossier_pdf_url = pub.data.publicUrl; }
+    var shareSave = await client.from("opportunities").update({dossier_share_url:shareUrl, dossier_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
+    if(shareSave.error) console.warn("Salvataggio link dossier su opportunities fallito:",shareSave.error);
     setStatus("Link al dossier generato.","success");
   }catch(e){
     console.error(e);
