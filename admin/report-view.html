@@ -2927,12 +2927,14 @@ async function init(){
        Altrimenti lo generiamo da soli in automatico qui, la primissima volta che il dossier
        viene aperto -- non serve più cliccare un pulsante apposta ogni volta. Non blocca il resto
        della pagina (non è awaited): il dossier è già visibile, il link compare appena pronto. */
-    /* TEMPORANEO: la pagina dossier-share-page (link con anteprima) è bloccata da un bug
-       del gateway Supabase (Content-Type ignorato -- ticket aperto). Finché non è risolto,
-       usiamo direttamente il link al PDF grezzo (dossier_pdf_url), che funziona sempre e
-       apre/scarica il dossier subito, anche senza anteprima nella chat. Quando il bug è
-       risolto basta ripristinare "opportunity.dossier_share_url" qui sotto. */
-    if(opportunity && opportunity.dossier_pdf_url){
+    /* dossier_share_url ora è una paginetta HTML statica su Storage (non più la Edge Function
+       col bug del Content-Type) -- se c'è già, usiamo quella (ha l'anteprima). Altrimenti, se
+       c'è solo il PDF grezzo salvato da un tentativo precedente, usiamo quello come fallback
+       senza anteprima. Se non c'è niente, generiamo tutto da zero. */
+    if(opportunity && opportunity.dossier_share_url){
+      currentDossierPdfUrl = opportunity.dossier_share_url;
+      renderDossierLinkRow();
+    }else if(opportunity && opportunity.dossier_pdf_url){
       currentDossierPdfUrl = opportunity.dossier_pdf_url;
       renderDossierLinkRow();
     }else{
@@ -3248,23 +3250,64 @@ async function generateDossierLink(){
     var upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
     if(upload.error) throw upload.error;
     var pub = client.storage.from("dossier-pdfs").getPublicUrl(path);
-    /* Il link che copiamo/mettiamo nel QR NON è il PDF diretto ma una pagina intermedia
-       (edge function dossier-share-page) con i tag Open Graph: solo così WhatsApp/email
-       mostrano un'anteprima con copertina e titolo quando il link viene incollato. Un link
-       diretto a un file PDF non può mai averla. La pagina reindirizza da sola al PDF vero. */
-    /* v2: link corto -- porta con sé solo l'id dell'opportunità (?opp=), la pagina
-       dossier-share-page cerca da sola titolo/copertina/PDF sul database. La versione
-       precedente incollava tre URL codificati nel link stesso, diventava lunghissima ed
-       era probabile causa per cui WhatsApp non riusciva a generarne l'anteprima. */
-    var shareUrl = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/dossier-share-page"
-      +"?opp="+encodeURIComponent(opportunityId||"");
-    /* TEMPORANEO: la pagina share (shareUrl) è bloccata da un bug del gateway Supabase
-       (Content-Type ignorato -- ticket aperto). Usiamo il PDF diretto come link attivo,
-       che funziona sempre. shareUrl resta comunque salvato su opportunities qui sotto,
-       pronto per quando il bug sarà risolto. */
-    currentDossierPdfUrl = pub.data.publicUrl;
+    /* Il link che copiamo/mettiamo nel QR NON è il PDF diretto ma una paginetta HTML con i
+       tag Open Graph: solo così WhatsApp/email mostrano un'anteprima con copertina e titolo
+       quando il link viene incollato. Un link diretto a un file PDF non può mai averla.
+       v3: invece di generare questa pagina con una Edge Function (il gateway Supabase davanti
+       alle Edge Functions ha un bug che ignora il Content-Type impostato dal codice -- pagina
+       mostrata come testo grezzo, non renderizzata, ticket aperto con Supabase), la generiamo
+       qui nel browser come file HTML statico e la carichiamo su Storage, nello stesso identico
+       modo in cui carichiamo già il PDF poco sopra. Storage serve il Content-Type corretto in
+       base a quello dichiarato nell'upload (lo vediamo funzionare per i PDF ogni volta), quindi
+       bypassa completamente il pezzo di infrastruttura rotto. */
+    var shareTitle = getTitle()||"Dossier IMMONOVA";
+    var shareCover = (opportunity && opportunity.cover_image)||"";
+    var safeShareTitle = escapeHTML(shareTitle);
+    var safeSharePdf = escapeHTML(pub.data.publicUrl);
+    var safeShareCover = escapeHTML(shareCover);
+    var sharePageHtml = "<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n<meta charset=\"UTF-8\">\n"
+      +"<title>"+safeShareTitle+" — Dossier IMMONOVA</title>\n"
+      +"<meta name=\"description\" content=\"Scarica il dossier immobiliare riservato di "+safeShareTitle+".\">\n"
+      +"<meta property=\"og:type\" content=\"website\">\n"
+      +"<meta property=\"og:title\" content=\""+safeShareTitle+" — Dossier IMMONOVA\">\n"
+      +"<meta property=\"og:description\" content=\"Scarica il dossier immobiliare riservato.\">\n"
+      +(shareCover?"<meta property=\"og:image\" content=\""+safeShareCover+"\">\n":"")
+      +"<meta name=\"twitter:card\" content=\"summary_large_image\">\n"
+      +"<meta name=\"twitter:title\" content=\""+safeShareTitle+" — Dossier IMMONOVA\">\n"
+      +(shareCover?"<meta name=\"twitter:image\" content=\""+safeShareCover+"\">\n":"")
+      +"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+      +"<meta http-equiv=\"refresh\" content=\"1;url="+safeSharePdf+"\">\n"
+      +"<style>\n"
+      +"  body{margin:0;font-family:'Avenir Next','Helvetica Neue',Arial,sans-serif;background:#f7f1e6;color:#4a3c1d;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;box-sizing:border-box}\n"
+      +"  .card{max-width:480px;width:100%;background:#fffaf0;border:1px solid rgba(166,127,52,.25);border-radius:4px;overflow:hidden;box-shadow:0 24px 60px rgba(127,100,48,.12)}\n"
+      +"  .card img{width:100%;display:block;object-fit:cover;max-height:320px}\n"
+      +"  .card-body{padding:28px}\n"
+      +"  .kicker{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;font-weight:600;margin:0 0 8px}\n"
+      +"  h1{font-size:20px;margin:0 0 18px;line-height:1.3}\n"
+      +"  a.btn{display:inline-block;padding:14px 22px;background:#a67f34;color:#fffaf0;text-decoration:none;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;border-radius:2px}\n"
+      +"  a.btn:hover{background:#8f6d2c}\n"
+      +"  .fallback{margin-top:14px;font-size:12px;color:#8f7643}\n"
+      +"</style>\n</head>\n<body>\n  <div class=\"card\">\n"
+      +(shareCover?"    <img src=\""+safeShareCover+"\" alt=\"\">\n":"")
+      +"    <div class=\"card-body\">\n      <p class=\"kicker\">IMMONOVA · Investment Book</p>\n"
+      +"      <h1>"+safeShareTitle+"</h1>\n"
+      +"      <a class=\"btn\" id=\"dl\" href=\""+safeSharePdf+"\">Scarica il dossier</a>\n"
+      +"      <p class=\"fallback\">Il download parte automaticamente. Se non succede, usa il pulsante qui sopra.</p>\n"
+      +"    </div>\n  </div>\n</body>\n</html>";
+    var sharePagePath = "opportunity-"+(opportunityId||"na")+"/index.html";
+    var shareUrl = null;
+    var sharePageUpload = await client.storage.from("dossier-pages").upload(sharePagePath, new Blob([sharePageHtml],{type:"text/html"}), {contentType:"text/html; charset=utf-8", upsert:true});
+    if(sharePageUpload.error){
+      /* Se il bucket "dossier-pages" non esiste ancora su Supabase, l'upload fallisce: non è
+         bloccante, usiamo il PDF diretto come link (niente anteprima ma funziona comunque). */
+      console.warn("Upload pagina share fallito (bucket dossier-pages esiste?):",sharePageUpload.error);
+    }else{
+      var pubSharePage = client.storage.from("dossier-pages").getPublicUrl(sharePagePath);
+      shareUrl = pubSharePage.data.publicUrl;
+    }
+    currentDossierPdfUrl = shareUrl || pub.data.publicUrl;
     renderDossierLinkRow();
-    /* Salviamo sia il PDF grezzo (letto dalla pagina share) sia il link corto sull'opportunità
+    /* Salviamo sia il PDF grezzo che il link alla pagina share (se generata) sull'opportunità
        stessa: alla prossima apertura di questa pagina li trova già pronti (vedi init()) e non
        li rigenera più da solo -- genera una volta sola, non una PDF nuova a ogni apertura. Se
        questo salvataggio fallisce non è bloccante: il link resta comunque visibile e
@@ -3273,7 +3316,7 @@ async function generateDossierLink(){
     if(opportunity){ opportunity.dossier_share_url = shareUrl; opportunity.dossier_pdf_url = pub.data.publicUrl; }
     var shareSave = await client.from("opportunities").update({dossier_share_url:shareUrl, dossier_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
     if(shareSave.error) console.warn("Salvataggio link dossier su opportunities fallito:",shareSave.error);
-    setStatus("Link al dossier generato.","success");
+    setStatus(shareUrl?"Link al dossier generato, con anteprima.":"Link al dossier generato (senza anteprima: crea il bucket pubblico \"dossier-pages\" su Supabase Storage per attivarla).","success");
   }catch(e){
     console.error(e);
     setStatus("Errore nella generazione del link: "+(e.message||e),"error");
