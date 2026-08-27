@@ -282,6 +282,7 @@ var UI_STRINGS = {
   reason_habitability:"Agibilità",
   reason_location:"Zona corrispondente",
   btn_close:"Chiudi",
+  mandante_reserved_label:"Riservato",
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
@@ -346,6 +347,23 @@ async function checkAuth(){
   if(!session){ window.location.href = "login.html"; return false; }
   currentUser = session.user;
   return true;
+}
+
+/* ---- Super user (checkbox is_super_user su profiles): vede tutti i mandati di ricerca, ma
+   il nome del mandante viene mostrato solo per i mandati che ha inserito lui stesso
+   (immonova_search_mandates.created_by = currentUser.id). Per tutti gli altri il nome viene
+   mascherato. Non tocca nient'altro (zona, budget, caratteristiche, matching, azioni, ecc.
+   restano visibili e gestibili come prima). ---- */
+let isSuperUser = false;
+
+async function loadSuperUserFlag(){
+  if(!currentUser) return;
+  const profileRes = await client.from("profiles").select("id,is_super_user").eq("id", currentUser.id).single();
+  if(profileRes.error || !profileRes.data){
+    console.warn("Profilo non caricato per il controllo super user:", profileRes.error && profileRes.error.message);
+    return;
+  }
+  isSuperUser = !!profileRes.data.is_super_user;
 }
 
 function escapeHTML(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
@@ -429,8 +447,10 @@ function renderTable(data){
   }
 
   table.innerHTML = data.map(function(m){
+    var isOwnEntry = !isSuperUser || (currentUser && m.created_by === currentUser.id);
+    var displayName = isOwnEntry ? (m.client_name || "") : (T.mandante_reserved_label || "Riservato");
     return '<tr>'
-      + '<td><strong>' + escapeHTML(m.client_name || "") + '</strong>' + (m.client_phone ? '<br>' + escapeHTML(m.client_phone) : '') + (m.client_email ? '<br>' + escapeHTML(m.client_email) : '') + '</td>'
+      + '<td><strong>' + escapeHTML(displayName) + '</strong>' + (isOwnEntry && m.client_phone ? '<br>' + escapeHTML(m.client_phone) : '') + (isOwnEntry && m.client_email ? '<br>' + escapeHTML(m.client_email) : '') + '</td>'
       + '<td>' + (m.category ? '<span class="badge">' + escapeHTML(m.category) + '</span>' : '') + '</td>'
       + '<td>' + escapeHTML(m.location_areas || "") + '</td>'
       + '<td>' + escapeHTML(formatBudget(m)) + '</td>'
@@ -595,7 +615,9 @@ window.showMatches = async function(mandateId){
   var mandate = allMandates.find(function(m){ return Number(m.id) === Number(mandateId); });
   if(!mandate) return;
 
-  document.getElementById("matchesTitle").textContent = T.matches_title_prefix + mandate.client_name;
+  var isOwnMandate = !isSuperUser || (currentUser && mandate.created_by === currentUser.id);
+  var mandateDisplayName = isOwnMandate ? mandate.client_name : (T.mandante_reserved_label || "Riservato");
+  document.getElementById("matchesTitle").textContent = T.matches_title_prefix + mandateDisplayName;
   document.getElementById("matchesList").innerHTML = '<div class="empty">' + escapeHTML(T.loading) + '</div>';
   document.getElementById("matchesOverlay").classList.add("active");
 
@@ -654,6 +676,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 (async function init(){
   if(await checkAuth()){
     await loadUserLanguage();
+    await loadSuperUserFlag();
     await loadMandates();
   }
 })();
