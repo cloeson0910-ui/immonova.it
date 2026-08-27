@@ -3222,7 +3222,15 @@ async function generateDossierLink(){
     var upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
     if(upload.error) throw upload.error;
     var pub = client.storage.from("dossier-pdfs").getPublicUrl(path);
-    currentDossierPdfUrl = pub.data.publicUrl;
+    /* Il link che copiamo/mettiamo nel QR NON è il PDF diretto ma una pagina intermedia
+       (edge function dossier-share-page) con i tag Open Graph: solo così WhatsApp/email
+       mostrano un'anteprima con copertina e titolo quando il link viene incollato. Un link
+       diretto a un file PDF non può mai averla. La pagina reindirizza da sola al PDF vero. */
+    var shareUrl = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/dossier-share-page"
+      +"?pdf="+encodeURIComponent(pub.data.publicUrl)
+      +"&cover="+encodeURIComponent(getCoverImage()||"")
+      +"&title="+encodeURIComponent(getTitle());
+    currentDossierPdfUrl = shareUrl;
     renderDossierLinkRow();
     setStatus("Link al dossier generato.","success");
   }catch(e){
