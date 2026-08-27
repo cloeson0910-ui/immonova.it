@@ -559,70 +559,110 @@ async function detectPlacesInPolygon(latlngPoints){
    Brindisi e tagliare fuori solo il capoluogo stesso, e in quel caso Brindisi va comunque
    riconosciuta. Si controlla invece quanti comuni della provincia ricadono nel poligono
    rispetto al totale dei comuni della provincia (rapporto di copertura). ---- */
-async function runOverpassQuery(query){
-  var res = await fetch("https://overpass-api.de/api/interpreter", {
-    method:"POST",
-    headers:{ "Content-Type":"application/x-www-form-urlencoded" },
-    body:"data="+encodeURIComponent(query)
-  });
-  if(!res.ok) throw new Error("HTTP "+res.status);
-  return await res.json();
+/* ---- Ogni chiamata a Overpass e' incapsulata con un timeout lato browser (l'endpoint
+   pubblico a volte non risponde mai) e non fa mai fallire il resto: se una singola query va
+   storta, si degrada verso il comportamento piu' semplice (elenco comuni), MAI verso un campo
+   vuoto -- prima di questa versione un solo errore in una delle tante chiamate faceva saltare
+   tutto il resto senza aggiungere nulla. ---- */
+async function runOverpassQuery(query, timeoutMs){
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, timeoutMs || 20000);
+  try{
+    var res = await fetch("https://overpass-api.de/api/interpreter", {
+      method:"POST",
+      headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+      body:"data="+encodeURIComponent(query),
+      signal: controller.signal
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    return await res.json();
+  }finally{
+    clearTimeout(timer);
+  }
 }
 
-function overpassCount(json){
-  var el = (json.elements || [])[0];
+function overpassCountAt(json, index){
+  var el = (json.elements || [])[index];
   return el && el.tags ? Number(el.tags.nodes || el.tags.total || 0) : 0;
 }
 
 async function findCandidateProvinces(polyStr){
-  var query = '[out:json][timeout:25];(relation["admin_level"="6"]["boundary"="administrative"](poly:"'+polyStr+'"););out ids tags;';
+  var query = '[out:json][timeout:20];(relation["admin_level"="6"]["boundary"="administrative"](poly:"'+polyStr+'"););out ids tags;';
   var json = await runOverpassQuery(query);
   return (json.elements || [])
     .map(function(el){ return { id: el.id, name: el.tags && (el.tags["name:it"] || el.tags.name) }; })
     .filter(function(p){ return p.name; });
 }
 
-/* ---- L'id di un'area Overpass ricavata da una relation e' sempre 3600000000 + id relation. ---- */
-async function listPlaceNamesInProvince(provinceId){
-  var areaId = 3600000000 + provinceId;
-  var json = await runOverpassQuery('[out:json][timeout:25];area(id:'+areaId+')->.a;(node["place"~"^(city|town|village|hamlet)$"](area.a););out body;');
+/* ---- Una SOLA richiesta a Overpass per TUTTE le province candidate insieme (conta comuni
+   totali e comuni dentro il poligono per ciascuna), invece di due richieste per provincia:
+   molto piu' veloce e molto meno soggetto ai limiti dell'endpoint pubblico. L'id di un'area
+   Overpass ricavata da una relation e' sempre 3600000000 + id relation. ---- */
+async function detectCoveredProvinces(candidates, polyStr){
+  if(!candidates.length) return [];
+
+  var stmts = "";
+  candidates.forEach(function(c, i){
+    var areaId = 3600000000 + c.id;
+    stmts += 'area(id:'+areaId+')->.a'+i+';';
+    stmts += 'node["place"~"^(city|town|village|hamlet)$"](area.a'+i+')->.all'+i+';';
+    stmts += 'node.all'+i+'(poly:"'+polyStr+'")->.matched'+i+';';
+  });
+  var outs = "";
+  candidates.forEach(function(c, i){
+    outs += '(.all'+i+';);out count;(.matched'+i+';);out count;';
+  });
+
+  var json = await runOverpassQuery('[out:json][timeout:20];' + stmts + outs, 25000);
+
+  var covered = [];
+  candidates.forEach(function(c, i){
+    var total = overpassCountAt(json, i*2);
+    var matched = overpassCountAt(json, i*2 + 1);
+    if(total > 0 && (matched >= 5 || (matched / total) >= 0.35)){
+      covered.push(c);
+    }
+  });
+  return covered;
+}
+
+/* ---- Una SOLA richiesta per i nomi di TUTTI i comuni delle province coperte insieme
+   (unione), da escludere dalla lista puntuale per non ripetere le stesse zone due volte. ---- */
+async function listPlaceNamesInProvinces(covered){
+  if(!covered.length) return [];
+
+  var stmts = "";
+  covered.forEach(function(c, i){
+    var areaId = 3600000000 + c.id;
+    stmts += 'area(id:'+areaId+')->.a'+i+';';
+    stmts += 'node["place"~"^(city|town|village|hamlet)$"](area.a'+i+')->.n'+i+';';
+  });
+  var union = covered.map(function(c, i){ return '.n'+i+';'; }).join("");
+
+  var json = await runOverpassQuery('[out:json][timeout:20];' + stmts + '(' + union + ');out body;', 25000);
   return (json.elements || [])
     .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
     .filter(Boolean);
 }
 
-/* ---- Provincia "coperta" se almeno il 35% dei suoi comuni ricade nel poligono, o se ne
-   ricadono comunque almeno 5 (province con pochi comuni molto grandi). ---- */
-async function detectCoveredProvinces(latlngPoints){
-  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
-  var candidates = await findCandidateProvinces(polyStr);
-  var covered = [];
-  for(var i=0; i<candidates.length; i++){
-    var c = candidates[i];
-    try{
-      var areaId = 3600000000 + c.id;
-      var totalJson = await runOverpassQuery('[out:json][timeout:25];area(id:'+areaId+')->.a;(node["place"~"^(city|town|village|hamlet)$"](area.a););out count;');
-      var total = overpassCount(totalJson);
-      if(total <= 0) continue;
-      var matchedJson = await runOverpassQuery('[out:json][timeout:25];area(id:'+areaId+')->.a;(node["place"~"^(city|town|village|hamlet)$"](area.a)(poly:"'+polyStr+'"););out count;');
-      var matched = overpassCount(matchedJson);
-      if(matched >= 5 || (matched / total) >= 0.35){
-        covered.push(c);
-      }
-    }catch(e){
-      console.warn("Verifica copertura provincia "+c.name+" non riuscita (non bloccante):", e);
-    }
-  }
-  return covered;
-}
-
 /* ---- Prova prima con le province (zona molto grande): per quelle abbastanza coperte usa
    "Provincia di X" ed esclude i loro comuni dalla lista puntuale, per non ripetere le stesse
    zone due volte. I comuni restanti (fuori da qualsiasi provincia coperta) vengono comunque
-   elencati uno per uno, con un tetto massimo per non riempire il campo all'infinito. ---- */
+   elencati uno per uno, con un tetto massimo per non riempire il campo all'infinito.
+   Ogni fase e' isolata: se il rilevamento province fallisce (rete lenta, endpoint pubblico
+   sovraccarico), si torna comunque al semplice elenco comuni invece di lasciare tutto vuoto. ---- */
 async function detectAreaNamesInPolygon(latlngPoints){
   var MAX_TOWN_NAMES = 20;
-  var covered = await detectCoveredProvinces(latlngPoints);
+  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
+
+  var covered = [];
+  try{
+    var candidates = await findCandidateProvinces(polyStr);
+    covered = await detectCoveredProvinces(candidates, polyStr);
+  }catch(e){
+    console.warn("Rilevamento province non riuscito, si prova comunque con i comuni (non bloccante):", e);
+  }
+
   var towns = await detectPlacesInPolygon(latlngPoints);
 
   if(!covered.length){
@@ -630,13 +670,11 @@ async function detectAreaNamesInPolygon(latlngPoints){
   }
 
   var excludeLower = new Set();
-  for(var i=0; i<covered.length; i++){
-    try{
-      var names = await listPlaceNamesInProvince(covered[i].id);
-      names.forEach(function(n){ excludeLower.add(n.toLowerCase()); });
-    }catch(e){
-      console.warn("Lettura comuni provincia "+covered[i].name+" non riuscita (non bloccante):", e);
-    }
+  try{
+    var provinceTownNames = await listPlaceNamesInProvinces(covered);
+    provinceTownNames.forEach(function(n){ excludeLower.add(n.toLowerCase()); });
+  }catch(e){
+    console.warn("Lettura comuni delle province coperte non riuscita (non bloccante):", e);
   }
 
   var remainingTowns = towns.filter(function(t){ return !excludeLower.has(t.toLowerCase()); }).slice(0, MAX_TOWN_NAMES);
