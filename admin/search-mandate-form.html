@@ -6,7 +6,6 @@
 <title>Mandato di Ricerca | IMMONOVA Admin</title>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.min.css">
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -142,6 +141,18 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
   font-family:inherit;
 }
 .map-clear-btn:hover{background:#9c2f2f;color:#fff}
+.map-secondary-btn{
+  padding:9px 14px;
+  border:1px solid rgba(166,127,52,.28);
+  background:rgba(255,255,255,.20);
+  color:#a67f34;
+  cursor:pointer;
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.map-secondary-btn:hover{background:#a67f34;color:#fff}
 .map-status{font-size:11.5px;color:#8f7643}
 .footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
 .save-panel{min-width:340px;flex:1;max-width:560px}
@@ -237,6 +248,8 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
         <div class="map-hint" data-i18n="hint_interest_area_map">Definisce l'area in modo più preciso di un nome di zona a testo libero: usa l'icona del poligono qui sotto a sinistra sulla mappa per tracciare il perimetro, clicca i punti e chiudi il poligono sull'ultimo punto. Serve a far emergere le opportunità che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.</div>
         <div id="interestAreaMap"></div>
         <div class="map-actions">
+          <button type="button" class="map-secondary-btn" id="undoAreaPointBtn" data-i18n="btn_undo_area_point">Annulla ultimo punto</button>
+          <button type="button" class="map-secondary-btn" id="finishAreaBtn" data-i18n="btn_finish_area">Chiudi poligono</button>
           <button type="button" class="map-clear-btn" id="clearAreaMapBtn" data-i18n="btn_clear_area_map">Cancella zona disegnata</button>
           <span class="map-status" id="areaMapStatus"></span>
         </div>
@@ -329,7 +342,6 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.min.js"></script>
 <script src="../js/config.js"></script>
 
 <script>
@@ -370,10 +382,13 @@ var UI_STRINGS = {
   cat_development:"Nuove Edificazioni", cat_commercial:"Commerciale", cat_land:"Terreni", cat_off_market:"Off Market",
   label_location_areas:"Zona / Aree di interesse", ph_areas:"Es. Salento, Valle d\u2019Itria, Costa Adriatica",
   label_interest_area_map:"Disegna la zona di interesse sulla mappa (opzionale)",
-  hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: usa l'icona del poligono qui sotto a sinistra sulla mappa per tracciare il perimetro, clicca i punti e chiudi il poligono sull'ultimo punto. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
+  hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi \"Chiudi poligono\" per completarlo. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
   btn_clear_area_map:"Cancella zona disegnata",
+  btn_undo_area_point:"Annulla ultimo punto",
+  btn_finish_area:"Chiudi poligono",
   map_status_drawn:"Zona salvata: verr\u00e0 usata per il matching geografico.",
-  map_status_none:"Nessuna zona disegnata: verr\u00e0 usato solo il testo qui sopra.",
+  map_status_drawing:"{n} punti aggiunti \u2014 continua a cliccare o premi \"Chiudi poligono\" (minimo 3 punti).",
+  map_status_none:"Nessuna zona disegnata: clicca sulla mappa per iniziare (verr\u00e0 usato solo il testo qui sopra finch\u00e9 non disegni nulla).",
   label_budget_min:"Budget minimo €", label_budget_max:"Budget massimo €",
   label_sqm_min:"Metratura minima mq", label_sqm_max:"Metratura massima mq",
   label_bedrooms_min:"Camere (almeno)", label_bathrooms_min:"Bagni (almeno)",
@@ -458,18 +473,54 @@ async function loadUserLanguage(){
 }
 
 /* ---- Zona di interesse disegnata sulla mappa: sostituisce/affianca il campo "Zona / Aree di
-   interesse" a testo libero con un perimetro reale (poligono), salvato come GeoJSON standard
-   nella colonna immonova_search_mandates.interest_area_geojson. Leaflet + Leaflet.draw, mappe
-   OpenStreetMap: nessuna chiave API, nessun account esterno. Un solo poligono per mandato:
-   disegnarne uno nuovo sostituisce il precedente. ---- */
+   interesse" a testo libero con un perimetro reale (poligono libero, click per aggiungere ogni
+   vertice), salvato come GeoJSON standard nella colonna
+   immonova_search_mandates.interest_area_geojson. Solo Leaflet core (mappe OpenStreetMap,
+   nessuna chiave API, nessun account esterno) -- niente plugin di disegno: il click-to-vertex
+   e' gestito a mano qui sotto, cosi' il poligono puo' avere qualunque forma libera, non solo
+   forme predefinite. Un solo poligono per mandato: ridisegnare sostituisce il precedente. ---- */
 var interestAreaMap = null;
-var drawnAreaItems = null;
+var areaPoints = []; // [[lat,lng], ...] mentre si sta disegnando
+var areaPreviewLine = null;
+var areaFinalPolygon = null;
 var currentAreaGeoJSON = null;
+var areaDrawingLocked = false; // true quando c'e' gia' un poligono finito (nuovo o caricato da un mandato esistente)
 
 function updateAreaMapStatus(){
   var el = document.getElementById("areaMapStatus");
   if(!el) return;
-  el.textContent = currentAreaGeoJSON ? T.map_status_drawn : T.map_status_none;
+  if(areaDrawingLocked){
+    el.textContent = T.map_status_drawn;
+  }else if(areaPoints.length){
+    el.textContent = T.map_status_drawing.replace("{n}", areaPoints.length);
+  }else{
+    el.textContent = T.map_status_none;
+  }
+}
+
+function redrawAreaPreview(){
+  if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
+  if(areaPoints.length > 1){
+    areaPreviewLine = L.polyline(areaPoints, { color:"#a67f34", weight:3, dashArray:"6,6" }).addTo(interestAreaMap);
+  }
+}
+
+function finishAreaPolygon(){
+  if(areaPoints.length < 3) return;
+  if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
+  areaFinalPolygon = L.polygon(areaPoints, { color:"#a67f34", weight:2, fillOpacity:.18 }).addTo(interestAreaMap);
+  currentAreaGeoJSON = areaFinalPolygon.toGeoJSON().geometry;
+  areaDrawingLocked = true;
+  updateAreaMapStatus();
+}
+
+function resetAreaDrawing(){
+  areaPoints = [];
+  if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
+  if(areaFinalPolygon){ interestAreaMap.removeLayer(areaFinalPolygon); areaFinalPolygon = null; }
+  currentAreaGeoJSON = null;
+  areaDrawingLocked = false;
+  updateAreaMapStatus();
 }
 
 function initInterestAreaMap(){
@@ -482,39 +533,21 @@ function initInterestAreaMap(){
     maxZoom: 19
   }).addTo(interestAreaMap);
 
-  drawnAreaItems = new L.FeatureGroup();
-  interestAreaMap.addLayer(drawnAreaItems);
-
-  var drawControl = new L.Control.Draw({
-    draw: {
-      polygon: { allowIntersection:false, showArea:true },
-      polyline:false, rectangle:false, circle:false, circlemarker:false, marker:false
-    },
-    edit: { featureGroup: drawnAreaItems }
-  });
-  interestAreaMap.addControl(drawControl);
-
-  interestAreaMap.on(L.Draw.Event.CREATED, function(e){
-    drawnAreaItems.clearLayers(); // un solo poligono per mandato: il nuovo sostituisce il vecchio
-    drawnAreaItems.addLayer(e.layer);
-    currentAreaGeoJSON = e.layer.toGeoJSON().geometry;
-    updateAreaMapStatus();
-  });
-  interestAreaMap.on(L.Draw.Event.EDITED, function(){
-    var layers = drawnAreaItems.getLayers();
-    currentAreaGeoJSON = layers.length ? layers[0].toGeoJSON().geometry : null;
-    updateAreaMapStatus();
-  });
-  interestAreaMap.on(L.Draw.Event.DELETED, function(){
-    currentAreaGeoJSON = drawnAreaItems.getLayers().length ? currentAreaGeoJSON : null;
+  interestAreaMap.on("click", function(e){
+    if(areaDrawingLocked) return; // un poligono gia' chiuso: serve "Cancella zona" prima di ridisegnare
+    areaPoints.push([e.latlng.lat, e.latlng.lng]);
+    redrawAreaPreview();
     updateAreaMapStatus();
   });
 
-  document.getElementById("clearAreaMapBtn").addEventListener("click", function(){
-    drawnAreaItems.clearLayers();
-    currentAreaGeoJSON = null;
+  document.getElementById("finishAreaBtn").addEventListener("click", finishAreaPolygon);
+  document.getElementById("undoAreaPointBtn").addEventListener("click", function(){
+    if(areaDrawingLocked || !areaPoints.length) return;
+    areaPoints.pop();
+    redrawAreaPreview();
     updateAreaMapStatus();
   });
+  document.getElementById("clearAreaMapBtn").addEventListener("click", resetAreaDrawing);
 
   updateAreaMapStatus();
 
@@ -525,13 +558,15 @@ function initInterestAreaMap(){
 }
 
 function loadAreaGeoJSONOntoMap(geojson){
-  if(!interestAreaMap || !drawnAreaItems || !geojson) return;
+  if(!interestAreaMap || !geojson) return;
   try{
     var layer = L.geoJSON(geojson).getLayers()[0];
     if(!layer) return;
-    drawnAreaItems.clearLayers();
-    drawnAreaItems.addLayer(layer);
+    if(areaFinalPolygon){ interestAreaMap.removeLayer(areaFinalPolygon); }
+    areaFinalPolygon = layer.addTo(interestAreaMap);
+    areaFinalPolygon.setStyle({ color:"#a67f34", weight:2, fillOpacity:.18 });
     currentAreaGeoJSON = geojson;
+    areaDrawingLocked = true;
     interestAreaMap.fitBounds(layer.getBounds(), { maxZoom:12 });
     updateAreaMapStatus();
   }catch(e){
