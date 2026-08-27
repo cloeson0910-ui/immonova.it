@@ -854,49 +854,96 @@ async function detectPlacesInPolygon(latlngPoints){
   return Array.from(new Set(names));
 }
 
-/* ---- Se il poligono e' cosi' grande da racchiudere l'intero territorio di una o piu'
-   province, non ha senso elencare ogni singolo comune (lista infinita e illeggibile nel
-   campo testo): meglio scrivere direttamente "Provincia di X". Si interroga Overpass per le
-   province (admin_level=6 in Italia) e si tiene solo quelle il cui centro cade dentro il
-   perimetro disegnato -- un'approssimazione ragionevole di "il poligono copre la provincia". ---- */
-function pointInPolygonLatLng(lat, lng, points){
-  var inside = false;
-  for(var i=0, j=points.length-1; i<points.length; j=i++){
-    var yi=points[i][0], xi=points[i][1], yj=points[j][0], xj=points[j][1];
-    var intersect = ((yi>lat) !== (yj>lat)) && (lng < (xj-xi)*(lat-yi)/(yj-yi)+xi);
-    if(intersect) inside = !inside;
-  }
-  return inside;
-}
-
-async function detectProvincesInPolygon(latlngPoints){
-  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
-  var query = '[out:json][timeout:25];(relation["admin_level"="6"]["boundary"="administrative"](poly:"'+polyStr+'"););out center;';
+/* ---- Se il poligono e' cosi' grande da coprire una BUONA PARTE del territorio di una o piu'
+   province, non ha senso elencare ogni singolo comune (lista infinita e illeggibile nel campo
+   testo): meglio scrivere direttamente "Provincia di X". Non basta controllare se il centro
+   (capoluogo) della provincia cade dentro il poligono -- un poligono puo' coprire quasi tutta
+   Brindisi e tagliare fuori solo il capoluogo stesso, e in quel caso Brindisi va comunque
+   riconosciuta. Si controlla invece quanti comuni della provincia ricadono nel poligono
+   rispetto al totale dei comuni della provincia (rapporto di copertura). ---- */
+async function runOverpassQuery(query){
   var res = await fetch("https://overpass-api.de/api/interpreter", {
     method:"POST",
     headers:{ "Content-Type":"application/x-www-form-urlencoded" },
     body:"data="+encodeURIComponent(query)
   });
   if(!res.ok) throw new Error("HTTP "+res.status);
-  var json = await res.json();
-  var names = (json.elements || [])
-    .filter(function(el){ return el.center && pointInPolygonLatLng(el.center.lat, el.center.lon, latlngPoints); })
-    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
-    .filter(Boolean);
-  return Array.from(new Set(names));
+  return await res.json();
 }
 
-/* ---- Prova prima con le province (zona molto grande): se ne trova almeno una, usa quelle
-   e si ferma li'. Altrimenti torna al rilevamento comune per comune di sempre, con un tetto
-   massimo di nomi per non riempire comunque il campo all'infinito su zone via di mezzo. ---- */
+function overpassCount(json){
+  var el = (json.elements || [])[0];
+  return el && el.tags ? Number(el.tags.nodes || el.tags.total || 0) : 0;
+}
+
+async function findCandidateProvinces(polyStr){
+  var query = '[out:json][timeout:25];(relation["admin_level"="6"]["boundary"="administrative"](poly:"'+polyStr+'"););out ids tags;';
+  var json = await runOverpassQuery(query);
+  return (json.elements || [])
+    .map(function(el){ return { id: el.id, name: el.tags && (el.tags["name:it"] || el.tags.name) }; })
+    .filter(function(p){ return p.name; });
+}
+
+/* ---- L'id di un'area Overpass ricavata da una relation e' sempre 3600000000 + id relation. ---- */
+async function listPlaceNamesInProvince(provinceId){
+  var areaId = 3600000000 + provinceId;
+  var json = await runOverpassQuery('[out:json][timeout:25];area(id:'+areaId+')->.a;(node["place"~"^(city|town|village|hamlet)$"](area.a););out body;');
+  return (json.elements || [])
+    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
+    .filter(Boolean);
+}
+
+/* ---- Provincia "coperta" se almeno il 35% dei suoi comuni ricade nel poligono, o se ne
+   ricadono comunque almeno 5 (province con pochi comuni molto grandi). ---- */
+async function detectCoveredProvinces(latlngPoints){
+  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
+  var candidates = await findCandidateProvinces(polyStr);
+  var covered = [];
+  for(var i=0; i<candidates.length; i++){
+    var c = candidates[i];
+    try{
+      var areaId = 3600000000 + c.id;
+      var totalJson = await runOverpassQuery('[out:json][timeout:25];area(id:'+areaId+')->.a;(node["place"~"^(city|town|village|hamlet)$"](area.a););out count;');
+      var total = overpassCount(totalJson);
+      if(total <= 0) continue;
+      var matchedJson = await runOverpassQuery('[out:json][timeout:25];area(id:'+areaId+')->.a;(node["place"~"^(city|town|village|hamlet)$"](area.a)(poly:"'+polyStr+'"););out count;');
+      var matched = overpassCount(matchedJson);
+      if(matched >= 5 || (matched / total) >= 0.35){
+        covered.push(c);
+      }
+    }catch(e){
+      console.warn("Verifica copertura provincia "+c.name+" non riuscita (non bloccante):", e);
+    }
+  }
+  return covered;
+}
+
+/* ---- Prova prima con le province (zona molto grande): per quelle abbastanza coperte usa
+   "Provincia di X" ed esclude i loro comuni dalla lista puntuale, per non ripetere le stesse
+   zone due volte. I comuni restanti (fuori da qualsiasi provincia coperta) vengono comunque
+   elencati uno per uno, con un tetto massimo per non riempire il campo all'infinito. ---- */
 async function detectAreaNamesInPolygon(latlngPoints){
   var MAX_TOWN_NAMES = 20;
-  var provinces = await detectProvincesInPolygon(latlngPoints);
-  if(provinces.length){
-    return provinces.map(function(p){ return "Provincia di " + p; });
-  }
+  var covered = await detectCoveredProvinces(latlngPoints);
   var towns = await detectPlacesInPolygon(latlngPoints);
-  return towns.slice(0, MAX_TOWN_NAMES);
+
+  if(!covered.length){
+    return towns.slice(0, MAX_TOWN_NAMES);
+  }
+
+  var excludeLower = new Set();
+  for(var i=0; i<covered.length; i++){
+    try{
+      var names = await listPlaceNamesInProvince(covered[i].id);
+      names.forEach(function(n){ excludeLower.add(n.toLowerCase()); });
+    }catch(e){
+      console.warn("Lettura comuni provincia "+covered[i].name+" non riuscita (non bloccante):", e);
+    }
+  }
+
+  var remainingTowns = towns.filter(function(t){ return !excludeLower.has(t.toLowerCase()); }).slice(0, MAX_TOWN_NAMES);
+  var provinceNames = covered.map(function(p){ return "Provincia di " + p.name; });
+  return provinceNames.concat(remainingTowns);
 }
 
 function mergeNamesIntoAreasField(names){
