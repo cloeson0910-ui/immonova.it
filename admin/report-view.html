@@ -2927,8 +2927,13 @@ async function init(){
        Altrimenti lo generiamo da soli in automatico qui, la primissima volta che il dossier
        viene aperto -- non serve più cliccare un pulsante apposta ogni volta. Non blocca il resto
        della pagina (non è awaited): il dossier è già visibile, il link compare appena pronto. */
-    if(opportunity && opportunity.dossier_share_url){
-      currentDossierPdfUrl = opportunity.dossier_share_url;
+    /* TEMPORANEO: la pagina dossier-share-page (link con anteprima) è bloccata da un bug
+       del gateway Supabase (Content-Type ignorato -- ticket aperto). Finché non è risolto,
+       usiamo direttamente il link al PDF grezzo (dossier_pdf_url), che funziona sempre e
+       apre/scarica il dossier subito, anche senza anteprima nella chat. Quando il bug è
+       risolto basta ripristinare "opportunity.dossier_share_url" qui sotto. */
+    if(opportunity && opportunity.dossier_pdf_url){
+      currentDossierPdfUrl = opportunity.dossier_pdf_url;
       renderDossierLinkRow();
     }else{
       generateDossierLink();
@@ -3253,7 +3258,11 @@ async function generateDossierLink(){
        era probabile causa per cui WhatsApp non riusciva a generarne l'anteprima. */
     var shareUrl = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/dossier-share-page"
       +"?opp="+encodeURIComponent(opportunityId||"");
-    currentDossierPdfUrl = shareUrl;
+    /* TEMPORANEO: la pagina share (shareUrl) è bloccata da un bug del gateway Supabase
+       (Content-Type ignorato -- ticket aperto). Usiamo il PDF diretto come link attivo,
+       che funziona sempre. shareUrl resta comunque salvato su opportunities qui sotto,
+       pronto per quando il bug sarà risolto. */
+    currentDossierPdfUrl = pub.data.publicUrl;
     renderDossierLinkRow();
     /* Salviamo sia il PDF grezzo (letto dalla pagina share) sia il link corto sull'opportunità
        stessa: alla prossima apertura di questa pagina li trova già pronti (vedi init()) e non
