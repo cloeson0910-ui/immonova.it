@@ -891,10 +891,17 @@ function renderTable(data){
   }).join("");
 }
 
+/* ---- Prima di cancellare, si tiene da parte un riassunto della scheda (nome, tipo cliente,
+   budget, aree, categorie, note) cosi' da poterlo mandare via email allo staff DOPO che la
+   cancellazione e' andata a buon fine -- altrimenti chi non ha ancora visto la richiesta la
+   perde senza sapere che esisteva. Notifica best-effort: se fallisce non blocca nulla, la
+   cancellazione resta comunque valida. ---- */
 window.deleteInvestor = async function(id){
   if(!confirm(T.confirm_delete_investor)){
     return;
   }
+
+  const inv = allInvestors.find(function(i){ return String(i.id) === String(id); });
 
   setStatus(T.msg_deleting, "");
 
@@ -909,8 +916,39 @@ window.deleteInvestor = async function(id){
   }
 
   setStatus(T.msg_deleted, "success");
+
+  if(inv){
+    notifyDeletedInvestor(inv).catch(function(e){
+      console.warn("Notifica investitore eliminato non riuscita (non bloccante):", e);
+    });
+  }
+
   await loadInvestors();
 };
+
+async function notifyDeletedInvestor(inv){
+  const categories = (inv.investor_categories || []).map(x => x.category).filter(Boolean);
+  const areas = (inv.investor_areas || []).map(x => x.area).filter(Boolean);
+
+  const result = await client.functions.invoke("notify-deleted-investor", {
+    body:{
+      first_name: inv.first_name,
+      last_name: inv.last_name,
+      is_investor: inv.is_investor !== false,
+      is_seller: !!inv.is_seller,
+      budget_min: inv.budget_min,
+      budget_max: inv.budget_max,
+      areas: areas.join(", "),
+      categories: categories,
+      notes: inv.notes,
+      deleted_by_email: (currentUser && currentUser.email) || ""
+    }
+  });
+
+  if(result.error){
+    console.warn("Notifica investitore eliminato non riuscita (non bloccante):", result.error);
+  }
+}
 
 searchInput.addEventListener("input", applyFilters);
 statusFilter.addEventListener("change", applyFilters);
