@@ -245,11 +245,12 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 
       <div class="field full map-field">
         <label data-i18n="label_interest_area_map">Disegna la zona di interesse sulla mappa (opzionale)</label>
-        <div class="map-hint" data-i18n="hint_interest_area_map">Definisce l'area in modo più preciso di un nome di zona a testo libero: usa l'icona del poligono qui sotto a sinistra sulla mappa per tracciare il perimetro, clicca i punti e chiudi il poligono sull'ultimo punto. Serve a far emergere le opportunità che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.</div>
+        <div class="map-hint" data-i18n="hint_interest_area_map">Definisce l'area in modo più preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi "Chiudi poligono" per completarlo — puoi disegnare più zone. Alla chiusura di ogni poligono i comuni al suo interno vengono rilevati automaticamente e aggiunti al campo "Zona / Aree di interesse" qui sopra. Serve a far emergere le opportunità che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.</div>
         <div id="interestAreaMap"></div>
         <div class="map-actions">
           <button type="button" class="map-secondary-btn" id="undoAreaPointBtn" data-i18n="btn_undo_area_point">Annulla ultimo punto</button>
           <button type="button" class="map-secondary-btn" id="finishAreaBtn" data-i18n="btn_finish_area">Chiudi poligono</button>
+          <button type="button" class="map-secondary-btn" id="undoLastAreaBtn" data-i18n="btn_undo_last_area">Elimina ultima zona</button>
           <button type="button" class="map-clear-btn" id="clearAreaMapBtn" data-i18n="btn_clear_area_map">Cancella zona disegnata</button>
           <span class="map-status" id="areaMapStatus"></span>
         </div>
@@ -382,10 +383,13 @@ var UI_STRINGS = {
   cat_development:"Nuove Edificazioni", cat_commercial:"Commerciale", cat_land:"Terreni", cat_off_market:"Off Market",
   label_location_areas:"Zona / Aree di interesse", ph_areas:"Es. Salento, Valle d\u2019Itria, Costa Adriatica",
   label_interest_area_map:"Disegna la zona di interesse sulla mappa (opzionale)",
-  hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi \"Chiudi poligono\" per completarlo. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
+  hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi \"Chiudi poligono\" per completarlo \u2014 puoi disegnare pi\u00f9 zone. Alla chiusura di ogni poligono i comuni al suo interno vengono rilevati automaticamente e aggiunti al campo \"Zona / Aree di interesse\" qui sopra. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
   btn_clear_area_map:"Cancella zona disegnata",
   btn_undo_area_point:"Annulla ultimo punto",
   btn_finish_area:"Chiudi poligono",
+  btn_undo_last_area:"Elimina ultima zona",
+  map_status_areas:"{n} zone disegnate",
+  map_status_detecting:"Ricerca comuni nella zona in corso\u2026",
   map_status_drawn:"Zona salvata: verr\u00e0 usata per il matching geografico.",
   map_status_drawing:"{n} punti aggiunti \u2014 continua a cliccare o premi \"Chiudi poligono\" (minimo 3 punti).",
   map_status_none:"Nessuna zona disegnata: clicca sulla mappa per iniziare (verr\u00e0 usato solo il testo qui sopra finch\u00e9 non disegni nulla).",
@@ -472,30 +476,54 @@ async function loadUserLanguage(){
   await applyLanguage((result.data && result.data.language) || "it");
 }
 
-/* ---- Zona di interesse disegnata sulla mappa: sostituisce/affianca il campo "Zona / Aree di
-   interesse" a testo libero con un perimetro reale (poligono libero, click per aggiungere ogni
-   vertice), salvato come GeoJSON standard nella colonna
-   immonova_search_mandates.interest_area_geojson. Solo Leaflet core (mappe OpenStreetMap,
-   nessuna chiave API, nessun account esterno) -- niente plugin di disegno: il click-to-vertex
-   e' gestito a mano qui sotto, cosi' il poligono puo' avere qualunque forma libera, non solo
-   forme predefinite. Un solo poligono per mandato: ridisegnare sostituisce il precedente. ---- */
+/* ---- Zone di interesse disegnate sulla mappa: affiancano il campo "Zona / Aree di interesse"
+   a testo libero con perimetri reali (poligoni liberi, click per aggiungere ogni vertice),
+   salvate come GeoJSON MultiPolygon standard nella colonna
+   immonova_search_mandates.interest_area_geojson. Si possono disegnare PIU' zone: "Chiudi
+   poligono" completa quella corrente e ne apre subito una nuova (basta continuare a
+   cliccare); "Elimina ultima zona" toglie solo l'ultimo poligono completato; "Cancella tutto"
+   azzera tutto. Alla chiusura di ogni poligono viene interrogata la Overpass API
+   (OpenStreetMap, pubblica, gratuita, nessuna chiave) per trovare i comuni/paesi che ricadono
+   dentro quel perimetro e il loro nome viene aggiunto automaticamente al campo testo "Zona /
+   Aree di interesse" qui sopra (senza duplicati, senza cancellare quello che c'era gia').
+   Solo Leaflet core per la mappa -- nessun plugin di disegno: il click-to-vertex e' gestito a
+   mano qui sotto, cosi' il poligono puo' avere qualunque forma libera. ---- */
 var interestAreaMap = null;
-var areaPoints = []; // [[lat,lng], ...] mentre si sta disegnando
+var areaPoints = []; // [[lat,lng], ...] della zona in corso di disegno
 var areaPreviewLine = null;
-var areaFinalPolygon = null;
+var areaPolygons = []; // [{points:[[lat,lng],...], layer:L.Polygon}, ...] zone gia' completate
 var currentAreaGeoJSON = null;
-var areaDrawingLocked = false; // true quando c'e' gia' un poligono finito (nuovo o caricato da un mandato esistente)
 
-function updateAreaMapStatus(){
+function ringFromLatLngPoints(points){
+  var ring = points.map(function(pt){ return [pt[1], pt[0]]; }); // GeoJSON vuole [lng,lat]
+  ring.push(ring[0]); // il primo anello deve chiudersi sullo stesso punto
+  return ring;
+}
+
+function recomputeAreaGeoJSON(){
+  currentAreaGeoJSON = areaPolygons.length
+    ? { type:"MultiPolygon", coordinates: areaPolygons.map(function(p){ return [ ringFromLatLngPoints(p.points) ]; }) }
+    : null;
+}
+
+function extractPolygonPointArraysFromGeoJSON(geojson){
+  if(!geojson) return [];
+  var polys = geojson.type === "MultiPolygon" ? geojson.coordinates
+    : geojson.type === "Polygon" ? [geojson.coordinates]
+    : [];
+  return polys.map(function(rings){
+    return rings[0].map(function(coord){ return [coord[1], coord[0]]; }); // torna a [lat,lng]
+  });
+}
+
+function updateAreaMapStatus(message){
   var el = document.getElementById("areaMapStatus");
   if(!el) return;
-  if(areaDrawingLocked){
-    el.textContent = T.map_status_drawn;
-  }else if(areaPoints.length){
-    el.textContent = T.map_status_drawing.replace("{n}", areaPoints.length);
-  }else{
-    el.textContent = T.map_status_none;
-  }
+  if(message){ el.textContent = message; return; }
+  var parts = [];
+  if(areaPolygons.length) parts.push(T.map_status_areas.replace("{n}", areaPolygons.length));
+  if(areaPoints.length) parts.push(T.map_status_drawing.replace("{n}", areaPoints.length));
+  el.textContent = parts.length ? parts.join(" — ") : T.map_status_none;
 }
 
 function redrawAreaPreview(){
@@ -505,21 +533,75 @@ function redrawAreaPreview(){
   }
 }
 
-function finishAreaPolygon(){
+/* ---- Overpass API: trova i nodi place=city/town/village/hamlet dentro il poligono appena
+   chiuso, e ne aggiunge il nome al campo "Zona / Aree di interesse" a testo libero. Best-effort:
+   se fallisce (rete, timeout, nessun risultato) non blocca nulla, resta solo il poligono salvato. ---- */
+async function detectPlacesInPolygon(latlngPoints){
+  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
+  var query = '[out:json][timeout:25];(node["place"~"^(city|town|village|hamlet)$"](poly:"'+polyStr+'"););out body;';
+  var res = await fetch("https://overpass-api.de/api/interpreter", {
+    method:"POST",
+    headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+    body:"data="+encodeURIComponent(query)
+  });
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  var json = await res.json();
+  var names = (json.elements || [])
+    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
+    .filter(Boolean);
+  return Array.from(new Set(names));
+}
+
+function mergeNamesIntoAreasField(names){
+  if(!names.length) return;
+  var field = document.getElementById("locationAreas");
+  if(!field) return;
+  var existing = field.value.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+  var existingLower = existing.map(function(s){ return s.toLowerCase(); });
+  names.forEach(function(n){
+    if(existingLower.indexOf(n.toLowerCase()) === -1){
+      existing.push(n);
+      existingLower.push(n.toLowerCase());
+    }
+  });
+  field.value = existing.join(", ");
+}
+
+async function finishAreaPolygon(){
   if(areaPoints.length < 3) return;
   if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
-  areaFinalPolygon = L.polygon(areaPoints, { color:"#a67f34", weight:2, fillOpacity:.18 }).addTo(interestAreaMap);
-  currentAreaGeoJSON = areaFinalPolygon.toGeoJSON().geometry;
-  areaDrawingLocked = true;
+
+  var closedPoints = areaPoints.slice();
+  var layer = L.polygon(closedPoints, { color:"#a67f34", weight:2, fillOpacity:.18 }).addTo(interestAreaMap);
+  areaPolygons.push({ points:closedPoints, layer:layer });
+  areaPoints = [];
+  recomputeAreaGeoJSON();
+  updateAreaMapStatus();
+
+  updateAreaMapStatus(T.map_status_detecting);
+  try{
+    var names = await detectPlacesInPolygon(closedPoints);
+    mergeNamesIntoAreasField(names);
+  }catch(e){
+    console.warn("Rilevamento comuni nella zona non riuscito (non bloccante):", e);
+  }
+  updateAreaMapStatus();
+}
+
+function undoLastAreaPolygon(){
+  if(!areaPolygons.length) return;
+  var last = areaPolygons.pop();
+  interestAreaMap.removeLayer(last.layer);
+  recomputeAreaGeoJSON();
   updateAreaMapStatus();
 }
 
 function resetAreaDrawing(){
   areaPoints = [];
   if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
-  if(areaFinalPolygon){ interestAreaMap.removeLayer(areaFinalPolygon); areaFinalPolygon = null; }
+  areaPolygons.forEach(function(p){ interestAreaMap.removeLayer(p.layer); });
+  areaPolygons = [];
   currentAreaGeoJSON = null;
-  areaDrawingLocked = false;
   updateAreaMapStatus();
 }
 
@@ -534,7 +616,6 @@ function initInterestAreaMap(){
   }).addTo(interestAreaMap);
 
   interestAreaMap.on("click", function(e){
-    if(areaDrawingLocked) return; // un poligono gia' chiuso: serve "Cancella zona" prima di ridisegnare
     areaPoints.push([e.latlng.lat, e.latlng.lng]);
     redrawAreaPreview();
     updateAreaMapStatus();
@@ -542,11 +623,12 @@ function initInterestAreaMap(){
 
   document.getElementById("finishAreaBtn").addEventListener("click", finishAreaPolygon);
   document.getElementById("undoAreaPointBtn").addEventListener("click", function(){
-    if(areaDrawingLocked || !areaPoints.length) return;
+    if(!areaPoints.length) return;
     areaPoints.pop();
     redrawAreaPreview();
     updateAreaMapStatus();
   });
+  document.getElementById("undoLastAreaBtn").addEventListener("click", undoLastAreaPolygon);
   document.getElementById("clearAreaMapBtn").addEventListener("click", resetAreaDrawing);
 
   updateAreaMapStatus();
@@ -560,14 +642,19 @@ function initInterestAreaMap(){
 function loadAreaGeoJSONOntoMap(geojson){
   if(!interestAreaMap || !geojson) return;
   try{
-    var layer = L.geoJSON(geojson).getLayers()[0];
-    if(!layer) return;
-    if(areaFinalPolygon){ interestAreaMap.removeLayer(areaFinalPolygon); }
-    areaFinalPolygon = layer.addTo(interestAreaMap);
-    areaFinalPolygon.setStyle({ color:"#a67f34", weight:2, fillOpacity:.18 });
-    currentAreaGeoJSON = geojson;
-    areaDrawingLocked = true;
-    interestAreaMap.fitBounds(layer.getBounds(), { maxZoom:12 });
+    var pointArrays = extractPolygonPointArraysFromGeoJSON(geojson);
+    if(!pointArrays.length) return;
+    areaPolygons.forEach(function(p){ interestAreaMap.removeLayer(p.layer); });
+    areaPolygons = [];
+    var allBounds = null;
+    pointArrays.forEach(function(points){
+      var closedPoints = points.slice();
+      var layer = L.polygon(closedPoints, { color:"#a67f34", weight:2, fillOpacity:.18 }).addTo(interestAreaMap);
+      areaPolygons.push({ points:closedPoints, layer:layer });
+      allBounds = allBounds ? allBounds.extend(layer.getBounds()) : layer.getBounds();
+    });
+    recomputeAreaGeoJSON();
+    if(allBounds) interestAreaMap.fitBounds(allBounds, { maxZoom:12 });
     updateAreaMapStatus();
   }catch(e){
     console.warn("Zona di interesse salvata non valida, mappa lasciata vuota:", e);
