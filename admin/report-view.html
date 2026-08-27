@@ -642,13 +642,24 @@ async function translateOneText(lang, text, context){
       context: context || "",
       texts: [protectedItem.text]
     })});
+    if(!res.ok){
+      console.warn("[i18n] translate-public-content ha risposto con errore HTTP",res.status,"per il testo:",text.slice(0,60));
+      return null;
+    }
     result = await res.json();
   }catch(e){
+    console.warn("[i18n] chiamata a translate-public-content fallita (rete/fetch) per il testo:",text.slice(0,60),e);
     return null;
   }
-  if(!result || !result.success || !Array.isArray(result.translations) || result.translations.length !== 1) return null;
+  if(!result || !result.success || !Array.isArray(result.translations) || result.translations.length !== 1){
+    console.warn("[i18n] risposta di translate-public-content malformata per il testo:",text.slice(0,60),result);
+    return null;
+  }
   var raw = result.translations[0];
-  if(raw == null) return null;
+  if(raw == null){
+    console.warn("[i18n] translate-public-content ha restituito una traduzione vuota per il testo:",text.slice(0,60));
+    return null;
+  }
   return restorePlaceholders(raw, protectedItem.tokens);
 }
 /* v10.11: prima si mandava un'unica chiamata con TUTTE le stringhe insieme
@@ -3061,7 +3072,7 @@ function slugify(value){
   return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "opportunita";
 }
 function buildDossierFilename(){
-  return "dossier_IMMONOVA_"+slugify(getTitle())+".pdf";
+  return "dossier_IMMONOVA_"+slugify(getTitle())+"_"+(CURRENT_LANG||"it")+".pdf";
 }
 /* html2canvas 1.4.1 ha un bug noto: durante la misurazione del testo usa Range.setEnd() sul
    contenuto dei nodi, e se l'offset calcolato non combacia più con la lunghezza reale del nodo
@@ -3243,6 +3254,14 @@ async function generateDossierLink(){
   var originalLabel = generateDossierLinkBtn.textContent;
   generateDossierLinkBtn.textContent = "Generazione in corso...";
   try{
+    /* Forziamo un ri-render fresco nella lingua corrente PRIMA di catturare il PDF: elimina
+       qualunque possibilità che venga catturata una versione del dossier non aggiornata alla
+       lingua scelta per una questione di tempistica (es. render precedente ancora in corso,
+       o DOM non ancora aggiornato dopo un cambio lingua). */
+    console.log("[dossier-pdf] Genero il PDF in lingua:",CURRENT_LANG);
+    await applyLanguage(CURRENT_LANG);
+    renderBook();
+    await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
     setStatus("Generazione PDF del dossier in corso...","");
     var pdfBlob = await generateDossierPdfBlob();
     var filename = buildDossierFilename();
@@ -3270,7 +3289,8 @@ async function generateDossierLink(){
           opportunityId: opportunityId,
           title: getTitle()||"Dossier IMMONOVA",
           coverUrl: (opportunity && opportunity.cover_image)||"",
-          pdfUrl: pub.data.publicUrl
+          pdfUrl: pub.data.publicUrl,
+          lang: CURRENT_LANG||"it"
         })
       });
       var publishData = await publishResp.json();
