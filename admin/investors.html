@@ -581,7 +581,7 @@ async function checkAuth(){
 async function loadProfile(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,role,language")
+    .select("id,email,full_name,role,language,is_super_user")
     .eq("id", currentUser.id)
     .single();
 
@@ -591,7 +591,7 @@ async function loadProfile(){
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
-      result = await client.from("profiles").select("id,email,full_name,role").eq("id", currentUser.id).single();
+      result = await client.from("profiles").select("id,email,full_name,role,is_super_user").eq("id", currentUser.id).single();
     }
   }
 
@@ -604,7 +604,9 @@ async function loadProfile(){
   currentProfile = result.data;
   await applyLanguage(currentProfile.language || "it");
 
-  if(currentProfile.role !== "admin"){
+  /* Il super user (checkbox is_super_user su profiles) puo' accedere alla pagina investitori
+     esattamente come un admin: non deve piu' vedere il messaggio "Accesso riservato agli admin". */
+  if(currentProfile.role !== "admin" && !currentProfile.is_super_user){
     setStatus(T.msg_access_denied, "error");
     table.innerHTML = '<tr><td colspan="8" class="empty">'+esc(T.empty_unauthorized)+'</td></tr>';
     return false;

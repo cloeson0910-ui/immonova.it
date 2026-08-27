@@ -296,6 +296,7 @@ var logoutBtn = document.getElementById("logoutBtn");
 var dossierLinkRow = document.getElementById("dossierLinkRow");
 var shareImageBox = document.getElementById("shareImageBox");
 var generateDossierLinkBtn = document.getElementById("generateDossierLinkBtn");
+var isSuperUser = false; // profiles.is_super_user: non puo' fare chiamate a pagamento (Discovery Engine / Aggiorna dati)
 var shareImageObjectUrl = null;
 var currentDossierPdfUrl = null;
 var currentUser = null;
@@ -783,6 +784,17 @@ function getCategory(){return clean(opportunity&&opportunity.category)||clean(re
 function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||gallery[0]||"";}
 function getGeneratedDate(){var d=(report&&report.created_at)||(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG).format(new Date(d));}catch(e){return "";}}
 async function checkAuth(){var sessionRes=await client.auth.getSession();var session=sessionRes&&sessionRes.data&&sessionRes.data.session;if(!session){window.location.href="login.html";return null;}currentUser=session.user;return session;}
+/* ---- Super user (checkbox is_super_user su profiles): puo' vedere, scaricare e generare il
+   link del dossier normalmente, ma NON deve poter richiamare il Discovery Engine (chiamate a
+   pagamento) ne' forzare l'aggiornamento dei dati territoriali. Nasconde il pulsante e blocca
+   comunque forceRefreshDossier() a livello di funzione, per sicurezza. Non tocca nient'altro. ---- */
+async function loadSuperUserFlag(){
+  if(!currentUser) return;
+  var res=await client.from("profiles").select("role,is_super_user").eq("id",currentUser.id).single();
+  if(res.error||!res.data){console.warn("Profilo non caricato per il controllo super user:",res.error&&res.error.message);return;}
+  isSuperUser=!!res.data.is_super_user&&res.data.role!=="admin"&&res.data.role!=="ceo";
+  if(isSuperUser&&refreshDossierBtn){refreshDossierBtn.style.display="none";}
+}
 async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-edit.html?id="+encodeURIComponent(opportunityId);}
 async function loadLatestReport(){
   lastReportLoadError=null;
@@ -1090,6 +1102,7 @@ async function ensureDossier(){
   }
 }
 async function forceRefreshDossier(){
+  if(isSuperUser){setStatus("Non hai i permessi per aggiornare i dati territoriali (chiamata a pagamento).","error");return;}
   var confirmed=confirm("Questo richiama il Discovery Engine (Google Places e le altre fonti a pagamento) e sovrascrive i dati territoriali già salvati per questo dossier. Da fare solo se necessario (es. verifica di un fix). Procedere?");
   if(!confirmed) return;
   var options=await askDossierOptions();
@@ -2911,6 +2924,7 @@ async function init(){
     }
     setStatus("Caricamento dati interni IMMONOVA...","");
     await checkAuth();
+    await loadSuperUserFlag();
     await loadOpportunity();
     // La prima applyLanguage() (sopra) e' avvenuta prima che l'opportunita'
     // fosse caricata, quindi i testi narrativi non erano ancora disponibili

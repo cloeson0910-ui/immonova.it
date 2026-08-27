@@ -339,7 +339,8 @@ var UI_STRINGS = {
   dossier_day_of_15:"Giorno {n}/15",
   dossier_contact_today:"Ricontattare oggi",
   dossier_overdue:"Aggiornamento scaduto",
-  dossier_suspended:"Trattativa sospesa"
+  dossier_suspended:"Trattativa sospesa",
+  mandante_reserved_label:"Riservato"
 };
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 var T = UI_STRINGS;
@@ -419,6 +420,35 @@ async function checkAuth(){
 
   currentUser = session.user;
   return true;
+}
+
+/* ---- Super user (checkbox is_super_user su profiles): vede tutte le richieste come un
+   admin, ma il nome del mandante (cliente) viene mostrato solo per le richieste legate a un
+   investitore che ha inserito lui stesso (investors.created_by = currentUser.id). Per tutte
+   le altre righe il nome viene mascherato. Non tocca nient'altro (email, telefono, dossier,
+   stato, ecc. restano visibili e gestibili come prima). ---- */
+let isSuperUser = false;
+let ownedInvestorIds = new Set();
+
+async function loadSuperUserContext(){
+  if(!currentUser) return;
+
+  const profileRes = await client.from("profiles").select("id,role,is_super_user").eq("id", currentUser.id).single();
+  if(profileRes.error || !profileRes.data){
+    console.warn("Profilo non caricato per il controllo super user:", profileRes.error && profileRes.error.message);
+    return;
+  }
+
+  isSuperUser = !!profileRes.data.is_super_user && profileRes.data.role !== "admin" && profileRes.data.role !== "ceo";
+  if(!isSuperUser) return;
+
+  const investorsRes = await client.from("investors").select("id").eq("created_by", currentUser.id);
+  if(investorsRes.error){
+    console.warn("Investitori del super user non caricati:", investorsRes.error.message);
+    return;
+  }
+
+  ownedInvestorIds = new Set((investorsRes.data || []).map(row => row.id));
 }
 
 function formatDate(value){
@@ -523,7 +553,11 @@ async function loadInquiries(){
   }
 
   table.innerHTML = data.map(i => {
-    const clientName = i.full_name || [i.first_name, i.last_name].filter(Boolean).join(" ");
+    let clientName = i.full_name || [i.first_name, i.last_name].filter(Boolean).join(" ");
+    const isOwnEntry = i.investor_id != null && ownedInvestorIds.has(i.investor_id);
+    if(isSuperUser && !isOwnEntry){
+      clientName = T.mandante_reserved_label || "Riservato";
+    }
     const investorLine = [i.investor_type, i.budget_range].filter(Boolean).join(" · ");
     const message = extractUserMessage(i.message);
     const currentStatus = i.status || "pending";
@@ -531,7 +565,7 @@ async function loadInquiries(){
     return `
       <tr>
         <td>${formatDate(i.created_at)}</td>
-        <td>${clientName || ""}${i.company ? `<br><span style="opacity:.65">${i.company}</span>` : ""}</td>
+        <td>${clientName || ""}${(!isSuperUser || isOwnEntry) && i.company ? `<br><span style="opacity:.65">${i.company}</span>` : ""}</td>
         <td>${i.email || ""}</td>
         <td>${i.phone || ""}</td>
         <td>${i.country || "—"}</td>
@@ -630,6 +664,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 
   if(isLogged){
     await loadUserLanguage();
+    await loadSuperUserContext();
     await loadInquiries();
   }
 })();
