@@ -271,6 +271,49 @@ td{
   .container{padding:28px 22px}
   .stats,.toolbar{grid-template-columns:1fr}
 }
+.badge-map{cursor:pointer}
+.badge-map:hover{filter:brightness(0.95)}
+.area-map-modal-overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(50,38,14,.55);
+  z-index:1000;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+.area-map-modal-overlay.open{display:flex}
+.area-map-modal{
+  background:#fbf6ec;
+  border-radius:12px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+  width:100%;
+  max-width:640px;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+.area-map-modal-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 18px;
+  border-bottom:1px solid rgba(166,127,52,.22);
+  font-weight:600;
+  color:#7f6430;
+}
+.area-map-modal-close{
+  background:none;
+  border:none;
+  font-size:26px;
+  line-height:1;
+  cursor:pointer;
+  color:#7f6430;
+  padding:0 4px;
+}
+.area-map-modal-close:hover{color:#5a480f}
+#areaMapModalMap{width:100%;height:420px}
 </style>
 </head>
 
@@ -366,6 +409,16 @@ td{
     </select>
   </div>
 
+  <div id="areaMapModalOverlay" class="area-map-modal-overlay" onclick="if(event.target===this) closeAreaMapModal()">
+    <div class="area-map-modal">
+      <div class="area-map-modal-head">
+        <span id="areaMapModalTitle"></span>
+        <button type="button" class="area-map-modal-close" onclick="closeAreaMapModal()" aria-label="Chiudi">&times;</button>
+      </div>
+      <div id="areaMapModalMap"></div>
+    </div>
+  </div>
+
   <div class="table-wrapper">
     <table>
       <thead>
@@ -388,6 +441,8 @@ td{
 
 </div>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
@@ -434,7 +489,7 @@ var UI_STRINGS = {
   seller_status_mandato_firmato:"Mandato firmato", seller_status_venduto:"Venduto",
   th_investor:"Investitore", th_contacts:"Contatti", th_profile:"Profilo", th_budget:"Budget",
   th_areas:"Aree", th_categories:"Categorie", th_consents:"Consensi", th_actions:"Azioni",
-  area_map_badge:"🗺 Zona su mappa", area_map_badge_title:"Zona di interesse disegnata sulla mappa nel profilo investitore",
+  area_map_badge:"🗺 Zona su mappa", area_map_badge_title:"Clicca per vedere la zona di interesse disegnata sulla mappa",
   loading:"Caricamento investitori...",
   budget_from:"Da ", budget_to:"Fino a ", budget_not_indicated:"Non indicato",
   type_private:"Private Investor", type_family_office:"Family Office", type_real_estate_operator:"Real Estate Operator",
@@ -724,6 +779,53 @@ function applyFilters(){
   renderTable(filtered);
 }
 
+/* ---- Popup con mappa: mostra la/le zone di interesse disegnate per un investitore,
+   cliccando sul badge "Zona su mappa" nella tabella. Sola visualizzazione, nessuna modifica. ---- */
+var areaMapModalMapInstance = null;
+
+function openAreaMapModal(investorId){
+  var inv = allInvestors.find(function(i){ return String(i.id) === String(investorId); });
+  if(!inv || !inv.interest_area_geojson) return;
+
+  var titleEl = document.getElementById("areaMapModalTitle");
+  titleEl.textContent = ((inv.first_name || "") + " " + (inv.last_name || "")).trim() || (T.area_map_badge || "Zona su mappa");
+
+  document.getElementById("areaMapModalOverlay").classList.add("open");
+
+  setTimeout(function(){
+    if(!areaMapModalMapInstance){
+      areaMapModalMapInstance = L.map("areaMapModalMap");
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 19
+      }).addTo(areaMapModalMapInstance);
+    }else{
+      areaMapModalMapInstance.eachLayer(function(layer){
+        if(layer instanceof L.GeoJSON) areaMapModalMapInstance.removeLayer(layer);
+      });
+    }
+
+    try{
+      var geoLayer = L.geoJSON(inv.interest_area_geojson, {
+        style:{ color:"#a67f34", weight:2, fillOpacity:.18 }
+      }).addTo(areaMapModalMapInstance);
+      areaMapModalMapInstance.invalidateSize();
+      areaMapModalMapInstance.fitBounds(geoLayer.getBounds(), { maxZoom:12 });
+    }catch(e){
+      console.warn("Zona di interesse non valida:", e);
+      areaMapModalMapInstance.setView([41.9, 12.6], 6);
+    }
+  }, 50);
+}
+
+function closeAreaMapModal(){
+  document.getElementById("areaMapModalOverlay").classList.remove("open");
+}
+
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape") closeAreaMapModal();
+});
+
 function renderBadges(values){
   if(!values || !values.length){
     return '<span class="muted">-</span>';
@@ -767,7 +869,7 @@ function renderTable(data){
 
         <td>${esc(fmtBudget(inv.budget_min, inv.budget_max))}</td>
 
-        <td>${renderBadges(areas)}${inv.interest_area_geojson ? '<span class="badge" title="'+esc(T.area_map_badge_title)+'">'+esc(T.area_map_badge)+'</span>' : ""}</td>
+        <td>${renderBadges(areas)}${inv.interest_area_geojson ? '<span class="badge badge-map" title="'+esc(T.area_map_badge_title)+'" onclick="openAreaMapModal(\''+inv.id+'\')">'+esc(T.area_map_badge)+'</span>' : ""}</td>
 
         <td>${renderBadges(categories)}</td>
 
