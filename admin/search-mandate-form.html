@@ -552,6 +552,51 @@ async function detectPlacesInPolygon(latlngPoints){
   return Array.from(new Set(names));
 }
 
+/* ---- Se il poligono e' cosi' grande da racchiudere l'intero territorio di una o piu'
+   province, non ha senso elencare ogni singolo comune (lista infinita e illeggibile nel
+   campo testo): meglio scrivere direttamente "Provincia di X". Si interroga Overpass per le
+   province (admin_level=6 in Italia) e si tiene solo quelle il cui centro cade dentro il
+   perimetro disegnato -- un'approssimazione ragionevole di "il poligono copre la provincia". ---- */
+function pointInPolygonLatLng(lat, lng, points){
+  var inside = false;
+  for(var i=0, j=points.length-1; i<points.length; j=i++){
+    var yi=points[i][0], xi=points[i][1], yj=points[j][0], xj=points[j][1];
+    var intersect = ((yi>lat) !== (yj>lat)) && (lng < (xj-xi)*(lat-yi)/(yj-yi)+xi);
+    if(intersect) inside = !inside;
+  }
+  return inside;
+}
+
+async function detectProvincesInPolygon(latlngPoints){
+  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
+  var query = '[out:json][timeout:25];(relation["admin_level"="6"]["boundary"="administrative"](poly:"'+polyStr+'"););out center;';
+  var res = await fetch("https://overpass-api.de/api/interpreter", {
+    method:"POST",
+    headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+    body:"data="+encodeURIComponent(query)
+  });
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  var json = await res.json();
+  var names = (json.elements || [])
+    .filter(function(el){ return el.center && pointInPolygonLatLng(el.center.lat, el.center.lon, latlngPoints); })
+    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
+    .filter(Boolean);
+  return Array.from(new Set(names));
+}
+
+/* ---- Prova prima con le province (zona molto grande): se ne trova almeno una, usa quelle
+   e si ferma li'. Altrimenti torna al rilevamento comune per comune di sempre, con un tetto
+   massimo di nomi per non riempire comunque il campo all'infinito su zone via di mezzo. ---- */
+async function detectAreaNamesInPolygon(latlngPoints){
+  var MAX_TOWN_NAMES = 20;
+  var provinces = await detectProvincesInPolygon(latlngPoints);
+  if(provinces.length){
+    return provinces.map(function(p){ return "Provincia di " + p; });
+  }
+  var towns = await detectPlacesInPolygon(latlngPoints);
+  return towns.slice(0, MAX_TOWN_NAMES);
+}
+
 function mergeNamesIntoAreasField(names){
   if(!names.length) return;
   var field = document.getElementById("locationAreas");
@@ -580,10 +625,10 @@ async function finishAreaPolygon(){
 
   updateAreaMapStatus(T.map_status_detecting);
   try{
-    var names = await detectPlacesInPolygon(closedPoints);
+    var names = await detectAreaNamesInPolygon(closedPoints);
     mergeNamesIntoAreasField(names);
   }catch(e){
-    console.warn("Rilevamento comuni nella zona non riuscito (non bloccante):", e);
+    console.warn("Rilevamento comuni/province nella zona non riuscito (non bloccante):", e);
   }
   updateAreaMapStatus();
 }
