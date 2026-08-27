@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nuovo Investitore | IMMONOVA Admin</title>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.min.css">
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;min-height:100%}
@@ -229,6 +232,23 @@ textarea{
 .check-card input{
   width:auto;
 }
+.map-field{margin-top:18px}
+.map-hint{font-size:12px;line-height:1.6;color:#8f7643;margin-bottom:10px}
+#interestAreaMap{width:100%;height:380px;border:1px solid rgba(166,127,52,.22)}
+.map-actions{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.map-clear-btn{
+  padding:9px 14px;
+  border:1px solid rgba(156,47,47,.30);
+  background:rgba(255,255,255,.20);
+  color:#9c2f2f;
+  cursor:pointer;
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.map-clear-btn:hover{background:#9c2f2f;color:#fff}
+.map-status{font-size:11.5px;color:#8f7643}
 .footer-actions{
   display:flex;
   justify-content:space-between;
@@ -463,6 +483,16 @@ textarea{
         <input id="areas" data-i18n-placeholder="ph_areas" placeholder="Es. Puglia, Salento, Valle d’Itria, Costa Adriatica">
       </div>
 
+      <div class="field full map-field">
+        <label data-i18n="label_interest_area_map">Disegna la zona di interesse sulla mappa (opzionale)</label>
+        <div class="map-hint" data-i18n="hint_interest_area_map">In aggiunta o al posto del testo qui sopra: usa l'icona del poligono in alto a sinistra sulla mappa per tracciare il perimetro dell'area in cui questo investitore cerca, clicca i punti e chiudi il poligono sull'ultimo punto.</div>
+        <div id="interestAreaMap"></div>
+        <div class="map-actions">
+          <button type="button" class="map-clear-btn" id="clearAreaMapBtn" data-i18n="btn_clear_area_map">Cancella zona disegnata</button>
+          <span class="map-status" id="areaMapStatus"></span>
+        </div>
+      </div>
+
       <div class="field full" style="margin-top:18px">
         <label data-i18n="label_investment_categories">Categorie Investimento</label>
         <div class="checkbox-row">
@@ -504,6 +534,8 @@ textarea{
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.min.js"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
 
@@ -549,6 +581,11 @@ var UI_STRINGS = {
   section_investment_profile:"Profilo Investimento", label_budget_min:"Budget Minimo", label_budget_max:"Budget Massimo",
   label_status:"Stato", status_active:"Attivo", status_vip:"VIP", status_inactive:"Inattivo",
   label_geo_areas:"Aree Geografiche", ph_areas:"Es. Puglia, Salento, Valle d\u2019Itria, Costa Adriatica",
+  label_interest_area_map:"Disegna la zona di interesse sulla mappa (opzionale)",
+  hint_interest_area_map:"In aggiunta o al posto del testo qui sopra: usa l'icona del poligono in alto a sinistra sulla mappa per tracciare il perimetro dell'area in cui questo investitore cerca, clicca i punti e chiudi il poligono sull'ultimo punto.",
+  btn_clear_area_map:"Cancella zona disegnata",
+  map_status_drawn:"Zona salvata.",
+  map_status_none:"Nessuna zona disegnata: verr\u00e0 usato solo il testo qui sopra.",
   label_investment_categories:"Categorie Investimento",
   cat_villa:"Ville", cat_apartment:"Appartamenti", cat_hotel:"Hotel", cat_resort:"Resort", cat_village:"Villaggi",
   cat_development:"Nuove Edificazioni", cat_off_market:"Off Market", cat_land:"Terreni",
@@ -730,6 +767,83 @@ async function loadProfile(){
   return true;
 }
 
+/* ---- Zona di interesse disegnata sulla mappa: stesso meccanismo di search-mandate-form.html
+   (vedi commento li' per il dettaglio). Qui si applica all'investitore invece che al mandato:
+   salvata in investors.interest_area_geojson, in aggiunta al campo "Aree Geografiche" a testo
+   libero gia' esistente -- nessuno dei due sostituisce obbligatoriamente l'altro. ---- */
+var interestAreaMap = null;
+var drawnAreaItems = null;
+var currentAreaGeoJSON = null;
+
+function updateAreaMapStatus(){
+  var el = document.getElementById("areaMapStatus");
+  if(!el) return;
+  el.textContent = currentAreaGeoJSON ? T.map_status_drawn : T.map_status_none;
+}
+
+function initInterestAreaMap(){
+  if(interestAreaMap || typeof L === "undefined") return;
+
+  interestAreaMap = L.map("interestAreaMap").setView([41.9, 12.6], 6); // centro Italia
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19
+  }).addTo(interestAreaMap);
+
+  drawnAreaItems = new L.FeatureGroup();
+  interestAreaMap.addLayer(drawnAreaItems);
+
+  var drawControl = new L.Control.Draw({
+    draw: {
+      polygon: { allowIntersection:false, showArea:true },
+      polyline:false, rectangle:false, circle:false, circlemarker:false, marker:false
+    },
+    edit: { featureGroup: drawnAreaItems }
+  });
+  interestAreaMap.addControl(drawControl);
+
+  interestAreaMap.on(L.Draw.Event.CREATED, function(e){
+    drawnAreaItems.clearLayers(); // un solo poligono per investitore: il nuovo sostituisce il vecchio
+    drawnAreaItems.addLayer(e.layer);
+    currentAreaGeoJSON = e.layer.toGeoJSON().geometry;
+    updateAreaMapStatus();
+  });
+  interestAreaMap.on(L.Draw.Event.EDITED, function(){
+    var layers = drawnAreaItems.getLayers();
+    currentAreaGeoJSON = layers.length ? layers[0].toGeoJSON().geometry : null;
+    updateAreaMapStatus();
+  });
+  interestAreaMap.on(L.Draw.Event.DELETED, function(){
+    currentAreaGeoJSON = drawnAreaItems.getLayers().length ? currentAreaGeoJSON : null;
+    updateAreaMapStatus();
+  });
+
+  document.getElementById("clearAreaMapBtn").addEventListener("click", function(){
+    drawnAreaItems.clearLayers();
+    currentAreaGeoJSON = null;
+    updateAreaMapStatus();
+  });
+
+  updateAreaMapStatus();
+  setTimeout(function(){ interestAreaMap.invalidateSize(); }, 200);
+}
+
+function loadAreaGeoJSONOntoMap(geojson){
+  if(!interestAreaMap || !drawnAreaItems || !geojson) return;
+  try{
+    var layer = L.geoJSON(geojson).getLayers()[0];
+    if(!layer) return;
+    drawnAreaItems.clearLayers();
+    drawnAreaItems.addLayer(layer);
+    currentAreaGeoJSON = geojson;
+    interestAreaMap.fitBounds(layer.getBounds(), { maxZoom:12 });
+    updateAreaMapStatus();
+  }catch(e){
+    console.warn("Zona di interesse salvata non valida, mappa lasciata vuota:", e);
+  }
+}
+
 async function loadInvestor(){
   if(!investorId) return;
 
@@ -780,6 +894,10 @@ async function loadInvestor(){
   const areas = (data.investor_areas || []).map(row => row.area).filter(Boolean);
   document.getElementById("areas").value = areas.join(", ");
 
+  if(data.interest_area_geojson){
+    loadAreaGeoJSONOntoMap(data.interest_area_geojson);
+  }
+
   const categories = (data.investor_categories || []).map(row => row.category).filter(Boolean);
   document.querySelectorAll('input[name="category"]').forEach(input => {
     input.checked = categories.includes(input.value);
@@ -809,6 +927,7 @@ function collectInvestorPayload(){
     is_investor: boolVal("is_investor"),
     is_seller: boolVal("is_seller"),
     seller_status: boolVal("is_seller") ? (val("seller_status") || "da_contattare") : null,
+    interest_area_geojson: currentAreaGeoJSON || null,
     updated_at: new Date().toISOString()
   };
 
@@ -1006,6 +1125,7 @@ async function revealCapitalPartnersLinkIfAllowed(){
   if(await checkAuth()){
     const ok = await loadProfile();
     if(ok){
+      initInterestAreaMap();
       await loadOpportunitiesForSelect();
       if(!investorId){
         document.getElementById("is_investor").checked = true;

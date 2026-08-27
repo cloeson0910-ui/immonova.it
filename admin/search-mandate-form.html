@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mandato di Ricerca | IMMONOVA Admin</title>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.min.css">
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;min-height:100%}
@@ -123,6 +126,23 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
   cursor:pointer;
 }
 .check-card input{width:auto}
+.map-field{margin-top:18px}
+.map-hint{font-size:12px;line-height:1.6;color:#8f7643;margin-bottom:10px}
+#interestAreaMap{width:100%;height:380px;border:1px solid rgba(166,127,52,.22)}
+.map-actions{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.map-clear-btn{
+  padding:9px 14px;
+  border:1px solid rgba(156,47,47,.30);
+  background:rgba(255,255,255,.20);
+  color:#9c2f2f;
+  cursor:pointer;
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.map-clear-btn:hover{background:#9c2f2f;color:#fff}
+.map-status{font-size:11.5px;color:#8f7643}
 .footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
 .save-panel{min-width:340px;flex:1;max-width:560px}
 .progress-text{min-height:18px;margin-bottom:10px;font-size:13px;color:#8f7643}
@@ -212,6 +232,16 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
         </div>
       </div>
 
+      <div class="field full map-field">
+        <label data-i18n="label_interest_area_map">Disegna la zona di interesse sulla mappa (opzionale)</label>
+        <div class="map-hint" data-i18n="hint_interest_area_map">Definisce l'area in modo più preciso di un nome di zona a testo libero: usa l'icona del poligono qui sotto a sinistra sulla mappa per tracciare il perimetro, clicca i punti e chiudi il poligono sull'ultimo punto. Serve a far emergere le opportunità che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.</div>
+        <div id="interestAreaMap"></div>
+        <div class="map-actions">
+          <button type="button" class="map-clear-btn" id="clearAreaMapBtn" data-i18n="btn_clear_area_map">Cancella zona disegnata</button>
+          <span class="map-status" id="areaMapStatus"></span>
+        </div>
+      </div>
+
       <div class="grid-3" style="margin-top:18px">
         <div class="field">
           <label data-i18n="label_budget_min">Budget minimo €</label>
@@ -298,6 +328,8 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.min.js"></script>
 <script src="../js/config.js"></script>
 
 <script>
@@ -337,6 +369,11 @@ var UI_STRINGS = {
   cat_villa:"Ville", cat_apartment:"Appartamenti", cat_hotel:"Hotel", cat_resort:"Resort", cat_village:"Villaggi",
   cat_development:"Nuove Edificazioni", cat_commercial:"Commerciale", cat_land:"Terreni", cat_off_market:"Off Market",
   label_location_areas:"Zona / Aree di interesse", ph_areas:"Es. Salento, Valle d\u2019Itria, Costa Adriatica",
+  label_interest_area_map:"Disegna la zona di interesse sulla mappa (opzionale)",
+  hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: usa l'icona del poligono qui sotto a sinistra sulla mappa per tracciare il perimetro, clicca i punti e chiudi il poligono sull'ultimo punto. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
+  btn_clear_area_map:"Cancella zona disegnata",
+  map_status_drawn:"Zona salvata: verr\u00e0 usata per il matching geografico.",
+  map_status_none:"Nessuna zona disegnata: verr\u00e0 usato solo il testo qui sopra.",
   label_budget_min:"Budget minimo €", label_budget_max:"Budget massimo €",
   label_sqm_min:"Metratura minima mq", label_sqm_max:"Metratura massima mq",
   label_bedrooms_min:"Camere (almeno)", label_bathrooms_min:"Bagni (almeno)",
@@ -420,6 +457,88 @@ async function loadUserLanguage(){
   await applyLanguage((result.data && result.data.language) || "it");
 }
 
+/* ---- Zona di interesse disegnata sulla mappa: sostituisce/affianca il campo "Zona / Aree di
+   interesse" a testo libero con un perimetro reale (poligono), salvato come GeoJSON standard
+   nella colonna immonova_search_mandates.interest_area_geojson. Leaflet + Leaflet.draw, mappe
+   OpenStreetMap: nessuna chiave API, nessun account esterno. Un solo poligono per mandato:
+   disegnarne uno nuovo sostituisce il precedente. ---- */
+var interestAreaMap = null;
+var drawnAreaItems = null;
+var currentAreaGeoJSON = null;
+
+function updateAreaMapStatus(){
+  var el = document.getElementById("areaMapStatus");
+  if(!el) return;
+  el.textContent = currentAreaGeoJSON ? T.map_status_drawn : T.map_status_none;
+}
+
+function initInterestAreaMap(){
+  if(interestAreaMap || typeof L === "undefined") return;
+
+  interestAreaMap = L.map("interestAreaMap").setView([41.9, 12.6], 6); // centro Italia
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19
+  }).addTo(interestAreaMap);
+
+  drawnAreaItems = new L.FeatureGroup();
+  interestAreaMap.addLayer(drawnAreaItems);
+
+  var drawControl = new L.Control.Draw({
+    draw: {
+      polygon: { allowIntersection:false, showArea:true },
+      polyline:false, rectangle:false, circle:false, circlemarker:false, marker:false
+    },
+    edit: { featureGroup: drawnAreaItems }
+  });
+  interestAreaMap.addControl(drawControl);
+
+  interestAreaMap.on(L.Draw.Event.CREATED, function(e){
+    drawnAreaItems.clearLayers(); // un solo poligono per mandato: il nuovo sostituisce il vecchio
+    drawnAreaItems.addLayer(e.layer);
+    currentAreaGeoJSON = e.layer.toGeoJSON().geometry;
+    updateAreaMapStatus();
+  });
+  interestAreaMap.on(L.Draw.Event.EDITED, function(){
+    var layers = drawnAreaItems.getLayers();
+    currentAreaGeoJSON = layers.length ? layers[0].toGeoJSON().geometry : null;
+    updateAreaMapStatus();
+  });
+  interestAreaMap.on(L.Draw.Event.DELETED, function(){
+    currentAreaGeoJSON = drawnAreaItems.getLayers().length ? currentAreaGeoJSON : null;
+    updateAreaMapStatus();
+  });
+
+  document.getElementById("clearAreaMapBtn").addEventListener("click", function(){
+    drawnAreaItems.clearLayers();
+    currentAreaGeoJSON = null;
+    updateAreaMapStatus();
+  });
+
+  updateAreaMapStatus();
+
+  // Il div della mappa e' dentro un form inizialmente nascosto da nessun display:none, ma
+  // Leaflet a volte calcola le dimensioni prima che il layout sia finale: un invalidateSize
+  // dopo il primo render evita una mappa tagliata/grigia.
+  setTimeout(function(){ interestAreaMap.invalidateSize(); }, 200);
+}
+
+function loadAreaGeoJSONOntoMap(geojson){
+  if(!interestAreaMap || !drawnAreaItems || !geojson) return;
+  try{
+    var layer = L.geoJSON(geojson).getLayers()[0];
+    if(!layer) return;
+    drawnAreaItems.clearLayers();
+    drawnAreaItems.addLayer(layer);
+    currentAreaGeoJSON = geojson;
+    interestAreaMap.fitBounds(layer.getBounds(), { maxZoom:12 });
+    updateAreaMapStatus();
+  }catch(e){
+    console.warn("Zona di interesse salvata non valida, mappa lasciata vuota:", e);
+  }
+}
+
 async function loadMandateForEdit(){
   if(!mandateId) return;
 
@@ -451,6 +570,10 @@ async function loadMandateForEdit(){
     document.getElementById(f.elementId).checked = !!data[f.column];
   });
   document.getElementById("notes").value = data.notes || "";
+
+  if(data.interest_area_geojson){
+    loadAreaGeoJSONOntoMap(data.interest_area_geojson);
+  }
 }
 
 async function checkAuth(){
@@ -508,7 +631,8 @@ form.addEventListener("submit", async function(event){
     bathrooms_min: numVal("bathroomsMin"),
     bedrooms_max: numVal("bedroomsMax"),
     bathrooms_max: numVal("bathroomsMax"),
-    notes: val("notes") || null
+    notes: val("notes") || null,
+    interest_area_geojson: currentAreaGeoJSON || null
   };
 
   MANDATE_FEATURES.forEach(function(f){
@@ -597,6 +721,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 (async function init(){
   if(await checkAuth()){
     await loadUserLanguage();
+    initInterestAreaMap();
     await loadMandateForEdit();
   }
 })();

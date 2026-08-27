@@ -492,9 +492,43 @@ async function loadOpportunitiesForMatching(){
   if(allOpportunitiesCache) return allOpportunitiesCache;
   var result = await client
     .from("opportunities")
-    .select("id,title,category,price,location,municipality,province,region,internal_size,land_size,bedrooms,bathrooms,short_description,full_description,cover_image,published,has_pool,has_garden,has_garage,has_parking_spot,has_terrace,has_balcony,has_sea_view,has_historic_center,has_air_conditioning,has_elevator,has_fireplace,has_beachfront,has_photovoltaic,photovoltaic_kw,has_car_charger,has_solar_thermal,has_storage_battery,has_artesian_well,has_heating_system,has_habitability");
+    .select("id,title,category,price,location,municipality,province,region,latitude,longitude,internal_size,land_size,bedrooms,bathrooms,short_description,full_description,cover_image,published,has_pool,has_garden,has_garage,has_parking_spot,has_terrace,has_balcony,has_sea_view,has_historic_center,has_air_conditioning,has_elevator,has_fireplace,has_beachfront,has_photovoltaic,photovoltaic_kw,has_car_charger,has_solar_thermal,has_storage_battery,has_artesian_well,has_heating_system,has_habitability");
   allOpportunitiesCache = result.data || [];
   return allOpportunitiesCache;
+}
+
+/* ---- Point-in-polygon (ray casting) su un poligono GeoJSON (Polygon o MultiPolygon), per
+   verificare se le coordinate di un'opportunità ricadono dentro la zona di interesse disegnata
+   sulla mappa nel form del mandato. Nessuna libreria esterna: e' un test geometrico semplice,
+   sufficiente per un perimetro disegnato a mano su una mappa. ---- */
+function pointInRing(lng, lat, ring){
+  var inside = false;
+  for(var i = 0, j = ring.length - 1; i < ring.length; j = i++){
+    var xi = ring[i][0], yi = ring[i][1];
+    var xj = ring[j][0], yj = ring[j][1];
+    var intersects = ((yi > lat) !== (yj > lat)) &&
+      (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if(intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInGeoJSON(lng, lat, geometry){
+  if(!geometry) return false;
+  if(geometry.type === "Polygon"){
+    var rings = geometry.coordinates;
+    if(!rings || !rings.length || !pointInRing(lng, lat, rings[0])) return false;
+    for(var i = 1; i < rings.length; i++){
+      if(pointInRing(lng, lat, rings[i])) return false; // dentro un buco del poligono
+    }
+    return true;
+  }
+  if(geometry.type === "MultiPolygon"){
+    return (geometry.coordinates || []).some(function(polyCoords){
+      return pointInGeoJSON(lng, lat, { type:"Polygon", coordinates:polyCoords });
+    });
+  }
+  return false;
 }
 
 function parsePriceNumber(text){
@@ -560,7 +594,18 @@ function computeMatch(mandate, opp){
     }
   }
 
-  if(!excluded && mandate.location_areas){
+  // Se il mandato ha una zona disegnata sulla mappa (poligono), quella prevale sul testo
+  // libero: e' un dato geometrico, molto piu' preciso di un nome di zona a occhio.
+  if(!excluded && mandate.interest_area_geojson){
+    maxScore++;
+    if(opp.latitude == null || opp.longitude == null){
+      unknowns.push(T.reason_location);
+    }else if(pointInGeoJSON(Number(opp.longitude), Number(opp.latitude), mandate.interest_area_geojson)){
+      score++; reasons.push(T.reason_location);
+    }else{
+      excluded = true;
+    }
+  }else if(!excluded && mandate.location_areas){
     maxScore++;
     var areas = mandate.location_areas.split(",").map(function(a){ return a.trim().toLowerCase(); }).filter(Boolean);
     var oppLoc = [opp.location, opp.municipality, opp.province, opp.region].filter(Boolean).join(" ").toLowerCase();
