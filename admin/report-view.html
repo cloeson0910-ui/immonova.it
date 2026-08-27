@@ -264,8 +264,8 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
   </div>
   <div id="dossierLinkRow" class="dossier-link-row"></div>
   <div id="shareImageBox" class="share-image-box">
-    <div class="share-image-title">Immagine da condividere (WhatsApp / Email)</div>
-    <div class="share-image-hint">Copertina con il link al dossier incorporato nel QR code: chi la riceve inquadra il codice (o clicca l'immagine se il canale supporta i link sulle immagini) e scarica subito il PDF. Funziona anche se incollata come immagine pura, senza bisogno che il link resti cliccabile.</div>
+    <div class="share-image-title">Immagine di copertina (allegato visivo)</div>
+    <div class="share-image-hint">Attenzione: questa immagine NON è cliccabile e il QR serve solo se qualcuno la scansiona da un altro dispositivo o da una stampa — chi la riceve già sul proprio telefono in chat non può usarlo. Per il link cliccabile su WhatsApp usa sempre "Copia link" qui sopra e incollalo come testo nel messaggio: WhatsApp lo trasforma da solo in un link con anteprima. Questa immagine è solo un allegato visivo di corredo, da mandare in aggiunta al link di testo, non al posto suo.</div>
     <canvas id="dossierShareCanvas"></canvas>
     <div class="share-image-actions">
       <button type="button" class="btn secondary" id="copyShareImageBtn">Copia immagine</button>
@@ -2162,7 +2162,22 @@ function renderLocationPage(){
   var a=getAddressParts();
   var q=mapQuery();
   if(!q)return "";
-  var mapSrc="https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
+  var lat=Number(opportunity&&opportunity.latitude), lng=Number(opportunity&&opportunity.longitude);
+  var hasCoords=Number.isFinite(lat)&&Number.isFinite(lng);
+  var mapHTML;
+  if(hasCoords){
+    /* Immagine statica invece di iframe: l'iframe della mappa live non è catturabile da
+       html2canvas (e nemmeno affidabile in stampa/PDF nativo), quindi nel PDF generato
+       risultava vuoto pur essendo un servizio a pagamento. Stessa soluzione già in uso in
+       dossier-send.html: la scarichiamo via fetch() autenticato dall'edge function
+       static-map-proxy e la mostriamo come blob URL locale — niente CORS, niente JWT
+       mancante. Il caricamento vero avviene in loadLocationMapImage(), chiamata dopo il
+       render del libro. */
+    mapHTML='<img class="map-frame" id="locationMapImg" data-lat="'+escapeHTML(String(lat))+'" data-lng="'+escapeHTML(String(lng))+'" alt="Mappa posizione immobile" style="object-fit:cover">';
+  }else{
+    var mapSrc="https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
+    mapHTML='<iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>';
+  }
   function row(label,val){ return val?'<div class="addr-row"><strong>'+escapeHTML(label)+'</strong><span>'+escapeHTML(val)+'</span></div>':''; }
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_asset_location)+'</div><h2 class="section-title">'+escapeHTML(T.title_location)+'</h2><div class="lux-rule"></div><div class="location-layout"><div>'
     +row(T.label_address_row,a.address||"-")
@@ -2171,7 +2186,26 @@ function renderLocationPage(){
     +row(T.label_city_row,a.city||"-")
     +row(T.label_province_row,a.province||"-")
     +row(T.label_region_row,a.region||"-")
-    +'</div><iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div></div></article>';
+    +'</div>'+mapHTML+'</div></div></article>';
+}
+async function loadLocationMapImage(){
+  var img=document.getElementById("locationMapImg");
+  if(!img) return;
+  var lat=img.getAttribute("data-lat");
+  var lng=img.getAttribute("data-lng");
+  if(!lat||!lng) return;
+  try{
+    var url=SUPABASE_URL+"/functions/v1/static-map-proxy?lat="+encodeURIComponent(lat)+"&lng="+encodeURIComponent(lng)+"&zoom=15&size=1200x700&scale=2";
+    var res=await fetch(url,{headers:{"Authorization":"Bearer "+SUPABASE_ANON_KEY,"apikey":SUPABASE_ANON_KEY}});
+    if(!res.ok){
+      console.warn("Mappa posizione non caricata:",res.status,await res.text());
+      return;
+    }
+    var blob=await res.blob();
+    img.src=URL.createObjectURL(blob);
+  }catch(e){
+    console.warn("Mappa posizione: errore fetch",e);
+  }
 }
 
 /* ---- Media gallery: solo foto caricate dall'analista per QUESTO immobile ---- */
@@ -2841,6 +2875,7 @@ function renderBook(){
   finalHtml += renderDebugBootstrap();
 
   book.innerHTML = finalHtml;
+  loadLocationMapImage();
 }
 
 async function init(){
@@ -3028,6 +3063,14 @@ async function renderDossierPageToCanvas(pageEl){
   }
 }
 async function generateDossierPdfBlob(){
+  var mapImg=document.getElementById("locationMapImg");
+  if(mapImg){
+    var waited=0;
+    while(waited<5000 && String(mapImg.src||"").indexOf("blob:")!==0){
+      await new Promise(function(r){ setTimeout(r,100); });
+      waited+=100;
+    }
+  }
   document.body.classList.add("pdf-export-mode");
   await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
   try{
