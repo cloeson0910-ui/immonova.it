@@ -51,6 +51,10 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
 .customize-page-row{display:flex;align-items:center;gap:10px;padding:6px 0 6px 26px;font-size:13px;color:#5c4a20}
 .customize-page-row input{cursor:pointer}
 .customize-page-row label{cursor:pointer}
+.customize-page-row.is-off{opacity:.55}
+.customize-page-row.is-off label{text-decoration:line-through;text-decoration-color:rgba(156,47,47,.5)}
+.customize-page-row .off-tag{margin-left:auto;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:#9c2f2f;background:rgba(156,47,47,.10);padding:2px 6px;border-radius:2px}
+.customize-chapter-group.is-off .customize-chapter-head{opacity:.55}
 
 .report-page{position:relative;width:100%;min-height:720px;background:#fffdf8;border-bottom:1px solid rgba(166,127,52,.12);overflow:hidden}.report-page.pattern{background:#f4ecdf}.report-page.pattern::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.30) 42%,rgba(244,236,223,.06) 75%),#f4ecdf;z-index:0}.report-page.pattern::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.34;z-index:0}.page-inner{position:relative;z-index:2;padding:54px}.cover{height:720px;display:flex;flex-direction:column;justify-content:space-between}.cover.with-image{color:white}.cover.with-image::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(31,22,8,.78),rgba(31,22,8,.48),rgba(31,22,8,.10));z-index:1}.cover-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}.brand{font-size:31px;letter-spacing:.20em;color:#a67f34;font-weight:300}.cover.with-image .brand,.cover.with-image .cover-kicker,.cover.with-image .cover-title,.cover.with-image .cover-meta{color:#f1d27a}.brand-sub{margin-top:8px;font-size:9px;letter-spacing:.22em;color:#a58139;text-transform:uppercase}.cover-kicker{font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:#a67f34;margin-bottom:22px}.cover-title{max-width:930px;font-size:54px;line-height:1.08;font-weight:200;letter-spacing:.08em;text-transform:uppercase;color:#a67f34}.cover-meta{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8f7643;line-height:2}
 .ad-disclosure{font-size:9px;letter-spacing:.2em;text-transform:uppercase;opacity:.72;margin-bottom:16px}
@@ -3022,13 +3026,13 @@ function renderCustomizePanelOptions(){
     var groupId = "customizeGroup" + gi;
     var allChecked = g.pages.every(function(p){ return !deselectedPageKeys[p.key]; });
     var noneChecked = g.pages.every(function(p){ return !!deselectedPageKeys[p.key]; });
-    html += '<div class="customize-chapter-group">';
-    html += '<div class="customize-chapter-head"><input type="checkbox" id="'+groupId+'" data-role="group" data-label="'+encodeHTMLAttr(g.label)+'"'+(allChecked?' checked':'')+(!allChecked && !noneChecked?' data-indeterminate="1"':'')+'><label for="'+groupId+'">'+escapeHTML(g.label)+' ('+g.pages.length+')</label></div>';
+    html += '<div class="customize-chapter-group' + (noneChecked ? ' is-off' : '') + '">';
+    html += '<div class="customize-chapter-head"><input type="checkbox" id="'+groupId+'" data-role="group" data-label="'+encodeHTMLAttr(g.label)+'"'+(allChecked?' checked':'')+(!allChecked && !noneChecked?' data-indeterminate="1"':'')+'><label for="'+groupId+'">'+escapeHTML(g.label)+' ('+g.pages.length+')</label>'+(noneChecked?'<span class="off-tag">Capitolo escluso</span>':'')+'</div>';
     g.pages.forEach(function(p, pi){
       var pageId = "customizePage" + gi + "_" + pi;
       var checked = !deselectedPageKeys[p.key];
       var title = p.title || ("Pagina " + (pi+1));
-      html += '<div class="customize-page-row"><input type="checkbox" id="'+pageId+'" data-role="page" data-key="'+encodeHTMLAttr(p.key)+'" data-label="'+encodeHTMLAttr(g.label)+'"'+(checked?' checked':'')+'><label for="'+pageId+'">'+escapeHTML(title)+'</label></div>';
+      html += '<div class="customize-page-row' + (checked ? '' : ' is-off') + '"><input type="checkbox" id="'+pageId+'" data-role="page" data-key="'+encodeHTMLAttr(p.key)+'" data-label="'+encodeHTMLAttr(g.label)+'"'+(checked?' checked':'')+'><label for="'+pageId+'">'+escapeHTML(title)+'</label>'+(checked?'':'<span class="off-tag">Esclusa</span>')+'</div>';
     });
     html += '</div>';
   });
