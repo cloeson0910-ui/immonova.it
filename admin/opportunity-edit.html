@@ -332,6 +332,127 @@ textarea{
   color:#8f7643;
 }
 
+.folder-import-box{
+  border:1px solid rgba(165,129,57,.30);
+  background:rgba(255,252,244,.30);
+  padding:20px;
+  margin-bottom:22px;
+}
+.folder-import-title{
+  font-size:13px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:#a58139;
+  font-weight:600;
+  margin-bottom:8px;
+}
+.folder-import-hint{
+  font-size:12px;
+  line-height:1.6;
+  color:#8f7643;
+  margin-bottom:14px;
+}
+.folder-import-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:14px;
+  align-items:center;
+  margin-bottom:12px;
+}
+.folder-import-row label{
+  font-size:11px;
+  letter-spacing:.10em;
+  text-transform:uppercase;
+  color:#8f7643;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.folder-import-row input[type="number"]{
+  width:80px;
+  padding:8px 10px;
+}
+.folder-import-status{
+  font-size:12.5px;
+  color:#8f7643;
+  min-height:18px;
+  margin:6px 0 4px;
+}
+.folder-import-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:12px;
+  margin-top:14px;
+}
+.folder-import-card{
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,255,255,.30);
+  padding:8px;
+  position:relative;
+}
+.folder-import-card.excluded{opacity:.42}
+.folder-import-card img{
+  width:100%;
+  height:110px;
+  object-fit:cover;
+  display:block;
+  cursor:pointer;
+}
+.folder-import-badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+  margin-top:6px;
+}
+.folder-import-badge{
+  font-size:8.5px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  padding:2px 6px;
+  border-radius:2px;
+  background:rgba(166,127,52,.14);
+  color:#8f7643;
+}
+.folder-import-badge.cover-badge{background:rgba(79,127,69,.16);color:#4f7f45}
+.folder-import-badge.enhanced-badge{background:rgba(166,127,52,.22);color:#a58139;cursor:pointer}
+.folder-import-badge.low-score-badge{background:rgba(156,47,47,.14);color:#9c2f2f}
+.folder-import-card-actions{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:8px;
+  font-size:10px;
+}
+.folder-import-card-actions label{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  color:#8f7643;
+  cursor:pointer;
+}
+.folder-import-cover-btn{
+  border:1px solid rgba(165,129,57,.35);
+  background:transparent;
+  color:#a58139;
+  font-size:9px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  padding:4px 7px;
+  cursor:pointer;
+}
+.folder-import-cover-btn.active{background:rgba(79,127,69,.18);color:#4f7f45;border-color:rgba(79,127,69,.4)}
+.folder-import-score{
+  position:absolute;
+  top:6px;
+  right:6px;
+  background:rgba(30,22,10,.66);
+  color:#f1d27a;
+  font-size:10px;
+  font-family:monospace;
+  padding:2px 6px;
+  border-radius:2px;
+}
+
 .checks{
   grid-column:1 / -1;
   display:flex;
@@ -1261,6 +1382,30 @@ button.danger{
       <div class="section-title" data-i18n="section_media">Media</div>
 
       <div class="field full">
+        <div class="folder-import-box">
+          <div class="folder-import-title">Importa foto da cartella (selezione automatica + correzione)</div>
+          <div class="folder-import-hint">
+            Criterio standard cartella: crea una cartella con tutte le foto dell'immobile (jpg/png/webp), tutte insieme, senza sottocartelle da usare. Se una foto nel nome contiene "cover" o "copertina" viene proposta come copertina, altrimenti il sistema sceglie da solo la foto migliore. Le altre vengono valutate per nitidezza, luce e colore: le migliori vengono selezionate e aggiunte alla gallery esistente, quelle imperfette ma valide vengono corrette in automatico (bilanciamento colore, luce, leggera nitidezza) senza interventi invasivi — nessun taglio, nessuna rotazione, nessun contenuto alterato. Puoi sempre rivedere e cambiare la selezione prima di salvare; la copertina attuale viene sostituita solo se scegli esplicitamente una nuova copertina dall'importazione.
+          </div>
+          <div class="folder-import-row">
+            <input type="file" id="folderImportInput" webkitdirectory directory multiple accept="image/*">
+          </div>
+          <div class="folder-import-row">
+            <label for="folderImportMaxCount">Max foto da aggiungere alla gallery
+              <input type="number" id="folderImportMaxCount" value="24" min="1" max="60" step="1">
+            </label>
+            <label for="folderImportAutoCorrect">
+              <input type="checkbox" id="folderImportAutoCorrect" checked>
+              Correggi automaticamente le foto imperfette
+            </label>
+            <button type="button" class="soft" id="folderImportClearBtn">Annulla importazione</button>
+          </div>
+          <div class="folder-import-status" id="folderImportStatus"></div>
+          <div class="folder-import-grid" id="folderImportGrid"></div>
+        </div>
+      </div>
+
+      <div class="field full">
         <label data-i18n="label_current_cover">Copertina attuale</label>
         <img id="coverPreview" class="preview-cover" alt="Copertina attuale">
         <div id="noCoverText" class="file-note" data-i18n="no_cover_text">Nessuna copertina caricata.</div>
@@ -1800,6 +1945,7 @@ button.danger{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
 
 <script>
 var client = window.supabase.createClient(
@@ -3499,6 +3645,389 @@ async function uploadImage(file, path){
   return publicUrl.data.publicUrl;
 }
 
+/* =========================================================================
+   IMPORTAZIONE FOTO DA CARTELLA — selezione automatica + correzione non invasiva
+   (identica logica della creazione nuova opportunità). In modifica la gallery
+   esistente NON viene toccata: le foto importate vengono AGGIUNTE in coda, e
+   la copertina attuale viene sostituita solo se scegli esplicitamente una
+   nuova copertina dall'importazione (o se una foto ha "cover"/"copertina" nel
+   nome — in quel caso viene proposta come copertina, ma resta deselezionabile).
+   Legge tutte le immagini di una cartella locale (scelta ogni volta dall'utente
+   tramite il selettore nativo del browser: per motivi di sicurezza un sito web
+   non puo' "ricordarsi" un percorso di cartella da solo), valuta ognuna
+   (nitidezza, esposizione, contrasto), sceglie in automatico le migliori per
+   la gallery, e corregge in modo leggero e reversibile (bilanciamento colore,
+   luce, nitidezza) solo le foto che ne hanno bisogno. Nessun taglio, nessuna
+   rotazione, nessuna alterazione del contenuto: solo correzioni fotografiche
+   classiche, sempre annullabili con un click.
+   ========================================================================= */
+var FOLDER_IMPORT_MAX_DIMENSION = 2600; // px — evita file enormi mantenendo qualità alta
+var folderImportItems = []; // {id,file,name,url,score,flags,needsCorrection,correctedUrl,correctedBlob,useCorrected,included,isCover}
+var folderImportCoverOverrideBlob = null;
+var folderImportGalleryOverrideBlobs = [];
+
+function folderImportSetStatus(msg, type){
+  var el = document.getElementById("folderImportStatus");
+  if(!el) return;
+  el.textContent = msg || "";
+  el.className = "folder-import-status " + (type || "");
+}
+
+function loadImageFromFile(file){
+  return new Promise(function(resolve, reject){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){ resolve({img:img, url:url}); };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("Impossibile leggere l'immagine " + file.name)); };
+    img.src = url;
+  });
+}
+
+/* Analizza una foto: nitidezza (varianza del Laplaciano su scala di grigi),
+   luminosità media, percentuale di pixel bruciati/troppo scuri, contrasto
+   (deviazione standard della luminanza). Tutto calcolato su una versione
+   ridotta dell'immagine (max 260px) solo per velocità di analisi — la
+   correzione, quando applicata, lavora invece sull'immagine a piena
+   risoluzione (capped a FOLDER_IMPORT_MAX_DIMENSION). */
+function analyzePhoto(img){
+  var maxDim = 260;
+  var scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  var w = Math.max(1, Math.round(img.naturalWidth * scale));
+  var h = Math.max(1, Math.round(img.naturalHeight * scale));
+  var canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  var ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, w, h);
+  var data = ctx.getImageData(0, 0, w, h).data;
+
+  var gray = new Float32Array(w * h);
+  var sumLum = 0, darkCount = 0, brightCount = 0;
+  var sumR = 0, sumG = 0, sumB = 0;
+  for(var i = 0, p = 0; i < data.length; i += 4, p++){
+    var r = data[i], g = data[i+1], b = data[i+2];
+    var l = 0.2126*r + 0.7152*g + 0.0722*b;
+    gray[p] = l;
+    sumLum += l;
+    sumR += r; sumG += g; sumB += b;
+    if(l < 24) darkCount++;
+    if(l > 236) brightCount++;
+  }
+  var n = w * h;
+  var meanLum = sumLum / n;
+  var darkRatio = darkCount / n;
+  var brightRatio = brightCount / n;
+
+  var sumSqDiff = 0;
+  for(p = 0; p < n; p++){ var d = gray[p] - meanLum; sumSqDiff += d*d; }
+  var stdDev = Math.sqrt(sumSqDiff / n);
+
+  // Varianza del Laplaciano (indicatore standard di nitidezza/sfocatura)
+  var lapSum = 0, lapSumSq = 0, lapCount = 0;
+  for(var y = 1; y < h - 1; y++){
+    for(var x = 1; x < w - 1; x++){
+      var idx = y*w + x;
+      var lap = -4*gray[idx] + gray[idx-1] + gray[idx+1] + gray[idx-w] + gray[idx+w];
+      lapSum += lap; lapSumSq += lap*lap; lapCount++;
+    }
+  }
+  var lapMean = lapCount ? lapSum / lapCount : 0;
+  var sharpness = lapCount ? (lapSumSq / lapCount - lapMean*lapMean) : 0;
+
+  var resolutionScore = Math.min(1, (img.naturalWidth * img.naturalHeight) / (2400*1600));
+
+  var flags = {
+    dark: meanLum < 85 || darkRatio > 0.14,
+    bright: meanLum > 190 || brightRatio > 0.10,
+    lowContrast: stdDev < 32,
+    soft: sharpness < 90
+  };
+
+  var sharpnessScore = Math.min(1, sharpness / 260);
+  var exposureScore = 1 - Math.min(1, Math.abs(meanLum - 128) / 128) * 0.8 - darkRatio - brightRatio;
+  var contrastScore = Math.min(1, stdDev / 60);
+
+  var score = Math.round(100 * Math.max(0, Math.min(1,
+    sharpnessScore * 0.40 + exposureScore * 0.30 + contrastScore * 0.15 + resolutionScore * 0.15
+  )));
+
+  return {
+    score: score,
+    meanLum: meanLum,
+    avgR: sumR/n, avgG: sumG/n, avgB: sumB/n,
+    flags: flags,
+    needsCorrection: flags.dark || flags.bright || flags.lowContrast || flags.soft
+  };
+}
+
+/* Correzione non invasiva a piena risoluzione: bilanciamento colore (gray-world,
+   con scarto massimo ±15% per canale), correzione luce (gamma leggera, mai
+   più di ±20%), leggero allargamento del contrasto se piatto, e una minima
+   maschera di contrasto locale ("unsharp mask" leggero) solo se la foto è
+   segnalata come poco nitida. Nessun ritaglio, nessuna rotazione. */
+function correctPhoto(img, analysis){
+  var scale = Math.min(1, FOLDER_IMPORT_MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+  var w = Math.max(1, Math.round(img.naturalWidth * scale));
+  var h = Math.max(1, Math.round(img.naturalHeight * scale));
+  var canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  var ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, w, h);
+  var imageData = ctx.getImageData(0, 0, w, h);
+  var data = imageData.data;
+
+  var gray = (analysis.avgR + analysis.avgG + analysis.avgB) / 3;
+  var scaleR = analysis.avgR > 1 ? clamp(gray / analysis.avgR, 0.85, 1.15) : 1;
+  var scaleG = analysis.avgG > 1 ? clamp(gray / analysis.avgG, 0.85, 1.15) : 1;
+  var scaleB = analysis.avgB > 1 ? clamp(gray / analysis.avgB, 0.85, 1.15) : 1;
+
+  var targetLum = 128;
+  var gamma = 1;
+  if(analysis.flags.dark) gamma = clamp(Math.log(targetLum/255) / Math.log(Math.max(4, analysis.meanLum)/255), 0.8, 1.35);
+  if(analysis.flags.bright) gamma = clamp(Math.log(targetLum/255) / Math.log(Math.max(4, analysis.meanLum)/255), 0.75, 1.2);
+
+  var contrastFactor = analysis.flags.lowContrast ? 1.12 : 1.0;
+
+  for(var i = 0; i < data.length; i += 4){
+    for(var c = 0; c < 3; c++){
+      var v = data[i+c];
+      var colScale = c === 0 ? scaleR : (c === 1 ? scaleG : scaleB);
+      v = v * colScale;
+      if(gamma !== 1) v = 255 * Math.pow(clamp(v/255, 0, 1), gamma);
+      v = (v - 128) * contrastFactor + 128;
+      data[i+c] = clamp(v, 0, 255);
+    }
+  }
+
+  if(analysis.flags.soft){
+    data = unsharpMaskLight(data, w, h);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+/* Unsharp mask leggero (amount basso, capped) — rende la foto un filo più
+   nitida senza introdurre aloni evidenti: non "inventa" dettaglio, accentua
+   solo i contorni già presenti. */
+function unsharpMaskLight(data, w, h){
+  var amount = 0.25;
+  var out = new Uint8ClampedArray(data.length);
+  out.set(data);
+  for(var y = 1; y < h - 1; y++){
+    for(var x = 1; x < w - 1; x++){
+      var idx = (y*w + x) * 4;
+      for(var c = 0; c < 3; c++){
+        var center = data[idx+c];
+        var blurAvg = (
+          data[idx+c-4] + data[idx+c+4] +
+          data[idx+c-w*4] + data[idx+c+w*4]
+        ) / 4;
+        var sharpened = center + (center - blurAvg) * amount;
+        out[idx+c] = clamp(sharpened, 0, 255);
+      }
+    }
+  }
+  return out;
+}
+
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function canvasToBlob(canvas, quality){
+  return new Promise(function(resolve){
+    canvas.toBlob(function(blob){ resolve(blob); }, "image/jpeg", quality || 0.92);
+  });
+}
+
+async function handleFolderImportFiles(fileList){
+  var files = Array.prototype.filter.call(fileList, function(f){ return /^image\//.test(f.type); });
+  if(!files.length){
+    folderImportSetStatus("Nessuna immagine trovata in questa cartella.", "error");
+    return;
+  }
+
+  folderImportItems = [];
+  var grid = document.getElementById("folderImportGrid");
+  grid.innerHTML = "";
+
+  for(var i = 0; i < files.length; i++){
+    folderImportSetStatus("Analisi foto " + (i+1) + " di " + files.length + " in corso...", "");
+    var file = files[i];
+    try{
+      var loaded = await loadImageFromFile(file);
+      var analysis = analyzePhoto(loaded.img);
+      var item = {
+        id: "fi_" + i + "_" + Date.now(),
+        file: file,
+        name: file.name,
+        img: loaded.img,
+        url: loaded.url,
+        score: analysis.score,
+        flags: analysis.flags,
+        needsCorrection: analysis.needsCorrection,
+        analysis: analysis,
+        correctedUrl: null,
+        correctedBlob: null,
+        useCorrected: false,
+        included: true,
+        isCover: false
+      };
+      folderImportItems.push(item);
+    }catch(e){
+      console.error(e);
+    }
+  }
+
+  var autoCorrect = document.getElementById("folderImportAutoCorrect").checked;
+  if(autoCorrect){
+    for(var j = 0; j < folderImportItems.length; j++){
+      var it = folderImportItems[j];
+      if(it.needsCorrection){
+        folderImportSetStatus("Correzione automatica " + (j+1) + " di " + folderImportItems.length + "...", "");
+        var canvas = correctPhoto(it.img, it.analysis);
+        var blob = await canvasToBlob(canvas, 0.92);
+        it.correctedBlob = blob;
+        it.correctedUrl = URL.createObjectURL(blob);
+        it.useCorrected = true;
+      }
+    }
+  }
+
+  applyFolderImportAutoSelection();
+  renderFolderImportGrid();
+  folderImportSetStatus(folderImportItems.length + " foto analizzate. La selezione per la gallery è automatica — la copertina attuale NON viene toccata a meno che tu non ne scelga una nuova qui sotto.", "success");
+}
+
+/* In modifica non sostituiamo mai la copertina esistente in automatico: al
+   massimo la "proponiamo" (badge, non selezionata di default) se il nome del
+   file contiene esplicitamente cover/copertina — resta sempre l'utente a
+   doverla confermare col tasto "Imposta copertina". Tutte le altre foto
+   valide vengono marcate per essere AGGIUNTE alla gallery esistente. */
+function applyFolderImportAutoSelection(){
+  var maxCount = parseInt(document.getElementById("folderImportMaxCount").value, 10) || 24;
+
+  folderImportItems.forEach(function(it){ it.isCover = false; it.included = false; });
+
+  var sorted = folderImportItems.slice().sort(function(a,b){ return b.score - a.score; });
+
+  var suggestedCover = folderImportItems.find(function(it){
+    return /cover|copertina/i.test(it.name);
+  });
+
+  var galleryCandidates = sorted.filter(function(it){ return it !== suggestedCover; });
+  galleryCandidates.slice(0, maxCount).forEach(function(it){ it.included = true; });
+}
+
+function renderFolderImportGrid(){
+  var grid = document.getElementById("folderImportGrid");
+  if(!grid) return;
+
+  var html = "";
+  folderImportItems.forEach(function(it){
+    var displayUrl = (it.useCorrected && it.correctedUrl) ? it.correctedUrl : it.url;
+    var cardClass = "folder-import-card" + (!it.included && !it.isCover ? " excluded" : "");
+    html += '<div class="' + cardClass + '" data-id="' + it.id + '">';
+    html += '<div class="folder-import-score">' + it.score + '</div>';
+    html += '<img src="' + displayUrl + '" alt="' + escapeAttr(it.name) + '" data-role="thumb" data-id="' + it.id + '">';
+    html += '<div class="folder-import-badges">';
+    if(it.isCover) html += '<span class="folder-import-badge cover-badge">Nuova copertina</span>';
+    if(it.needsCorrection) html += '<span class="folder-import-badge enhanced-badge" data-role="toggle-correction" data-id="' + it.id + '">' + (it.useCorrected ? "Migliorata (vedi originale)" : "Originale (vedi migliorata)") + '</span>';
+    if(it.score < 40) html += '<span class="folder-import-badge low-score-badge">Qualità bassa</span>';
+    html += '</div>';
+    html += '<div class="folder-import-card-actions">';
+    html += '<label><input type="checkbox" data-role="include" data-id="' + it.id + '"' + (it.included ? " checked" : "") + (it.isCover ? " disabled" : "") + '> In gallery</label>';
+    html += '<button type="button" class="folder-import-cover-btn' + (it.isCover ? " active" : "") + '" data-role="set-cover" data-id="' + it.id + '">' + (it.isCover ? "★ Nuova copertina" : "Imposta come copertina") + '</button>';
+    html += '</div></div>';
+  });
+
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('[data-role="include"]').forEach(function(el){
+    el.addEventListener("change", function(){
+      var it = folderImportItems.find(function(x){ return x.id === el.getAttribute("data-id"); });
+      if(it) it.included = el.checked;
+    });
+  });
+  grid.querySelectorAll('[data-role="set-cover"]').forEach(function(el){
+    el.addEventListener("click", function(){
+      var id = el.getAttribute("data-id");
+      folderImportItems.forEach(function(x){
+        if(x.id === id){ x.isCover = !x.isCover; if(x.isCover) x.included = false; }
+        else{ x.isCover = false; }
+      });
+      renderFolderImportGrid();
+    });
+  });
+  grid.querySelectorAll('[data-role="toggle-correction"]').forEach(function(el){
+    el.addEventListener("click", function(){
+      var id = el.getAttribute("data-id");
+      var it = folderImportItems.find(function(x){ return x.id === id; });
+      if(it && it.correctedUrl){ it.useCorrected = !it.useCorrected; renderFolderImportGrid(); }
+    });
+  });
+}
+
+function escapeAttr(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(ch){
+    return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[ch];
+  });
+}
+
+/* Converte la selezione corrente del pannello di importazione nei Blob/File
+   effettivamente da caricare (rispetta, per ogni foto, se l'utente ha scelto
+   la versione corretta o quella originale) — chiamata al momento del
+   salvataggio. In modifica: la gallery importata viene AGGIUNTA a quella
+   esistente, la copertina viene sostituita solo se l'utente ne ha scelta
+   esplicitamente una dall'importazione. */
+async function resolveFolderImportSelection(){
+  folderImportCoverOverrideBlob = null;
+  folderImportGalleryOverrideBlobs = [];
+
+  if(!folderImportItems.length) return;
+
+  var coverItem = folderImportItems.find(function(it){ return it.isCover; });
+  if(coverItem){
+    folderImportCoverOverrideBlob = (coverItem.useCorrected && coverItem.correctedBlob) ? coverItem.correctedBlob : coverItem.file;
+    if(folderImportCoverOverrideBlob && !folderImportCoverOverrideBlob.name){
+      folderImportCoverOverrideBlob = new File([folderImportCoverOverrideBlob], coverItem.name, {type:"image/jpeg"});
+    }
+  }
+
+  folderImportItems.filter(function(it){ return it.included && !it.isCover; }).forEach(function(it){
+    var blob = (it.useCorrected && it.correctedBlob) ? it.correctedBlob : it.file;
+    if(blob && !blob.name){
+      blob = new File([blob], it.name, {type:"image/jpeg"});
+    }
+    folderImportGalleryOverrideBlobs.push(blob);
+  });
+}
+
+function clearFolderImport(){
+  folderImportItems.forEach(function(it){
+    URL.revokeObjectURL(it.url);
+    if(it.correctedUrl) URL.revokeObjectURL(it.correctedUrl);
+  });
+  folderImportItems = [];
+  folderImportCoverOverrideBlob = null;
+  folderImportGalleryOverrideBlobs = [];
+  document.getElementById("folderImportInput").value = "";
+  document.getElementById("folderImportGrid").innerHTML = "";
+  folderImportSetStatus("Importazione da cartella annullata: verranno usati i campi manuali qui sotto.", "");
+}
+
+(function wireFolderImport(){
+  var input = document.getElementById("folderImportInput");
+  var clearBtn = document.getElementById("folderImportClearBtn");
+  var maxCountInput = document.getElementById("folderImportMaxCount");
+
+  if(input) input.addEventListener("change", function(){
+    if(input.files && input.files.length) handleFolderImportFiles(input.files);
+  });
+  if(clearBtn) clearBtn.addEventListener("click", clearFolderImport);
+  if(maxCountInput) maxCountInput.addEventListener("change", function(){
+    if(folderImportItems.length){ applyFolderImportAutoSelection(); renderFolderImportGrid(); }
+  });
+})();
+
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_dossier_ia:"Dossier IA", logout:"Logout",
   title:"Modifica Opportunità",
@@ -4658,8 +5187,14 @@ form.addEventListener("submit", async function(e){
     var timestamp = Date.now();
     var folder = (baseSlug || "opportunity") + "-" + id + "-" + timestamp;
 
+    /* Se e' stata usata l'importazione da cartella, ha la precedenza sui campi
+       manuali qui sotto: la copertina viene sostituita solo se ne e' stata
+       scelta esplicitamente una nell'importazione, le foto di gallery
+       importate si aggiungono a quelle caricate manualmente (se presenti). */
+    await resolveFolderImportSelection();
+
     var finalCoverUrl = currentCoverUrl;
-    var coverFile = document.getElementById("coverFile").files[0];
+    var coverFile = folderImportCoverOverrideBlob || document.getElementById("coverFile").files[0];
 
     if(coverFile){
       setStatus("Caricamento nuova copertina...", "");
@@ -4668,7 +5203,7 @@ form.addEventListener("submit", async function(e){
       finalCoverUrl = await uploadImage(coverFile, coverPath);
     }
 
-    var galleryFiles = Array.prototype.slice.call(document.getElementById("galleryFiles").files);
+    var galleryFiles = Array.prototype.slice.call(document.getElementById("galleryFiles").files).concat(folderImportGalleryOverrideBlobs);
 
     if(galleryFiles.length > 0){
       setStatus("Caricamento nuove immagini gallery...", "");
