@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notizie | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{
+  text-decoration:none;
+  color:#a67f34;
+}
+.logo-main{
+  font-size:24px;
+  font-weight:600;
+  letter-spacing:.35em;
+}
+.logo-sub{
+  margin-top:6px;
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.18em;
+  color:#a58139;
+}
+.header-actions{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.header-actions a,
+.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.header-actions a:hover,
+.logout:hover{
+  background:#a67f34;
+  color:#fff;
+}
+.header-actions a.active{
+  background:#a67f34;
+  color:#fff;
+}
+.container{
+  max-width:1100px;
+  margin:auto;
+  padding:40px;
+}
+.kicker{
+  font-size:11px;
+  letter-spacing:.32em;
+  text-transform:uppercase;
+  color:#9a793c;
+  margin-bottom:12px;
+}
+.title-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:22px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+}
+.title{
+  font-size:42px;
+  font-weight:200;
+  letter-spacing:.05em;
+  color:#a67f34;
+}
+.subtitle{
+  font-size:15px;
+  line-height:1.8;
+  color:#8f7643;
+  max-width:860px;
+  margin-bottom:28px;
+}
+.primary-link{
+  display:inline-block;
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  background:#a67f34;
+  color:#fffaf0;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.status{
+  margin-bottom:20px;
+  font-size:13px;
+  min-height:18px;
+}
+.status.error{color:#9c2f2f}
+.status.success{color:#4f7f45}
+
+/* ---- Form di creazione/modifica: visibile solo ad admin/super user, nascosto di default. ---- */
+.news-form{
+  display:none;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.28);
+  padding:26px;
+  margin-bottom:32px;
+}
+.news-form.open{ display:block; }
+.news-form .field{ margin-bottom:16px; }
+.news-form label{
+  display:block;
+  font-size:10px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#8f7643;
+  margin-bottom:8px;
+}
+.news-form input[type="text"],
+.news-form textarea{
+  width:100%;
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.6);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+  resize:vertical;
+}
+.news-form textarea{ min-height:120px; line-height:1.6; }
+.news-form .checkbox-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:#7f6430;
+}
+.news-form .form-actions{
+  display:flex;
+  gap:10px;
+  margin-top:6px;
+}
+.secondary-btn{
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  background:rgba(255,255,255,.3);
+  color:#a67f34;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.secondary-btn:hover{ background:rgba(166,127,52,.1); }
+
+/* ---- Elenco notizie: card in stile bacheca, coerente col resto dell'app. ---- */
+.news-list{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.news-card{
+  background:rgba(255,255,255,.22);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+  padding:26px;
+}
+.news-card.pinned{
+  border-color:rgba(166,127,52,.5);
+  background:linear-gradient(135deg,rgba(166,127,52,.10),rgba(255,255,255,.25));
+}
+.news-card-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  margin-bottom:10px;
+}
+.news-title{
+  font-size:19px;
+  color:#a67f34;
+  line-height:1.4;
+}
+.pin-badge{
+  display:inline-block;
+  padding:5px 9px;
+  border:1px solid rgba(166,127,52,.4);
+  color:#a67f34;
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-left:10px;
+  vertical-align:middle;
+}
+.news-meta{
+  font-size:11px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#8f7643;
+  white-space:nowrap;
+}
+.news-body{
+  font-size:14px;
+  line-height:1.8;
+  color:#5c4b25;
+  white-space:pre-wrap;
+  margin-bottom:14px;
+}
+.news-actions{
+  display:flex;
+  gap:8px;
+}
+.news-actions button{
+  padding:8px 14px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  color:#a67f34;
+  cursor:pointer;
+  font-size:11px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.news-actions button:hover{ background:#a67f34; color:#fff; }
+.news-actions button.danger:hover{ background:#9c2f2f; border-color:#9c2f2f; }
+.empty{
+  padding:40px;
+  text-align:center;
+  color:#8f7643;
+  font-size:14px;
+  border:1px solid rgba(166,127,52,.15);
+  background:rgba(255,255,255,.18);
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+
+  <div class="header-actions">
+    <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
+    <a href="events.html" data-i18n="nav_events">Eventi</a>
+    <a href="investors.html" data-i18n="nav_investors">Investitori</a>
+    <a href="capital-partners.html" data-i18n="nav_capital_partners" id="capitalPartnersLink" style="display:none">Capital Partners</a>
+    <a href="users.html" id="usersLink" data-i18n="nav_users">Utenti</a>
+    <a href="notizie.html" class="active" data-i18n="nav_news">Notizie</a>
+    <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="kicker" data-i18n="kicker">Bacheca Interna</div>
+
+  <div class="title-row">
+    <div>
+      <h1 class="title" data-i18n="title">Notizie</h1>
+    </div>
+    <button type="button" class="primary-link" id="openFormBtn" style="display:none" data-i18n="btn_new_news">Nuova Notizia</button>
+  </div>
+
+  <p class="subtitle" data-i18n="subtitle">
+    Annunci e aggiornamenti interni per tutto lo staff IMMONOVA: novità operative, comunicazioni importanti, promemoria.
+  </p>
+
+  <div id="status" class="status"></div>
+
+  <form class="news-form" id="newsForm">
+    <div class="field">
+      <label data-i18n="label_title">Titolo</label>
+      <input type="text" id="newsTitle" maxlength="200" required>
+    </div>
+    <div class="field">
+      <label data-i18n="label_body">Testo</label>
+      <textarea id="newsBody" required></textarea>
+    </div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="newsPinned">
+      <label for="newsPinned" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="label_pinned">Metti in evidenza in cima alla bacheca</label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="primary-link" id="saveNewsBtn" data-i18n="btn_save_news">Pubblica</button>
+      <button type="button" class="secondary-btn" id="cancelFormBtn" data-i18n="btn_cancel">Annulla</button>
+    </div>
+  </form>
+
+  <div class="news-list" id="newsList">
+    <div class="empty" data-i18n="loading">Caricamento notizie...</div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const statusBox = document.getElementById("status");
+const newsList = document.getElementById("newsList");
+const newsForm = document.getElementById("newsForm");
+const openFormBtn = document.getElementById("openFormBtn");
+const cancelFormBtn = document.getElementById("cancelFormBtn");
+const newsTitleInput = document.getElementById("newsTitle");
+const newsBodyInput = document.getElementById("newsBody");
+const newsPinnedInput = document.getElementById("newsPinned");
+const saveNewsBtn = document.getElementById("saveNewsBtn");
+
+let currentUser = null;
+let currentProfile = null;
+let currentUserLanguage = "it";
+let canWrite = false;
+let editingId = null;
+let allNews = [];
+
+/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi investors.html/users.html). ---- */
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi",
+  nav_investors:"Investitori", nav_capital_partners:"Capital Partners", nav_users:"Utenti",
+  nav_news:"Notizie", logout:"Logout",
+  kicker:"Bacheca Interna", title:"Notizie",
+  subtitle:"Annunci e aggiornamenti interni per tutto lo staff IMMONOVA: novità operative, comunicazioni importanti, promemoria.",
+  btn_new_news:"Nuova Notizia", btn_save_news:"Pubblica", btn_update_news:"Salva Modifiche", btn_cancel:"Annulla",
+  label_title:"Titolo", label_body:"Testo", label_pinned:"Metti in evidenza in cima alla bacheca",
+  loading:"Caricamento notizie...", empty_none:"Nessuna notizia pubblicata al momento.",
+  pin_badge:"In evidenza",
+  action_edit:"Modifica", action_delete:"Elimina",
+  confirm_delete_news:"Eliminare definitivamente questa notizia?",
+  msg_saving:"Pubblicazione in corso...", msg_saved:"Notizia pubblicata.", msg_updated:"Notizia aggiornata.",
+  msg_deleting:"Eliminazione in corso...", msg_deleted:"Notizia eliminata.",
+  msg_required_fields:"Titolo e testo sono obbligatori.",
+  msg_profile_not_found:"Impossibile caricare il profilo utente.",
+  msg_load_error:"Errore nel caricamento delle notizie."
+};
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_notizie_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Admin internal news/announcements board page: titles, buttons, form labels.",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione notizie non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.innerHTML = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+}
+
+function esc(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setStatus(message, type){
+  statusBox.className = "status " + (type || "");
+  statusBox.textContent = message || "";
+}
+
+function fmtDate(iso){
+  try{
+    return new Intl.DateTimeFormat(currentUserLanguage === "it" ? "it-IT" : currentUserLanguage, {
+      day:"2-digit", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit"
+    }).format(new Date(iso));
+  }catch(e){
+    return iso || "";
+  }
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){
+    window.location.href = "login.html";
+    return false;
+  }
+  currentUser = session.user;
+  return true;
+}
+
+async function loadProfile(){
+  var result = await client
+    .from("profiles")
+    .select("id,email,full_name,role,language,is_super_user")
+    .eq("id", currentUser.id)
+    .single();
+
+  if(result.error){
+    var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
+    if(looksLikeMissingLanguageColumn){
+      result = await client.from("profiles").select("id,email,full_name,role,is_super_user").eq("id", currentUser.id).single();
+    }
+  }
+
+  if(result.error || !result.data){
+    await applyLanguage("it");
+    setStatus(T.msg_profile_not_found, "error");
+    return false;
+  }
+
+  currentProfile = result.data;
+  await applyLanguage(currentProfile.language || "it");
+
+  /* ---- Chi puo' scrivere sulla bacheca: admin o super user (stesso identico criterio usato
+     in tutte le altre pagine admin). Tutti gli altri collaboratori vedono la bacheca in sola
+     lettura -- il pulsante "Nuova Notizia" e i pulsanti modifica/elimina restano nascosti. ---- */
+  canWrite = currentProfile.role === "admin" || !!currentProfile.is_super_user;
+  if(canWrite) openFormBtn.style.display = "";
+
+  return true;
+}
+
+function renderNewsList(){
+  if(!allNews.length){
+    newsList.innerHTML = '<div class="empty">'+esc(T.empty_none)+'</div>';
+    return;
+  }
+
+  newsList.innerHTML = allNews.map(function(n){
+    var actions = canWrite ? (
+      '<div class="news-actions">'+
+        '<button type="button" onclick="editNews(\''+n.id+'\')">'+esc(T.action_edit)+'</button>'+
+        '<button type="button" class="danger" onclick="deleteNews(\''+n.id+'\')">'+esc(T.action_delete)+'</button>'+
+      '</div>'
+    ) : "";
+
+    return (
+      '<div class="news-card'+(n.pinned ? " pinned" : "")+'">'+
+        '<div class="news-card-head">'+
+          '<div class="news-title">'+esc(n.title)+(n.pinned ? '<span class="pin-badge">'+esc(T.pin_badge)+'</span>' : "")+'</div>'+
+          '<div class="news-meta">'+esc(fmtDate(n.created_at))+'</div>'+
+        '</div>'+
+        '<div class="news-body">'+esc(n.body)+'</div>'+
+        actions+
+      '</div>'
+    );
+  }).join("");
+}
+
+async function loadNews(){
+  var result = await client
+    .from("immonova_news")
+    .select("*")
+    .order("pinned", { ascending:false })
+    .order("created_at", { ascending:false });
+
+  if(result.error){
+    setStatus(T.msg_load_error, "error");
+    newsList.innerHTML = '<div class="empty">'+esc(T.msg_load_error)+'</div>';
+    return;
+  }
+
+  allNews = result.data || [];
+  renderNewsList();
+}
+
+function openForm(){
+  newsForm.classList.add("open");
+  openFormBtn.style.display = "none";
+  newsTitleInput.focus();
+}
+
+function closeForm(){
+  newsForm.classList.remove("open");
+  newsForm.reset();
+  editingId = null;
+  saveNewsBtn.textContent = T.btn_save_news;
+  if(canWrite) openFormBtn.style.display = "";
+}
+
+window.editNews = function(id){
+  var n = allNews.find(function(x){ return String(x.id) === String(id); });
+  if(!n) return;
+  editingId = id;
+  newsTitleInput.value = n.title || "";
+  newsBodyInput.value = n.body || "";
+  newsPinnedInput.checked = !!n.pinned;
+  saveNewsBtn.textContent = T.btn_update_news;
+  openForm();
+};
+
+window.deleteNews = async function(id){
+  if(!confirm(T.confirm_delete_news)) return;
+
+  setStatus(T.msg_deleting, "");
+  const { error } = await client.from("immonova_news").delete().eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setStatus(T.msg_deleted, "success");
+  await loadNews();
+};
+
+newsForm.addEventListener("submit", async function(event){
+  event.preventDefault();
+
+  var title = newsTitleInput.value.trim();
+  var body = newsBodyInput.value.trim();
+  if(!title || !body){
+    setStatus(T.msg_required_fields, "error");
+    return;
+  }
+
+  var payload = {
+    title: title,
+    body: body,
+    pinned: newsPinnedInput.checked,
+    updated_at: new Date().toISOString()
+  };
+
+  setStatus(editingId ? T.msg_saving : T.msg_saving, "");
+
+  var result;
+  if(editingId){
+    result = await client.from("immonova_news").update(payload).eq("id", editingId);
+  }else{
+    payload.created_by = currentUser.id;
+    result = await client.from("immonova_news").insert(payload);
+  }
+
+  if(result.error){
+    setStatus(result.error.message, "error");
+    return;
+  }
+
+  setStatus(editingId ? T.msg_updated : T.msg_saved, "success");
+  closeForm();
+  await loadNews();
+});
+
+openFormBtn.addEventListener("click", openForm);
+cancelFormBtn.addEventListener("click", closeForm);
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+/* ---- Il link "Capital Partners" è nascosto di default: compare solo se questo utente ha
+   accesso alla sezione riservata. Stesso controllo usato nelle altre pagine admin. ---- */
+async function revealCapitalPartnersLinkIfAllowed(){
+  try{
+    const { data, error } = await client.rpc("has_capital_partners_access");
+    if(!error && data){
+      document.getElementById("capitalPartnersLink").style.display = "";
+    }
+  }catch(e){
+    console.warn("Verifica accesso Capital Partners non riuscita (non bloccante):", e);
+  }
+}
+
+(async function init(){
+  if(await checkAuth()){
+    const ok = await loadProfile();
+    if(ok){
+      await loadNews();
+      await revealCapitalPartnersLinkIfAllowed();
+    }
+  }
+})();
+</script>
+</body>
+</html>
