@@ -2474,10 +2474,47 @@ function updateMapPreview(){
   mapBox.style.display = "none";
 }
 
-async function geocodeAddress(){
-  var query = buildAddressQuery();
+/* ---- Nominatim spesso non trova nulla se la query completa mescola CAP + frazione/
+   località non ufficiale (es. "Porto Rotondo", che è una frazione di Olbia, non un
+   comune) insieme al comune vero. Invece di fallire subito, proviamo più varianti della
+   query, dalla più specifica alla più generica, finché una non restituisce un risultato —
+   così l'indirizzo si trova comunque anche quando la combinazione esatta dei campi non
+   coincide con come Nominatim indicizza quella zona. ---- */
+function buildAddressQueryCandidates(){
+  var address = textOrNull("address");
+  var postal = textOrNull("postal_code");
+  var locality = textOrNull("locality");
+  var municipality = textOrNull("municipality");
+  var province = textOrNull("province");
+  var region = textOrNull("region");
 
-  if(!query || query === "Italia"){
+  var variants = [
+    [address, postal, locality, municipality, province, region],
+    [address, locality, municipality, province, region],
+    [address, postal, municipality, province, region],
+    [address, municipality, province, region],
+    [locality, municipality, province, region],
+    [municipality, province, region]
+  ];
+
+  var seen = {};
+  var candidates = [];
+  variants.forEach(function(parts){
+    var joined = parts.filter(Boolean).join(", ");
+    var query = joined ? (joined + ", Italia") : "";
+    if(query && query !== "Italia" && !seen[query]){
+      seen[query] = true;
+      candidates.push(query);
+    }
+  });
+
+  return candidates;
+}
+
+async function geocodeAddress(){
+  var candidates = buildAddressQueryCandidates();
+
+  if(!candidates.length){
     setGeoStatus("Inserisci almeno indirizzo/località/comune prima di geolocalizzare.", "error");
     return;
   }
@@ -2485,27 +2522,46 @@ async function geocodeAddress(){
   setGeoStatus("Geolocalizzazione indirizzo in corso...", "");
 
   try{
-    var url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=" + encodeURIComponent(query);
-    var response = await fetch(url, { headers:{ "Accept":"application/json" } });
+    var usedQuery = null;
+    var item = null;
 
-    if(!response.ok){
-      throw new Error("Servizio geocoding non disponibile.");
+    for(var i = 0; i < candidates.length; i++){
+      var query = candidates[i];
+      if(i > 0){
+        setGeoStatus("Nessun risultato con l'indirizzo completo, provo una versione più generica (" + (i+1) + "/" + candidates.length + ")...", "");
+      }
+
+      var url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=" + encodeURIComponent(query);
+      var response = await fetch(url, { headers:{ "Accept":"application/json" } });
+
+      if(!response.ok){
+        throw new Error("Servizio geocoding non disponibile.");
+      }
+
+      var data = await response.json();
+
+      if(data && data.length){
+        item = data[0];
+        usedQuery = query;
+        break;
+      }
     }
 
-    var data = await response.json();
-
-    if(!data || !data.length){
+    if(!item){
       throw new Error("Nessun risultato trovato. Controlla indirizzo, CAP e comune.");
     }
 
-    var item = data[0];
-
     setValue("latitude", item.lat);
     setValue("longitude", item.lon);
-    setValue("formatted_address", item.display_name || query);
+    setValue("formatted_address", item.display_name || usedQuery);
 
     updateMapPreview();
-    setGeoStatus("Coordinate trovate e mappa aggiornata.", "success");
+    setGeoStatus(
+      usedQuery === candidates[0]
+        ? "Coordinate trovate e mappa aggiornata."
+        : "Coordinate trovate (con una versione semplificata dell'indirizzo) e mappa aggiornata. Verifica che la posizione sulla mappa sia corretta.",
+      "success"
+    );
   }catch(error){
     setGeoStatus(error.message || "Errore geolocalizzazione.", "error");
   }
