@@ -271,6 +271,8 @@ body::after{
 }
 .news-actions button:hover{ background:#a67f34; color:#fff; }
 .news-actions button.danger:hover{ background:#9c2f2f; border-color:#9c2f2f; }
+.news-actions button.verify{ border-color:rgba(79,127,69,.4); color:#4f7f45; }
+.news-actions button.verify:hover{ background:#4f7f45; color:#fff; }
 .empty{
   padding:40px;
   text-align:center;
@@ -279,6 +281,77 @@ body::after{
   border:1px solid rgba(166,127,52,.15);
   background:rgba(255,255,255,.18);
 }
+
+/* ---- Badge di stato verifica, campi aggiuntivi indirizzo/appuntamento/anagrafica cliente. ---- */
+.verify-badge{
+  display:inline-block;
+  padding:5px 9px;
+  border:1px solid rgba(196,140,20,.5);
+  color:#a5710d;
+  background:rgba(196,140,20,.08);
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-left:10px;
+  vertical-align:middle;
+}
+.verified-badge{
+  display:inline-block;
+  padding:5px 9px;
+  border:1px solid rgba(79,127,69,.4);
+  color:#4f7f45;
+  background:rgba(79,127,69,.07);
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-left:10px;
+  vertical-align:middle;
+}
+.news-details{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 20px;
+  margin-bottom:14px;
+  font-size:12.5px;
+  color:#8f7643;
+}
+.news-details strong{ color:#7f6430; }
+.news-details a{ color:#a67f34; }
+.form-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+.form-grid .field.full{ grid-column:1 / -1; }
+.form-section-label{
+  font-size:10px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin:22px 0 12px;
+  border-top:1px solid rgba(166,127,52,.18);
+  padding-top:16px;
+}
+.news-form input[type="text"],
+.news-form input[type="datetime-local"],
+.news-form input[type="email"],
+.news-form input[type="tel"]{
+  width:100%;
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.6);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+}
+.appointment-row{
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  flex-wrap:wrap;
+}
+.appointment-row .field{ flex:1; min-width:220px; margin-bottom:0; }
 </style>
 </head>
 <body>
@@ -303,7 +376,7 @@ body::after{
 
 <div class="container">
 
-  <div class="kicker" data-i18n="kicker">Bacheca Interna</div>
+  <div class="kicker" data-i18n="kicker">Bacheca Interna · Solo Admin</div>
 
   <div class="title-row">
     <div>
@@ -313,21 +386,55 @@ body::after{
   </div>
 
   <p class="subtitle" data-i18n="subtitle">
-    Annunci e aggiornamenti interni per tutto lo staff IMMONOVA: novità operative, comunicazioni importanti, promemoria.
+    Segnalazioni interne su immobili in vendita: indirizzo, dati del cliente e appuntamento. Ogni segnalazione genera automaticamente una scheda in Investitori/Venditori e resta "in fase di verifica" finché un admin non la conferma. Pagina visibile solo ad admin e super user.
   </p>
 
   <div id="status" class="status"></div>
 
   <form class="news-form" id="newsForm">
-    <div class="field">
+    <div class="field full">
       <label data-i18n="label_title">Titolo</label>
       <input type="text" id="newsTitle" maxlength="200" required>
     </div>
-    <div class="field">
-      <label data-i18n="label_body">Testo</label>
+    <div class="field full">
+      <label data-i18n="label_body">Testo / Note</label>
       <textarea id="newsBody" required></textarea>
     </div>
-    <div class="field checkbox-row">
+    <div class="field full">
+      <label data-i18n="label_address">Indirizzo dell'immobile da vendere</label>
+      <input type="text" id="newsAddress" placeholder="Via, città, provincia">
+    </div>
+
+    <div class="form-section-label" data-i18n="section_appointment">Appuntamento</div>
+    <div class="appointment-row">
+      <div class="field">
+        <label data-i18n="label_appointment">Data e ora appuntamento (opzionale)</label>
+        <input type="datetime-local" id="newsAppointment">
+      </div>
+      <button type="button" class="secondary-btn" id="openEventsBtn" data-i18n="btn_fix_appointment">Fissa Appuntamento in Eventi</button>
+    </div>
+
+    <div class="form-section-label" data-i18n="section_client">Dati Anagrafici Cliente (crea automaticamente una scheda in Investitori/Venditori)</div>
+    <div class="form-grid">
+      <div class="field">
+        <label data-i18n="label_client_first_name">Nome</label>
+        <input type="text" id="clientFirstName">
+      </div>
+      <div class="field">
+        <label data-i18n="label_client_last_name">Cognome</label>
+        <input type="text" id="clientLastName">
+      </div>
+      <div class="field">
+        <label data-i18n="label_client_phone">Telefono</label>
+        <input type="tel" id="clientPhone">
+      </div>
+      <div class="field">
+        <label data-i18n="label_client_email">Email</label>
+        <input type="email" id="clientEmail">
+      </div>
+    </div>
+
+    <div class="field checkbox-row" style="margin-top:16px">
       <input type="checkbox" id="newsPinned">
       <label for="newsPinned" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="label_pinned">Metti in evidenza in cima alla bacheca</label>
     </div>
@@ -357,13 +464,20 @@ const openFormBtn = document.getElementById("openFormBtn");
 const cancelFormBtn = document.getElementById("cancelFormBtn");
 const newsTitleInput = document.getElementById("newsTitle");
 const newsBodyInput = document.getElementById("newsBody");
+const newsAddressInput = document.getElementById("newsAddress");
+const newsAppointmentInput = document.getElementById("newsAppointment");
+const openEventsBtn = document.getElementById("openEventsBtn");
+const clientFirstNameInput = document.getElementById("clientFirstName");
+const clientLastNameInput = document.getElementById("clientLastName");
+const clientPhoneInput = document.getElementById("clientPhone");
+const clientEmailInput = document.getElementById("clientEmail");
 const newsPinnedInput = document.getElementById("newsPinned");
 const saveNewsBtn = document.getElementById("saveNewsBtn");
 
 let currentUser = null;
 let currentProfile = null;
 let currentUserLanguage = "it";
-let canWrite = false;
+let canAccess = false;
 let editingId = null;
 let allNews = [];
 
@@ -372,19 +486,31 @@ var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi",
   nav_investors:"Investitori", nav_capital_partners:"Capital Partners", nav_users:"Utenti",
   nav_news:"Notizie", logout:"Logout",
-  kicker:"Bacheca Interna", title:"Notizie",
-  subtitle:"Annunci e aggiornamenti interni per tutto lo staff IMMONOVA: novità operative, comunicazioni importanti, promemoria.",
+  kicker:"Bacheca Interna · Solo Admin", title:"Notizie",
+  subtitle:"Segnalazioni interne su immobili in vendita: indirizzo, dati del cliente e appuntamento. Ogni segnalazione genera automaticamente una scheda in Investitori/Venditori e resta \"in fase di verifica\" finché un admin non la conferma. Pagina visibile solo ad admin e super user.",
   btn_new_news:"Nuova Notizia", btn_save_news:"Pubblica", btn_update_news:"Salva Modifiche", btn_cancel:"Annulla",
-  label_title:"Titolo", label_body:"Testo", label_pinned:"Metti in evidenza in cima alla bacheca",
+  label_title:"Titolo", label_body:"Testo / Note", label_address:"Indirizzo dell'immobile da vendere",
+  label_pinned:"Metti in evidenza in cima alla bacheca",
+  section_appointment:"Appuntamento", label_appointment:"Data e ora appuntamento (opzionale)",
+  btn_fix_appointment:"Fissa Appuntamento in Eventi",
+  section_client:"Dati Anagrafici Cliente (crea automaticamente una scheda in Investitori/Venditori)",
+  label_client_first_name:"Nome", label_client_last_name:"Cognome", label_client_phone:"Telefono", label_client_email:"Email",
   loading:"Caricamento notizie...", empty_none:"Nessuna notizia pubblicata al momento.",
-  pin_badge:"In evidenza",
-  action_edit:"Modifica", action_delete:"Elimina",
+  pin_badge:"In evidenza", verify_badge:"Notizia in fase di verifica", verified_badge:"Verificata",
+  action_edit:"Modifica", action_delete:"Elimina", action_verify:"Segna come verificata",
+  address_label:"Indirizzo:", appointment_label:"Appuntamento:", client_label:"Cliente:",
+  linked_investor_link:"Vedi scheda in Investitori",
   confirm_delete_news:"Eliminare definitivamente questa notizia?",
   msg_saving:"Pubblicazione in corso...", msg_saved:"Notizia pubblicata.", msg_updated:"Notizia aggiornata.",
   msg_deleting:"Eliminazione in corso...", msg_deleted:"Notizia eliminata.",
+  msg_verifying:"Verifica in corso...", msg_verified:"Notizia segnata come verificata.",
+  msg_investor_created:" Scheda cliente creata in Investitori/Venditori.",
+  msg_investor_failed:" (la notizia è stata salvata, ma la scheda cliente non è stata creata: verificarla a mano)",
   msg_required_fields:"Titolo e testo sono obbligatori.",
   msg_profile_not_found:"Impossibile caricare il profilo utente.",
-  msg_load_error:"Errore nel caricamento delle notizie."
+  msg_load_error:"Errore nel caricamento delle notizie.",
+  msg_access_denied:"Accesso riservato agli admin.",
+  empty_unauthorized:"Accesso riservato agli admin."
 };
 var T = UI_STRINGS;
 
@@ -493,12 +619,19 @@ async function loadProfile(){
   currentProfile = result.data;
   await applyLanguage(currentProfile.language || "it");
 
-  /* ---- Chi puo' scrivere sulla bacheca: admin o super user (stesso identico criterio usato
-     in tutte le altre pagine admin). Tutti gli altri collaboratori vedono la bacheca in sola
-     lettura -- il pulsante "Nuova Notizia" e i pulsanti modifica/elimina restano nascosti. ---- */
-  canWrite = currentProfile.role === "admin" || !!currentProfile.is_super_user;
-  if(canWrite) openFormBtn.style.display = "";
+  /* ---- L'intera pagina notizie (lettura E scrittura) e' riservata ad admin o super user --
+     stesso identico criterio usato in tutte le altre pagine admin. Un collaboratore normale
+     non vede nessuna notizia, nemmeno quelle gia' verificate: la bacheca qui non e' pubblica
+     come nella prima versione, e' uno strumento di lavoro solo per chi gestisce le vendite. ---- */
+  canAccess = currentProfile.role === "admin" || !!currentProfile.is_super_user;
+  if(!canAccess){
+    setStatus(T.msg_access_denied, "error");
+    newsList.innerHTML = '<div class="empty">'+esc(T.empty_unauthorized)+'</div>';
+    newsForm.style.display = "none";
+    return false;
+  }
 
+  openFormBtn.style.display = "";
   return true;
 }
 
@@ -509,19 +642,37 @@ function renderNewsList(){
   }
 
   newsList.innerHTML = allNews.map(function(n){
-    var actions = canWrite ? (
+    var statusBadge = n.status === "verificata"
+      ? '<span class="verified-badge">'+esc(T.verified_badge)+'</span>'
+      : '<span class="verify-badge">'+esc(T.verify_badge)+'</span>';
+
+    var clientName = [n.client_first_name, n.client_last_name].filter(Boolean).join(" ");
+    var clientBits = [clientName, n.client_phone, n.client_email].filter(Boolean).join(" · ");
+
+    var detailsParts = [];
+    if(n.property_address) detailsParts.push('<span><strong>'+esc(T.address_label)+'</strong> '+esc(n.property_address)+'</span>');
+    if(n.appointment_at) detailsParts.push('<span><strong>'+esc(T.appointment_label)+'</strong> '+esc(fmtDate(n.appointment_at))+'</span>');
+    if(clientBits) detailsParts.push('<span><strong>'+esc(T.client_label)+'</strong> '+esc(clientBits)+'</span>');
+    if(n.linked_investor_id) detailsParts.push('<a href="investor-form.html?id='+encodeURIComponent(n.linked_investor_id)+'" target="_blank">'+esc(T.linked_investor_link)+'</a>');
+    var details = detailsParts.length ? '<div class="news-details">'+detailsParts.join("")+'</div>' : "";
+
+    var verifyBtn = n.status === "verificata" ? "" : '<button type="button" class="verify" onclick="verifyNews(\''+n.id+'\')">'+esc(T.action_verify)+'</button>';
+
+    var actions = (
       '<div class="news-actions">'+
+        verifyBtn+
         '<button type="button" onclick="editNews(\''+n.id+'\')">'+esc(T.action_edit)+'</button>'+
         '<button type="button" class="danger" onclick="deleteNews(\''+n.id+'\')">'+esc(T.action_delete)+'</button>'+
       '</div>'
-    ) : "";
+    );
 
     return (
       '<div class="news-card'+(n.pinned ? " pinned" : "")+'">'+
         '<div class="news-card-head">'+
-          '<div class="news-title">'+esc(n.title)+(n.pinned ? '<span class="pin-badge">'+esc(T.pin_badge)+'</span>' : "")+'</div>'+
+          '<div class="news-title">'+esc(n.title)+(n.pinned ? '<span class="pin-badge">'+esc(T.pin_badge)+'</span>' : "")+statusBadge+'</div>'+
           '<div class="news-meta">'+esc(fmtDate(n.created_at))+'</div>'+
         '</div>'+
+        details+
         '<div class="news-body">'+esc(n.body)+'</div>'+
         actions+
       '</div>'
@@ -557,7 +708,7 @@ function closeForm(){
   newsForm.reset();
   editingId = null;
   saveNewsBtn.textContent = T.btn_save_news;
-  if(canWrite) openFormBtn.style.display = "";
+  openFormBtn.style.display = "";
 }
 
 window.editNews = function(id){
@@ -566,6 +717,12 @@ window.editNews = function(id){
   editingId = id;
   newsTitleInput.value = n.title || "";
   newsBodyInput.value = n.body || "";
+  newsAddressInput.value = n.property_address || "";
+  newsAppointmentInput.value = n.appointment_at ? n.appointment_at.slice(0, 16) : "";
+  clientFirstNameInput.value = n.client_first_name || "";
+  clientLastNameInput.value = n.client_last_name || "";
+  clientPhoneInput.value = n.client_phone || "";
+  clientEmailInput.value = n.client_email || "";
   newsPinnedInput.checked = !!n.pinned;
   saveNewsBtn.textContent = T.btn_update_news;
   openForm();
@@ -586,6 +743,48 @@ window.deleteNews = async function(id){
   await loadNews();
 };
 
+/* ---- "Segna come verificata": toglie l'etichetta "Notizia in fase di verifica". Nessuna
+   email o notifica viene mandata in nessun punto di questa pagina, per nessuna azione. ---- */
+window.verifyNews = async function(id){
+  setStatus(T.msg_verifying, "");
+  const { error } = await client.from("immonova_news").update({ status:"verificata", updated_at:new Date().toISOString() }).eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setStatus(T.msg_verified, "success");
+  await loadNews();
+};
+
+/* ---- Crea in automatico una scheda Investitori/Venditori dai dati anagrafici inseriti nella
+   notizia (solo alla creazione, mai su una modifica successiva, per non duplicare la scheda
+   ad ogni salvataggio). is_seller = true perche' la notizia riguarda sempre un immobile da
+   vendere. Nessuna notifica viene inviata: notify-new-investor NON viene chiamata qui. ---- */
+async function createInvestorFromNews(news){
+  var payload = {
+    first_name: news.client_first_name,
+    last_name: news.client_last_name,
+    phone: news.client_phone || null,
+    email: news.client_email || null,
+    is_investor: false,
+    is_seller: true,
+    seller_status: "da_contattare",
+    status: "active",
+    notes: [
+      "Creato automaticamente dalla notizia \"" + news.title + "\".",
+      news.property_address ? "Indirizzo immobile: " + news.property_address : null,
+      news.body ? news.body : null
+    ].filter(Boolean).join("\n"),
+    created_by: currentUser.id
+  };
+
+  const { data, error } = await client.from("investors").insert(payload).select("id").single();
+  if(error || !data) throw error || new Error("insert investors: nessun id restituito");
+  return data.id;
+}
+
 newsForm.addEventListener("submit", async function(event){
   event.preventDefault();
 
@@ -599,18 +798,26 @@ newsForm.addEventListener("submit", async function(event){
   var payload = {
     title: title,
     body: body,
+    property_address: newsAddressInput.value.trim() || null,
+    appointment_at: newsAppointmentInput.value ? new Date(newsAppointmentInput.value).toISOString() : null,
+    client_first_name: clientFirstNameInput.value.trim() || null,
+    client_last_name: clientLastNameInput.value.trim() || null,
+    client_phone: clientPhoneInput.value.trim() || null,
+    client_email: clientEmailInput.value.trim() || null,
     pinned: newsPinnedInput.checked,
     updated_at: new Date().toISOString()
   };
 
-  setStatus(editingId ? T.msg_saving : T.msg_saving, "");
+  setStatus(T.msg_saving, "");
 
-  var result;
+  var result, savedId = editingId;
   if(editingId){
     result = await client.from("immonova_news").update(payload).eq("id", editingId);
   }else{
     payload.created_by = currentUser.id;
-    result = await client.from("immonova_news").insert(payload);
+    payload.status = "in_verifica";
+    result = await client.from("immonova_news").insert(payload).select("id").single();
+    if(!result.error && result.data) savedId = result.data.id;
   }
 
   if(result.error){
@@ -618,9 +825,32 @@ newsForm.addEventListener("submit", async function(event){
     return;
   }
 
-  setStatus(editingId ? T.msg_updated : T.msg_saved, "success");
+  var extraMsg = "";
+  if(!editingId && payload.client_first_name && payload.client_last_name){
+    try{
+      var investorId = await createInvestorFromNews(payload);
+      await client.from("immonova_news").update({ linked_investor_id: investorId }).eq("id", savedId);
+      extraMsg = T.msg_investor_created;
+    }catch(e){
+      console.warn("Creazione automatica scheda Investitori/Venditori non riuscita:", e);
+      extraMsg = T.msg_investor_failed;
+    }
+  }
+
+  setStatus((editingId ? T.msg_updated : T.msg_saved) + extraMsg, "success");
   closeForm();
   await loadNews();
+});
+
+/* ---- "Fissa Appuntamento in Eventi": apre la pagina eventi in una nuova scheda, con titolo,
+   note e data gia' pronti da copiare -- non scrive direttamente sul calendario (la struttura
+   esatta della tabella eventi non e' gestita da questa pagina), l'admin conferma da li'. ---- */
+openEventsBtn.addEventListener("click", function(){
+  var params = new URLSearchParams();
+  if(newsTitleInput.value.trim()) params.set("title", newsTitleInput.value.trim());
+  if(newsAddressInput.value.trim()) params.set("location", newsAddressInput.value.trim());
+  if(newsAppointmentInput.value) params.set("date", newsAppointmentInput.value);
+  window.open("events.html?" + params.toString(), "_blank");
 });
 
 openFormBtn.addEventListener("click", openForm);
