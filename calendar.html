@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendario Claudio Romano | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+
+body{
+background:#f4ecdf;
+font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+color:#7f6430;
+}
+
+body::before{
+content:"";
+position:fixed;
+inset:0;
+z-index:-2;
+background:
+radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+#f4ecdf;
+}
+
+body::after{
+content:"";
+position:fixed;
+inset:0;
+z-index:-1;
+background:
+repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+background-size:230px 199px;
+opacity:.30;
+}
+
+.header{
+padding:30px 40px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+border-bottom:1px solid rgba(166,127,52,.12);
+}
+
+.logo{
+font-size:24px;
+font-weight:300;
+letter-spacing:.35em;
+color:#a67f34;
+}
+
+.header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.header-actions a,.logout{
+padding:10px 20px;
+border:1px solid rgba(166,127,52,.25);
+background:rgba(255,255,255,.25);
+cursor:pointer;
+color:#a67f34;
+text-decoration:none;
+font-size:12px;
+letter-spacing:.14em;
+text-transform:uppercase;
+}
+
+.container{max-width:1300px;margin:auto;padding:40px}
+
+.title{font-size:42px;font-weight:200;letter-spacing:.05em;color:#a67f34;margin-bottom:18px}
+.subtitle{font-size:15px;line-height:1.8;color:#8f7643;max-width:820px;margin-bottom:28px}
+
+.legend{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:26px;font-size:12px}
+.legend-item{display:flex;align-items:center;gap:8px}
+.legend-swatch{width:16px;height:16px;border:1px solid rgba(166,127,52,.25)}
+.legend-swatch.free{background:rgba(255,255,255,.4)}
+.legend-swatch.busy{background:rgba(143,91,40,.30)}
+.legend-swatch.telefonata{background:rgba(95,143,146,.30);border-color:rgba(95,143,146,.5)}
+.legend-swatch.riunione{background:rgba(166,127,52,.30);border-color:rgba(166,127,52,.5)}
+.legend-swatch.visita_posto{background:rgba(79,127,69,.30);border-color:rgba(79,127,69,.5)}
+
+.cal-toolbar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.cal-nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.cal-nav button{padding:10px 16px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.25);color:#a67f34;cursor:pointer;font-size:12px;letter-spacing:.06em;font-family:inherit}
+.cal-nav button:hover{background:#a67f34;color:#fff}
+.cal-period-label{font-size:16px;color:#a67f34;min-width:170px;text-align:center;text-transform:capitalize}
+.cal-view-switch{display:flex;gap:8px}
+.cal-view-switch button{padding:10px 16px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.18);color:#a67f34;cursor:pointer;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-family:inherit}
+.cal-view-switch button.active{background:#a67f34;color:#fff}
+
+.month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:rgba(166,127,52,.12);border:1px solid rgba(166,127,52,.15)}
+.month-weekday{padding:10px;text-align:center;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;background:rgba(255,255,255,.35)}
+.month-day{min-height:98px;padding:8px;background:rgba(255,255,255,.32);cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.month-day:hover{background:rgba(255,255,255,.48)}
+.month-day.other-month{opacity:.35}
+.month-day.today{box-shadow:inset 0 0 0 2px rgba(166,127,52,.5)}
+.month-day-num{font-size:12px;color:#a67f34;font-weight:600}
+.month-day-chip{font-size:9px;padding:3px 5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.month-day-chip.busy{background:rgba(143,91,40,.20);color:#8f5b28}
+.month-day-chip.telefonata{background:rgba(95,143,146,.22);color:#5f8f92}
+.month-day-chip.riunione{background:rgba(166,127,52,.22);color:#8a682c}
+.month-day-chip.visita_posto{background:rgba(79,127,69,.22);color:#4f7f45}
+.month-day-more{font-size:9px;color:#8f7643}
+
+.week-grid{display:grid;grid-template-columns:64px repeat(7,1fr);gap:1px;background:rgba(166,127,52,.12);border:1px solid rgba(166,127,52,.15);overflow-x:auto}
+.week-corner{background:rgba(255,255,255,.35)}
+.week-day-head{padding:10px 4px;text-align:center;background:rgba(255,255,255,.35);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#a67f34}
+.week-day-head.clickable{cursor:pointer}
+.week-day-head.clickable:hover{background:rgba(166,127,52,.14)}
+.week-day-head .wk-num{display:block;font-size:16px;font-weight:600;margin-top:3px;text-transform:none}
+.week-hour-label{padding:8px 6px;font-size:10px;color:#8f7643;text-align:right;background:rgba(255,255,255,.24)}
+.week-cell{position:relative;height:52px;background:rgba(255,255,255,.32);cursor:pointer;padding:0;overflow:hidden}
+.hour-tick{position:absolute;left:0;width:9px;height:1px;background:rgba(166,127,52,.4);pointer-events:none;z-index:0}
+/* Vista giorno: stessa struttura a griglia della settimana ma con una sola colonna molto più
+   larga e celle più alte -- pensata apposta per leggere chiaramente più impegni sovrapposti
+   nella stessa fascia oraria, cosa che nella vista settimana (colonne strette) diventa illeggibile. */
+.day-grid{display:grid;grid-template-columns:64px 1fr;gap:1px;background:rgba(166,127,52,.12);border:1px solid rgba(166,127,52,.15)}
+.day-cell{position:relative;height:88px;background:rgba(255,255,255,.32);cursor:pointer;padding:0;overflow:hidden}
+.day-cell.busy{background:rgba(143,91,40,.18);cursor:not-allowed}
+.day-cell.past{background:rgba(166,127,52,.06);cursor:default}
+.day-event-bar{position:absolute;overflow:hidden;cursor:pointer;padding:5px 10px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.5);border-radius:2px}
+.day-event-bar.split{border-right:1px solid rgba(255,255,255,.65)}
+.day-event-bar.split:last-child{border-right:0}
+.day-event-bar.telefonata{background:rgba(95,143,146,.34);color:#5f8f92}
+.day-event-bar.riunione{background:rgba(166,127,52,.34);color:#8a682c}
+.day-event-bar.visita_posto{background:rgba(79,127,69,.34);color:#4f7f45}
+.day-event-bar.busy{background:rgba(143,91,40,.34);color:#8f5b28;cursor:not-allowed}
+.day-cell-title{font-size:12px;font-weight:600;line-height:1.3;overflow:hidden}
+.day-cell-time{font-size:10px;opacity:.8;margin-top:2px}
+.week-cell:hover{background:rgba(166,127,52,.14)}
+.week-cell.busy{background:rgba(143,91,40,.18);cursor:not-allowed}
+.week-cell.past{background:rgba(127,100,48,.05);cursor:default}
+.week-event-bar{position:absolute;left:0;right:0;overflow:hidden;cursor:pointer;padding:2px 4px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.5)}
+.week-event-bar.split{border-right:1px solid rgba(255,255,255,.65)}
+.week-event-bar.split:last-child{border-right:0}
+.week-event-bar.telefonata{background:rgba(95,143,146,.34);color:#5f8f92}
+.week-event-bar.riunione{background:rgba(166,127,52,.34);color:#8a682c}
+.week-event-bar.visita_posto{background:rgba(79,127,69,.34);color:#4f7f45}
+.week-event-bar.busy{background:rgba(143,91,40,.34);color:#8f5b28;cursor:not-allowed}
+.week-cell-note{font-size:7px;line-height:1.2;letter-spacing:.02em;overflow:hidden}
+
+.status{margin-bottom:22px;min-height:20px;font-size:13px}
+.success{color:#4f7f45}
+.error{color:#9c2f2f}
+
+.day-block{
+background:rgba(255,255,255,.20);
+border:1px solid rgba(166,127,52,.15);
+margin-bottom:18px;
+overflow:hidden;
+}
+
+.day-head{
+padding:14px 20px;
+background:rgba(166,127,52,.08);
+font-size:12px;
+letter-spacing:.16em;
+text-transform:uppercase;
+color:#a67f34;
+border-bottom:1px solid rgba(166,127,52,.12);
+}
+
+.day-slots{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+gap:2px;
+padding:10px;
+}
+
+.slot{
+padding:10px 8px;
+text-align:center;
+font-size:11px;
+letter-spacing:.04em;
+border:1px solid rgba(166,127,52,.10);
+background:rgba(255,255,255,.35);
+cursor:pointer;
+line-height:1.5;
+}
+.slot:hover{background:rgba(166,127,52,.14)}
+.slot.busy{background:rgba(143,91,40,.18);color:#8f5b28;cursor:not-allowed}
+.slot.busy:hover{background:rgba(143,91,40,.18)}
+.slot.telefonata{background:rgba(95,143,146,.20);color:#5f8f92;cursor:pointer}
+.slot.riunione{background:rgba(166,127,52,.20);color:#8a682c;cursor:pointer}
+.slot.visita_posto{background:rgba(79,127,69,.20);color:#4f7f45;cursor:pointer}
+.slot.telefonata:hover,.slot.riunione:hover,.slot.visita_posto:hover{opacity:.9}
+.slot-time{display:block;font-weight:600;margin-bottom:3px}
+.slot-note{display:block;font-size:9px;letter-spacing:.06em;text-transform:uppercase;opacity:.85}
+
+.empty{padding:40px;text-align:center;opacity:.7}
+
+.modal-overlay{
+display:none;
+position:fixed;
+inset:0;
+background:rgba(31,22,8,.45);
+z-index:50;
+align-items:center;
+justify-content:center;
+padding:20px;
+}
+.modal-overlay.active{display:flex}
+
+.modal{
+width:100%;
+max-width:480px;
+background:#f4ecdf;
+border:1px solid rgba(166,127,52,.28);
+padding:34px;
+max-height:90vh;
+overflow:auto;
+}
+
+.modal-title{font-size:20px;font-weight:300;color:#a67f34;margin-bottom:20px;letter-spacing:.03em}
+
+.field{margin-bottom:16px}
+label{display:block;margin-bottom:7px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643}
+input,select,textarea{
+width:100%;
+padding:12px 14px;
+border:1px solid rgba(166,127,52,.25);
+background:rgba(255,255,255,.35);
+color:#7f6430;
+font-size:14px;
+font-family:inherit;
+outline:none;
+}
+textarea{min-height:70px;resize:vertical}
+
+.modal-actions{display:flex;gap:12px;margin-top:22px}
+.btn{
+padding:13px 22px;
+background:#a67f34;
+color:#fff;
+border:1px solid #a67f34;
+text-transform:uppercase;
+letter-spacing:.14em;
+font-size:12px;
+cursor:pointer;
+font-family:inherit;
+}
+.btn:hover{background:#8a682c}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.secondary{background:rgba(255,255,255,.22);color:#a67f34}
+
+.modal-status{margin-top:14px;font-size:13px;min-height:18px}
+
+@media(max-width:760px){
+.header{flex-direction:column;gap:18px}
+.container{padding:24px 18px}
+.day-slots{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+<div class="logo">IMMONOVA</div>
+<div class="header-actions">
+<a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+<a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
+<button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
+</div>
+</header>
+
+<div class="container">
+
+<h1 class="title" data-i18n="title">Calendario Claudio Romano</h1>
+<p class="subtitle" data-i18n="subtitle">
+Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente un appuntamento negli spazi liberi. L'appuntamento comparirà anche sul suo calendario personale.
+</p>
+
+<div class="legend">
+<div class="legend-item"><span class="legend-swatch free"></span><span data-i18n="legend_free">Libero</span></div>
+<div class="legend-item"><span class="legend-swatch busy"></span><span data-i18n="legend_busy">Occupato (iCloud)</span></div>
+<div class="legend-item"><span class="legend-swatch telefonata"></span><span data-i18n="legend_telefonata">Telefonata</span></div>
+<div class="legend-item"><span class="legend-swatch riunione"></span><span data-i18n="legend_riunione">Riunione</span></div>
+<div class="legend-item"><span class="legend-swatch visita_posto"></span><span data-i18n="legend_visita">Visita sul posto</span></div>
+</div>
+
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px;align-items:center">
+<button type="button" class="btn secondary" id="refreshSyncBtn" data-i18n="btn_refresh_sync">Aggiorna disponibilità da iCloud ora</button>
+<button type="button" class="btn secondary" id="enablePushBtn" data-i18n="btn_enable_push">Attiva notifiche push</button>
+</div>
+
+<div class="field" id="calendarOwnerField" style="max-width:340px;display:none">
+<label data-i18n="label_calendar_owner">Calendario di</label>
+<select id="calendarOwnerSelect"></select>
+</div>
+
+<div class="day-block" id="connectionsBlock">
+<div class="day-head" data-i18n="connections_title">Collega il tuo calendario personale</div>
+<div style="padding:16px 20px;display:flex;flex-direction:column;gap:18px">
+
+<div id="connectionsStatus" style="font-size:12px"></div>
+
+<div style="display:flex;flex-direction:column;gap:10px;max-width:420px">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643" data-i18n="connections_icloud_title">iCloud</div>
+<div id="icloudConnectionStatus" style="font-size:12px"></div>
+<div id="icloudConnectForm" style="display:flex;flex-direction:column;gap:10px">
+<input type="email" id="icloudUsername" placeholder="nome@icloud.com" data-i18n-placeholder="ph_icloud_email">
+<input type="password" id="icloudAppPassword" data-i18n-placeholder="ph_icloud_app_password" placeholder="Password per app (appleid.apple.com)">
+<div style="display:flex;gap:10px">
+<button type="button" class="btn secondary" id="connectIcloudBtn" data-i18n="btn_connect_icloud">Collega iCloud</button>
+<button type="button" class="btn secondary" id="disconnectIcloudBtn" data-i18n="btn_disconnect" style="display:none;color:#9c2f2f;border-color:rgba(156,47,47,.35)">Scollega</button>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px;max-width:420px">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643" data-i18n="connections_google_title">Google Calendar</div>
+<div id="googleConnectionStatus" style="font-size:12px"></div>
+<div style="display:flex;gap:10px">
+<button type="button" class="btn secondary" id="connectGoogleBtn" data-i18n="btn_connect_google">Collega Google Calendar</button>
+<button type="button" class="btn secondary" id="disconnectGoogleBtn" data-i18n="btn_disconnect" style="display:none;color:#9c2f2f;border-color:rgba(156,47,47,.35)">Scollega</button>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="cal-toolbar">
+<div class="cal-nav">
+<button type="button" id="prevPeriodBtn">‹</button>
+<div class="cal-period-label" id="periodLabel"></div>
+<button type="button" id="nextPeriodBtn">›</button>
+<button type="button" id="todayBtn" data-i18n="btn_today">Oggi</button>
+</div>
+<div class="cal-view-switch">
+<button type="button" id="viewMonthBtn" data-i18n="btn_view_month">Mese</button>
+<button type="button" id="viewWeekBtn" data-i18n="btn_view_week">Settimana</button>
+<button type="button" id="viewDayBtn" data-i18n="btn_view_day">Giorno</button>
+</div>
+</div>
+
+<div id="status" class="status"></div>
+
+<div id="calendarBody">
+<div class="empty" data-i18n="loading">Caricamento calendario...</div>
+</div>
+
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+<div class="modal">
+<div class="modal-title" data-i18n="modal_title">Fissa appuntamento</div>
+
+<div class="field">
+<label data-i18n="label_type">Tipo appuntamento</label>
+<select id="eventType">
+<option value="telefonata" data-i18n="type_telefonata">Telefonata</option>
+<option value="riunione" data-i18n="type_riunione">Riunione</option>
+<option value="visita_posto" data-i18n="type_visita">Visita sul posto</option>
+</select>
+</div>
+
+<div class="field">
+<label data-i18n="label_date">Data e ora inizio</label>
+<input type="datetime-local" id="eventStart">
+</div>
+
+<div class="field">
+<label data-i18n="label_duration">Durata (minuti)</label>
+<input type="number" id="eventDuration" min="15" step="15" value="30">
+</div>
+
+<div class="field">
+<label class="check-inline" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+<input type="checkbox" id="eventAllDay" style="width:auto">
+<span data-i18n="label_all_day">Blocca tutta la giornata</span>
+</label>
+</div>
+
+<div class="field">
+<label data-i18n="label_opportunity">Opportunità collegata (opzionale)</label>
+<select id="eventOpportunity">
+<option value="" data-i18n="opt_none">Nessuna</option>
+</select>
+</div>
+
+<div class="field">
+<label data-i18n="label_address">Indirizzo (opzionale, utile per Visita sul posto)</label>
+<input type="text" id="eventAddress" placeholder="Es. Via Roma 12, Bari">
+<a href="#" id="mapsLink" target="_blank" rel="noopener" style="display:none;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a67f34;margin-top:8px" data-i18n="link_open_maps">Apri in Maps</a>
+</div>
+
+<div class="field">
+<label data-i18n="label_notes">Note (opzionale)</label>
+<textarea id="eventNotes"></textarea>
+</div>
+
+<div class="field" id="participantsField" style="display:none">
+<label data-i18n="label_participants">Collaboratori coinvolti (riceveranno una notifica push)</label>
+<div id="participantsList" style="display:flex;flex-direction:column;gap:6px"></div>
+</div>
+
+<div id="createdByInfo" style="display:none;margin-bottom:16px;font-size:12px;color:#8f7643"></div>
+
+<div id="readOnlyNotice" style="display:none;margin-bottom:16px;font-size:12px;color:#8f5b28"></div>
+
+<div class="modal-actions" id="modalActions">
+<button type="button" class="btn" id="confirmBookBtn" data-i18n="btn_confirm">Conferma appuntamento</button>
+<button type="button" class="btn secondary" id="cancelBookBtn" data-i18n="btn_cancel">Annulla</button>
+<button type="button" class="btn secondary" id="deleteBookBtn" data-i18n="btn_delete" style="display:none;color:#9c2f2f;border-color:rgba(156,47,47,.35)">Elimina appuntamento</button>
+</div>
+
+<div id="modalStatus" class="modal-status"></div>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const statusBox = document.getElementById("status");
+const calendarBody = document.getElementById("calendarBody");
+const modalOverlay = document.getElementById("modalOverlay");
+const modalStatus = document.getElementById("modalStatus");
+const confirmBookBtn = document.getElementById("confirmBookBtn");
+const cancelBookBtn = document.getElementById("cancelBookBtn");
+const deleteBookBtn = document.getElementById("deleteBookBtn");
+
+const DAY_START_HOUR = 8;
+const DAY_END_HOUR = 20;
+var currentView = "week";
+var anchorDate = new Date();
+anchorDate.setHours(0,0,0,0);
+
+let currentUser = null;
+let currentUserLanguage = "it";
+let currentUserRole = "user";
+let currentUserIsAdmin = false;
+let busyBlocks = [];
+let bookedEvents = [];
+let allOpportunities = [];
+let profilesById = {};
+let allCollaborators = []; // [{id,name,role}] tutti gli utenti registrati (per il selettore admin e i checkbox partecipanti)
+let adminUserIds = []; // id dei profili con role="admin" (il calendario "occupato/iCloud" appartiene a loro)
+let eventParticipantsMap = {}; // event_id -> [user_id, ...] (chi e' stato invitato su quell'evento)
+let viewedUserId = null; // di chi e' il calendario che sto guardando ora (default: il proprio)
+let pendingSlotStart = null;
+let editingEvent = null;
+
+/* Stessa chiave pubblica VAPID gia' usata in notifications-consent.html per gli avvisi
+   preferiti (secret VAPID_PUBLIC_KEY lato server, gia' configurato su Supabase) -- qui
+   viene riusata per la sottoscrizione push dei collaboratori autenticati al calendario. */
+var VAPID_PUBLIC_KEY = "BKSNGyB_2rF1krXLKppDB022aJasOv2fIeogcpZykaMFOtXP4UAzMXgWpi7vBmSbkd3YCZ0s6hBO7GKtVDB8A7s";
+
+function urlBase64ToUint8Array(base64String){
+  var padding = "=".repeat((4 - base64String.length % 4) % 4);
+  var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  var rawData = window.atob(base64);
+  var outputArray = new Uint8Array(rawData.length);
+  for(var i = 0; i < rawData.length; ++i){
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+function pad2(n){ return String(n).padStart(2,"0"); }
+
+/* ---- Un campo <input type="datetime-local"> vuole l'ora LOCALE scritta cosi' com'e',
+   non un timestamp UTC. Usare .toISOString() qui era il bug: quella funzione converte
+   sempre in UTC (a Ferragosto in Italia sono 2 ore indietro), quindi cliccando le 14:00
+   il modulo si apriva precompilato con le 12:00. Questi due helper costruiscono/leggono
+   la stringa locale a mano, senza nessuna conversione di fuso. ---- */
+function toLocalInputValue(date){
+  return date.getFullYear() + "-" + pad2(date.getMonth()+1) + "-" + pad2(date.getDate()) + "T" + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
+}
+function isoToLocalInputValue(iso){
+  return toLocalInputValue(new Date(iso));
+}
+
+/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). ---- */
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", logout:"Logout",
+  title:"Calendario Claudio Romano",
+  subtitle:"Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente un appuntamento negli spazi liberi. L'appuntamento comparirà anche sul suo calendario personale.",
+  legend_free:"Libero", legend_busy:"Occupato (iCloud)", legend_telefonata:"Telefonata",
+  legend_riunione:"Riunione", legend_visita:"Visita sul posto",
+  btn_refresh_sync:"Aggiorna disponibilità da iCloud ora",
+  btn_today:"Oggi", btn_view_month:"Mese", btn_view_week:"Settimana", btn_view_day:"Giorno",
+  msg_refreshing_sync:"Aggiornamento disponibilità da iCloud in corso (può richiedere qualche secondo)...",
+  msg_refresh_sync_done:"Disponibilità aggiornata con i dati più recenti di iCloud.",
+  msg_refresh_sync_failed:"Aggiornamento non riuscito: ",
+  loading:"Caricamento calendario...", loading_error:"Errore nel caricamento del calendario.",
+  modal_title:"Fissa appuntamento",
+  label_type:"Tipo appuntamento", type_telefonata:"Telefonata", type_riunione:"Riunione", type_visita:"Visita sul posto",
+  label_date:"Data e ora inizio", label_duration:"Durata",
+  label_opportunity:"Opportunità collegata (opzionale)", opt_none:"Nessuna",
+  label_all_day:"Blocca tutta la giornata",
+  label_address:"Indirizzo (opzionale, utile per Visita sul posto)", link_open_maps:"Apri in Maps",
+  created_by_prefix:"Inserito da: ", unknown_collaborator:"Collaboratore",
+  label_notes:"Note (opzionale)",
+  btn_confirm:"Conferma appuntamento", btn_cancel:"Annulla", btn_delete:"Elimina appuntamento",
+  modal_title_new:"Fissa appuntamento", modal_title_edit:"Modifica appuntamento",
+  btn_save_changes:"Salva modifiche",
+  confirm_delete_event:"Eliminare definitivamente questo appuntamento? Verrà rimosso anche dal calendario iCloud.",
+  msg_deleting:"Eliminazione in corso...", msg_deleted:"Appuntamento eliminato.",
+  msg_updating:"Aggiornamento appuntamento...", msg_updated_full:"Appuntamento aggiornato e sincronizzato con iCloud.",
+  msg_updated_no_sync:"Appuntamento aggiornato su IMMONOVA. Sincronizzazione iCloud non riuscita: ",
+  msg_saving:"Salvataggio appuntamento...", msg_syncing:"Sincronizzazione con iCloud...",
+  msg_saved_full:"Appuntamento fissato e sincronizzato con iCloud.",
+  msg_saved_no_sync:"Appuntamento fissato su IMMONOVA. Sincronizzazione con iCloud non riuscita (comparirà comunque qui): ",
+  msg_slot_taken:"Questo spazio non è più libero, aggiorna la pagina.",
+  occupied_label:"Occupato",
+  label_calendar_owner:"Calendario di", opt_my_calendar:"Il mio calendario",
+  label_participants:"Collaboratori coinvolti (riceveranno una notifica push)",
+  btn_enable_push:"Attiva notifiche push", btn_push_enabled:"Notifiche push attive",
+  msg_push_enabling:"Attivazione notifiche in corso...",
+  msg_push_enabled:"Notifiche push attivate su questo dispositivo.",
+  msg_push_failed:"Attivazione notifiche non riuscita: ",
+  msg_push_unsupported:"Questo browser non supporta le notifiche push.",
+  readonly_notice:"Puoi vedere questo appuntamento perché ne fai parte, ma solo chi l'ha creato o un amministratore può modificarlo.",
+  msg_notify_failed_note:" (le notifiche push ai collaboratori potrebbero non essere state inviate)",
+  connections_title:"Collega il tuo calendario personale",
+  connections_icloud_title:"iCloud", connections_google_title:"Google Calendar",
+  ph_icloud_email:"nome@icloud.com", ph_icloud_app_password:"Password per app (appleid.apple.com)",
+  btn_connect_icloud:"Collega iCloud", btn_connect_google:"Collega Google Calendar", btn_disconnect:"Scollega",
+  msg_connecting_icloud:"Verifica delle credenziali iCloud in corso...",
+  msg_icloud_connected:"iCloud collegato: ",
+  msg_icloud_not_connected:"Nessun account iCloud collegato.",
+  msg_icloud_connect_failed:"Collegamento iCloud non riuscito: ",
+  msg_google_connected:"Google Calendar collegato.",
+  msg_google_not_connected:"Nessun account Google Calendar collegato.",
+  msg_google_connect_failed:"Collegamento Google Calendar non riuscito: ",
+  msg_disconnecting:"Scollegamento in corso...", msg_disconnected:"Calendario scollegato.",
+  msg_sync_error_note:" — ultimo errore di sincronizzazione: "
+};
+
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_calendar_" + lang + "_v6"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Shared calendar admin page: booking appointments (call, meeting, site visit) with the company owner, showing busy/free time slots.",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione calendar non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(function(el){
+    var key = el.getAttribute("data-i18n-placeholder");
+    if(T[key]) el.placeholder = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+}
+
+async function loadUserLanguage(){
+  var result = await client.from("profiles").select("language,role").eq("id", currentUser.id).single();
+  if(result.error){ await applyLanguage("it"); return; }
+  currentUserRole = (result.data && result.data.role) || "user";
+  currentUserIsAdmin = currentUserRole === "admin";
+  viewedUserId = currentUser.id;
+  await applyLanguage((result.data && result.data.language) || "it");
+}
+
+async function checkAuth(){
+  const { data:{ session } } = await client.auth.getSession();
+  if(!session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function escapeHTML(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+
+function setStatus(message, type){
+  statusBox.className = "status " + (type || "");
+  statusBox.textContent = message || "";
+}
+
+function eventTypeLabel(type){
+  var map = { telefonata:T.type_telefonata, riunione:T.type_riunione, visita_posto:T.type_visita };
+  return map[type] || type;
+}
+
+/* ---- Lezione riutilizzata da users.html: su risposta non-2xx di una edge function,
+   supabase-js NON mette il body in result.data (resta null) e result.error.message è
+   sempre il testo fisso generico. Il messaggio vero va letto da result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
+function formatSlotTime(date){
+  return date.toLocaleTimeString(currentUserLanguage==="it"?"it-IT":currentUserLanguage,{hour:"2-digit",minute:"2-digit"});
+}
+
+function isSlotBusy(slotStart, slotEnd){
+  return busyBlocks.some(function(b){
+    var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+    return slotStart < bEnd && slotEnd > bStart;
+  });
+}
+
+/* Usata per decidere se un'INTERA cella-ora (griglia settimana/giorno) va resa non
+   cliccabile. Prima si usava isSlotBusy() sull'intera ora: bastava che una QUALSIASI
+   parte dell'ora avesse un conflitto (es. i primi 45 minuti) per bloccare il click su
+   tutta la cella, anche se l'ultimo quarto d'ora restava libero e visibile come tale.
+   Qui invece si uniscono gli intervalli occupati (eventi non-telefonata + blocchi iCloud)
+   dentro l'ora e si controlla se coprono l'ora PER INTERO: solo in quel caso il click va
+   disabilitato, altrimenti resta possibile cliccare sulla porzione libera (il calcolo
+   preciso del minuto lo fa già handleWeekCellClick in base alla posizione del click, e il
+   controllo di conflitto reale sull'orario esatto scelto avviene comunque al salvataggio). */
+function isHourFullyBusy(slotStart, slotEnd, blockingEvents, busyOverlap){
+  var intervals = [];
+  function addInterval(s, e){
+    if(s < slotStart) s = slotStart;
+    if(e > slotEnd) e = slotEnd;
+    if(s < e) intervals.push([s.getTime(), e.getTime()]);
+  }
+  (blockingEvents || []).forEach(function(ev){
+    addInterval(new Date(ev.start_at), new Date(ev.end_at));
+  });
+  (busyOverlap || []).forEach(function(b){
+    addInterval(new Date(b.start_at), new Date(b.end_at));
+  });
+  if(!intervals.length) return false;
+  intervals.sort(function(a, b){ return a[0] - b[0]; });
+  var covered = slotStart.getTime();
+  for(var i = 0; i < intervals.length; i++){
+    if(intervals[i][0] > covered) return false;
+    if(intervals[i][1] > covered) covered = intervals[i][1];
+  }
+  return covered >= slotEnd.getTime();
+}
+
+function bookedEventForSlot(slotStart, slotEnd, excludeId){
+  return bookedEvents.find(function(ev){
+    if(excludeId && Number(ev.id) === Number(excludeId)) return false;
+    var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+    return slotStart < eEnd && slotEnd > eStart;
+  });
+}
+
+function startOfWeek(d){
+  var date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  var day = date.getDay();
+  var diff = (day === 0 ? -6 : 1 - day);
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+function getViewRange(){
+  if(currentView === "month"){
+    var start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+    var end = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1);
+    return { start: start, end: end };
+  }
+  if(currentView === "day"){
+    var start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+    var end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+    return { start: start, end: end };
+  }
+  var start = startOfWeek(anchorDate);
+  var end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+  return { start: start, end: end };
+}
+
+// Per la vista mese servono anche i giorni "di contorno" (fine mese precedente/inizio
+// successivo) che riempiono la griglia: qui carichiamo dati su quell'intervallo piu' ampio,
+// cosi' occupato/appuntamenti compaiono anche su quei giorni.
+function getMonthGridRange(){
+  var monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  var gridStart = startOfWeek(monthStart);
+  var gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 42);
+  return { start: gridStart, end: gridEnd };
+}
+
+async function loadStaticData(){
+  var oppsResult = await client
+    .from("opportunities")
+    .select("id,title")
+    .order("created_at",{ascending:false})
+    .limit(200);
+
+  var profilesResult = await client
+    .from("profiles")
+    .select("id,full_name,email,role,active");
+
+  allOpportunities = oppsResult.data || [];
+  if(profilesResult.data){
+    profilesById = {};
+    allCollaborators = [];
+    adminUserIds = [];
+    profilesResult.data.forEach(function(p){
+      profilesById[p.id] = p.full_name || p.email || p.id;
+      allCollaborators.push({ id:p.id, name:p.full_name || p.email || p.id, role:p.role, active:p.active !== false });
+      if(p.role === "admin") adminUserIds.push(p.id);
+    });
+  }
+
+  var oppSelect = document.getElementById("eventOpportunity");
+  oppSelect.innerHTML = '<option value="">' + escapeHTML(T.opt_none) + '</option>';
+  allOpportunities.forEach(function(o){
+    var opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.title || ("Opportunità #" + o.id);
+    oppSelect.appendChild(opt);
+  });
+
+  renderCalendarOwnerSelector();
+}
+
+/* ---- Selettore "Calendario di": un admin vede tutti i collaboratori (puo' guardare
+   il calendario di chiunque, uno alla volta); un utente non-admin vede solo il proprio
+   calendario e quello di un amministratore (mai quello di un altro collaboratore, per
+   la regola di visibilita' confermata: "solo il proprio + il tuo"). ---- */
+function renderCalendarOwnerSelector(){
+  var field = document.getElementById("calendarOwnerField");
+  var select = document.getElementById("calendarOwnerSelect");
+
+  var options = [];
+  options.push({ id:currentUser.id, label:T.opt_my_calendar });
+
+  if(currentUserIsAdmin){
+    allCollaborators.forEach(function(c){
+      if(c.id === currentUser.id) return;
+      options.push({ id:c.id, label:c.name });
+    });
+  }else{
+    adminUserIds.forEach(function(id){
+      if(id === currentUser.id) return;
+      options.push({ id:id, label:profilesById[id] || T.unknown_collaborator });
+    });
+  }
+
+  select.innerHTML = "";
+  options.forEach(function(o){
+    var opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.label;
+    select.appendChild(opt);
+  });
+
+  // Il selettore ha senso solo se esiste almeno un altro calendario oltre al proprio.
+  field.style.display = options.length > 1 ? "block" : "none";
+  select.value = viewedUserId || currentUser.id;
+}
+
+document.getElementById("calendarOwnerSelect").addEventListener("change", function(){
+  viewedUserId = this.value;
+  loadCalendarData();
+});
+
+async function loadCalendarData(){
+  var range = currentView === "month" ? getMonthGridRange() : getViewRange();
+  var owner = viewedUserId || currentUser.id;
+  var viewingAdminCalendar = adminUserIds.indexOf(owner) !== -1;
+
+  // Gli slot "occupato" iCloud appartengono al calendario personale di un amministratore
+  // (la tabella non distingue tra piu' admin, quindi si mostrano quando si guarda il
+  // calendario di un admin, come confermato: "anche gli slot iCloud occupati").
+  var busyResult = viewingAdminCalendar
+    ? await client.from("immonova_calendar_busy_blocks").select("start_at,end_at,title")
+        .gte("start_at", range.start.toISOString()).lt("start_at", range.end.toISOString())
+    : { data: [], error: null };
+
+  // La RLS lascia passare solo cio' che l'utente puo' vedere (i propri eventi, quelli di
+  // un admin, o quelli dove e' partecipante): qui prendiamo tutto cio' che e' visibile nel
+  // periodo, poi filtriamo lato client sul calendario scelto (owner) qui sotto.
+  var eventsResult = await client
+    .from("immonova_calendar_events")
+    .select("id,event_type,title,start_at,end_at,notes,address,opportunity_id,icloud_uid,icloud_href,google_event_id,created_by")
+    .gte("start_at", range.start.toISOString())
+    .lt("start_at", range.end.toISOString());
+
+  if(busyResult.error){
+    setStatus(T.loading_error + " (busy: " + busyResult.error.message + ")", "error");
+  }
+  if(eventsResult.error){
+    setStatus(T.loading_error + " (events: " + eventsResult.error.message + ")", "error");
+  }
+
+  busyBlocks = busyResult.data || [];
+  var rawEvents = eventsResult.data || [];
+
+  eventParticipantsMap = {};
+  var eventIds = rawEvents.map(function(ev){ return ev.id; });
+  if(eventIds.length){
+    var partsResult = await client
+      .from("immonova_calendar_event_participants")
+      .select("event_id,user_id")
+      .in("event_id", eventIds);
+    if(!partsResult.error && partsResult.data){
+      partsResult.data.forEach(function(row){
+        if(!eventParticipantsMap[row.event_id]) eventParticipantsMap[row.event_id] = [];
+        eventParticipantsMap[row.event_id].push(row.user_id);
+      });
+    }
+  }
+
+  // Un evento compare sul calendario "owner" se e' stato creato da lui, OPPURE se lui e'
+  // stato invitato come partecipante (evento condiviso: "compare su entrambi", come
+  // confermato) -- questo vale sia per il proprio calendario che per quello altrui che si
+  // sta guardando.
+  bookedEvents = rawEvents.filter(function(ev){
+    if(ev.created_by === owner) return true;
+    var parts = eventParticipantsMap[ev.id] || [];
+    return parts.indexOf(owner) !== -1;
+  });
+
+  renderCalendar();
+}
+
+function updatePeriodLabel(){
+  var label = document.getElementById("periodLabel");
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
+
+  if(currentView === "month"){
+    label.textContent = anchorDate.toLocaleDateString(locale, { month:"long", year:"numeric" });
+  }else if(currentView === "day"){
+    label.textContent = anchorDate.toLocaleDateString(locale, { weekday:"long", day:"2-digit", month:"long", year:"numeric" });
+  }else{
+    var range = getViewRange();
+    var endDisplay = new Date(range.end.getTime() - 86400000);
+    var fmt = { day:"2-digit", month:"short" };
+    label.textContent = range.start.toLocaleDateString(locale, fmt) + " – " + endDisplay.toLocaleDateString(locale, fmt);
+  }
+}
+
+function updateViewButtons(){
+  document.getElementById("viewMonthBtn").classList.toggle("active", currentView === "month");
+  document.getElementById("viewWeekBtn").classList.toggle("active", currentView === "week");
+  document.getElementById("viewDayBtn").classList.toggle("active", currentView === "day");
+}
+
+function renderCalendar(){
+  updatePeriodLabel();
+  if(currentView === "month") renderMonthView();
+  else if(currentView === "day") renderDayView();
+  else renderWeekView();
+}
+
+function renderMonthView(){
+  var now = new Date();
+  var monthStart = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  var gridStart = startOfWeek(monthStart);
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
+
+  var html = '<div class="month-grid">';
+
+  for(var w = 0; w < 7; w++){
+    var wd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + w);
+    html += '<div class="month-weekday">' + escapeHTML(wd.toLocaleDateString(locale, { weekday:"short" })) + '</div>';
+  }
+
+  for(var d = 0; d < 42; d++){
+    var day = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + d);
+    var isOtherMonth = day.getMonth() !== anchorDate.getMonth();
+    var isToday = day.toDateString() === now.toDateString();
+
+    var dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    var dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+
+    var dayBooked = bookedEvents.filter(function(ev){
+      var s = new Date(ev.start_at);
+      return s >= dayStart && s < dayEnd;
+    });
+    var dayBusyBlocks = busyBlocks.filter(function(b){
+      var s = new Date(b.start_at);
+      return s >= dayStart && s < dayEnd;
+    });
+
+    var chips = "";
+    dayBooked.slice(0,3).forEach(function(ev){
+      chips += '<div class="month-day-chip ' + escapeHTML(ev.event_type) + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div>';
+    });
+    if(dayBooked.length > 3){
+      chips += '<div class="month-day-more">+' + (dayBooked.length - 3) + '</div>';
+    }
+    if(dayBusyBlocks.length && !dayBooked.length){
+      /* Titolo reale dell'evento importato da iCloud quando disponibile (colonna "title",
+         valorizzata dalla sync icloud-calendar-sync); fallback sull'etichetta generica solo
+         se l'evento iCloud non aveva un SUMMARY (caso raro ma possibile). */
+      dayBusyBlocks.slice(0,3).forEach(function(b){
+        chips += '<div class="month-day-chip busy" title="' + escapeHTML(b.title || T.occupied_label) + '">' + escapeHTML(b.title || T.occupied_label) + '</div>';
+      });
+      if(dayBusyBlocks.length > 3){
+        chips += '<div class="month-day-more">+' + (dayBusyBlocks.length - 3) + '</div>';
+      }
+    }
+
+    var cls = "month-day" + (isOtherMonth ? " other-month" : "") + (isToday ? " today" : "");
+    var dateStr = day.getFullYear() + "-" + pad2(day.getMonth()+1) + "-" + pad2(day.getDate());
+
+    html += '<div class="' + cls + '" onclick="goToDayWeek(\'' + dateStr + '\')"><div class="month-day-num">' + day.getDate() + '</div>' + chips + '</div>';
+  }
+
+  html += '</div>';
+  calendarBody.innerHTML = html;
+}
+
+function renderWeekView(){
+  var now = new Date();
+  var weekStart = startOfWeek(anchorDate);
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
+
+  var html = '<div class="week-grid"><div class="week-corner"></div>';
+
+  for(var i = 0; i < 7; i++){
+    var d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i);
+    var dDateStr = d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate());
+    html += '<div class="week-day-head clickable" onclick="goToDayWeek(\'' + dDateStr + '\')">' + escapeHTML(d.toLocaleDateString(locale, { weekday:"short" })) + '<span class="wk-num">' + d.getDate() + '</span></div>';
+  }
+
+  for(var h = DAY_START_HOUR; h < DAY_END_HOUR; h++){
+    html += '<div class="week-hour-label">' + pad2(h) + ':00</div>';
+
+    for(var j = 0; j < 7; j++){
+      var day = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + j);
+      var slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, 0, 0);
+      var slotEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h + 1, 0, 0);
+
+      var overlapping = bookedEvents.filter(function(ev){
+        var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+        return slotStart < eEnd && slotEnd > eStart;
+      });
+      var blockingEvents = overlapping.filter(function(ev){ return ev.event_type !== "telefonata"; });
+      var phoneEvents = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
+      var overlappingBusy = blockingEvents.length ? [] : busyBlocks.filter(function(b){
+        var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+        return slotStart < bEnd && slotEnd > bStart;
+      });
+      var busyOverlapForFullCheck = busyBlocks.filter(function(b){
+        var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+        return slotStart < bEnd && slotEnd > bStart;
+      });
+      var busy = isHourFullyBusy(slotStart, slotEnd, blockingEvents, busyOverlapForFullCheck);
+      var isPast = slotEnd <= now;
+
+      // Ogni barra e' alta/posizionata in percentuale in base a quanto della durata reale
+      // dell'evento cade dentro quest'ora: un evento da 15 minuti occupa un quarto della
+      // cella, non tutta, cosi' la differenza di durata si vede a colpo d'occhio.
+      function barStyle(ev){
+        var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+        var overlapStart = eStart > slotStart ? eStart : slotStart;
+        var overlapEnd = eEnd < slotEnd ? eEnd : slotEnd;
+        var top = (overlapStart - slotStart) / 36000;
+        var height = (overlapEnd - overlapStart) / 36000;
+        return "top:" + top + "%;height:" + Math.max(height, 6) + "%;";
+      }
+
+      // Divisione in colonne: vale per QUALSIASI numero e combinazione di eventi sovrapposti
+      // nella stessa ora (telefonata+riunione, due telefonate, riunione+visita ecc.), non solo
+      // per la coppia telefonata/altro-tipo. Ogni evento prende una fetta di larghezza uguale.
+      var barsHtml = "";
+      var allInCell = phoneEvents.concat(blockingEvents);
+      var columnWidth = allInCell.length > 1 ? (100 / allInCell.length) : 100;
+
+      allInCell.forEach(function(ev, idx){
+        var cls = "week-event-bar " + escapeHTML(ev.event_type);
+        var positionStyle = allInCell.length > 1
+          ? ("left:" + (idx * columnWidth) + "%;width:" + columnWidth + "%;right:auto;")
+          : "";
+        cls += allInCell.length > 1 ? " split" : "";
+        barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + positionStyle + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')"><div class="week-cell-note">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div></div>';
+      });
+
+      /* Titolo reale dell'evento importato da iCloud (colonna "title" su
+         immonova_calendar_busy_blocks) al posto del riquadro "occupato" senza testo. Non
+         cliccabile: è un evento del calendario personale di Claudio, non un appuntamento
+         IMMONOVA modificabile da qui. */
+      overlappingBusy.forEach(function(b){
+        barsHtml += '<div class="week-event-bar busy" style="' + barStyle(b) + '"><div class="week-cell-note">' + escapeHTML(b.title || T.occupied_label) + '</div></div>';
+      });
+
+      var cls = "week-cell";
+      var onclick = "";
+
+      if(busy){
+        cls += " busy";
+      }else if(isPast){
+        if(!phoneEvents.length) cls += " past";
+      }else{
+        onclick = 'onclick="handleWeekCellClick(event,\'' + toLocalInputValue(slotStart) + '\')"';
+      }
+
+      var tickHtml = '<div class="hour-tick" style="top:25%"></div><div class="hour-tick" style="top:50%"></div><div class="hour-tick" style="top:75%"></div>';
+      html += '<div class="' + cls + '" ' + onclick + '>' + tickHtml + barsHtml + '</div>';
+    }
+  }
+
+  html += '</div>';
+  calendarBody.innerHTML = html;
+}
+
+/* ---- Vista giorno: stessa logica di calcolo sovrapposizioni della vista settimana (divisione
+   in colonne uguali per QUALSIASI combinazione di eventi sovrapposti), ma su una sola colonna
+   molto più larga e celle più alte, con titolo e orario scritti per esteso in ogni riquadro --
+   pensata per i momenti con più impegni nella stessa fascia, dove la vista settimana (colonne
+   strette, solo poche parole visibili) non basta a capire cosa c'è senza cliccare uno per uno. ---- */
+function renderDayView(){
+  var now = new Date();
+  var day = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+  var locale = currentUserLanguage === "it" ? "it-IT" : currentUserLanguage;
+
+  var html = '<div class="day-grid"><div class="week-corner"></div>';
+  html += '<div class="week-day-head">' + escapeHTML(day.toLocaleDateString(locale, { weekday:"long" })) + '<span class="wk-num">' + day.getDate() + '</span></div>';
+
+  for(var h = DAY_START_HOUR; h < DAY_END_HOUR; h++){
+    html += '<div class="week-hour-label">' + pad2(h) + ':00</div>';
+
+    var slotStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, 0, 0);
+    var slotEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h + 1, 0, 0);
+
+    var overlapping = bookedEvents.filter(function(ev){
+      var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+      return slotStart < eEnd && slotEnd > eStart;
+    });
+    var blockingEvents = overlapping.filter(function(ev){ return ev.event_type !== "telefonata"; });
+    var phoneEvents = overlapping.filter(function(ev){ return ev.event_type === "telefonata"; });
+    var overlappingBusy = blockingEvents.length ? [] : busyBlocks.filter(function(b){
+      var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+      return slotStart < bEnd && slotEnd > bStart;
+    });
+    var busyOverlapForFullCheck = busyBlocks.filter(function(b){
+      var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+      return slotStart < bEnd && slotEnd > bStart;
+    });
+    var busy = isHourFullyBusy(slotStart, slotEnd, blockingEvents, busyOverlapForFullCheck);
+    var isPast = slotEnd <= now;
+
+    function barStyle(ev){
+      var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+      var overlapStart = eStart > slotStart ? eStart : slotStart;
+      var overlapEnd = eEnd < slotEnd ? eEnd : slotEnd;
+      var top = (overlapStart - slotStart) / 36000;
+      var height = (overlapEnd - overlapStart) / 36000;
+      return "top:" + top + "%;height:" + Math.max(height, 12) + "%;";
+    }
+
+    var barsHtml = "";
+    var allInCell = phoneEvents.concat(blockingEvents);
+    var columnWidth = allInCell.length > 1 ? (100 / allInCell.length) : 100;
+
+    allInCell.forEach(function(ev, idx){
+      var cls = "day-event-bar " + escapeHTML(ev.event_type);
+      var positionStyle = "left:" + (idx * columnWidth) + "%;width:" + columnWidth + "%;";
+      cls += allInCell.length > 1 ? " split" : "";
+      var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+      var timeLabel = formatSlotTime(eStart) + " – " + formatSlotTime(eEnd);
+      barsHtml += '<div class="' + cls + '" style="' + barStyle(ev) + positionStyle + '" onclick="event.stopPropagation();openEditModal(' + ev.id + ')">'
+        + '<div class="day-cell-title">' + escapeHTML(ev.title || eventTypeLabel(ev.event_type)) + '</div>'
+        + '<div class="day-cell-time">' + escapeHTML(timeLabel) + '</div></div>';
+    });
+
+    overlappingBusy.forEach(function(b){
+      var bStart = new Date(b.start_at), bEnd = new Date(b.end_at);
+      var timeLabel = formatSlotTime(bStart) + " – " + formatSlotTime(bEnd);
+      barsHtml += '<div class="day-event-bar busy" style="' + barStyle(b) + 'left:0;width:100%;">'
+        + '<div class="day-cell-title">' + escapeHTML(b.title || T.occupied_label) + '</div>'
+        + '<div class="day-cell-time">' + escapeHTML(timeLabel) + '</div></div>';
+    });
+
+    var cls = "day-cell";
+    var onclick = "";
+
+    if(busy){
+      cls += " busy";
+    }else if(isPast){
+      if(!phoneEvents.length) cls += " past";
+    }else{
+      onclick = 'onclick="handleWeekCellClick(event,\'' + toLocalInputValue(slotStart) + '\')"';
+    }
+
+    var tickHtml = '<div class="hour-tick" style="top:25%"></div><div class="hour-tick" style="top:50%"></div><div class="hour-tick" style="top:75%"></div>';
+    html += '<div class="' + cls + '" ' + onclick + '>' + tickHtml + barsHtml + '</div>';
+  }
+
+  html += '</div>';
+  calendarBody.innerHTML = html;
+}
+
+window.goToDayWeek = function(dateStr){
+  var parts = dateStr.split("-");
+  anchorDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  currentView = "day";
+  updateViewButtons();
+  loadCalendarData();
+};
+
+/* ---- Il clic su una cella della vista settimana ora calcola il minuto esatto in base a DOVE
+   dentro la cella si clicca (la cella rappresenta un'ora intera), arrotondato ai 15 minuti più
+   vicini — prima l'intera ora veniva bloccata alla prenotazione se anche solo una parte era
+   occupata, anche se il resto era visibilmente libero. Il controllo vero di sovrapposizione
+   resta comunque quello già presente al salvataggio (ignora le telefonate esistenti). ---- */
+window.handleWeekCellClick = function(e, slotStartLocal){
+  var cellEl = e.currentTarget;
+  var rect = cellEl.getBoundingClientRect();
+  var relY = e.clientY - rect.top;
+  var fraction = Math.max(0, Math.min(1, rect.height ? relY / rect.height : 0));
+  var minutesWithinHour = Math.floor((fraction * 60) / 15) * 15;
+
+  var base = new Date(slotStartLocal);
+  base.setMinutes(base.getMinutes() + minutesWithinHour);
+
+  openBookingModal(toLocalInputValue(base));
+};
+
+/* Checkbox dei collaboratori da poter invitare su un evento (escluso se' stessi). Chi
+   viene spuntato ricevera' una notifica push e vedra' l'evento anche sul proprio
+   calendario ("compare su entrambi", come confermato). */
+function renderParticipantCheckboxes(selectedIds, disabled){
+  var list = document.getElementById("participantsList");
+  list.innerHTML = "";
+  var others = allCollaborators.filter(function(c){ return c.id !== currentUser.id; });
+  if(!others.length){
+    document.getElementById("participantsField").style.display = "none";
+    return;
+  }
+  others.forEach(function(c){
+    var id = "participant_" + c.id;
+    var wrap = document.createElement("label");
+    wrap.style.display = "flex";
+    wrap.style.alignItems = "center";
+    wrap.style.gap = "10px";
+    wrap.style.cursor = disabled ? "default" : "pointer";
+    wrap.style.fontSize = "13px";
+    wrap.style.textTransform = "none";
+    wrap.style.letterSpacing = "normal";
+
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = c.id;
+    cb.id = id;
+    cb.style.width = "auto";
+    cb.disabled = !!disabled;
+    cb.checked = (selectedIds || []).indexOf(c.id) !== -1;
+
+    var span = document.createElement("span");
+    span.textContent = c.name;
+
+    wrap.appendChild(cb);
+    wrap.appendChild(span);
+    list.appendChild(wrap);
+  });
+  document.getElementById("participantsField").style.display = "block";
+}
+
+function selectedParticipantIds(){
+  return Array.from(document.querySelectorAll("#participantsList input[type=checkbox]:checked")).map(function(cb){ return cb.value; });
+}
+
+function setModalReadOnly(readOnly){
+  ["eventType","eventStart","eventDuration","eventAllDay","eventOpportunity","eventAddress","eventNotes"].forEach(function(id){
+    document.getElementById(id).disabled = readOnly;
+  });
+  document.querySelectorAll("#participantsList input[type=checkbox]").forEach(function(cb){ cb.disabled = readOnly; });
+  document.getElementById("modalActions").style.display = readOnly ? "none" : "flex";
+  document.getElementById("readOnlyNotice").style.display = readOnly ? "block" : "none";
+  document.getElementById("readOnlyNotice").textContent = readOnly ? T.readonly_notice : "";
+}
+
+window.openBookingModal = function(localValue){
+  editingEvent = null;
+  pendingSlotStart = localValue;
+  document.getElementById("eventStart").value = localValue;
+  document.getElementById("eventType").value = "telefonata";
+  document.getElementById("eventDuration").value = "30";
+  document.getElementById("eventDuration").disabled = false;
+  document.getElementById("eventAllDay").checked = false;
+  document.getElementById("eventOpportunity").value = "";
+  document.getElementById("eventAddress").value = "";
+  document.getElementById("eventNotes").value = "";
+  document.querySelector(".modal-title").textContent = T.modal_title_new;
+  confirmBookBtn.textContent = T.btn_confirm;
+  deleteBookBtn.style.display = "none";
+  document.getElementById("createdByInfo").style.display = "none";
+  document.getElementById("mapsLink").style.display = "none";
+  renderParticipantCheckboxes([], false);
+  setModalReadOnly(false);
+  modalStatus.textContent = "";
+  modalStatus.className = "modal-status";
+  modalOverlay.classList.add("active");
+};
+
+window.openEditModal = function(eventId){
+  var ev = bookedEvents.find(function(e){ return Number(e.id) === Number(eventId); });
+  if(!ev) return;
+
+  editingEvent = ev;
+  pendingSlotStart = null;
+
+  var startDate = new Date(ev.start_at);
+  var endDate = new Date(ev.end_at);
+  var durationMin = Math.round((endDate - startDate) / 60000);
+
+  document.getElementById("eventStart").value = isoToLocalInputValue(ev.start_at);
+  document.getElementById("eventType").value = ev.event_type;
+  document.getElementById("eventDuration").value = durationMin;
+  document.getElementById("eventDuration").disabled = false;
+  document.getElementById("eventAllDay").checked = false;
+  document.getElementById("eventOpportunity").value = ev.opportunity_id || "";
+  document.getElementById("eventAddress").value = ev.address || "";
+  document.getElementById("eventNotes").value = ev.notes || "";
+
+  var createdByBox = document.getElementById("createdByInfo");
+  var creatorName = profilesById[ev.created_by] || T.unknown_collaborator;
+  createdByBox.textContent = T.created_by_prefix + creatorName;
+  createdByBox.style.display = "block";
+
+  var mapsLink = document.getElementById("mapsLink");
+  if(ev.address){
+    mapsLink.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(ev.address);
+    mapsLink.style.display = "inline-block";
+  }else{
+    mapsLink.style.display = "none";
+  }
+
+  // Solo il proprietario dell'evento o un admin possono modificarlo/eliminarlo (coerente
+  // con le policy RLS UPDATE/DELETE su immonova_calendar_events) -- chi lo vede solo perche'
+  // e' stato invitato come partecipante lo vede in sola lettura.
+  var canManage = ev.created_by === currentUser.id || currentUserIsAdmin;
+
+  document.querySelector(".modal-title").textContent = T.modal_title_edit;
+  confirmBookBtn.textContent = T.btn_save_changes;
+  deleteBookBtn.style.display = canManage ? "inline-block" : "none";
+  renderParticipantCheckboxes(eventParticipantsMap[ev.id] || [], !canManage);
+  setModalReadOnly(!canManage);
+  modalStatus.textContent = "";
+  modalStatus.className = "modal-status";
+  modalOverlay.classList.add("active");
+};
+
+document.getElementById("eventAllDay").addEventListener("change", function(){
+  document.getElementById("eventDuration").disabled = this.checked;
+});
+
+cancelBookBtn.addEventListener("click", function(){
+  editingEvent = null;
+  modalOverlay.classList.remove("active");
+});
+
+confirmBookBtn.addEventListener("click", async function(){
+  var eventType = document.getElementById("eventType").value;
+  var startValue = document.getElementById("eventStart").value;
+  var isAllDay = document.getElementById("eventAllDay").checked;
+  var durationMin = Number(document.getElementById("eventDuration").value) || 15;
+  var opportunityId = document.getElementById("eventOpportunity").value || null;
+  var address = document.getElementById("eventAddress").value.trim() || null;
+  var notes = document.getElementById("eventNotes").value.trim() || null;
+
+  if(!startValue){
+    modalStatus.className = "modal-status error";
+    modalStatus.textContent = "Seleziona data e ora.";
+    return;
+  }
+
+  var startDate, endDate;
+
+  if(isAllDay){
+    var refDate = new Date(startValue);
+    startDate = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate(), DAY_START_HOUR, 0, 0);
+    endDate = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate(), DAY_END_HOUR, 0, 0);
+  }else{
+    startDate = new Date(startValue);
+    endDate = new Date(startDate.getTime() + durationMin * 60000);
+  }
+
+  var excludeId = editingEvent ? editingEvent.id : null;
+
+  // Le telefonate esistenti non bloccano mai lo slot: solo un evento occupato NON telefonata,
+  // o un blocco "occupato" letto da iCloud, impediscono di prenotare sopra.
+  var hasConflict = isSlotBusy(startDate, endDate) || bookedEvents.some(function(ev){
+    if(excludeId && Number(ev.id) === Number(excludeId)) return false;
+    if(ev.event_type === "telefonata") return false;
+    var eStart = new Date(ev.start_at), eEnd = new Date(ev.end_at);
+    return startDate < eEnd && endDate > eStart;
+  });
+
+  if(hasConflict){
+    modalStatus.className = "modal-status error";
+    modalStatus.textContent = T.msg_slot_taken;
+    return;
+  }
+
+  confirmBookBtn.disabled = true;
+  deleteBookBtn.disabled = true;
+  modalStatus.className = "modal-status";
+  modalStatus.textContent = editingEvent ? T.msg_updating : T.msg_saving;
+
+  try{
+    var profileResult = await client.from("profiles").select("full_name,email").eq("id", currentUser.id).single();
+    var collaboratorName = (profileResult.data && (profileResult.data.full_name || profileResult.data.email)) || "Collaboratore";
+
+    var title = collaboratorName;
+    if(opportunityId){
+      var opp = allOpportunities.find(function(o){ return String(o.id) === String(opportunityId); });
+      if(opp) title += " — " + opp.title;
+    }
+
+    var eventId;
+
+    if(editingEvent){
+      eventId = editingEvent.id;
+      var updateResult = await client.from("immonova_calendar_events").update({
+        event_type:eventType,
+        title:title,
+        start_at:startDate.toISOString(),
+        end_at:endDate.toISOString(),
+        notes:notes,
+        address:address,
+        opportunity_id:opportunityId
+      }).eq("id", eventId);
+      if(updateResult.error) throw updateResult.error;
+    }else{
+      var insertResult = await client.from("immonova_calendar_events").insert({
+        event_type:eventType,
+        title:title,
+        start_at:startDate.toISOString(),
+        end_at:endDate.toISOString(),
+        notes:notes,
+        address:address,
+        opportunity_id:opportunityId,
+        created_by:currentUser.id
+      }).select("id").single();
+      if(insertResult.error) throw insertResult.error;
+      eventId = insertResult.data.id;
+    }
+
+    // La sincronizzazione con il calendario personale (iCloud e/o Google) avviene per
+    // CHIUNQUE l'abbia collegato, non solo per l'admin: le due edge function guardano da
+    // sole la connessione del proprietario dell'evento e non fanno nulla (senza errore)
+    // se quell'utente non ha collegato quel provider.
+    modalStatus.textContent = T.msg_syncing;
+
+    var syncPromises = [
+      client.functions.invoke("icloud-calendar-push", {
+        body:{
+          action:editingEvent ? "update" : "create",
+          event_id:eventId,
+          title:title,
+          event_type:eventType,
+          start_at:startDate.toISOString(),
+          end_at:endDate.toISOString(),
+          notes:notes,
+          address:address,
+          icloud_href:editingEvent ? editingEvent.icloud_href : null,
+          icloud_uid:editingEvent ? editingEvent.icloud_uid : null
+        }
+      }),
+      client.functions.invoke("immonova-google-calendar-push", {
+        body:{
+          action:editingEvent ? "update" : "create",
+          event_id:eventId,
+          title:title,
+          event_type:eventType,
+          start_at:startDate.toISOString(),
+          end_at:endDate.toISOString(),
+          notes:notes,
+          address:address,
+          google_event_id:editingEvent ? editingEvent.google_event_id : null
+        }
+      })
+    ];
+
+    var syncOutcomes = await Promise.all(syncPromises);
+    var syncErrors = [];
+    for(var si = 0; si < syncOutcomes.length; si++){
+      var so = syncOutcomes[si];
+      if(so.error || !so.data || so.data.success !== true){
+        syncErrors.push((so.data && so.data.error) || (so.error ? await extractEdgeFunctionErrorMessage(so.error) : "errore sconosciuto"));
+      }
+    }
+
+    if(syncErrors.length){
+      modalStatus.className = "modal-status error";
+      modalStatus.textContent = (editingEvent ? T.msg_updated_no_sync : T.msg_saved_no_sync) + syncErrors.join(" / ");
+    }else{
+      modalStatus.className = "modal-status success";
+      modalStatus.textContent = editingEvent ? T.msg_updated_full : T.msg_saved_full;
+    }
+
+    // Sincronizza i partecipanti (collaboratori invitati su questo evento) e notifica via
+    // push solo quelli appena aggiunti -- chi era gia' invitato prima non riceve una nuova
+    // notifica ad ogni modifica, solo al primo invito o se rimosso e reinvitato.
+    try{
+      var selectedIds = selectedParticipantIds();
+      var priorIds = editingEvent ? (eventParticipantsMap[editingEvent.id] || []) : [];
+      var addedIds = selectedIds.filter(function(id){ return priorIds.indexOf(id) === -1; });
+      var removedIds = priorIds.filter(function(id){ return selectedIds.indexOf(id) === -1; });
+
+      if(removedIds.length){
+        await client.from("immonova_calendar_event_participants").delete().eq("event_id", eventId).in("user_id", removedIds);
+      }
+      if(addedIds.length){
+        var rows = addedIds.map(function(id){ return { event_id:eventId, user_id:id }; });
+        await client.from("immonova_calendar_event_participants").insert(rows);
+
+        var timeLabel = formatSlotTime(startDate) + " – " + formatSlotTime(endDate);
+        var notifyResult = await client.functions.invoke("immonova-calendar-notify", {
+          body:{
+            user_ids: addedIds,
+            title:"IMMONOVA Calendario",
+            body: collaboratorName + ": " + (title || eventTypeLabel(eventType)) + " (" + timeLabel + ")",
+            url:"/admin/calendar.html"
+          }
+        });
+        if(notifyResult.error){
+          modalStatus.textContent += T.msg_notify_failed_note;
+        }
+      }
+    }catch(participantsError){
+      modalStatus.textContent += T.msg_notify_failed_note;
+    }
+
+    await loadCalendarData();
+
+    setTimeout(function(){
+      modalOverlay.classList.remove("active");
+    }, 1800);
+  }catch(error){
+    modalStatus.className = "modal-status error";
+    modalStatus.textContent = (error && error.message) || "Errore durante il salvataggio.";
+  }
+
+  confirmBookBtn.disabled = false;
+  deleteBookBtn.disabled = false;
+});
+
+deleteBookBtn.addEventListener("click", async function(){
+  if(!editingEvent) return;
+  if(!confirm(T.confirm_delete_event)) return;
+
+  confirmBookBtn.disabled = true;
+  deleteBookBtn.disabled = true;
+  modalStatus.className = "modal-status";
+  modalStatus.textContent = T.msg_deleting;
+
+  try{
+    // Pulizia esterna su TUTTI i provider collegati dal proprietario prima di cancellare
+    // la riga (le due edge function non toccano più il DB, vedi loro commenti).
+    var deletePromises = [];
+    if(editingEvent.icloud_href){
+      deletePromises.push(client.functions.invoke("icloud-calendar-push", {
+        body:{ action:"delete", event_id:editingEvent.id, icloud_href:editingEvent.icloud_href }
+      }));
+    }
+    if(editingEvent.google_event_id){
+      deletePromises.push(client.functions.invoke("immonova-google-calendar-push", {
+        body:{ action:"delete", event_id:editingEvent.id, google_event_id:editingEvent.google_event_id }
+      }));
+    }
+
+    var deleteOutcomes = await Promise.all(deletePromises);
+    for(var di = 0; di < deleteOutcomes.length; di++){
+      var dOut = deleteOutcomes[di];
+      if(dOut.error || !dOut.data || dOut.data.success !== true){
+        var delMsg = (dOut.data && dOut.data.error) || (dOut.error ? await extractEdgeFunctionErrorMessage(dOut.error) : "errore sconosciuto");
+        throw new Error(delMsg);
+      }
+    }
+
+    var dbDelResult = await client.from("immonova_calendar_events").delete().eq("id", editingEvent.id);
+    if(dbDelResult.error) throw dbDelResult.error;
+
+    modalStatus.className = "modal-status success";
+    modalStatus.textContent = T.msg_deleted;
+
+    await loadCalendarData();
+
+    setTimeout(function(){
+      modalOverlay.classList.remove("active");
+    }, 1200);
+  }catch(error){
+    modalStatus.className = "modal-status error";
+    modalStatus.textContent = (error && error.message) || "Errore durante l'eliminazione.";
+  }
+
+  confirmBookBtn.disabled = false;
+  deleteBookBtn.disabled = false;
+});
+
+document.getElementById("refreshSyncBtn").addEventListener("click", async function(){
+  var btn = this;
+  btn.disabled = true;
+  setStatus(T.msg_refreshing_sync, "");
+
+  try{
+    var result = await client.functions.invoke("icloud-calendar-sync", { body:{} });
+
+    if(result.error || !result.data || result.data.success !== true){
+      var msg = (result.data && result.data.error) || (result.error ? await extractEdgeFunctionErrorMessage(result.error) : "errore sconosciuto");
+      setStatus(T.msg_refresh_sync_failed + msg, "error");
+    }else{
+      setStatus(T.msg_refresh_sync_done, "success");
+    }
+  }catch(e){
+    setStatus(T.msg_refresh_sync_failed + ((e && e.message) || e), "error");
+  }
+
+  await loadCalendarData();
+  btn.disabled = false;
+});
+
+document.getElementById("enablePushBtn").addEventListener("click", async function(){
+  var btn = this;
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    setStatus(T.msg_push_unsupported, "error");
+    return;
+  }
+
+  btn.disabled = true;
+  setStatus(T.msg_push_enabling, "");
+
+  try{
+    var registration = await navigator.serviceWorker.register("/service-worker.js");
+    await navigator.serviceWorker.ready;
+
+    var subscription = await registration.pushManager.getSubscription();
+    if(!subscription){
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+
+    var subJson = subscription.toJSON();
+    var upsertResult = await client.from("immonova_calendar_push_subscriptions").upsert({
+      user_id: currentUser.id,
+      endpoint: subJson.endpoint,
+      p256dh: subJson.keys.p256dh,
+      auth: subJson.keys.auth,
+      user_agent: navigator.userAgent
+    }, { onConflict:"user_id,endpoint" });
+
+    if(upsertResult.error) throw upsertResult.error;
+
+    setStatus(T.msg_push_enabled, "success");
+    btn.textContent = T.btn_push_enabled;
+  }catch(e){
+    setStatus(T.msg_push_failed + ((e && e.message) || e), "error");
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "login.html";
+});
+
+document.getElementById("prevPeriodBtn").addEventListener("click", function(){
+  if(currentView === "month"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 1, 1);
+  }else if(currentView === "day"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() - 1);
+  }else{
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() - 7);
+  }
+  loadCalendarData();
+});
+
+document.getElementById("nextPeriodBtn").addEventListener("click", function(){
+  if(currentView === "month"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1);
+  }else if(currentView === "day"){
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + 1);
+  }else{
+    anchorDate = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + 7);
+  }
+  loadCalendarData();
+});
+
+document.getElementById("todayBtn").addEventListener("click", function(){
+  anchorDate = new Date();
+  anchorDate.setHours(0,0,0,0);
+  loadCalendarData();
+});
+
+document.getElementById("viewMonthBtn").addEventListener("click", function(){
+  currentView = "month";
+  updateViewButtons();
+  loadCalendarData();
+});
+
+document.getElementById("viewWeekBtn").addEventListener("click", function(){
+  currentView = "week";
+  updateViewButtons();
+  loadCalendarData();
+});
+
+document.getElementById("viewDayBtn").addEventListener("click", function(){
+  currentView = "day";
+  updateViewButtons();
+  loadCalendarData();
+});
+
+/* ---- Collegamento calendario personale (iCloud / Google Calendar) di ogni utente
+   loggato. Le credenziali/token non transitano mai per la tabella profiles: vivono in
+   immonova_calendar_connections, protetta da RLS (solo il proprietario + admin possono
+   leggerla). ---- */
+var myConnections = { icloud:null, google:null };
+
+async function loadMyConnections(){
+  var result = await client.from("immonova_calendar_connections")
+    .select("provider,active,icloud_username,last_synced_at,last_sync_error")
+    .eq("user_id", currentUser.id);
+
+  myConnections = { icloud:null, google:null };
+  (result.data || []).forEach(function(row){ myConnections[row.provider] = row; });
+
+  renderConnectionsUI();
+}
+
+function renderConnectionsUI(){
+  var icloudStatus = document.getElementById("icloudConnectionStatus");
+  var icloudForm = document.getElementById("icloudConnectForm");
+  var disconnectIcloudBtn = document.getElementById("disconnectIcloudBtn");
+  var connectIcloudBtn = document.getElementById("connectIcloudBtn");
+
+  if(myConnections.icloud && myConnections.icloud.active){
+    var icloudLine = T.msg_icloud_connected + escapeHTML(myConnections.icloud.icloud_username || "");
+    if(myConnections.icloud.last_sync_error) icloudLine += T.msg_sync_error_note + escapeHTML(myConnections.icloud.last_sync_error);
+    icloudStatus.innerHTML = icloudLine;
+    icloudStatus.className = myConnections.icloud.last_sync_error ? "error" : "success";
+    connectIcloudBtn.style.display = "none";
+    document.getElementById("icloudUsername").style.display = "none";
+    document.getElementById("icloudAppPassword").style.display = "none";
+    disconnectIcloudBtn.style.display = "inline-block";
+  }else{
+    icloudStatus.textContent = T.msg_icloud_not_connected;
+    icloudStatus.className = "";
+    connectIcloudBtn.style.display = "inline-block";
+    document.getElementById("icloudUsername").style.display = "block";
+    document.getElementById("icloudAppPassword").style.display = "block";
+    disconnectIcloudBtn.style.display = "none";
+  }
+
+  var googleStatus = document.getElementById("googleConnectionStatus");
+  var connectGoogleBtn = document.getElementById("connectGoogleBtn");
+  var disconnectGoogleBtn = document.getElementById("disconnectGoogleBtn");
+
+  if(myConnections.google && myConnections.google.active){
+    var googleLine = T.msg_google_connected;
+    if(myConnections.google.last_sync_error) googleLine += T.msg_sync_error_note + escapeHTML(myConnections.google.last_sync_error);
+    googleStatus.innerHTML = googleLine;
+    googleStatus.className = myConnections.google.last_sync_error ? "error" : "success";
+    connectGoogleBtn.style.display = "none";
+    disconnectGoogleBtn.style.display = "inline-block";
+  }else{
+    googleStatus.textContent = T.msg_google_not_connected;
+    googleStatus.className = "";
+    connectGoogleBtn.style.display = "inline-block";
+    disconnectGoogleBtn.style.display = "none";
+  }
+}
+
+document.getElementById("connectIcloudBtn").addEventListener("click", async function(){
+  var username = document.getElementById("icloudUsername").value.trim();
+  var appPassword = document.getElementById("icloudAppPassword").value.trim();
+  if(!username || !appPassword) return;
+
+  var btn = this;
+  btn.disabled = true;
+  var statusEl = document.getElementById("connectionsStatus");
+  statusEl.className = "";
+  statusEl.textContent = T.msg_connecting_icloud;
+
+  try{
+    var result = await client.functions.invoke("immonova-calendar-connect-icloud", {
+      body:{ icloud_username:username, icloud_app_password:appPassword }
+    });
+    if(result.error || !result.data || result.data.success !== true){
+      var msg = (result.data && result.data.error) || (result.error ? await extractEdgeFunctionErrorMessage(result.error) : "errore sconosciuto");
+      statusEl.className = "error";
+      statusEl.textContent = T.msg_icloud_connect_failed + msg;
+    }else{
+      statusEl.textContent = "";
+      document.getElementById("icloudAppPassword").value = "";
+      await loadMyConnections();
+      client.functions.invoke("icloud-calendar-sync", { body:{ user_id:currentUser.id } }).then(function(){ loadCalendarData(); });
+    }
+  }catch(e){
+    statusEl.className = "error";
+    statusEl.textContent = T.msg_icloud_connect_failed + ((e && e.message) || e);
+  }
+
+  btn.disabled = false;
+});
+
+document.getElementById("disconnectIcloudBtn").addEventListener("click", async function(){
+  var statusEl = document.getElementById("connectionsStatus");
+  statusEl.className = "";
+  statusEl.textContent = T.msg_disconnecting;
+  await client.from("immonova_calendar_connections").delete().eq("user_id", currentUser.id).eq("provider", "icloud");
+  statusEl.textContent = T.msg_disconnected;
+  await loadMyConnections();
+  await loadCalendarData();
+});
+
+document.getElementById("connectGoogleBtn").addEventListener("click", async function(){
+  var btn = this;
+  btn.disabled = true;
+  var statusEl = document.getElementById("connectionsStatus");
+  statusEl.className = "";
+  statusEl.textContent = "";
+
+  try{
+    var result = await client.functions.invoke("immonova-google-oauth-start", { body:{} });
+    if(result.error || !result.data || result.data.success !== true || !result.data.auth_url){
+      var msg = (result.data && result.data.error) || (result.error ? await extractEdgeFunctionErrorMessage(result.error) : "errore sconosciuto");
+      statusEl.className = "error";
+      statusEl.textContent = T.msg_google_connect_failed + msg;
+      btn.disabled = false;
+      return;
+    }
+    window.location.href = result.data.auth_url;
+  }catch(e){
+    statusEl.className = "error";
+    statusEl.textContent = T.msg_google_connect_failed + ((e && e.message) || e);
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("disconnectGoogleBtn").addEventListener("click", async function(){
+  var statusEl = document.getElementById("connectionsStatus");
+  statusEl.className = "";
+  statusEl.textContent = T.msg_disconnecting;
+  await client.from("immonova_calendar_connections").delete().eq("user_id", currentUser.id).eq("provider", "google");
+  statusEl.textContent = T.msg_disconnected;
+  await loadMyConnections();
+  await loadCalendarData();
+});
+
+// Al ritorno da immonova-google-oauth-callback la pagina viene ricaricata con
+// ?google_connect=success|error in query string: mostriamo l'esito e ripuliamo l'URL.
+function handleGoogleConnectRedirect(){
+  var params = new URLSearchParams(window.location.search);
+  var status = params.get("google_connect");
+  if(!status) return;
+  var statusEl = document.getElementById("connectionsStatus");
+  if(status === "success"){
+    statusEl.className = "success";
+    statusEl.textContent = T.msg_google_connected;
+    client.functions.invoke("immonova-google-calendar-sync", { body:{ user_id:currentUser.id } }).then(function(){ loadCalendarData(); });
+  }else{
+    statusEl.className = "error";
+    statusEl.textContent = T.msg_google_connect_failed + (params.get("google_connect_msg") || "");
+  }
+  params.delete("google_connect");
+  params.delete("google_connect_msg");
+  var newQuery = params.toString();
+  window.history.replaceState({}, "", window.location.pathname + (newQuery ? "?" + newQuery : ""));
+}
+
+/* ---- Arrivo da notizie.html "Fissa Appuntamento": la pagina viene aperta con
+   ?date=YYYY-MM-DDTHH:MM (gia' nel formato datetime-local) e opzionalmente &address=...&notes=...
+   Portiamo la vista sul giorno giusto e apriamo direttamente il form di configurazione
+   appuntamento precompilato, invece di lasciare che l'utente lo cerchi/apra a mano. ---- */
+async function handleNewsDeepLink(){
+  var params = new URLSearchParams(window.location.search);
+  var dateStr = params.get("date");
+  if(!dateStr) return false;
+
+  var address = params.get("address") || params.get("location") || "";
+  var notes = params.get("notes") || params.get("title") || "";
+
+  var d = new Date(dateStr);
+  if(isNaN(d.getTime())) return false;
+
+  anchorDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  currentView = "day";
+  updateViewButtons();
+  await loadCalendarData();
+
+  openBookingModal(dateStr);
+  if(address) document.getElementById("eventAddress").value = address;
+  if(notes) document.getElementById("eventNotes").value = notes;
+
+  params.delete("date");
+  params.delete("address");
+  params.delete("location");
+  params.delete("notes");
+  params.delete("title");
+  var newQuery = params.toString();
+  window.history.replaceState({}, "", window.location.pathname + (newQuery ? "?" + newQuery : ""));
+  return true;
+}
+
+(async function init(){
+  const isLogged = await checkAuth();
+  if(isLogged){
+    await loadUserLanguage();
+    updateViewButtons();
+    await loadStaticData();
+    await loadMyConnections();
+    handleGoogleConnectRedirect();
+    var handledDeepLink = await handleNewsDeepLink();
+    if(!handledDeepLink) await loadCalendarData();
+  }
+})();
+</script>
+
+</body>
+</html>

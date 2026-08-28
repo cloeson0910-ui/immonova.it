@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notizie | IMMONOVA Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{
+  text-decoration:none;
+  color:#a67f34;
+}
+.logo-main{
+  font-size:24px;
+  font-weight:600;
+  letter-spacing:.35em;
+}
+.logo-sub{
+  margin-top:6px;
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.18em;
+  color:#a58139;
+}
+.header-actions{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.header-actions a,
+.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.header-actions a:hover,
+.logout:hover{
+  background:#a67f34;
+  color:#fff;
+}
+.header-actions a.active{
+  background:#a67f34;
+  color:#fff;
+}
+.container{
+  max-width:1100px;
+  margin:auto;
+  padding:40px;
+}
+.kicker{
+  font-size:11px;
+  letter-spacing:.32em;
+  text-transform:uppercase;
+  color:#9a793c;
+  margin-bottom:12px;
+}
+.title-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:22px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+}
+.title{
+  font-size:42px;
+  font-weight:200;
+  letter-spacing:.05em;
+  color:#a67f34;
+}
+.subtitle{
+  font-size:15px;
+  line-height:1.8;
+  color:#8f7643;
+  max-width:860px;
+  margin-bottom:28px;
+}
+.primary-link{
+  display:inline-block;
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  background:#a67f34;
+  color:#fffaf0;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.status{
+  margin-bottom:20px;
+  font-size:13px;
+  min-height:18px;
+}
+.status.error{color:#9c2f2f}
+.status.success{color:#4f7f45}
+
+/* ---- Form di creazione/modifica: visibile solo ad admin/super user, nascosto di default. ---- */
+.news-form{
+  display:none;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.28);
+  padding:26px;
+  margin-bottom:32px;
+}
+.news-form.open{ display:block; }
+.news-form .field{ margin-bottom:16px; }
+.news-form label{
+  display:block;
+  font-size:10px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#8f7643;
+  margin-bottom:8px;
+}
+.news-form input[type="text"],
+.news-form textarea{
+  width:100%;
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.6);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+  resize:vertical;
+}
+.news-form textarea{ min-height:120px; line-height:1.6; }
+.news-form .checkbox-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:#7f6430;
+}
+.news-form .form-actions{
+  display:flex;
+  gap:10px;
+  margin-top:6px;
+}
+.secondary-btn{
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  background:rgba(255,255,255,.3);
+  color:#a67f34;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.secondary-btn:hover{ background:rgba(166,127,52,.1); }
+
+/* ---- Elenco notizie: card in stile bacheca, coerente col resto dell'app. ---- */
+.news-list{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.news-card{
+  background:rgba(255,255,255,.22);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+  padding:26px;
+}
+.news-card.pinned{
+  border-color:rgba(166,127,52,.5);
+  background:linear-gradient(135deg,rgba(166,127,52,.10),rgba(255,255,255,.25));
+}
+.news-card-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  margin-bottom:10px;
+}
+.news-title{
+  font-size:19px;
+  color:#a67f34;
+  line-height:1.4;
+}
+.pin-badge{
+  display:inline-block;
+  padding:5px 9px;
+  border:1px solid rgba(166,127,52,.4);
+  color:#a67f34;
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-left:10px;
+  vertical-align:middle;
+}
+.news-meta{
+  font-size:11px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#8f7643;
+  white-space:nowrap;
+}
+.news-body{
+  font-size:14px;
+  line-height:1.8;
+  color:#5c4b25;
+  white-space:pre-wrap;
+  margin-bottom:14px;
+}
+.news-actions{
+  display:flex;
+  gap:8px;
+}
+.news-actions button{
+  padding:8px 14px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  color:#a67f34;
+  cursor:pointer;
+  font-size:11px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.news-actions button:hover{ background:#a67f34; color:#fff; }
+.news-actions button.danger:hover{ background:#9c2f2f; border-color:#9c2f2f; }
+.news-actions button.verify{ border-color:rgba(79,127,69,.4); color:#4f7f45; }
+.news-actions button.verify:hover{ background:#4f7f45; color:#fff; }
+#historyList{ display:flex; flex-direction:column; gap:8px; }
+.news-update-item{ border-left:2px solid rgba(166,127,52,.4); padding-left:10px; margin-bottom:8px; }
+.news-update-date{ font-size:11px; color:#a67f34; text-transform:uppercase; letter-spacing:.06em; }
+.news-update-note{ font-size:13px; color:#5c4b25; white-space:pre-wrap; }
+.news-update-empty{ font-size:13px; color:#8f7643; }
+.empty{
+  padding:40px;
+  text-align:center;
+  color:#8f7643;
+  font-size:14px;
+  border:1px solid rgba(166,127,52,.15);
+  background:rgba(255,255,255,.18);
+}
+
+/* ---- Badge di stato verifica, campi aggiuntivi indirizzo/appuntamento/anagrafica cliente. ---- */
+.verify-badge{
+  display:inline-block;
+  padding:5px 9px;
+  border:1px solid rgba(196,140,20,.5);
+  color:#a5710d;
+  background:rgba(196,140,20,.08);
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-left:10px;
+  vertical-align:middle;
+}
+.verified-badge{
+  display:inline-block;
+  padding:5px 9px;
+  border:1px solid rgba(79,127,69,.4);
+  color:#4f7f45;
+  background:rgba(79,127,69,.07);
+  font-size:9px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  margin-left:10px;
+  vertical-align:middle;
+}
+.news-details{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 20px;
+  margin-bottom:14px;
+  font-size:12.5px;
+  color:#8f7643;
+}
+.news-details strong{ color:#7f6430; }
+.news-details a{ color:#a67f34; }
+.form-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+.form-grid .field.full{ grid-column:1 / -1; }
+.form-section-label{
+  font-size:10px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#a67f34;
+  margin:22px 0 12px;
+  border-top:1px solid rgba(166,127,52,.18);
+  padding-top:16px;
+}
+.news-form input[type="text"],
+.news-form input[type="datetime-local"],
+.news-form input[type="email"],
+.news-form input[type="tel"]{
+  width:100%;
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.6);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+}
+.appointment-row{
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  flex-wrap:wrap;
+}
+.appointment-row .field{ flex:1; min-width:220px; margin-bottom:0; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+
+  <div class="header-actions">
+    <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
+    <a href="events.html" data-i18n="nav_events">Eventi</a>
+    <a href="investors.html" data-i18n="nav_investors">Contatti</a>
+    <a href="capital-partners.html" data-i18n="nav_capital_partners" id="capitalPartnersLink" style="display:none">Capital Partners</a>
+    <a href="users.html" id="usersLink" data-i18n="nav_users">Utenti</a>
+    <a href="notizie.html" class="active" data-i18n="nav_news">Notizie</a>
+    <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="kicker" data-i18n="kicker">Bacheca Interna · Solo Admin</div>
+
+  <div class="title-row">
+    <div>
+      <h1 class="title" data-i18n="title">Notizie</h1>
+    </div>
+    <button type="button" class="primary-link" id="openFormBtn" style="display:none" data-i18n="btn_new_news">Nuova Notizia</button>
+  </div>
+
+  <p class="subtitle" data-i18n="subtitle">
+    Segnalazioni interne su immobili in vendita: indirizzo, dati del cliente e appuntamento. Ogni segnalazione genera automaticamente una scheda in Investitori/Venditori e resta "in fase di verifica" finché un admin non la conferma. Pagina visibile solo ad admin e super user.
+  </p>
+
+  <div id="status" class="status"></div>
+
+  <form class="news-form" id="newsForm">
+    <div class="field full">
+      <label data-i18n="label_title">Titolo</label>
+      <input type="text" id="newsTitle" maxlength="200" required>
+    </div>
+    <div class="field full">
+      <label data-i18n="label_body">Testo / Note</label>
+      <textarea id="newsBody" required></textarea>
+    </div>
+    <div class="field full">
+      <label data-i18n="label_address">Indirizzo dell'immobile da vendere</label>
+      <input type="text" id="newsAddress" placeholder="Via, città, provincia">
+      <div id="newsAddressMap" style="display:none;margin-top:10px;height:220px;border-radius:6px;overflow:hidden"></div>
+    </div>
+
+    <div class="form-section-label" data-i18n="section_appointment">Appuntamento</div>
+    <div class="appointment-row">
+      <div class="field">
+        <label data-i18n="label_appointment">Data e ora appuntamento (opzionale)</label>
+        <input type="datetime-local" id="newsAppointment">
+      </div>
+      <button type="button" class="secondary-btn" id="openEventsBtn" data-i18n="btn_fix_appointment">Fissa Appuntamento in Calendario</button>
+    </div>
+
+    <div class="form-section-label" data-i18n="section_client">Dati Anagrafici Cliente (crea automaticamente una scheda in Investitori/Venditori)</div>
+    <div class="form-grid">
+      <div class="field">
+        <label data-i18n="label_client_first_name">Nome</label>
+        <input type="text" id="clientFirstName">
+      </div>
+      <div class="field">
+        <label data-i18n="label_client_last_name">Cognome</label>
+        <input type="text" id="clientLastName">
+      </div>
+      <div class="field">
+        <label data-i18n="label_client_phone">Telefono</label>
+        <input type="tel" id="clientPhone">
+      </div>
+      <div class="field">
+        <label data-i18n="label_client_email">Email</label>
+        <input type="email" id="clientEmail">
+      </div>
+    </div>
+
+    <div class="form-section-label" data-i18n="section_client_type">Tipo Contatto</div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="clientIsInvestor">
+      <label for="clientIsInvestor" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="check_client_investor">Investitore</label>
+    </div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="clientIsSeller" checked>
+      <label for="clientIsSeller" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="check_client_seller">Venditore</label>
+    </div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="clientIsSupplier">
+      <label for="clientIsSupplier" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="check_client_supplier">Fornitore</label>
+    </div>
+
+    <div class="field checkbox-row" style="margin-top:16px">
+      <input type="checkbox" id="newsPinned">
+      <label for="newsPinned" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="label_pinned">Metti in evidenza in cima alla bacheca</label>
+    </div>
+
+    <div class="form-section-label" id="historySectionLabel" style="display:none" data-i18n="section_history">Cronologia Aggiornamenti</div>
+    <div id="historyList" style="display:none;margin-bottom:14px"></div>
+    <div class="field full" id="historyAddField" style="display:none">
+      <label data-i18n="label_history_note">Aggiungi un aggiornamento</label>
+      <textarea id="historyNoteInput" placeholder="Cosa hai fatto/aggiornato..."></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="datetime-local" id="historyDateInput">
+        <button type="button" class="secondary-btn" id="addHistoryBtn" data-i18n="action_add_event">Aggiungi Evento</button>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="primary-link" id="saveNewsBtn" data-i18n="btn_save_news">Pubblica</button>
+      <button type="button" class="secondary-btn" id="cancelFormBtn" data-i18n="btn_cancel">Annulla</button>
+    </div>
+  </form>
+
+  <div class="news-list" id="newsList">
+    <div class="empty" data-i18n="loading">Caricamento notizie...</div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const statusBox = document.getElementById("status");
+const newsList = document.getElementById("newsList");
+const newsForm = document.getElementById("newsForm");
+const openFormBtn = document.getElementById("openFormBtn");
+const cancelFormBtn = document.getElementById("cancelFormBtn");
+const newsTitleInput = document.getElementById("newsTitle");
+const newsBodyInput = document.getElementById("newsBody");
+const newsAddressInput = document.getElementById("newsAddress");
+const newsAppointmentInput = document.getElementById("newsAppointment");
+const openEventsBtn = document.getElementById("openEventsBtn");
+const clientFirstNameInput = document.getElementById("clientFirstName");
+const clientLastNameInput = document.getElementById("clientLastName");
+const clientPhoneInput = document.getElementById("clientPhone");
+const clientEmailInput = document.getElementById("clientEmail");
+const clientIsInvestorInput = document.getElementById("clientIsInvestor");
+const clientIsSellerInput = document.getElementById("clientIsSeller");
+const clientIsSupplierInput = document.getElementById("clientIsSupplier");
+const newsAddressMapDiv = document.getElementById("newsAddressMap");
+const newsPinnedInput = document.getElementById("newsPinned");
+const historySectionLabel = document.getElementById("historySectionLabel");
+const historyListDiv = document.getElementById("historyList");
+const historyAddField = document.getElementById("historyAddField");
+const historyNoteInput = document.getElementById("historyNoteInput");
+const historyDateInput = document.getElementById("historyDateInput");
+const addHistoryBtn = document.getElementById("addHistoryBtn");
+const saveNewsBtn = document.getElementById("saveNewsBtn");
+
+let currentUser = null;
+let currentProfile = null;
+let currentUserLanguage = "it";
+let canAccess = false;
+let editingId = null;
+let allNews = [];
+let newsUpdatesByNewsId = {};
+
+/* ---- i18n: stesso meccanismo delle altre pagine admin (vedi investors.html/users.html). ---- */
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi",
+  nav_investors:"Contatti", nav_capital_partners:"Capital Partners", nav_users:"Utenti",
+  nav_news:"Notizie", logout:"Logout",
+  kicker:"Bacheca Interna · Solo Admin", title:"Notizie",
+  subtitle:"Segnalazioni interne su immobili in vendita: indirizzo, dati del cliente e appuntamento. Ogni segnalazione genera automaticamente una scheda in Investitori/Venditori e resta \"in fase di verifica\" finché un admin non la conferma. Pagina visibile solo ad admin e super user.",
+  btn_new_news:"Nuova Notizia", btn_save_news:"Pubblica", btn_update_news:"Salva Modifiche", btn_cancel:"Annulla",
+  label_title:"Titolo", label_body:"Testo / Note", label_address:"Indirizzo dell'immobile da vendere",
+  label_pinned:"Metti in evidenza in cima alla bacheca",
+  section_appointment:"Appuntamento", label_appointment:"Data e ora appuntamento (opzionale)",
+  btn_fix_appointment:"Fissa Appuntamento in Calendario",
+  section_client:"Dati Anagrafici Cliente (crea automaticamente una scheda in Contatti)",
+  label_client_first_name:"Nome", label_client_last_name:"Cognome", label_client_phone:"Telefono", label_client_email:"Email",
+  section_client_type:"Tipo Contatto",
+  check_client_investor:"Investitore", check_client_seller:"Venditore", check_client_supplier:"Fornitore",
+  loading:"Caricamento notizie...", empty_none:"Nessuna notizia pubblicata al momento.",
+  pin_badge:"In evidenza", verify_badge:"Notizia in fase di verifica", verified_badge:"Verificata",
+  action_edit:"Modifica", action_delete:"Elimina", action_verify:"Segna come verificata",
+  action_set_appointment:"Fissa Appuntamento", action_events:"Eventi", action_add_event:"Aggiungi Evento",
+  events_panel_empty:"Nessun evento registrato.", events_note_placeholder:"Cosa hai fatto/aggiornato...",
+  section_history:"Cronologia Aggiornamenti", label_history_note:"Aggiungi un aggiornamento",
+  address_label:"Indirizzo:", appointment_label:"Appuntamento:", client_label:"Cliente:",
+  linked_investor_link:"Vedi scheda in Investitori",
+  confirm_delete_news:"Eliminare definitivamente questa notizia?",
+  msg_saving:"Pubblicazione in corso...", msg_saved:"Notizia pubblicata.", msg_updated:"Notizia aggiornata.",
+  msg_deleting:"Eliminazione in corso...", msg_deleted:"Notizia eliminata.",
+  msg_verifying:"Verifica in corso...", msg_verified:"Notizia segnata come verificata.",
+  msg_investor_created:" Scheda cliente creata in Investitori/Venditori.",
+  msg_investor_failed:" (la notizia è stata salvata, ma la scheda cliente non è stata creata: verificarla a mano)",
+  msg_required_fields:"Titolo e testo sono obbligatori.",
+  msg_profile_not_found:"Impossibile caricare il profilo utente.",
+  msg_load_error:"Errore nel caricamento delle notizie.",
+  msg_access_denied:"Accesso riservato agli admin.",
+  empty_unauthorized:"Accesso riservato agli admin."
+};
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_notizie_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Admin internal news/announcements board page: titles, buttons, form labels.",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione notizie non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.innerHTML = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+}
+
+function esc(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setStatus(message, type){
+  statusBox.className = "status " + (type || "");
+  statusBox.textContent = message || "";
+}
+
+function fmtDate(iso){
+  try{
+    return new Intl.DateTimeFormat(currentUserLanguage === "it" ? "it-IT" : currentUserLanguage, {
+      day:"2-digit", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit"
+    }).format(new Date(iso));
+  }catch(e){
+    return iso || "";
+  }
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){
+    window.location.href = "login.html";
+    return false;
+  }
+  currentUser = session.user;
+  return true;
+}
+
+async function loadProfile(){
+  var result = await client
+    .from("profiles")
+    .select("id,email,full_name,role,language,is_super_user")
+    .eq("id", currentUser.id)
+    .single();
+
+  if(result.error){
+    var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
+    if(looksLikeMissingLanguageColumn){
+      result = await client.from("profiles").select("id,email,full_name,role,is_super_user").eq("id", currentUser.id).single();
+    }
+  }
+
+  if(result.error || !result.data){
+    await applyLanguage("it");
+    setStatus(T.msg_profile_not_found, "error");
+    return false;
+  }
+
+  currentProfile = result.data;
+  await applyLanguage(currentProfile.language || "it");
+
+  /* ---- L'intera pagina notizie (lettura E scrittura) e' riservata ad admin o super user --
+     stesso identico criterio usato in tutte le altre pagine admin. Un collaboratore normale
+     non vede nessuna notizia, nemmeno quelle gia' verificate: la bacheca qui non e' pubblica
+     come nella prima versione, e' uno strumento di lavoro solo per chi gestisce le vendite. ---- */
+  canAccess = currentProfile.role === "admin" || !!currentProfile.is_super_user;
+  if(!canAccess){
+    setStatus(T.msg_access_denied, "error");
+    newsList.innerHTML = '<div class="empty">'+esc(T.empty_unauthorized)+'</div>';
+    newsForm.style.display = "none";
+    return false;
+  }
+
+  openFormBtn.style.display = "";
+  return true;
+}
+
+function renderNewsList(){
+  if(!allNews.length){
+    newsList.innerHTML = '<div class="empty">'+esc(T.empty_none)+'</div>';
+    return;
+  }
+
+  newsList.innerHTML = allNews.map(function(n){
+    var statusBadge = n.status === "verificata"
+      ? '<span class="verified-badge">'+esc(T.verified_badge)+'</span>'
+      : '<span class="verify-badge">'+esc(T.verify_badge)+'</span>';
+
+    var clientName = [n.client_first_name, n.client_last_name].filter(Boolean).join(" ");
+    var clientBits = [clientName, n.client_phone, n.client_email].filter(Boolean).join(" · ");
+
+    var detailsParts = [];
+    if(n.property_address) detailsParts.push('<span><strong>'+esc(T.address_label)+'</strong> '+esc(n.property_address)+'</span>');
+    if(n.appointment_at) detailsParts.push('<span><strong>'+esc(T.appointment_label)+'</strong> '+esc(fmtDate(n.appointment_at))+'</span>');
+    if(clientBits) detailsParts.push('<span><strong>'+esc(T.client_label)+'</strong> '+esc(clientBits)+'</span>');
+    if(n.linked_investor_id) detailsParts.push('<a href="investor-form.html?id='+encodeURIComponent(n.linked_investor_id)+'" target="_blank">'+esc(T.linked_investor_link)+'</a>');
+    var details = detailsParts.length ? '<div class="news-details">'+detailsParts.join("")+'</div>' : "";
+
+    var verifyBtn = n.status === "verificata" ? "" : '<button type="button" class="verify" onclick="verifyNews(\''+n.id+'\')">'+esc(T.action_verify)+'</button>';
+    var calendarBtn = '<button type="button" onclick="openCalendarForNews(\''+n.id+'\')">'+esc(T.action_set_appointment)+'</button>';
+    var eventsBtn = '<button type="button" onclick="editNews(\''+n.id+'\', true)">'+esc(T.action_events)+'</button>';
+
+    var actions = (
+      '<div class="news-actions">'+
+        verifyBtn+
+        calendarBtn+
+        eventsBtn+
+        '<button type="button" onclick="editNews(\''+n.id+'\')">'+esc(T.action_edit)+'</button>'+
+        '<button type="button" class="danger" onclick="deleteNews(\''+n.id+'\')">'+esc(T.action_delete)+'</button>'+
+      '</div>'
+    );
+
+    return (
+      '<div class="news-card'+(n.pinned ? " pinned" : "")+'">'+
+        '<div class="news-card-head">'+
+          '<div class="news-title">'+esc(n.title)+(n.pinned ? '<span class="pin-badge">'+esc(T.pin_badge)+'</span>' : "")+statusBadge+'</div>'+
+          '<div class="news-meta">'+esc(fmtDate(n.created_at))+'</div>'+
+        '</div>'+
+        details+
+        '<div class="news-body">'+esc(n.body)+'</div>'+
+        actions+
+      '</div>'
+    );
+  }).join("");
+}
+
+async function loadNews(){
+  var result = await client
+    .from("immonova_news")
+    .select("*")
+    .order("pinned", { ascending:false })
+    .order("created_at", { ascending:false });
+
+  if(result.error){
+    setStatus(T.msg_load_error, "error");
+    newsList.innerHTML = '<div class="empty">'+esc(T.msg_load_error)+'</div>';
+    return;
+  }
+
+  allNews = result.data || [];
+  renderNewsList();
+}
+
+/* ---- Cronologia aggiornamenti (dentro il form di Modifica Notizia, NON un pannello separato
+   sulla card -- cosi' l'admin scrive dentro la stessa schermata di modifica, come richiesto). ---- */
+async function renderHistoryList(newsId){
+  var updates = newsUpdatesByNewsId[newsId] || [];
+  if(!updates.length){
+    historyListDiv.innerHTML = '<div class="news-update-empty">'+esc(T.events_panel_empty)+'</div>';
+    return;
+  }
+  historyListDiv.innerHTML = updates.map(function(u){
+    return '<div class="news-update-item"><div class="news-update-date">'+esc(fmtDate(u.event_at))+'</div><div class="news-update-note">'+esc(u.note)+'</div></div>';
+  }).join("");
+}
+
+async function loadHistoryForNews(newsId){
+  try{
+    var result = await client
+      .from("immonova_news_updates")
+      .select("*")
+      .eq("news_id", newsId)
+      .order("event_at", { ascending:false });
+
+    newsUpdatesByNewsId[newsId] = (!result.error && result.data) ? result.data : [];
+  }catch(e){
+    console.warn("Caricamento cronologia notizia non riuscito (non bloccante):", e);
+    newsUpdatesByNewsId[newsId] = newsUpdatesByNewsId[newsId] || [];
+  }
+  renderHistoryList(newsId);
+}
+
+addHistoryBtn.addEventListener("click", async function(){
+  var note = historyNoteInput.value.trim();
+  if(!note || !editingId) return;
+
+  var whenLocal = historyDateInput.value;
+  var eventAt = whenLocal ? new Date(whenLocal).toISOString() : new Date().toISOString();
+
+  var result = await client.from("immonova_news_updates").insert({
+    news_id: editingId,
+    note: note,
+    event_at: eventAt,
+    created_by: currentUser.id
+  });
+
+  if(result.error){
+    setStatus(result.error.message, "error");
+    return;
+  }
+
+  historyNoteInput.value = "";
+  historyDateInput.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  await loadHistoryForNews(editingId);
+});
+
+/* ---- "Fissa Appuntamento": apre direttamente la pagina calendario (NON il form di modifica
+   della notizia, per non rischiare di alterare la notizia stessa), sul giorno/ora giusti, con
+   il form di configurazione appuntamento gia' aperto e precompilato con indirizzo e note.
+   I nomi dei parametri (date/address/notes) corrispondono ai campi reali del form appuntamento
+   in calendar.html: quella pagina li legge ed apre il modale in automatico. ---- */
+window.openCalendarForNews = function(id){
+  var n = allNews.find(function(x){ return String(x.id) === String(id); });
+  if(!n) return;
+
+  var params = new URLSearchParams();
+
+  var when;
+  if(n.appointment_at){
+    when = new Date(n.appointment_at);
+  }else{
+    when = new Date();
+    when.setMinutes(when.getMinutes() + 30 - (when.getMinutes() % 30));
+  }
+  var localStr = new Date(when.getTime() - when.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  params.set("date", localStr);
+
+  if(n.property_address) params.set("address", n.property_address);
+
+  var noteBits = ["Notizia: " + n.title];
+  if(n.body) noteBits.push(n.body);
+  params.set("notes", noteBits.join(" — "));
+
+  window.open("calendar.html?" + params.toString(), "_blank");
+};
+
+function openForm(){
+  newsForm.classList.add("open");
+  openFormBtn.style.display = "none";
+  newsTitleInput.focus();
+}
+
+function closeForm(){
+  newsForm.classList.remove("open");
+  newsForm.reset();
+  newsAddressMapDiv.style.display = "none";
+  historySectionLabel.style.display = "none";
+  historyListDiv.style.display = "none";
+  historyAddField.style.display = "none";
+  editingId = null;
+  saveNewsBtn.textContent = T.btn_save_news;
+  openFormBtn.style.display = "";
+}
+
+window.editNews = async function(id, focusHistory){
+  var n = allNews.find(function(x){ return String(x.id) === String(id); });
+  if(!n) return;
+  editingId = id;
+  newsTitleInput.value = n.title || "";
+  newsBodyInput.value = n.body || "";
+  newsAddressInput.value = n.property_address || "";
+  newsAppointmentInput.value = n.appointment_at ? n.appointment_at.slice(0, 16) : "";
+  clientFirstNameInput.value = n.client_first_name || "";
+  clientLastNameInput.value = n.client_last_name || "";
+  clientPhoneInput.value = n.client_phone || "";
+  clientEmailInput.value = n.client_email || "";
+  newsPinnedInput.checked = !!n.pinned;
+  saveNewsBtn.textContent = T.btn_update_news;
+
+  historySectionLabel.style.display = "";
+  historyListDiv.style.display = "";
+  historyAddField.style.display = "";
+  historyListDiv.innerHTML = '<div class="news-update-empty">'+esc(T.loading)+'</div>';
+  historyDateInput.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  historyNoteInput.value = "";
+
+  openForm();
+  if(n.property_address) geocodeAndShowAddress(n.property_address);
+  await loadHistoryForNews(id);
+  if(focusHistory) historyNoteInput.focus();
+};
+
+window.deleteNews = async function(id){
+  if(!confirm(T.confirm_delete_news)) return;
+
+  setStatus(T.msg_deleting, "");
+  const { error } = await client.from("immonova_news").delete().eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setStatus(T.msg_deleted, "success");
+  await loadNews();
+};
+
+/* ---- "Segna come verificata": toglie l'etichetta "Notizia in fase di verifica". Nessuna
+   email o notifica viene mandata in nessun punto di questa pagina, per nessuna azione. ---- */
+window.verifyNews = async function(id){
+  setStatus(T.msg_verifying, "");
+  const { error } = await client.from("immonova_news").update({ status:"verificata", updated_at:new Date().toISOString() }).eq("id", id);
+
+  if(error){
+    setStatus(error.message, "error");
+    return;
+  }
+
+  setStatus(T.msg_verified, "success");
+  await loadNews();
+};
+
+/* ---- Anteprima mappa dell'indirizzo inserito: geocodifica via Nominatim (OpenStreetMap) e
+   mostra un marker su una mini mappa Leaflet. Best-effort: se la geocodifica fallisce o non
+   trova nulla, la mappa resta semplicemente nascosta, senza bloccare il resto del form. ---- */
+var newsAddressMapInstance = null;
+var newsAddressMapMarker = null;
+var newsAddressGeocodeTimer = null;
+
+async function geocodeAndShowAddress(address){
+  if(!address){
+    newsAddressMapDiv.style.display = "none";
+    return;
+  }
+
+  try{
+    var url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(address);
+    var controller = new AbortController();
+    var timeout = setTimeout(function(){ controller.abort(); }, 6000);
+    var res = await fetch(url, { signal: controller.signal, headers:{ "Accept":"application/json" } });
+    clearTimeout(timeout);
+    var results = await res.json();
+    if(!results || !results.length) { newsAddressMapDiv.style.display = "none"; return; }
+
+    var lat = parseFloat(results[0].lat);
+    var lon = parseFloat(results[0].lon);
+    if(!isFinite(lat) || !isFinite(lon)) { newsAddressMapDiv.style.display = "none"; return; }
+
+    newsAddressMapDiv.style.display = "block";
+    if(!newsAddressMapInstance){
+      newsAddressMapInstance = L.map(newsAddressMapDiv);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19 }).addTo(newsAddressMapInstance);
+    }
+    newsAddressMapInstance.setView([lat, lon], 15);
+    if(newsAddressMapMarker) newsAddressMapInstance.removeLayer(newsAddressMapMarker);
+    newsAddressMapMarker = L.marker([lat, lon]).addTo(newsAddressMapInstance);
+    setTimeout(function(){ if(newsAddressMapInstance) newsAddressMapInstance.invalidateSize(); }, 150);
+  }catch(e){
+    console.warn("Geocodifica indirizzo non riuscita (non bloccante):", e);
+    newsAddressMapDiv.style.display = "none";
+  }
+}
+
+newsAddressInput.addEventListener("input", function(){
+  clearTimeout(newsAddressGeocodeTimer);
+  var value = newsAddressInput.value.trim();
+  newsAddressGeocodeTimer = setTimeout(function(){ geocodeAndShowAddress(value); }, 900);
+});
+
+/* ---- Crea in automatico una scheda Contatti dai dati anagrafici inseriti nella notizia
+   (solo alla creazione, mai su una modifica successiva, per non duplicare la scheda ad ogni
+   salvataggio). Il tipo di contatto (investitore/venditore/fornitore) riflette le checkbox
+   flaggate nel form, non un valore fisso. Nessuna notifica viene inviata: nessuna funzione
+   notify-* viene mai chiamata da questa pagina. ---- */
+async function createInvestorFromNews(news, contactType){
+  contactType = contactType || {};
+  var payload = {
+    first_name: news.client_first_name,
+    last_name: news.client_last_name,
+    phone: news.client_phone || null,
+    email: news.client_email || null,
+    is_investor: !!contactType.isInvestor,
+    is_seller: !!contactType.isSeller,
+    is_supplier: !!contactType.isSupplier,
+    seller_status: contactType.isSeller ? "da_contattare" : null,
+    status: "active",
+    notes: [
+      "Creato automaticamente dalla notizia \"" + news.title + "\".",
+      news.property_address ? "Indirizzo immobile: " + news.property_address : null,
+      news.body ? news.body : null
+    ].filter(Boolean).join("\n"),
+    created_by: currentUser.id
+  };
+
+  const { data, error } = await client.from("investors").insert(payload).select("id").single();
+  if(error || !data) throw error || new Error("insert investors: nessun id restituito");
+  return data.id;
+}
+
+newsForm.addEventListener("submit", async function(event){
+  event.preventDefault();
+
+  var title = newsTitleInput.value.trim();
+  var body = newsBodyInput.value.trim();
+  if(!title || !body){
+    setStatus(T.msg_required_fields, "error");
+    return;
+  }
+
+  var payload = {
+    title: title,
+    body: body,
+    property_address: newsAddressInput.value.trim() || null,
+    appointment_at: newsAppointmentInput.value ? new Date(newsAppointmentInput.value).toISOString() : null,
+    client_first_name: clientFirstNameInput.value.trim() || null,
+    client_last_name: clientLastNameInput.value.trim() || null,
+    client_phone: clientPhoneInput.value.trim() || null,
+    client_email: clientEmailInput.value.trim() || null,
+    pinned: newsPinnedInput.checked,
+    updated_at: new Date().toISOString()
+  };
+
+  setStatus(T.msg_saving, "");
+
+  var result, savedId = editingId;
+  if(editingId){
+    result = await client.from("immonova_news").update(payload).eq("id", editingId);
+  }else{
+    payload.created_by = currentUser.id;
+    payload.status = "in_verifica";
+    result = await client.from("immonova_news").insert(payload).select("id").single();
+    if(!result.error && result.data) savedId = result.data.id;
+  }
+
+  if(result.error){
+    setStatus(result.error.message, "error");
+    return;
+  }
+
+  var extraMsg = "";
+  if(!editingId && payload.client_first_name && payload.client_last_name){
+    try{
+      var investorId = await createInvestorFromNews(payload, {
+        isInvestor: clientIsInvestorInput.checked,
+        isSeller: clientIsSellerInput.checked,
+        isSupplier: clientIsSupplierInput.checked
+      });
+      await client.from("immonova_news").update({ linked_investor_id: investorId }).eq("id", savedId);
+      extraMsg = T.msg_investor_created;
+    }catch(e){
+      console.warn("Creazione automatica scheda Investitori/Venditori non riuscita:", e);
+      extraMsg = T.msg_investor_failed;
+    }
+  }
+
+  setStatus((editingId ? T.msg_updated : T.msg_saved) + extraMsg, "success");
+  closeForm();
+  await loadNews();
+});
+
+/* ---- "Fissa Appuntamento in Calendario": apre la pagina calendario (NON eventi, che e'
+   riservata alle feste/eventi aziendali) in una nuova scheda, con titolo, luogo e data gia'
+   pronti da copiare -- non scrive direttamente sul calendario (la struttura esatta della
+   tabella calendario non e' gestita da questa pagina), l'admin conferma da li'. ---- */
+openEventsBtn.addEventListener("click", function(){
+  var params = new URLSearchParams();
+
+  var whenLocal = newsAppointmentInput.value;
+  if(!whenLocal){
+    var now = new Date();
+    now.setMinutes(now.getMinutes() + 30 - (now.getMinutes() % 30));
+    whenLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+  params.set("date", whenLocal);
+
+  if(newsAddressInput.value.trim()) params.set("address", newsAddressInput.value.trim());
+
+  var noteBits = [];
+  if(newsTitleInput.value.trim()) noteBits.push("Notizia: " + newsTitleInput.value.trim());
+  if(newsBodyInput.value.trim()) noteBits.push(newsBodyInput.value.trim());
+  if(noteBits.length) params.set("notes", noteBits.join(" — "));
+
+  window.open("calendar.html?" + params.toString(), "_blank");
+});
+
+openFormBtn.addEventListener("click", openForm);
+cancelFormBtn.addEventListener("click", closeForm);
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+/* ---- Il link "Capital Partners" è nascosto di default: compare solo se questo utente ha
+   accesso alla sezione riservata. Stesso controllo usato nelle altre pagine admin. ---- */
+async function revealCapitalPartnersLinkIfAllowed(){
+  try{
+    const { data, error } = await client.rpc("has_capital_partners_access");
+    if(!error && data){
+      document.getElementById("capitalPartnersLink").style.display = "";
+    }
+  }catch(e){
+    console.warn("Verifica accesso Capital Partners non riuscita (non bloccante):", e);
+  }
+}
+
+(async function init(){
+  if(await checkAuth()){
+    const ok = await loadProfile();
+    if(ok){
+      await loadNews();
+      await revealCapitalPartnersLinkIfAllowed();
+    }
+  }
+})();
+</script>
+</body>
+</html>
