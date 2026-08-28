@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Notizie | IMMONOVA Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -366,7 +368,7 @@ body::after{
     <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
     <a href="events.html" data-i18n="nav_events">Eventi</a>
-    <a href="investors.html" data-i18n="nav_investors">Investitori</a>
+    <a href="investors.html" data-i18n="nav_investors">Contatti</a>
     <a href="capital-partners.html" data-i18n="nav_capital_partners" id="capitalPartnersLink" style="display:none">Capital Partners</a>
     <a href="users.html" id="usersLink" data-i18n="nav_users">Utenti</a>
     <a href="notizie.html" class="active" data-i18n="nav_news">Notizie</a>
@@ -403,6 +405,7 @@ body::after{
     <div class="field full">
       <label data-i18n="label_address">Indirizzo dell'immobile da vendere</label>
       <input type="text" id="newsAddress" placeholder="Via, città, provincia">
+      <div id="newsAddressMap" style="display:none;margin-top:10px;height:220px;border-radius:6px;overflow:hidden"></div>
     </div>
 
     <div class="form-section-label" data-i18n="section_appointment">Appuntamento</div>
@@ -432,6 +435,20 @@ body::after{
         <label data-i18n="label_client_email">Email</label>
         <input type="email" id="clientEmail">
       </div>
+    </div>
+
+    <div class="form-section-label" data-i18n="section_client_type">Tipo Contatto</div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="clientIsInvestor">
+      <label for="clientIsInvestor" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="check_client_investor">Investitore</label>
+    </div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="clientIsSeller" checked>
+      <label for="clientIsSeller" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="check_client_seller">Venditore</label>
+    </div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="clientIsSupplier">
+      <label for="clientIsSupplier" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="check_client_supplier">Fornitore</label>
     </div>
 
     <div class="field checkbox-row" style="margin-top:16px">
@@ -471,6 +488,10 @@ const clientFirstNameInput = document.getElementById("clientFirstName");
 const clientLastNameInput = document.getElementById("clientLastName");
 const clientPhoneInput = document.getElementById("clientPhone");
 const clientEmailInput = document.getElementById("clientEmail");
+const clientIsInvestorInput = document.getElementById("clientIsInvestor");
+const clientIsSellerInput = document.getElementById("clientIsSeller");
+const clientIsSupplierInput = document.getElementById("clientIsSupplier");
+const newsAddressMapDiv = document.getElementById("newsAddressMap");
 const newsPinnedInput = document.getElementById("newsPinned");
 const saveNewsBtn = document.getElementById("saveNewsBtn");
 
@@ -484,7 +505,7 @@ let allNews = [];
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi investors.html/users.html). ---- */
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi",
-  nav_investors:"Investitori", nav_capital_partners:"Capital Partners", nav_users:"Utenti",
+  nav_investors:"Contatti", nav_capital_partners:"Capital Partners", nav_users:"Utenti",
   nav_news:"Notizie", logout:"Logout",
   kicker:"Bacheca Interna · Solo Admin", title:"Notizie",
   subtitle:"Segnalazioni interne su immobili in vendita: indirizzo, dati del cliente e appuntamento. Ogni segnalazione genera automaticamente una scheda in Investitori/Venditori e resta \"in fase di verifica\" finché un admin non la conferma. Pagina visibile solo ad admin e super user.",
@@ -493,8 +514,10 @@ var UI_STRINGS = {
   label_pinned:"Metti in evidenza in cima alla bacheca",
   section_appointment:"Appuntamento", label_appointment:"Data e ora appuntamento (opzionale)",
   btn_fix_appointment:"Fissa Appuntamento in Eventi",
-  section_client:"Dati Anagrafici Cliente (crea automaticamente una scheda in Investitori/Venditori)",
+  section_client:"Dati Anagrafici Cliente (crea automaticamente una scheda in Contatti)",
   label_client_first_name:"Nome", label_client_last_name:"Cognome", label_client_phone:"Telefono", label_client_email:"Email",
+  section_client_type:"Tipo Contatto",
+  check_client_investor:"Investitore", check_client_seller:"Venditore", check_client_supplier:"Fornitore",
   loading:"Caricamento notizie...", empty_none:"Nessuna notizia pubblicata al momento.",
   pin_badge:"In evidenza", verify_badge:"Notizia in fase di verifica", verified_badge:"Verificata",
   action_edit:"Modifica", action_delete:"Elimina", action_verify:"Segna come verificata",
@@ -706,6 +729,7 @@ function openForm(){
 function closeForm(){
   newsForm.classList.remove("open");
   newsForm.reset();
+  newsAddressMapDiv.style.display = "none";
   editingId = null;
   saveNewsBtn.textContent = T.btn_save_news;
   openFormBtn.style.display = "";
@@ -726,6 +750,7 @@ window.editNews = function(id){
   newsPinnedInput.checked = !!n.pinned;
   saveNewsBtn.textContent = T.btn_update_news;
   openForm();
+  if(n.property_address) geocodeAndShowAddress(n.property_address);
 };
 
 window.deleteNews = async function(id){
@@ -758,19 +783,69 @@ window.verifyNews = async function(id){
   await loadNews();
 };
 
-/* ---- Crea in automatico una scheda Investitori/Venditori dai dati anagrafici inseriti nella
-   notizia (solo alla creazione, mai su una modifica successiva, per non duplicare la scheda
-   ad ogni salvataggio). is_seller = true perche' la notizia riguarda sempre un immobile da
-   vendere. Nessuna notifica viene inviata: notify-new-investor NON viene chiamata qui. ---- */
-async function createInvestorFromNews(news){
+/* ---- Anteprima mappa dell'indirizzo inserito: geocodifica via Nominatim (OpenStreetMap) e
+   mostra un marker su una mini mappa Leaflet. Best-effort: se la geocodifica fallisce o non
+   trova nulla, la mappa resta semplicemente nascosta, senza bloccare il resto del form. ---- */
+var newsAddressMapInstance = null;
+var newsAddressMapMarker = null;
+var newsAddressGeocodeTimer = null;
+
+async function geocodeAndShowAddress(address){
+  if(!address){
+    newsAddressMapDiv.style.display = "none";
+    return;
+  }
+
+  try{
+    var url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(address);
+    var controller = new AbortController();
+    var timeout = setTimeout(function(){ controller.abort(); }, 6000);
+    var res = await fetch(url, { signal: controller.signal, headers:{ "Accept":"application/json" } });
+    clearTimeout(timeout);
+    var results = await res.json();
+    if(!results || !results.length) { newsAddressMapDiv.style.display = "none"; return; }
+
+    var lat = parseFloat(results[0].lat);
+    var lon = parseFloat(results[0].lon);
+    if(!isFinite(lat) || !isFinite(lon)) { newsAddressMapDiv.style.display = "none"; return; }
+
+    newsAddressMapDiv.style.display = "block";
+    if(!newsAddressMapInstance){
+      newsAddressMapInstance = L.map(newsAddressMapDiv);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19 }).addTo(newsAddressMapInstance);
+    }
+    newsAddressMapInstance.setView([lat, lon], 15);
+    if(newsAddressMapMarker) newsAddressMapInstance.removeLayer(newsAddressMapMarker);
+    newsAddressMapMarker = L.marker([lat, lon]).addTo(newsAddressMapInstance);
+    setTimeout(function(){ if(newsAddressMapInstance) newsAddressMapInstance.invalidateSize(); }, 150);
+  }catch(e){
+    console.warn("Geocodifica indirizzo non riuscita (non bloccante):", e);
+    newsAddressMapDiv.style.display = "none";
+  }
+}
+
+newsAddressInput.addEventListener("input", function(){
+  clearTimeout(newsAddressGeocodeTimer);
+  var value = newsAddressInput.value.trim();
+  newsAddressGeocodeTimer = setTimeout(function(){ geocodeAndShowAddress(value); }, 900);
+});
+
+/* ---- Crea in automatico una scheda Contatti dai dati anagrafici inseriti nella notizia
+   (solo alla creazione, mai su una modifica successiva, per non duplicare la scheda ad ogni
+   salvataggio). Il tipo di contatto (investitore/venditore/fornitore) riflette le checkbox
+   flaggate nel form, non un valore fisso. Nessuna notifica viene inviata: nessuna funzione
+   notify-* viene mai chiamata da questa pagina. ---- */
+async function createInvestorFromNews(news, contactType){
+  contactType = contactType || {};
   var payload = {
     first_name: news.client_first_name,
     last_name: news.client_last_name,
     phone: news.client_phone || null,
     email: news.client_email || null,
-    is_investor: false,
-    is_seller: true,
-    seller_status: "da_contattare",
+    is_investor: !!contactType.isInvestor,
+    is_seller: !!contactType.isSeller,
+    is_supplier: !!contactType.isSupplier,
+    seller_status: contactType.isSeller ? "da_contattare" : null,
     status: "active",
     notes: [
       "Creato automaticamente dalla notizia \"" + news.title + "\".",
@@ -828,7 +903,11 @@ newsForm.addEventListener("submit", async function(event){
   var extraMsg = "";
   if(!editingId && payload.client_first_name && payload.client_last_name){
     try{
-      var investorId = await createInvestorFromNews(payload);
+      var investorId = await createInvestorFromNews(payload, {
+        isInvestor: clientIsInvestorInput.checked,
+        isSeller: clientIsSellerInput.checked,
+        isSupplier: clientIsSupplierInput.checked
+      });
       await client.from("immonova_news").update({ linked_investor_id: investorId }).eq("id", savedId);
       extraMsg = T.msg_investor_created;
     }catch(e){

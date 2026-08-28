@@ -272,6 +272,12 @@ td{
   .stats,.toolbar{grid-template-columns:1fr}
 }
 .badge-map{cursor:pointer}
+.contact-tab{
+  background:transparent;border:1px solid rgba(255,255,255,.15);color:inherit;
+  padding:8px 16px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  cursor:pointer;border-radius:2px;
+}
+.contact-tab.active{background:rgba(196,140,20,.15);border-color:rgba(196,140,20,.6);color:#c48c14}
 .badge-map:hover{filter:brightness(0.95)}
 .area-map-modal-overlay{
   display:none;
@@ -329,7 +335,7 @@ td{
     <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
     <a href="events.html" data-i18n="nav_events">Eventi</a>
-    <a href="investors.html" data-i18n="nav_investors">Investitori</a>
+    <a href="investors.html" data-i18n="nav_investors">Contatti</a>
     <a href="capital-partners.html" data-i18n="nav_capital_partners" id="capitalPartnersLink" style="display:none">Capital Partners</a>
     <a href="users.html" id="usersLink" data-i18n="nav_users">Utenti</a>
     <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
@@ -338,17 +344,17 @@ td{
 
 <div class="container">
 
-  <div class="kicker" data-i18n="kicker">Investor Relationship Management</div>
+  <div class="kicker" data-i18n="kicker">Contact Relationship Management</div>
 
   <div class="title-row">
     <div>
-      <h1 class="title" data-i18n="title">Investitori</h1>
+      <h1 class="title" data-i18n="title">Contatti</h1>
     </div>
-    <a class="primary-link" href="investor-form.html" data-i18n="btn_new_investor">Nuovo Investitore</a>
+    <a class="primary-link" href="investor-form.html" data-i18n="btn_new_investor">Nuovo Contatto</a>
   </div>
 
   <p class="subtitle" data-i18n="subtitle">
-    Anagrafica investitori IMMONOVA con preferenze di budget, aree, categorie, lingua e consenso per inviti email / WhatsApp.
+    Anagrafica contatti IMMONOVA (venditori, investitori, fornitori) con preferenze di budget, aree, categorie, lingua e consenso per inviti email / WhatsApp.
   </p>
 
   <div id="status" class="status"></div>
@@ -374,6 +380,17 @@ td{
       <div class="stat-label" data-i18n="stat_sellers">Venditori</div>
       <div class="stat-value" id="sellerCount">0</div>
     </div>
+    <div class="stat">
+      <div class="stat-label" data-i18n="stat_suppliers">Fornitori</div>
+      <div class="stat-value" id="supplierCount">0</div>
+    </div>
+  </div>
+
+  <div class="contact-tabs" style="display:flex;gap:8px;margin:0 0 14px">
+    <button type="button" class="contact-tab active" data-tab="" data-i18n="tab_all">Tutti</button>
+    <button type="button" class="contact-tab" data-tab="seller" data-i18n="tab_sellers">Venditori</button>
+    <button type="button" class="contact-tab" data-tab="investor" data-i18n="tab_investors">Investitori</button>
+    <button type="button" class="contact-tab" data-tab="supplier" data-i18n="tab_suppliers">Fornitori</button>
   </div>
 
   <div class="toolbar">
@@ -470,10 +487,11 @@ let currentUserLanguage = "it";
    buildFilters() con dati reali (nomi di categorie/aree salvati dagli investitori), quindi NON
    sono nel dizionario tradotto -- sono dati, non interfaccia. ---- */
 var UI_STRINGS = {
-  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi", nav_investors:"Investitori",
+  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi", nav_investors:"Contatti",
   nav_capital_partners:"Capital Partners",
   nav_users:"Utenti", logout:"Logout",
-  kicker:"Investor Relationship Management", title:"Investitori", btn_new_investor:"Nuovo Investitore",
+  kicker:"Contact Relationship Management", title:"Contatti", btn_new_investor:"Nuovo Contatto",
+  stat_suppliers:"Fornitori", tab_all:"Tutti", tab_sellers:"Venditori", tab_investors:"Investitori", tab_suppliers:"Fornitori",
   subtitle:"Anagrafica investitori IMMONOVA con preferenze di budget, aree, categorie, lingua e consenso per inviti email / WhatsApp.",
   stat_total:"Investitori<br>Totali", stat_email_optin:"Email<br>Opt-in", stat_whatsapp_optin:"WhatsApp<br>Opt-in",
   stat_vip_pipeline:"VIP / Active<br>Pipeline", stat_sellers:"Venditori",
@@ -718,6 +736,7 @@ function renderStats(){
   document.getElementById("whatsappCount").textContent = allInvestors.filter(i => i.whatsapp_opt_in).length;
   document.getElementById("vipCount").textContent = allInvestors.filter(i => i.status === "vip" || i.status === "active").length;
   document.getElementById("sellerCount").textContent = allInvestors.filter(i => i.is_seller).length;
+  document.getElementById("supplierCount").textContent = allInvestors.filter(i => i.is_supplier).length;
 }
 
 function investorSearchText(inv){
@@ -742,6 +761,8 @@ function investorSearchText(inv){
     inv.notes
   ].join(" ").toLowerCase();
 }
+
+var activeContactTab = "";
 
 function applyFilters(){
   const query = searchInput.value.trim().toLowerCase();
@@ -768,16 +789,31 @@ function applyFilters(){
 
     const isInvestor = inv.is_investor !== false;
     const isSeller = !!inv.is_seller;
+    const isSupplier = !!inv.is_supplier;
     let matchesClientType = true;
     if(clientType === "investor") matchesClientType = isInvestor && !isSeller;
     if(clientType === "seller") matchesClientType = isSeller && !isInvestor;
     if(clientType === "both") matchesClientType = isInvestor && isSeller;
 
-    return matchesSearch && matchesStatus && matchesCategory && matchesArea && matchesChannel && matchesClientType;
+    let matchesTab = true;
+    if(activeContactTab === "seller") matchesTab = isSeller;
+    if(activeContactTab === "investor") matchesTab = isInvestor;
+    if(activeContactTab === "supplier") matchesTab = isSupplier;
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesArea && matchesChannel && matchesClientType && matchesTab;
   });
 
   renderTable(filtered);
 }
+
+document.querySelectorAll(".contact-tab").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    document.querySelectorAll(".contact-tab").forEach(function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    activeContactTab = btn.getAttribute("data-tab") || "";
+    applyFilters();
+  });
+});
 
 /* ---- Popup con mappa: mostra la/le zone di interesse disegnate per un investitore,
    cliccando sul badge "Zona su mappa" nella tabella. Sola visualizzazione, nessuna modifica. ---- */
@@ -853,6 +889,7 @@ function renderTable(data){
           <span class="badge ${statusClass}">${esc(statusLabel(inv.status))}</span>
           ${inv.is_investor !== false ? '<span class="badge">'+esc(T.client_type_investor)+'</span>' : ""}
           ${inv.is_seller ? '<span class="badge">'+esc(T.client_type_seller)+(inv.seller_status ? " · "+esc(sellerStatusLabel(inv.seller_status)) : "")+'</span>' : ""}
+          ${inv.is_supplier ? '<span class="badge">'+esc(T.stat_suppliers)+'</span>' : ""}
         </td>
 
         <td>

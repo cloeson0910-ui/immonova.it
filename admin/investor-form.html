@@ -320,7 +320,7 @@ textarea{
     <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
     <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
     <a href="events.html" data-i18n="nav_events">Eventi</a>
-    <a href="investors.html" data-i18n="nav_investors">Investitori</a>
+    <a href="investors.html" data-i18n="nav_investors">Contatti</a>
     <a href="capital-partners.html" data-i18n="nav_capital_partners" id="capitalPartnersLink" style="display:none">Capital Partners</a>
     <a href="users.html" id="usersLink" data-i18n="nav_users">Utenti</a>
     <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
@@ -334,6 +334,7 @@ textarea{
   <div class="title-row">
     <div>
       <h1 class="title" id="pageTitle" data-i18n="title_new">Nuovo Investitore</h1>
+      <div id="pendingNewsBadge" style="display:none;margin-top:10px;padding:8px 14px;border:1px solid rgba(196,140,20,.5);color:#a5710d;background:rgba(196,140,20,.08);font-size:11px;letter-spacing:.1em;text-transform:uppercase"></div>
     </div>
     <a class="secondary-link" href="investors.html" data-i18n="btn_back_to_investors">Torna agli Investitori</a>
   </div>
@@ -445,6 +446,11 @@ textarea{
         <label class="check-card">
           <input id="is_seller" type="checkbox">
           <span data-i18n="check_is_seller">Venditore</span>
+        </label>
+
+        <label class="check-card">
+          <input id="is_supplier" type="checkbox">
+          <span data-i18n="check_is_supplier">Fornitore</span>
         </label>
       </div>
 
@@ -569,7 +575,7 @@ let currentProfile = null;
 let currentUserLanguage = "it";
 
 var UI_STRINGS = {
-  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi", nav_investors:"Investitori",
+  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_events:"Eventi", nav_investors:"Contatti",
   nav_capital_partners:"Capital Partners",
   nav_users:"Utenti", logout:"Logout",
   kicker:"Investor Relationship Management",
@@ -581,7 +587,8 @@ var UI_STRINGS = {
   type_private_investor:"Private Investor", type_family_office:"Family Office", type_real_estate_operator:"Real Estate Operator",
   type_hospitality_group:"Hospitality Group", type_fund:"Investment Fund", type_advisor:"Advisor", type_other:"Altro",
   label_country:"Paese", label_city:"Città",
-  section_client_type:"Tipo Cliente", check_is_investor:"Investitore", check_is_seller:"Venditore",
+  section_client_type:"Tipo Cliente", check_is_investor:"Investitore", check_is_seller:"Venditore", check_is_supplier:"Fornitore",
+  pending_news_badge:"Notizia in fase di verifica collegata a questo contatto",
   label_seller_status:"Stato Trattativa Venditore",
   seller_status_da_contattare:"Da contattare", seller_status_in_trattativa:"In trattativa",
   seller_status_mandato_firmato:"Mandato firmato", seller_status_venduto:"Venduto",
@@ -1089,6 +1096,30 @@ function loadAreaGeoJSONOntoMap(geojson){
   }
 }
 
+/* ---- Se questa scheda e' stata generata (o e' comunque collegata) da una notizia ancora
+   "in fase di verifica", lo si segnala qui in cima -- cosi' chi apre la scheda sa che
+   l'origine del contatto non e' ancora stata confermata da un admin. Best-effort: se la
+   tabella immonova_news non e' raggiungibile (utente senza accesso alle notizie) non blocca
+   il caricamento della scheda, semplicemente non mostra il badge. ---- */
+async function checkPendingNewsBadge(id){
+  try{
+    const { data, error } = await client
+      .from("immonova_news")
+      .select("id,title")
+      .eq("linked_investor_id", id)
+      .eq("status", "in_verifica")
+      .limit(1);
+
+    if(!error && data && data.length){
+      var badge = document.getElementById("pendingNewsBadge");
+      badge.textContent = T.pending_news_badge;
+      badge.style.display = "inline-block";
+    }
+  }catch(e){
+    console.warn("Verifica notizia collegata non riuscita (non bloccante):", e);
+  }
+}
+
 async function loadInvestor(){
   if(!investorId) return;
 
@@ -1128,6 +1159,7 @@ async function loadInvestor(){
 
   document.getElementById("is_investor").checked = data.is_investor !== false;
   document.getElementById("is_seller").checked = !!data.is_seller;
+  document.getElementById("is_supplier").checked = !!data.is_supplier;
   document.getElementById("seller_status").value = data.seller_status || "da_contattare";
   updateSellerFieldsVisibility();
 
@@ -1138,6 +1170,8 @@ async function loadInvestor(){
 
   const areas = (data.investor_areas || []).map(row => row.area).filter(Boolean);
   document.getElementById("areas").value = areas.join(", ");
+
+  await checkPendingNewsBadge(investorId);
 
   if(data.interest_area_geojson){
     loadAreaGeoJSONOntoMap(data.interest_area_geojson);
@@ -1171,6 +1205,7 @@ function collectInvestorPayload(){
     notes: val("notes") || null,
     is_investor: boolVal("is_investor"),
     is_seller: boolVal("is_seller"),
+    is_supplier: boolVal("is_supplier"),
     seller_status: boolVal("is_seller") ? (val("seller_status") || "da_contattare") : null,
     interest_area_geojson: currentAreaGeoJSON || null,
     updated_at: new Date().toISOString()
