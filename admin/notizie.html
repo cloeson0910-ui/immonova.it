@@ -285,6 +285,12 @@ body::after{
 .news-card-history-title{
   font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:#a67f34; margin-bottom:8px;
 }
+.contact-tab, .followup-freq-btn{
+  background:transparent; border:1px solid rgba(166,127,52,.3); color:#a67f34;
+  padding:8px 16px; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+  cursor:pointer; border-radius:2px; font-family:inherit;
+}
+.followup-freq-btn.active{ background:rgba(166,127,52,.18); border-color:#a67f34; color:#7f6430; font-weight:600; }
 .news-update-item{ border-left:2px solid rgba(166,127,52,.4); padding-left:10px; margin-bottom:8px; }
 .news-update-date{ font-size:11px; color:#a67f34; text-transform:uppercase; letter-spacing:.06em; }
 .news-update-note{ font-size:13px; color:#5c4b25; white-space:pre-wrap; }
@@ -470,6 +476,17 @@ body::after{
       <label for="newsPinned" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="label_pinned">Metti in evidenza in cima alla bacheca</label>
     </div>
 
+    <div class="form-section-label" data-i18n="section_followup_push">Promemoria Push di Follow-up</div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="followupPushEnabled">
+      <label for="followupPushEnabled" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="check_followup_push">Ricevi una notifica push di promemoria per seguire questa notizia</label>
+    </div>
+    <div id="followupFrequencyRow" style="display:none;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button type="button" class="contact-tab followup-freq-btn" data-freq="5" data-i18n="freq_5_days">Ogni 5 giorni</button>
+      <button type="button" class="contact-tab followup-freq-btn" data-freq="10" data-i18n="freq_10_days">Ogni 10 giorni</button>
+      <button type="button" class="contact-tab followup-freq-btn" data-freq="30" data-i18n="freq_monthly">Mensile</button>
+    </div>
+
     <div class="form-section-label" id="historySectionLabel" style="display:none" data-i18n="section_history">Cronologia Aggiornamenti</div>
     <div id="historyList" style="display:none;margin-bottom:14px"></div>
     <div class="field full" id="historyAddField" style="display:none">
@@ -519,6 +536,9 @@ const clientIsSellerInput = document.getElementById("clientIsSeller");
 const clientIsSupplierInput = document.getElementById("clientIsSupplier");
 const newsAddressMapDiv = document.getElementById("newsAddressMap");
 const newsPinnedInput = document.getElementById("newsPinned");
+const followupPushEnabledInput = document.getElementById("followupPushEnabled");
+const followupFrequencyRow = document.getElementById("followupFrequencyRow");
+let followupFrequencyValue = null;
 const historySectionLabel = document.getElementById("historySectionLabel");
 const historyListDiv = document.getElementById("historyList");
 const historyAddField = document.getElementById("historyAddField");
@@ -557,6 +577,10 @@ var UI_STRINGS = {
   action_set_appointment:"Fissa Appuntamento", action_events:"Eventi", action_add_event:"Aggiungi Evento",
   events_panel_empty:"Nessun evento registrato.", events_note_placeholder:"Cosa hai fatto/aggiornato...",
   section_history:"Cronologia Aggiornamenti", label_history_note:"Aggiungi un aggiornamento",
+  section_followup_push:"Promemoria Push di Follow-up",
+  check_followup_push:"Ricevi una notifica push di promemoria per seguire questa notizia",
+  freq_5_days:"Ogni 5 giorni", freq_10_days:"Ogni 10 giorni", freq_monthly:"Mensile",
+  msg_followup_freq_required:"Scegli ogni quanto vuoi ricevere il promemoria.",
   address_label:"Indirizzo:", appointment_label:"Appuntamento:", client_label:"Cliente:",
   linked_investor_link:"Vedi scheda in Investitori",
   confirm_delete_news:"Eliminare definitivamente questa notizia?",
@@ -658,13 +682,16 @@ async function checkAuth(){
 async function loadProfile(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,role,language,is_super_user")
+    .select("id,email,full_name,role,language,is_super_user,managed_by")
     .eq("id", currentUser.id)
     .single();
 
-  if(result.error){
-    var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
-    if(looksLikeMissingLanguageColumn){
+  if(result.error && result.error.code === "42703"){
+    // Colonna mancante (language o managed_by, a seconda di quali migrazioni SQL sono gia'
+    // state eseguite): riprova senza managed_by, poi senza language, invece di bloccare
+    // l'accesso alla pagina per una colonna opzionale non ancora presente.
+    result = await client.from("profiles").select("id,email,full_name,role,language,is_super_user").eq("id", currentUser.id).single();
+    if(result.error && result.error.code === "42703"){
       result = await client.from("profiles").select("id,email,full_name,role,is_super_user").eq("id", currentUser.id).single();
     }
   }
@@ -898,6 +925,8 @@ function closeForm(){
   historySectionLabel.style.display = "none";
   historyListDiv.style.display = "none";
   historyAddField.style.display = "none";
+  followupFrequencyRow.style.display = "none";
+  setFollowupFrequency(null);
   editingId = null;
   saveNewsBtn.textContent = T.btn_save_news;
   openFormBtn.style.display = "";
@@ -916,6 +945,9 @@ window.editNews = async function(id, focusHistory){
   clientPhoneInput.value = n.client_phone || "";
   clientEmailInput.value = n.client_email || "";
   newsPinnedInput.checked = !!n.pinned;
+  followupPushEnabledInput.checked = !!n.followup_push_enabled;
+  followupFrequencyRow.style.display = n.followup_push_enabled ? "flex" : "none";
+  setFollowupFrequency(n.followup_frequency_days || null);
   saveNewsBtn.textContent = T.btn_update_news;
 
   historySectionLabel.style.display = "";
@@ -1048,6 +1080,11 @@ newsForm.addEventListener("submit", async function(event){
     return;
   }
 
+  if(followupPushEnabledInput.checked && !followupFrequencyValue){
+    setStatus(T.msg_followup_freq_required, "error");
+    return;
+  }
+
   var payload = {
     title: title,
     body: body,
@@ -1058,6 +1095,8 @@ newsForm.addEventListener("submit", async function(event){
     client_phone: clientPhoneInput.value.trim() || null,
     client_email: clientEmailInput.value.trim() || null,
     pinned: newsPinnedInput.checked,
+    followup_push_enabled: followupPushEnabledInput.checked,
+    followup_frequency_days: followupPushEnabledInput.checked ? Number(followupFrequencyValue) : null,
     updated_at: new Date().toISOString()
   };
 
@@ -1094,6 +1133,26 @@ newsForm.addEventListener("submit", async function(event){
     }
   }
 
+  /* ---- ECCEZIONE ESPLICITA alla regola "nessuna notifica per le notizie": un super user che
+     gestisce un gruppo di collaboratori (profiles.managed_by) deve sapere quando uno dei suoi
+     crea una nuova notizia. E' una notifica push MIRATA solo al suo manager diretto, non una
+     mail/broadcast a tutto lo staff -- diversa dalla regola generale, che resta valida per
+     tutto il resto (verifica, modifica, cronologia). Best-effort: non blocca mai il salvataggio. ---- */
+  if(!editingId && currentProfile && currentProfile.managed_by){
+    try{
+      await client.functions.invoke("immonova-calendar-notify", {
+        body:{
+          user_ids: [currentProfile.managed_by],
+          title: "Nuova notizia da " + (currentProfile.full_name || currentProfile.email || "un collaboratore"),
+          body: title,
+          url: "/admin/notizie.html"
+        }
+      });
+    }catch(e){
+      console.warn("Notifica al super user non riuscita (non bloccante):", e);
+    }
+  }
+
   setStatus((editingId ? T.msg_updated : T.msg_saved) + extraMsg, "success");
   closeForm();
   await loadNews();
@@ -1122,6 +1181,27 @@ openEventsBtn.addEventListener("click", function(){
   if(noteBits.length) params.set("notes", noteBits.join(" — "));
 
   window.open("calendar.html?" + params.toString(), "_blank");
+});
+
+/* ---- Promemoria push di follow-up: visibile SOLO in questa pagina (gia' riservata ad
+   admin/super user) e mandato SOLO a chi ha creato la notizia tramite la tabella di
+   subscription push riservata allo staff -- mai ai clienti registrati sull'app pubblica. ---- */
+followupPushEnabledInput.addEventListener("change", function(){
+  followupFrequencyRow.style.display = followupPushEnabledInput.checked ? "flex" : "none";
+  if(!followupPushEnabledInput.checked) setFollowupFrequency(null);
+});
+
+function setFollowupFrequency(value){
+  followupFrequencyValue = value;
+  document.querySelectorAll(".followup-freq-btn").forEach(function(btn){
+    btn.classList.toggle("active", String(value) === btn.getAttribute("data-freq"));
+  });
+}
+
+document.querySelectorAll(".followup-freq-btn").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    setFollowupFrequency(btn.getAttribute("data-freq"));
+  });
 });
 
 openFormBtn.addEventListener("click", openForm);

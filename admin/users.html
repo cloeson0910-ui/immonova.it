@@ -201,30 +201,6 @@ select{
   font-family:inherit;
 }
 
-.checkbox-field{
-  flex-direction:row;
-  align-items:center;
-  gap:12px;
-}
-
-.checkbox-field input[type="checkbox"]{
-  width:auto;
-  accent-color:#a67f34;
-  cursor:pointer;
-}
-
-.checkbox-field label{
-  cursor:pointer;
-}
-
-.field-hint{
-  font-size:11px;
-  line-height:1.6;
-  color:#8f7643;
-  letter-spacing:normal;
-  text-transform:none;
-}
-
 button.primary{
   margin-top:8px;
   padding:14px 24px;
@@ -260,7 +236,7 @@ button.primary:disabled{
 table{
   width:100%;
   border-collapse:collapse;
-  min-width:1480px;
+  min-width:1340px;
 }
 
 th{
@@ -317,13 +293,6 @@ td{
 .badge.off{
   color:#9c2f2f;
   border-color:rgba(156,47,47,.35);
-}
-
-.small-checkbox{
-  width:18px;
-  height:18px;
-  accent-color:#a67f34;
-  cursor:pointer;
 }
 
 .empty{
@@ -450,12 +419,6 @@ td{
           </select>
         </div>
 
-        <div class="field checkbox-field">
-          <input type="checkbox" id="is_super_user">
-          <label for="is_super_user" data-i18n="label_super_user">Super User</label>
-        </div>
-        <p class="field-hint" data-i18n="hint_super_user">Vede tutto il sito ma modifica solo le proprie cose: niente clienti/investitori altrui, niente creazione ads/social, niente AI, valutazioni o statistiche. Non ha effetto se il ruolo accesso è Admin.</p>
-
         <div class="field">
           <label for="professional_role" data-i18n="label_professional_role">Incarico operativo</label>
           <select id="professional_role" required>
@@ -491,6 +454,11 @@ td{
     <section class="panel">
       <div class="panel-title" data-i18n="panel_existing_users">Utenti Esistenti</div>
 
+      <div class="field" style="max-width:360px;margin-bottom:16px">
+        <label for="superUserFilter" data-i18n="label_super_user_filter">Filtra per Super User</label>
+        <select id="superUserFilter"></select>
+      </div>
+
       <div class="table-wrapper">
         <table>
           <thead>
@@ -498,8 +466,8 @@ td{
               <th data-i18n="th_name">Nome</th>
               <th data-i18n="th_email">Email</th>
               <th data-i18n="th_phone">Telefono</th>
-              <th data-i18n="th_access">Accesso</th>
               <th data-i18n="th_super_user">Super User</th>
+              <th data-i18n="th_access">Accesso</th>
               <th data-i18n="th_role">Incarico</th>
               <th data-i18n="th_language">Lingua</th>
               <th data-i18n="th_status">Stato</th>
@@ -524,6 +492,7 @@ td{
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
 
 <script>
 var client = window.supabase.createClient(
@@ -535,11 +504,12 @@ var userForm = document.getElementById("userForm");
 var statusBox = document.getElementById("status");
 var createBtn = document.getElementById("createBtn");
 var usersTable = document.getElementById("usersTable");
-var roleSelect = document.getElementById("role");
-var isSuperUserCheckbox = document.getElementById("is_super_user");
+var superUserFilter = document.getElementById("superUserFilter");
 
 var currentUser = null;
 var currentUserLanguage = "it";
+var allUsersData = [];
+var superUserFilterValue = "";
 
 /* ---- i18n: dizionario delle stringhe statiche italiane di questa pagina. Vedi
    /js/i18n.js (da estrarre in futuro in un file condiviso) per riusare lo stesso
@@ -553,15 +523,13 @@ var UI_STRINGS = {
   logout: "Logout",
   kicker: "Area Admin",
   title: "Utenti",
-  subtitle: "Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori. Il ruolo accesso regola i permessi; l’incarico operativo identifica la funzione professionale.",
+  subtitle: "Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori. Il ruolo accesso regola i permessi; l\u2019incarico operativo identifica la funzione professionale.",
   panel_new_user: "Nuovo Utente",
   label_full_name: "Nome completo",
   label_email: "Email",
   label_phone: "Telefono",
   label_password: "Password temporanea",
   label_role: "Ruolo accesso",
-  label_super_user: "Super User",
-  hint_super_user: "Vede tutto il sito ma modifica solo le proprie cose: niente clienti/investitori altrui, niente creazione ads/social, niente AI, valutazioni o statistiche. Non ha effetto se il ruolo accesso è Admin.",
   label_professional_role: "Incarico operativo",
   label_language: "Lingua",
   role_user: "User",
@@ -574,11 +542,15 @@ var UI_STRINGS = {
   btn_create: "Crea Utente",
   btn_creating: "Creazione...",
   panel_existing_users: "Utenti Esistenti",
+  label_super_user_filter: "Filtra per Super User",
+  th_super_user: "Super User",
+  filter_all_super_users: "Tutti",
+  filter_no_super_user: "Senza Super User assegnato",
+  opt_no_super_user: "Nessuno",
   th_name: "Nome",
   th_email: "Email",
   th_phone: "Telefono",
   th_access: "Accesso",
-  th_super_user: "Super User",
   th_role: "Incarico",
   th_language: "Lingua",
   th_status: "Stato",
@@ -612,7 +584,7 @@ var UI_STRINGS = {
   prompt_new_password: "Inserisci nuova password temporanea per "
 };
 
-var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
 
 /* T contiene sempre le stringhe da usare per RENDERIZZARE (italiano finché la traduzione
    non è pronta, poi sostituito con la versione tradotta). Le funzioni che costruiscono
@@ -777,15 +749,68 @@ function languageOptionsHTML(selected){
 async function loadUsers(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,phone,role,is_super_user,professional_role,language,active,created_at")
+    .select("id,email,full_name,phone,role,professional_role,language,active,created_at,is_super_user,managed_by")
     .order("created_at", { ascending:false });
+
+  if(result.error){
+    // Colonna is_super_user/managed_by non ancora presente (SQL non eseguita): riprova senza,
+    // cosi' la pagina resta comunque utilizzabile finche' non esegui la migrazione.
+    if(result.error.code === "42703"){
+      result = await client
+        .from("profiles")
+        .select("id,email,full_name,phone,role,professional_role,language,active,created_at")
+        .order("created_at", { ascending:false });
+    }
+  }
 
   if(result.error){
     usersTable.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
     return;
   }
 
-  var data = result.data || [];
+  allUsersData = result.data || [];
+  renderSuperUserFilterOptions();
+  renderUsersTable();
+}
+
+/* ---- Popola il filtro "Filtra per Super User" con la lista dei super user esistenti,
+   ognuno con il conteggio di quanti collaboratori gestisce -- cosi' si vede subito chi
+   gestisce quanti utenti, senza doverli contare a mano riga per riga. ---- */
+function renderSuperUserFilterOptions(){
+  var superUsers = allUsersData.filter(function(u){ return !!u.is_super_user; });
+
+  var countByManager = {};
+  allUsersData.forEach(function(u){
+    if(u.managed_by) countByManager[u.managed_by] = (countByManager[u.managed_by] || 0) + 1;
+  });
+
+  var options = '<option value="">' + escapeHTML(T.filter_all_super_users) + '</option>';
+  superUsers.forEach(function(su){
+    var count = countByManager[su.id] || 0;
+    var label = (su.full_name || su.email || su.id) + " (" + count + ")";
+    options += '<option value="' + su.id + '" ' + (superUserFilterValue === su.id ? "selected" : "") + '>' + escapeHTML(label) + '</option>';
+  });
+  options += '<option value="__none__" ' + (superUserFilterValue === "__none__" ? "selected" : "") + '>' + escapeHTML(T.filter_no_super_user) + '</option>';
+
+  superUserFilter.innerHTML = options;
+}
+
+function superUserOptionsHTML(user){
+  var superUsers = allUsersData.filter(function(u){ return !!u.is_super_user && u.id !== user.id; });
+  var out = '<option value="">' + escapeHTML(T.opt_no_super_user) + '</option>';
+  superUsers.forEach(function(su){
+    var label = su.full_name || su.email || su.id;
+    out += '<option value="' + su.id + '" ' + (user.managed_by === su.id ? "selected" : "") + '>' + escapeHTML(label) + '</option>';
+  });
+  return out;
+}
+
+function renderUsersTable(){
+  var data = allUsersData.filter(function(u){
+    if(!superUserFilterValue) return true;
+    if(superUserFilterValue === "__none__") return !u.managed_by;
+    return u.managed_by === superUserFilterValue;
+  });
 
   if(data.length === 0){
     usersTable.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
@@ -827,20 +852,16 @@ async function loadUsers(){
         </td>
 
         <td>
+          <select class="small-select" onchange="updateUserManagedBy('${user.id}', this.value)">
+            ${superUserOptionsHTML(user)}
+          </select>
+        </td>
+
+        <td>
           <select class="small-select" onchange="updateUserField('${user.id}', 'role', this.value)" ${user.id === currentUser.id ? "disabled" : ""}>
             <option value="user" ${user.role === "user" ? "selected" : ""}>${escapeHTML(T.role_user)}</option>
             <option value="admin" ${user.role === "admin" ? "selected" : ""}>${escapeHTML(T.role_admin)}</option>
           </select>
-        </td>
-
-        <td style="text-align:center">
-          <input
-            type="checkbox"
-            class="small-checkbox"
-            ${user.is_super_user ? "checked" : ""}
-            ${user.role === "admin" || user.id === currentUser.id ? "disabled" : ""}
-            onchange="updateUserField('${user.id}', 'is_super_user', this.checked)"
-          >
         </td>
 
         <td>
@@ -892,13 +913,6 @@ async function updateUserField(userId, field, value){
   var updateData = {};
   updateData[field] = value;
 
-  // Un admin non può avere il flag Super User attivo: se il ruolo passa ad admin,
-  // spegniamo qui anche il flag, così la tabella resta coerente senza bisogno di un
-  // secondo salvataggio separato.
-  if(field === "role" && value === "admin"){
-    updateData.is_super_user = false;
-  }
-
   var result = await client
     .from("profiles")
     .update(updateData)
@@ -920,6 +934,12 @@ async function updateUserField(userId, field, value){
   }
 
   await loadUsers();
+}
+
+/* ---- Assegna/cambia il super user che gestisce questo utente (profiles.managed_by).
+   Il valore vuoto ("Nessuno") va salvato come null, non come stringa vuota. ---- */
+async function updateUserManagedBy(userId, value){
+  await updateUserField(userId, "managed_by", value || null);
 }
 
 async function updateUserEmail(userId, newEmail, inputEl){
@@ -1000,17 +1020,6 @@ async function resetPassword(userId, email){
   setStatus(T.msg_reset_done, "success");
 }
 
-// Il flag Super User non ha senso per un Admin: se si sceglie "Admin" nel form di
-// creazione, la checkbox viene spenta e disabilitata finché non si torna a "User".
-roleSelect.addEventListener("change", function(){
-  if(roleSelect.value === "admin"){
-    isSuperUserCheckbox.checked = false;
-    isSuperUserCheckbox.disabled = true;
-  }else{
-    isSuperUserCheckbox.disabled = false;
-  }
-});
-
 userForm.addEventListener("submit", async function(e){
   e.preventDefault();
 
@@ -1025,7 +1034,6 @@ userForm.addEventListener("submit", async function(e){
   var role = document.getElementById("role").value;
   var professional_role = document.getElementById("professional_role").value;
   var language = document.getElementById("language").value;
-  var is_super_user = isSuperUserCheckbox.checked;
 
   var result = await client.functions.invoke("create-user", {
     body:{
@@ -1035,8 +1043,7 @@ userForm.addEventListener("submit", async function(e){
       password:password,
       role:role,
       professional_role:professional_role,
-      language:language,
-      is_super_user:is_super_user
+      language:language
     }
   });
 
@@ -1064,7 +1071,6 @@ userForm.addEventListener("submit", async function(e){
   }
 
   userForm.reset();
-  isSuperUserCheckbox.disabled = false;
   createBtn.disabled = false;
   createBtn.textContent = T.btn_create;
 
@@ -1074,6 +1080,11 @@ userForm.addEventListener("submit", async function(e){
 document.getElementById("logoutBtn").addEventListener("click", async function(){
   await client.auth.signOut();
   window.location.href = "../index.html";
+});
+
+superUserFilter.addEventListener("change", function(){
+  superUserFilterValue = superUserFilter.value;
+  renderUsersTable();
 });
 
 (async function init(){
