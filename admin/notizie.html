@@ -276,6 +276,15 @@ body::after{
 .news-actions button.verify{ border-color:rgba(79,127,69,.4); color:#4f7f45; }
 .news-actions button.verify:hover{ background:#4f7f45; color:#fff; }
 #historyList{ display:flex; flex-direction:column; gap:8px; }
+.news-card-history{
+  margin-bottom:14px;
+  padding:12px 14px;
+  border-left:2px solid rgba(166,127,52,.35);
+  background:rgba(255,255,255,.22);
+}
+.news-card-history-title{
+  font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:#a67f34; margin-bottom:8px;
+}
 .news-update-item{ border-left:2px solid rgba(166,127,52,.4); padding-left:10px; margin-bottom:8px; }
 .news-update-date{ font-size:11px; color:#a67f34; text-transform:uppercase; letter-spacing:.06em; }
 .news-update-note{ font-size:13px; color:#5c4b25; white-space:pre-wrap; }
@@ -720,6 +729,18 @@ function renderNewsList(){
       '</div>'
     );
 
+    /* ---- Cronologia aggiornamenti VISIBILE direttamente sulla card, non solo dentro
+       Modifica Notizia -- altrimenti un aggiornamento scritto sparisce alla vista. ---- */
+    var updates = newsUpdatesByNewsId[n.id] || [];
+    var historyBlock = !updates.length ? "" : (
+      '<div class="news-card-history">'+
+        '<div class="news-card-history-title">'+esc(T.section_history)+'</div>'+
+        updates.map(function(u){
+          return '<div class="news-update-item"><div class="news-update-date">'+esc(fmtDate(u.event_at))+'</div><div class="news-update-note">'+esc(u.note)+'</div></div>';
+        }).join("")+
+      '</div>'
+    );
+
     return (
       '<div class="news-card'+(n.pinned ? " pinned" : "")+'">'+
         '<div class="news-card-head">'+
@@ -728,6 +749,7 @@ function renderNewsList(){
         '</div>'+
         details+
         '<div class="news-body">'+esc(n.body)+'</div>'+
+        historyBlock+
         actions+
       '</div>'
     );
@@ -748,7 +770,35 @@ async function loadNews(){
   }
 
   allNews = result.data || [];
+  await loadAllNewsUpdates();
   renderNewsList();
+}
+
+/* ---- Carica TUTTA la cronologia aggiornamenti delle notizie in una volta, raggruppata per
+   news_id, cosi' ogni card puo' mostrarla subito senza dover aprire Modifica Notizia.
+   Best-effort: se la tabella non esiste ancora o la query fallisce, la lista resta vuota
+   senza bloccare il resto della pagina. ---- */
+async function loadAllNewsUpdates(){
+  newsUpdatesByNewsId = {};
+  try{
+    var ids = allNews.map(function(n){ return n.id; });
+    if(!ids.length) return;
+
+    var result = await client
+      .from("immonova_news_updates")
+      .select("*")
+      .in("news_id", ids)
+      .order("event_at", { ascending:false });
+
+    if(result.error || !result.data) return;
+
+    result.data.forEach(function(u){
+      if(!newsUpdatesByNewsId[u.news_id]) newsUpdatesByNewsId[u.news_id] = [];
+      newsUpdatesByNewsId[u.news_id].push(u);
+    });
+  }catch(e){
+    console.warn("Caricamento cronologia notizie non riuscito (non bloccante):", e);
+  }
 }
 
 /* ---- Cronologia aggiornamenti (dentro il form di Modifica Notizia, NON un pannello separato
@@ -802,6 +852,7 @@ addHistoryBtn.addEventListener("click", async function(){
   historyNoteInput.value = "";
   historyDateInput.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   await loadHistoryForNews(editingId);
+  renderNewsList();
 });
 
 /* ---- "Fissa Appuntamento": apre direttamente la pagina calendario (NON il form di modifica
