@@ -275,24 +275,11 @@ body::after{
 .news-actions button.danger:hover{ background:#9c2f2f; border-color:#9c2f2f; }
 .news-actions button.verify{ border-color:rgba(79,127,69,.4); color:#4f7f45; }
 .news-actions button.verify:hover{ background:#4f7f45; color:#fff; }
-.news-events-panel{
-  margin-top:14px;
-  padding:14px;
-  border:1px solid rgba(166,127,52,.2);
-  background:rgba(255,255,255,.35);
-}
-.news-events-list{ margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
-.news-update-item{ border-left:2px solid rgba(166,127,52,.4); padding-left:10px; }
+#historyList{ display:flex; flex-direction:column; gap:8px; }
+.news-update-item{ border-left:2px solid rgba(166,127,52,.4); padding-left:10px; margin-bottom:8px; }
 .news-update-date{ font-size:11px; color:#a67f34; text-transform:uppercase; letter-spacing:.06em; }
 .news-update-note{ font-size:13px; color:#5c4b25; white-space:pre-wrap; }
 .news-update-empty{ font-size:13px; color:#8f7643; }
-.news-event-form{ display:flex; flex-direction:column; gap:8px; }
-.news-event-form textarea{
-  width:100%; min-height:60px; padding:8px; font-family:inherit; font-size:13px;
-  border:1px solid rgba(166,127,52,.3); background:#fff;
-}
-.news-event-form-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.news-event-form-row input{ padding:8px; font-family:inherit; font-size:13px; border:1px solid rgba(166,127,52,.3); }
 .empty{
   padding:40px;
   text-align:center;
@@ -473,6 +460,18 @@ body::after{
       <input type="checkbox" id="newsPinned">
       <label for="newsPinned" style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px" data-i18n="label_pinned">Metti in evidenza in cima alla bacheca</label>
     </div>
+
+    <div class="form-section-label" id="historySectionLabel" style="display:none" data-i18n="section_history">Cronologia Aggiornamenti</div>
+    <div id="historyList" style="display:none;margin-bottom:14px"></div>
+    <div class="field full" id="historyAddField" style="display:none">
+      <label data-i18n="label_history_note">Aggiungi un aggiornamento</label>
+      <textarea id="historyNoteInput" placeholder="Cosa hai fatto/aggiornato..."></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="datetime-local" id="historyDateInput">
+        <button type="button" class="secondary-btn" id="addHistoryBtn" data-i18n="action_add_event">Aggiungi Evento</button>
+      </div>
+    </div>
+
     <div class="form-actions">
       <button type="submit" class="primary-link" id="saveNewsBtn" data-i18n="btn_save_news">Pubblica</button>
       <button type="button" class="secondary-btn" id="cancelFormBtn" data-i18n="btn_cancel">Annulla</button>
@@ -511,6 +510,12 @@ const clientIsSellerInput = document.getElementById("clientIsSeller");
 const clientIsSupplierInput = document.getElementById("clientIsSupplier");
 const newsAddressMapDiv = document.getElementById("newsAddressMap");
 const newsPinnedInput = document.getElementById("newsPinned");
+const historySectionLabel = document.getElementById("historySectionLabel");
+const historyListDiv = document.getElementById("historyList");
+const historyAddField = document.getElementById("historyAddField");
+const historyNoteInput = document.getElementById("historyNoteInput");
+const historyDateInput = document.getElementById("historyDateInput");
+const addHistoryBtn = document.getElementById("addHistoryBtn");
 const saveNewsBtn = document.getElementById("saveNewsBtn");
 
 let currentUser = null;
@@ -520,7 +525,6 @@ let canAccess = false;
 let editingId = null;
 let allNews = [];
 let newsUpdatesByNewsId = {};
-let openEventsPanelId = null;
 
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi investors.html/users.html). ---- */
 var UI_STRINGS = {
@@ -543,6 +547,7 @@ var UI_STRINGS = {
   action_edit:"Modifica", action_delete:"Elimina", action_verify:"Segna come verificata",
   action_set_appointment:"Fissa Appuntamento", action_events:"Eventi", action_add_event:"Aggiungi Evento",
   events_panel_empty:"Nessun evento registrato.", events_note_placeholder:"Cosa hai fatto/aggiornato...",
+  section_history:"Cronologia Aggiornamenti", label_history_note:"Aggiungi un aggiornamento",
   address_label:"Indirizzo:", appointment_label:"Appuntamento:", client_label:"Cliente:",
   linked_investor_link:"Vedi scheda in Investitori",
   confirm_delete_news:"Eliminare definitivamente questa notizia?",
@@ -703,7 +708,7 @@ function renderNewsList(){
 
     var verifyBtn = n.status === "verificata" ? "" : '<button type="button" class="verify" onclick="verifyNews(\''+n.id+'\')">'+esc(T.action_verify)+'</button>';
     var calendarBtn = '<button type="button" onclick="openCalendarForNews(\''+n.id+'\')">'+esc(T.action_set_appointment)+'</button>';
-    var eventsBtn = '<button type="button" onclick="toggleEventsPanel(\''+n.id+'\')">'+esc(T.action_events)+'</button>';
+    var eventsBtn = '<button type="button" onclick="editNews(\''+n.id+'\', true)">'+esc(T.action_events)+'</button>';
 
     var actions = (
       '<div class="news-actions">'+
@@ -712,29 +717,6 @@ function renderNewsList(){
         eventsBtn+
         '<button type="button" onclick="editNews(\''+n.id+'\')">'+esc(T.action_edit)+'</button>'+
         '<button type="button" class="danger" onclick="deleteNews(\''+n.id+'\')">'+esc(T.action_delete)+'</button>'+
-      '</div>'
-    );
-
-    var isOpen = openEventsPanelId === n.id;
-    var updates = newsUpdatesByNewsId[n.id] || [];
-    var updatesList = updates.length
-      ? updates.map(function(u){
-          return '<div class="news-update-item"><div class="news-update-date">'+esc(fmtDate(u.event_at))+'</div><div class="news-update-note">'+esc(u.note)+'</div></div>';
-        }).join("")
-      : '<div class="news-update-empty">'+esc(T.events_panel_empty)+'</div>';
-
-    var nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-
-    var eventsPanel = !isOpen ? "" : (
-      '<div class="news-events-panel">'+
-        '<div class="news-events-list">'+updatesList+'</div>'+
-        '<form class="news-event-form" onsubmit="return submitNewsEvent(event, \''+n.id+'\')">'+
-          '<textarea placeholder="'+esc(T.events_note_placeholder)+'" required></textarea>'+
-          '<div class="news-event-form-row">'+
-            '<input type="datetime-local" value="'+nowLocal+'">'+
-            '<button type="submit" class="primary-link">'+esc(T.action_add_event)+'</button>'+
-          '</div>'+
-        '</form>'+
       '</div>'
     );
 
@@ -747,7 +729,6 @@ function renderNewsList(){
         details+
         '<div class="news-body">'+esc(n.body)+'</div>'+
         actions+
-        eventsPanel+
       '</div>'
     );
   }).join("");
@@ -767,82 +748,89 @@ async function loadNews(){
   }
 
   allNews = result.data || [];
-  await loadNewsUpdates();
   renderNewsList();
 }
 
-/* ---- Carica gli "eventi/aggiornamenti" liberi legati alle notizie (tabella
-   immonova_news_updates), raggruppati per news_id. Best-effort: se la tabella non esiste
-   ancora (SQL non eseguita) o la query fallisce, semplicemente non mostra eventi, senza
-   bloccare il resto della pagina. ---- */
-async function loadNewsUpdates(){
-  newsUpdatesByNewsId = {};
-  try{
-    var ids = allNews.map(function(n){ return n.id; });
-    if(!ids.length) return;
+/* ---- Cronologia aggiornamenti (dentro il form di Modifica Notizia, NON un pannello separato
+   sulla card -- cosi' l'admin scrive dentro la stessa schermata di modifica, come richiesto). ---- */
+async function renderHistoryList(newsId){
+  var updates = newsUpdatesByNewsId[newsId] || [];
+  if(!updates.length){
+    historyListDiv.innerHTML = '<div class="news-update-empty">'+esc(T.events_panel_empty)+'</div>';
+    return;
+  }
+  historyListDiv.innerHTML = updates.map(function(u){
+    return '<div class="news-update-item"><div class="news-update-date">'+esc(fmtDate(u.event_at))+'</div><div class="news-update-note">'+esc(u.note)+'</div></div>';
+  }).join("");
+}
 
+async function loadHistoryForNews(newsId){
+  try{
     var result = await client
       .from("immonova_news_updates")
       .select("*")
-      .in("news_id", ids)
+      .eq("news_id", newsId)
       .order("event_at", { ascending:false });
 
-    if(result.error || !result.data) return;
-
-    result.data.forEach(function(u){
-      if(!newsUpdatesByNewsId[u.news_id]) newsUpdatesByNewsId[u.news_id] = [];
-      newsUpdatesByNewsId[u.news_id].push(u);
-    });
+    newsUpdatesByNewsId[newsId] = (!result.error && result.data) ? result.data : [];
   }catch(e){
-    console.warn("Caricamento eventi notizie non riuscito (non bloccante):", e);
+    console.warn("Caricamento cronologia notizia non riuscito (non bloccante):", e);
+    newsUpdatesByNewsId[newsId] = newsUpdatesByNewsId[newsId] || [];
   }
+  renderHistoryList(newsId);
 }
 
-window.toggleEventsPanel = function(id){
-  openEventsPanelId = (openEventsPanelId === id) ? null : id;
-  renderNewsList();
-};
+addHistoryBtn.addEventListener("click", async function(){
+  var note = historyNoteInput.value.trim();
+  if(!note || !editingId) return;
 
-window.submitNewsEvent = function(event, newsId){
-  event.preventDefault();
-  var form = event.target;
-  var note = form.querySelector("textarea").value.trim();
-  var whenLocal = form.querySelector('input[type="datetime-local"]').value;
-  if(!note) return false;
-
+  var whenLocal = historyDateInput.value;
   var eventAt = whenLocal ? new Date(whenLocal).toISOString() : new Date().toISOString();
 
-  client.from("immonova_news_updates").insert({
-    news_id: newsId,
+  var result = await client.from("immonova_news_updates").insert({
+    news_id: editingId,
     note: note,
     event_at: eventAt,
     created_by: currentUser.id
-  }).then(function(result){
-    if(result.error){
-      setStatus(result.error.message, "error");
-      return;
-    }
-    loadNews();
   });
 
-  return false;
-};
+  if(result.error){
+    setStatus(result.error.message, "error");
+    return;
+  }
+
+  historyNoteInput.value = "";
+  historyDateInput.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  await loadHistoryForNews(editingId);
+});
 
 /* ---- "Fissa Appuntamento": apre direttamente la pagina calendario (NON il form di modifica
-   della notizia, per non rischiare di alterare la notizia stessa) alla data/ora gia' salvata
-   sulla notizia, se presente, altrimenti vuota cosi' l'admin la sceglie li'. ---- */
+   della notizia, per non rischiare di alterare la notizia stessa), sul giorno/ora giusti, con
+   il form di configurazione appuntamento gia' aperto e precompilato con indirizzo e note.
+   I nomi dei parametri (date/address/notes) corrispondono ai campi reali del form appuntamento
+   in calendar.html: quella pagina li legge ed apre il modale in automatico. ---- */
 window.openCalendarForNews = function(id){
   var n = allNews.find(function(x){ return String(x.id) === String(id); });
   if(!n) return;
 
   var params = new URLSearchParams();
-  if(n.title) params.set("title", n.title);
-  if(n.property_address) params.set("location", n.property_address);
+
+  var when;
   if(n.appointment_at){
-    var local = new Date(n.appointment_at);
-    var localStr = new Date(local.getTime() - local.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    params.set("date", localStr);
+    when = new Date(n.appointment_at);
+  }else{
+    when = new Date();
+    when.setMinutes(when.getMinutes() + 30 - (when.getMinutes() % 30));
   }
+  var localStr = new Date(when.getTime() - when.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  params.set("date", localStr);
+
+  if(n.property_address) params.set("address", n.property_address);
+
+  var noteBits = ["Notizia: " + n.title];
+  if(n.body) noteBits.push(n.body);
+  params.set("notes", noteBits.join(" — "));
+
   window.open("calendar.html?" + params.toString(), "_blank");
 };
 
@@ -856,12 +844,15 @@ function closeForm(){
   newsForm.classList.remove("open");
   newsForm.reset();
   newsAddressMapDiv.style.display = "none";
+  historySectionLabel.style.display = "none";
+  historyListDiv.style.display = "none";
+  historyAddField.style.display = "none";
   editingId = null;
   saveNewsBtn.textContent = T.btn_save_news;
   openFormBtn.style.display = "";
 }
 
-window.editNews = function(id){
+window.editNews = async function(id, focusHistory){
   var n = allNews.find(function(x){ return String(x.id) === String(id); });
   if(!n) return;
   editingId = id;
@@ -875,8 +866,18 @@ window.editNews = function(id){
   clientEmailInput.value = n.client_email || "";
   newsPinnedInput.checked = !!n.pinned;
   saveNewsBtn.textContent = T.btn_update_news;
+
+  historySectionLabel.style.display = "";
+  historyListDiv.style.display = "";
+  historyAddField.style.display = "";
+  historyListDiv.innerHTML = '<div class="news-update-empty">'+esc(T.loading)+'</div>';
+  historyDateInput.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  historyNoteInput.value = "";
+
   openForm();
   if(n.property_address) geocodeAndShowAddress(n.property_address);
+  await loadHistoryForNews(id);
+  if(focusHistory) historyNoteInput.focus();
 };
 
 window.deleteNews = async function(id){
@@ -1053,9 +1054,22 @@ newsForm.addEventListener("submit", async function(event){
    tabella calendario non e' gestita da questa pagina), l'admin conferma da li'. ---- */
 openEventsBtn.addEventListener("click", function(){
   var params = new URLSearchParams();
-  if(newsTitleInput.value.trim()) params.set("title", newsTitleInput.value.trim());
-  if(newsAddressInput.value.trim()) params.set("location", newsAddressInput.value.trim());
-  if(newsAppointmentInput.value) params.set("date", newsAppointmentInput.value);
+
+  var whenLocal = newsAppointmentInput.value;
+  if(!whenLocal){
+    var now = new Date();
+    now.setMinutes(now.getMinutes() + 30 - (now.getMinutes() % 30));
+    whenLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+  params.set("date", whenLocal);
+
+  if(newsAddressInput.value.trim()) params.set("address", newsAddressInput.value.trim());
+
+  var noteBits = [];
+  if(newsTitleInput.value.trim()) noteBits.push("Notizia: " + newsTitleInput.value.trim());
+  if(newsBodyInput.value.trim()) noteBits.push(newsBodyInput.value.trim());
+  if(noteBits.length) params.set("notes", noteBits.join(" — "));
+
   window.open("calendar.html?" + params.toString(), "_blank");
 });
 
