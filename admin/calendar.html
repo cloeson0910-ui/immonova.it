@@ -261,6 +261,7 @@ font-family:inherit;
 <div class="header-actions">
 <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
 <a href="opportunities.html" data-i18n="nav_opportunities">Opportunità</a>
+<a href="user-settings.html" data-i18n="nav_user_settings">Impostazioni Utente</a>
 <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
 </div>
 </header>
@@ -288,37 +289,6 @@ Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente
 <div class="field" id="calendarOwnerField" style="max-width:340px;display:none">
 <label data-i18n="label_calendar_owner">Calendario di</label>
 <select id="calendarOwnerSelect"></select>
-</div>
-
-<div class="day-block" id="connectionsBlock">
-<div class="day-head" data-i18n="connections_title">Collega il tuo calendario personale</div>
-<div style="padding:16px 20px;display:flex;flex-direction:column;gap:18px">
-
-<div id="connectionsStatus" style="font-size:12px"></div>
-
-<div style="display:flex;flex-direction:column;gap:10px;max-width:420px">
-<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643" data-i18n="connections_icloud_title">iCloud</div>
-<div id="icloudConnectionStatus" style="font-size:12px"></div>
-<div id="icloudConnectForm" style="display:flex;flex-direction:column;gap:10px">
-<input type="email" id="icloudUsername" placeholder="nome@icloud.com" data-i18n-placeholder="ph_icloud_email">
-<input type="password" id="icloudAppPassword" data-i18n-placeholder="ph_icloud_app_password" placeholder="Password per app (appleid.apple.com)">
-<div style="display:flex;gap:10px">
-<button type="button" class="btn secondary" id="connectIcloudBtn" data-i18n="btn_connect_icloud">Collega iCloud</button>
-<button type="button" class="btn secondary" id="disconnectIcloudBtn" data-i18n="btn_disconnect" style="display:none;color:#9c2f2f;border-color:rgba(156,47,47,.35)">Scollega</button>
-</div>
-</div>
-</div>
-
-<div style="display:flex;flex-direction:column;gap:10px;max-width:420px">
-<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643" data-i18n="connections_google_title">Google Calendar</div>
-<div id="googleConnectionStatus" style="font-size:12px"></div>
-<div style="display:flex;gap:10px">
-<button type="button" class="btn secondary" id="connectGoogleBtn" data-i18n="btn_connect_google">Collega Google Calendar</button>
-<button type="button" class="btn secondary" id="disconnectGoogleBtn" data-i18n="btn_disconnect" style="display:none;color:#9c2f2f;border-color:rgba(156,47,47,.35)">Scollega</button>
-</div>
-</div>
-
-</div>
 </div>
 
 <div class="cal-toolbar">
@@ -478,7 +448,7 @@ function isoToLocalInputValue(iso){
 
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). ---- */
 var UI_STRINGS = {
-  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", logout:"Logout",
+  nav_dashboard:"Dashboard", nav_opportunities:"Opportunità", nav_user_settings:"Impostazioni Utente", logout:"Logout",
   title:"Calendario Claudio Romano",
   subtitle:"Vedi quando Claudio è occupato (dal suo calendario iCloud) e fissa direttamente un appuntamento negli spazi liberi. L'appuntamento comparirà anche sul suo calendario personale.",
   legend_free:"Libero", legend_busy:"Occupato (iCloud)", legend_telefonata:"Telefonata",
@@ -1634,163 +1604,9 @@ document.getElementById("viewDayBtn").addEventListener("click", function(){
   loadCalendarData();
 });
 
-/* ---- Collegamento calendario personale (iCloud / Google Calendar) di ogni utente
-   loggato. Le credenziali/token non transitano mai per la tabella profiles: vivono in
-   immonova_calendar_connections, protetta da RLS (solo il proprietario + admin possono
-   leggerla). ---- */
-var myConnections = { icloud:null, google:null };
-
-async function loadMyConnections(){
-  var result = await client.from("immonova_calendar_connections")
-    .select("provider,active,icloud_username,last_synced_at,last_sync_error")
-    .eq("user_id", currentUser.id);
-
-  myConnections = { icloud:null, google:null };
-  (result.data || []).forEach(function(row){ myConnections[row.provider] = row; });
-
-  renderConnectionsUI();
-}
-
-function renderConnectionsUI(){
-  var icloudStatus = document.getElementById("icloudConnectionStatus");
-  var icloudForm = document.getElementById("icloudConnectForm");
-  var disconnectIcloudBtn = document.getElementById("disconnectIcloudBtn");
-  var connectIcloudBtn = document.getElementById("connectIcloudBtn");
-
-  if(myConnections.icloud && myConnections.icloud.active){
-    var icloudLine = T.msg_icloud_connected + escapeHTML(myConnections.icloud.icloud_username || "");
-    if(myConnections.icloud.last_sync_error) icloudLine += T.msg_sync_error_note + escapeHTML(myConnections.icloud.last_sync_error);
-    icloudStatus.innerHTML = icloudLine;
-    icloudStatus.className = myConnections.icloud.last_sync_error ? "error" : "success";
-    connectIcloudBtn.style.display = "none";
-    document.getElementById("icloudUsername").style.display = "none";
-    document.getElementById("icloudAppPassword").style.display = "none";
-    disconnectIcloudBtn.style.display = "inline-block";
-  }else{
-    icloudStatus.textContent = T.msg_icloud_not_connected;
-    icloudStatus.className = "";
-    connectIcloudBtn.style.display = "inline-block";
-    document.getElementById("icloudUsername").style.display = "block";
-    document.getElementById("icloudAppPassword").style.display = "block";
-    disconnectIcloudBtn.style.display = "none";
-  }
-
-  var googleStatus = document.getElementById("googleConnectionStatus");
-  var connectGoogleBtn = document.getElementById("connectGoogleBtn");
-  var disconnectGoogleBtn = document.getElementById("disconnectGoogleBtn");
-
-  if(myConnections.google && myConnections.google.active){
-    var googleLine = T.msg_google_connected;
-    if(myConnections.google.last_sync_error) googleLine += T.msg_sync_error_note + escapeHTML(myConnections.google.last_sync_error);
-    googleStatus.innerHTML = googleLine;
-    googleStatus.className = myConnections.google.last_sync_error ? "error" : "success";
-    connectGoogleBtn.style.display = "none";
-    disconnectGoogleBtn.style.display = "inline-block";
-  }else{
-    googleStatus.textContent = T.msg_google_not_connected;
-    googleStatus.className = "";
-    connectGoogleBtn.style.display = "inline-block";
-    disconnectGoogleBtn.style.display = "none";
-  }
-}
-
-document.getElementById("connectIcloudBtn").addEventListener("click", async function(){
-  var username = document.getElementById("icloudUsername").value.trim();
-  var appPassword = document.getElementById("icloudAppPassword").value.trim();
-  if(!username || !appPassword) return;
-
-  var btn = this;
-  btn.disabled = true;
-  var statusEl = document.getElementById("connectionsStatus");
-  statusEl.className = "";
-  statusEl.textContent = T.msg_connecting_icloud;
-
-  try{
-    var result = await client.functions.invoke("immonova-calendar-connect-icloud", {
-      body:{ icloud_username:username, icloud_app_password:appPassword }
-    });
-    if(result.error || !result.data || result.data.success !== true){
-      var msg = (result.data && result.data.error) || (result.error ? await extractEdgeFunctionErrorMessage(result.error) : "errore sconosciuto");
-      statusEl.className = "error";
-      statusEl.textContent = T.msg_icloud_connect_failed + msg;
-    }else{
-      statusEl.textContent = "";
-      document.getElementById("icloudAppPassword").value = "";
-      await loadMyConnections();
-      client.functions.invoke("icloud-calendar-sync", { body:{ user_id:currentUser.id } }).then(function(){ loadCalendarData(); });
-    }
-  }catch(e){
-    statusEl.className = "error";
-    statusEl.textContent = T.msg_icloud_connect_failed + ((e && e.message) || e);
-  }
-
-  btn.disabled = false;
-});
-
-document.getElementById("disconnectIcloudBtn").addEventListener("click", async function(){
-  var statusEl = document.getElementById("connectionsStatus");
-  statusEl.className = "";
-  statusEl.textContent = T.msg_disconnecting;
-  await client.from("immonova_calendar_connections").delete().eq("user_id", currentUser.id).eq("provider", "icloud");
-  statusEl.textContent = T.msg_disconnected;
-  await loadMyConnections();
-  await loadCalendarData();
-});
-
-document.getElementById("connectGoogleBtn").addEventListener("click", async function(){
-  var btn = this;
-  btn.disabled = true;
-  var statusEl = document.getElementById("connectionsStatus");
-  statusEl.className = "";
-  statusEl.textContent = "";
-
-  try{
-    var result = await client.functions.invoke("immonova-google-oauth-start", { body:{} });
-    if(result.error || !result.data || result.data.success !== true || !result.data.auth_url){
-      var msg = (result.data && result.data.error) || (result.error ? await extractEdgeFunctionErrorMessage(result.error) : "errore sconosciuto");
-      statusEl.className = "error";
-      statusEl.textContent = T.msg_google_connect_failed + msg;
-      btn.disabled = false;
-      return;
-    }
-    window.location.href = result.data.auth_url;
-  }catch(e){
-    statusEl.className = "error";
-    statusEl.textContent = T.msg_google_connect_failed + ((e && e.message) || e);
-    btn.disabled = false;
-  }
-});
-
-document.getElementById("disconnectGoogleBtn").addEventListener("click", async function(){
-  var statusEl = document.getElementById("connectionsStatus");
-  statusEl.className = "";
-  statusEl.textContent = T.msg_disconnecting;
-  await client.from("immonova_calendar_connections").delete().eq("user_id", currentUser.id).eq("provider", "google");
-  statusEl.textContent = T.msg_disconnected;
-  await loadMyConnections();
-  await loadCalendarData();
-});
-
-// Al ritorno da immonova-google-oauth-callback la pagina viene ricaricata con
-// ?google_connect=success|error in query string: mostriamo l'esito e ripuliamo l'URL.
-function handleGoogleConnectRedirect(){
-  var params = new URLSearchParams(window.location.search);
-  var status = params.get("google_connect");
-  if(!status) return;
-  var statusEl = document.getElementById("connectionsStatus");
-  if(status === "success"){
-    statusEl.className = "success";
-    statusEl.textContent = T.msg_google_connected;
-    client.functions.invoke("immonova-google-calendar-sync", { body:{ user_id:currentUser.id } }).then(function(){ loadCalendarData(); });
-  }else{
-    statusEl.className = "error";
-    statusEl.textContent = T.msg_google_connect_failed + (params.get("google_connect_msg") || "");
-  }
-  params.delete("google_connect");
-  params.delete("google_connect_msg");
-  var newQuery = params.toString();
-  window.history.replaceState({}, "", window.location.pathname + (newQuery ? "?" + newQuery : ""));
-}
+/* ---- Il collegamento calendario personale (iCloud / Google Calendar) e' stato spostato
+   nella pagina Impostazioni Utente (user-settings.html) -- non e' una impostazione della
+   pagina Calendario. ---- */
 
 /* ---- Arrivo da notizie.html "Fissa Appuntamento": la pagina viene aperta con
    ?date=YYYY-MM-DDTHH:MM (gia' nel formato datetime-local) e opzionalmente &address=...&notes=...
@@ -1832,8 +1648,6 @@ async function handleNewsDeepLink(){
     await loadUserLanguage();
     updateViewButtons();
     await loadStaticData();
-    await loadMyConnections();
-    handleGoogleConnectRedirect();
     var handledDeepLink = await handleNewsDeepLink();
     if(!handledDeepLink) await loadCalendarData();
   }

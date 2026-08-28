@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Impostazioni Utente | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{ text-decoration:none; color:#a67f34; font-size:22px; font-weight:600; letter-spacing:.3em; }
+.header-actions{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.header-actions a, .logout{
+  padding:10px 20px; border:1px solid rgba(166,127,52,.25); background:rgba(255,255,255,.25);
+  cursor:pointer; color:#a67f34; text-decoration:none; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+}
+.header-actions a:hover, .logout:hover{ background:#a67f34; color:#fff; }
+.container{ max-width:900px; margin:auto; padding:40px; }
+.kicker{ font-size:11px; letter-spacing:.32em; text-transform:uppercase; color:#9a793c; margin-bottom:12px; }
+.title{ font-size:36px; font-weight:200; letter-spacing:.05em; color:#a67f34; margin-bottom:8px; }
+.subtitle{ font-size:14px; line-height:1.7; color:#8f7643; margin-bottom:32px; }
+.block{
+  background:rgba(255,255,255,.20); border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07); margin-bottom:24px;
+}
+.block-head{
+  padding:16px 20px; font-size:13px; letter-spacing:.14em; text-transform:uppercase;
+  color:#a67f34; border-bottom:1px solid rgba(166,127,52,.15);
+}
+.block-body{ padding:20px; display:flex; flex-direction:column; gap:18px; }
+.provider-block{ display:flex; flex-direction:column; gap:10px; max-width:460px; }
+.provider-title{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#8f7643; }
+input{
+  width:100%; padding:12px 14px; border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.5); color:#7f6430; outline:none; font-size:14px; font-family:inherit;
+}
+.btn{
+  padding:11px 18px; border:1px solid rgba(166,127,52,.35); background:rgba(255,255,255,.3);
+  color:#a67f34; cursor:pointer; font-size:11px; letter-spacing:.12em; text-transform:uppercase; font-family:inherit;
+}
+.btn:hover{ background:#a67f34; color:#fff; }
+.btn.danger{ color:#9c2f2f; border-color:rgba(156,47,47,.35); }
+.btn.danger:hover{ background:#9c2f2f; color:#fff; }
+.status{ font-size:12px; min-height:16px; }
+.status.success{ color:#4f7f45; }
+.status.error{ color:#9c2f2f; }
+.empty{ padding:40px; text-align:center; opacity:.7; }
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="logo">IMMONOVA</a>
+  <div class="header-actions">
+    <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="calendar.html" data-i18n="nav_calendar">Calendario</a>
+    <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="kicker" data-i18n="kicker">Area Personale</div>
+  <div class="title" data-i18n="title">Impostazioni Utente</div>
+  <p class="subtitle" data-i18n="subtitle">Collegamenti personali con il tuo calendario esterno (iCloud / Google Calendar). Non riguarda le impostazioni del sito.</p>
+
+  <div id="status" class="status"></div>
+
+  <div class="block">
+    <div class="block-head" data-i18n="connections_title">Collega il tuo calendario personale</div>
+    <div class="block-body">
+
+      <div class="provider-block">
+        <div class="provider-title" data-i18n="connections_icloud_title">iCloud</div>
+        <div id="icloudConnectionStatus" class="status"></div>
+        <div id="icloudConnectForm" style="display:flex;flex-direction:column;gap:10px">
+          <input type="email" id="icloudUsername" placeholder="nome@icloud.com" data-i18n-placeholder="ph_icloud_email">
+          <input type="password" id="icloudAppPassword" placeholder="Password per app (appleid.apple.com)" data-i18n-placeholder="ph_icloud_app_password">
+          <div style="display:flex;gap:10px">
+            <button type="button" class="btn" id="connectIcloudBtn" data-i18n="btn_connect_icloud">Collega iCloud</button>
+            <button type="button" class="btn danger" id="disconnectIcloudBtn" style="display:none" data-i18n="btn_disconnect">Scollega</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="provider-block">
+        <div class="provider-title" data-i18n="connections_google_title">Google Calendar</div>
+        <div id="googleConnectionStatus" class="status"></div>
+        <div style="display:flex;gap:10px">
+          <button type="button" class="btn" id="connectGoogleBtn" data-i18n="btn_connect_google">Collega Google Calendar</button>
+          <button type="button" class="btn danger" id="disconnectGoogleBtn" style="display:none" data-i18n="btn_disconnect">Scollega</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const statusBox = document.getElementById("status");
+let currentUser = null;
+let currentUserLanguage = "it";
+
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_calendar:"Calendario", logout:"Logout",
+  kicker:"Area Personale", title:"Impostazioni Utente",
+  subtitle:"Collegamenti personali con il tuo calendario esterno (iCloud / Google Calendar). Non riguarda le impostazioni del sito.",
+  connections_title:"Collega il tuo calendario personale",
+  connections_icloud_title:"iCloud", connections_google_title:"Google Calendar",
+  ph_icloud_email:"nome@icloud.com", ph_icloud_app_password:"Password per app (appleid.apple.com)",
+  btn_connect_icloud:"Collega iCloud", btn_connect_google:"Collega Google Calendar", btn_disconnect:"Scollega",
+  msg_connecting_icloud:"Connessione a iCloud in corso...", msg_icloud_connect_failed:"Connessione iCloud non riuscita: ",
+  msg_google_connect_failed:"Connessione Google non riuscita: ", msg_disconnecting:"Scollegamento in corso...",
+  msg_disconnected:"Scollegato.", msg_icloud_connected:"Collegato come ", msg_google_connected:"Google Calendar collegato correttamente.",
+  msg_sync_error_note:" — errore ultima sincronizzazione: "
+};
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_usersettings_" + lang + "_v1"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{ language: lang, source_language:"it", context:"IMMONOVA admin, user settings page (calendar connections).", texts: texts }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    return UI_STRINGS;
+  }
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.innerHTML = T[key];
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(function(el){
+    var key = el.getAttribute("data-i18n-placeholder");
+    if(T[key]) el.placeholder = T[key];
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+}
+
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.json === "function"){
+      var body = await error.context.json();
+      if(body && body.error) return body.error;
+    }
+  }catch(e){}
+  return (error && error.message) || String(error);
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+/* ---- Collegamento calendario personale (iCloud / Google Calendar) di ogni utente loggato.
+   Le credenziali/token non transitano mai per la tabella profiles: vivono in
+   immonova_calendar_connections, protetta da RLS (solo il proprietario + admin possono
+   leggerla). Spostato qui dalla pagina Calendario, che non e' il posto giusto per una
+   impostazione personale dell'utente. ---- */
+var myConnections = { icloud:null, google:null };
+
+async function loadMyConnections(){
+  var result = await client.from("immonova_calendar_connections")
+    .select("provider,active,icloud_username,last_synced_at,last_sync_error")
+    .eq("user_id", currentUser.id);
+
+  myConnections = { icloud:null, google:null };
+  (result.data || []).forEach(function(row){ myConnections[row.provider] = row; });
+
+  renderConnectionsUI();
+}
+
+function renderConnectionsUI(){
+  var icloudStatus = document.getElementById("icloudConnectionStatus");
+  var icloudForm = document.getElementById("icloudConnectForm");
+  var disconnectIcloudBtn = document.getElementById("disconnectIcloudBtn");
+  var connectIcloudBtn = document.getElementById("connectIcloudBtn");
+
+  if(myConnections.icloud && myConnections.icloud.active){
+    var icloudLine = T.msg_icloud_connected + (myConnections.icloud.icloud_username || "");
+    if(myConnections.icloud.last_sync_error) icloudLine += T.msg_sync_error_note + myConnections.icloud.last_sync_error;
+    icloudStatus.textContent = icloudLine;
+    icloudStatus.className = "status " + (myConnections.icloud.last_sync_error ? "error" : "success");
+    connectIcloudBtn.style.display = "none";
+    icloudForm.querySelectorAll("input").forEach(function(i){ i.style.display = "none"; });
+    disconnectIcloudBtn.style.display = "inline-block";
+  }else{
+    icloudStatus.textContent = "";
+    icloudStatus.className = "status";
+    connectIcloudBtn.style.display = "inline-block";
+    icloudForm.querySelectorAll("input").forEach(function(i){ i.style.display = ""; });
+    disconnectIcloudBtn.style.display = "none";
+  }
+
+  var googleStatus = document.getElementById("googleConnectionStatus");
+  var connectGoogleBtn = document.getElementById("connectGoogleBtn");
+  var disconnectGoogleBtn = document.getElementById("disconnectGoogleBtn");
+
+  if(myConnections.google && myConnections.google.active){
+    var googleLine = T.msg_google_connected;
+    if(myConnections.google.last_sync_error) googleLine += T.msg_sync_error_note + myConnections.google.last_sync_error;
+    googleStatus.textContent = googleLine;
+    googleStatus.className = "status " + (myConnections.google.last_sync_error ? "error" : "success");
+    connectGoogleBtn.style.display = "none";
+    disconnectGoogleBtn.style.display = "inline-block";
+  }else{
+    googleStatus.textContent = "";
+    googleStatus.className = "status";
+    connectGoogleBtn.style.display = "inline-block";
+    disconnectGoogleBtn.style.display = "none";
+  }
+}
+
+document.getElementById("connectIcloudBtn").addEventListener("click", async function(){
+  var username = document.getElementById("icloudUsername").value.trim();
+  var appPassword = document.getElementById("icloudAppPassword").value.trim();
+  if(!username || !appPassword) return;
+
+  var btn = this;
+  btn.disabled = true;
+  var statusEl = document.getElementById("icloudConnectionStatus");
+  statusEl.className = "status";
+  statusEl.textContent = T.msg_connecting_icloud;
+
+  try{
+    var result = await client.functions.invoke("immonova-calendar-connect-icloud", {
+      body:{ icloud_username:username, icloud_app_password:appPassword }
+    });
+    if(result.error || !result.data || result.data.success !== true){
+      var msg = (result.data && result.data.error) || (result.error ? await extractEdgeFunctionErrorMessage(result.error) : "errore sconosciuto");
+      statusEl.className = "status error";
+      statusEl.textContent = T.msg_icloud_connect_failed + msg;
+    }else{
+      statusEl.textContent = "";
+      document.getElementById("icloudAppPassword").value = "";
+      await loadMyConnections();
+      client.functions.invoke("icloud-calendar-sync", { body:{ user_id:currentUser.id } });
+    }
+  }catch(e){
+    statusEl.className = "status error";
+    statusEl.textContent = T.msg_icloud_connect_failed + ((e && e.message) || e);
+  }
+
+  btn.disabled = false;
+});
+
+document.getElementById("disconnectIcloudBtn").addEventListener("click", async function(){
+  var statusEl = document.getElementById("icloudConnectionStatus");
+  statusEl.className = "status";
+  statusEl.textContent = T.msg_disconnecting;
+  await client.from("immonova_calendar_connections").delete().eq("user_id", currentUser.id).eq("provider", "icloud");
+  statusEl.textContent = T.msg_disconnected;
+  await loadMyConnections();
+});
+
+document.getElementById("connectGoogleBtn").addEventListener("click", async function(){
+  var btn = this;
+  btn.disabled = true;
+  var statusEl = document.getElementById("googleConnectionStatus");
+  statusEl.className = "status";
+  statusEl.textContent = "";
+
+  try{
+    var result = await client.functions.invoke("immonova-google-oauth-start", { body:{} });
+    if(result.error || !result.data || result.data.success !== true || !result.data.auth_url){
+      var msg = (result.data && result.data.error) || (result.error ? await extractEdgeFunctionErrorMessage(result.error) : "errore sconosciuto");
+      statusEl.className = "status error";
+      statusEl.textContent = T.msg_google_connect_failed + msg;
+      btn.disabled = false;
+      return;
+    }
+    window.location.href = result.data.auth_url;
+  }catch(e){
+    statusEl.className = "status error";
+    statusEl.textContent = T.msg_google_connect_failed + ((e && e.message) || e);
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("disconnectGoogleBtn").addEventListener("click", async function(){
+  var statusEl = document.getElementById("googleConnectionStatus");
+  statusEl.className = "status";
+  statusEl.textContent = T.msg_disconnecting;
+  await client.from("immonova_calendar_connections").delete().eq("user_id", currentUser.id).eq("provider", "google");
+  statusEl.textContent = T.msg_disconnected;
+  await loadMyConnections();
+});
+
+// Al ritorno da immonova-google-oauth-callback la pagina viene ricaricata con
+// ?google_connect=success|error in query string: mostriamo l'esito e ripuliamo l'URL.
+function handleGoogleConnectRedirect(){
+  var params = new URLSearchParams(window.location.search);
+  var status = params.get("google_connect");
+  if(!status) return;
+  var statusEl = document.getElementById("googleConnectionStatus");
+  if(status === "success"){
+    statusEl.className = "status success";
+    statusEl.textContent = T.msg_google_connected;
+    client.functions.invoke("immonova-google-calendar-sync", { body:{ user_id:currentUser.id } }).then(function(){ loadMyConnections(); });
+  }else{
+    statusEl.className = "status error";
+    statusEl.textContent = T.msg_google_connect_failed + (params.get("google_connect_msg") || "");
+  }
+  params.delete("google_connect");
+  params.delete("google_connect_msg");
+  var newQuery = params.toString();
+  window.history.replaceState({}, "", window.location.pathname + (newQuery ? "?" + newQuery : ""));
+}
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "login.html";
+});
+
+(async function init(){
+  const isLogged = await checkAuth();
+  if(isLogged){
+    var profileResult = await client.from("profiles").select("language").eq("id", currentUser.id).single();
+    await applyLanguage((profileResult.data && profileResult.data.language) || "it");
+    await loadMyConnections();
+    handleGoogleConnectRedirect();
+  }
+})();
+</script>
+
+</body>
+</html>
