@@ -275,6 +275,24 @@ body::after{
 .news-actions button.danger:hover{ background:#9c2f2f; border-color:#9c2f2f; }
 .news-actions button.verify{ border-color:rgba(79,127,69,.4); color:#4f7f45; }
 .news-actions button.verify:hover{ background:#4f7f45; color:#fff; }
+.news-events-panel{
+  margin-top:14px;
+  padding:14px;
+  border:1px solid rgba(166,127,52,.2);
+  background:rgba(255,255,255,.35);
+}
+.news-events-list{ margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
+.news-update-item{ border-left:2px solid rgba(166,127,52,.4); padding-left:10px; }
+.news-update-date{ font-size:11px; color:#a67f34; text-transform:uppercase; letter-spacing:.06em; }
+.news-update-note{ font-size:13px; color:#5c4b25; white-space:pre-wrap; }
+.news-update-empty{ font-size:13px; color:#8f7643; }
+.news-event-form{ display:flex; flex-direction:column; gap:8px; }
+.news-event-form textarea{
+  width:100%; min-height:60px; padding:8px; font-family:inherit; font-size:13px;
+  border:1px solid rgba(166,127,52,.3); background:#fff;
+}
+.news-event-form-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.news-event-form-row input{ padding:8px; font-family:inherit; font-size:13px; border:1px solid rgba(166,127,52,.3); }
 .empty{
   padding:40px;
   text-align:center;
@@ -501,6 +519,8 @@ let currentUserLanguage = "it";
 let canAccess = false;
 let editingId = null;
 let allNews = [];
+let newsUpdatesByNewsId = {};
+let openEventsPanelId = null;
 
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi investors.html/users.html). ---- */
 var UI_STRINGS = {
@@ -521,6 +541,8 @@ var UI_STRINGS = {
   loading:"Caricamento notizie...", empty_none:"Nessuna notizia pubblicata al momento.",
   pin_badge:"In evidenza", verify_badge:"Notizia in fase di verifica", verified_badge:"Verificata",
   action_edit:"Modifica", action_delete:"Elimina", action_verify:"Segna come verificata",
+  action_set_appointment:"Fissa Appuntamento", action_events:"Eventi", action_add_event:"Aggiungi Evento",
+  events_panel_empty:"Nessun evento registrato.", events_note_placeholder:"Cosa hai fatto/aggiornato...",
   address_label:"Indirizzo:", appointment_label:"Appuntamento:", client_label:"Cliente:",
   linked_investor_link:"Vedi scheda in Investitori",
   confirm_delete_news:"Eliminare definitivamente questa notizia?",
@@ -680,12 +702,39 @@ function renderNewsList(){
     var details = detailsParts.length ? '<div class="news-details">'+detailsParts.join("")+'</div>' : "";
 
     var verifyBtn = n.status === "verificata" ? "" : '<button type="button" class="verify" onclick="verifyNews(\''+n.id+'\')">'+esc(T.action_verify)+'</button>';
+    var calendarBtn = '<button type="button" onclick="openCalendarForNews(\''+n.id+'\')">'+esc(T.action_set_appointment)+'</button>';
+    var eventsBtn = '<button type="button" onclick="toggleEventsPanel(\''+n.id+'\')">'+esc(T.action_events)+'</button>';
 
     var actions = (
       '<div class="news-actions">'+
         verifyBtn+
+        calendarBtn+
+        eventsBtn+
         '<button type="button" onclick="editNews(\''+n.id+'\')">'+esc(T.action_edit)+'</button>'+
         '<button type="button" class="danger" onclick="deleteNews(\''+n.id+'\')">'+esc(T.action_delete)+'</button>'+
+      '</div>'
+    );
+
+    var isOpen = openEventsPanelId === n.id;
+    var updates = newsUpdatesByNewsId[n.id] || [];
+    var updatesList = updates.length
+      ? updates.map(function(u){
+          return '<div class="news-update-item"><div class="news-update-date">'+esc(fmtDate(u.event_at))+'</div><div class="news-update-note">'+esc(u.note)+'</div></div>';
+        }).join("")
+      : '<div class="news-update-empty">'+esc(T.events_panel_empty)+'</div>';
+
+    var nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+    var eventsPanel = !isOpen ? "" : (
+      '<div class="news-events-panel">'+
+        '<div class="news-events-list">'+updatesList+'</div>'+
+        '<form class="news-event-form" onsubmit="return submitNewsEvent(event, \''+n.id+'\')">'+
+          '<textarea placeholder="'+esc(T.events_note_placeholder)+'" required></textarea>'+
+          '<div class="news-event-form-row">'+
+            '<input type="datetime-local" value="'+nowLocal+'">'+
+            '<button type="submit" class="primary-link">'+esc(T.action_add_event)+'</button>'+
+          '</div>'+
+        '</form>'+
       '</div>'
     );
 
@@ -698,6 +747,7 @@ function renderNewsList(){
         details+
         '<div class="news-body">'+esc(n.body)+'</div>'+
         actions+
+        eventsPanel+
       '</div>'
     );
   }).join("");
@@ -717,8 +767,84 @@ async function loadNews(){
   }
 
   allNews = result.data || [];
+  await loadNewsUpdates();
   renderNewsList();
 }
+
+/* ---- Carica gli "eventi/aggiornamenti" liberi legati alle notizie (tabella
+   immonova_news_updates), raggruppati per news_id. Best-effort: se la tabella non esiste
+   ancora (SQL non eseguita) o la query fallisce, semplicemente non mostra eventi, senza
+   bloccare il resto della pagina. ---- */
+async function loadNewsUpdates(){
+  newsUpdatesByNewsId = {};
+  try{
+    var ids = allNews.map(function(n){ return n.id; });
+    if(!ids.length) return;
+
+    var result = await client
+      .from("immonova_news_updates")
+      .select("*")
+      .in("news_id", ids)
+      .order("event_at", { ascending:false });
+
+    if(result.error || !result.data) return;
+
+    result.data.forEach(function(u){
+      if(!newsUpdatesByNewsId[u.news_id]) newsUpdatesByNewsId[u.news_id] = [];
+      newsUpdatesByNewsId[u.news_id].push(u);
+    });
+  }catch(e){
+    console.warn("Caricamento eventi notizie non riuscito (non bloccante):", e);
+  }
+}
+
+window.toggleEventsPanel = function(id){
+  openEventsPanelId = (openEventsPanelId === id) ? null : id;
+  renderNewsList();
+};
+
+window.submitNewsEvent = function(event, newsId){
+  event.preventDefault();
+  var form = event.target;
+  var note = form.querySelector("textarea").value.trim();
+  var whenLocal = form.querySelector('input[type="datetime-local"]').value;
+  if(!note) return false;
+
+  var eventAt = whenLocal ? new Date(whenLocal).toISOString() : new Date().toISOString();
+
+  client.from("immonova_news_updates").insert({
+    news_id: newsId,
+    note: note,
+    event_at: eventAt,
+    created_by: currentUser.id
+  }).then(function(result){
+    if(result.error){
+      setStatus(result.error.message, "error");
+      return;
+    }
+    loadNews();
+  });
+
+  return false;
+};
+
+/* ---- "Fissa Appuntamento": apre direttamente la pagina calendario (NON il form di modifica
+   della notizia, per non rischiare di alterare la notizia stessa) alla data/ora gia' salvata
+   sulla notizia, se presente, altrimenti vuota cosi' l'admin la sceglie li'. ---- */
+window.openCalendarForNews = function(id){
+  var n = allNews.find(function(x){ return String(x.id) === String(id); });
+  if(!n) return;
+
+  var params = new URLSearchParams();
+  if(n.title) params.set("title", n.title);
+  if(n.property_address) params.set("location", n.property_address);
+  if(n.appointment_at){
+    var local = new Date(n.appointment_at);
+    var localStr = new Date(local.getTime() - local.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    params.set("date", localStr);
+  }
+  window.open("calendar.html?" + params.toString(), "_blank");
+};
 
 function openForm(){
   newsForm.classList.add("open");
