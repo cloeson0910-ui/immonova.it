@@ -191,7 +191,27 @@ button:disabled{opacity:.5;cursor:not-allowed}
   </div>
 
   <div class="card">
-    <div class="card-title">2. Esegui watermark</div>
+    <div class="card-title">2. Anteprima (nessuna modifica salvata)</div>
+    <div class="row">
+      <label for="previewPhotoSelect" style="flex:0 0 auto">Foto da provare</label>
+      <select id="previewPhotoSelect" style="flex:1 1 260px;min-width:220px;padding:8px 10px"></select>
+    </div>
+    <div class="row">
+      <label for="opacitySlider" style="flex:0 0 auto">Opacità watermark</label>
+      <input type="range" id="opacitySlider" min="5" max="100" value="50" step="5" style="flex:1 1 220px">
+      <span id="opacityValueLabel" style="font-size:12.5px;color:#7f6430;min-width:42px">50%</span>
+    </div>
+    <div class="row">
+      <button id="previewBtn" type="button" class="secondary" disabled>Genera anteprima</button>
+      <div id="previewStatus" class="status-box"></div>
+    </div>
+    <div id="previewImageBox" style="display:none;margin-top:6px">
+      <img id="previewImage" style="max-width:100%;border:1px solid rgba(165,129,57,.30);display:block">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">3. Esegui watermark</div>
     <div class="row">
       <label><input type="checkbox" id="testModeCheck" checked> Modalità test (elabora solo la prima foto trovata, per controllare il risultato)</label>
     </div>
@@ -236,7 +256,14 @@ function loadImageFromBlob(blob){
   });
 }
 
-async function applyImmonovaWatermark(blob, mimeType){
+function getSelectedOpacity(){
+  var slider = document.getElementById("opacitySlider");
+  var value = slider ? parseInt(slider.value, 10) : 50;
+  if(isNaN(value)) value = 50;
+  return Math.min(100, Math.max(5, value)) / 100;
+}
+
+async function renderWatermarkCanvas(blob, opacity){
   var logo = await loadImmonovaWatermarkLogo();
   var sourceImg = await loadImageFromBlob(blob);
 
@@ -255,10 +282,15 @@ async function applyImmonovaWatermark(blob, mimeType){
   var wmY = (canvas.height - wmHeight) / 2;
 
   ctx.save();
-  ctx.globalAlpha = 0.5;
+  ctx.globalAlpha = (typeof opacity === "number") ? opacity : 0.5;
   ctx.drawImage(logo, wmX, wmY, wmWidth, wmHeight);
   ctx.restore();
 
+  return canvas;
+}
+
+async function applyImmonovaWatermark(blob, mimeType, opacity){
+  var canvas = await renderWatermarkCanvas(blob, opacity);
   var outMime = mimeType === "image/png" ? "image/png" : "image/jpeg";
   return await new Promise(function(resolve, reject){
     canvas.toBlob(function(b){
@@ -306,7 +338,7 @@ async function processImageUrl(publicUrl){
   }
   var originalBlob = await response.blob();
 
-  var watermarkedBlob = await applyImmonovaWatermark(originalBlob, mimeType);
+  var watermarkedBlob = await applyImmonovaWatermark(originalBlob, mimeType, getSelectedOpacity());
 
   var uploadResult = await client
     .storage
@@ -336,6 +368,30 @@ async function checkAuth(){
   return true;
 }
 
+function buildFlatPhotoList(){
+  var allUrls = [];
+  opportunitiesData.forEach(function(o){
+    if(o.cover_image) allUrls.push({ url:o.cover_image, label:o.title + " — copertina" });
+    (o.gallery_images || []).forEach(function(u, idx){
+      allUrls.push({ url:u, label:o.title + " — gallery #" + (idx + 1) });
+    });
+  });
+  return allUrls;
+}
+
+function populatePreviewSelect(){
+  var select = document.getElementById("previewPhotoSelect");
+  select.innerHTML = "";
+  var allUrls = buildFlatPhotoList();
+  allUrls.forEach(function(item, idx){
+    var opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = item.label;
+    select.appendChild(opt);
+  });
+  document.getElementById("previewBtn").disabled = allUrls.length === 0;
+}
+
 async function loadOpportunities(){
   var statusEl = document.getElementById("loadStatus");
   statusEl.textContent = "Caricamento opportunità in corso...";
@@ -354,6 +410,41 @@ async function loadOpportunities(){
   statusEl.textContent = opportunitiesData.length + " opportunità trovate, " + totalPhotos + " foto totali (copertina + gallery).";
   statusEl.style.color = "#4f7f45";
   document.getElementById("runBtn").disabled = false;
+  populatePreviewSelect();
+}
+
+async function generatePreview(){
+  var select = document.getElementById("previewPhotoSelect");
+  var statusEl = document.getElementById("previewStatus");
+  var imageBox = document.getElementById("previewImageBox");
+  var imageEl = document.getElementById("previewImage");
+  var idx = parseInt(select.value, 10);
+  var allUrls = buildFlatPhotoList();
+  var item = allUrls[idx];
+
+  if(!item){
+    statusEl.textContent = "Seleziona prima una foto.";
+    statusEl.style.color = "#9c2f2f";
+    return;
+  }
+
+  statusEl.textContent = "Genero anteprima...";
+  statusEl.style.color = "#8f7643";
+
+  try{
+    var response = await fetch(item.url, { cache:"no-store" });
+    if(!response.ok) throw new Error("Impossibile scaricare la foto (" + response.status + ").");
+    var originalBlob = await response.blob();
+
+    var canvas = await renderWatermarkCanvas(originalBlob, getSelectedOpacity());
+    imageEl.src = canvas.toDataURL("image/jpeg", 0.9);
+    imageBox.style.display = "";
+    statusEl.textContent = "Anteprima generata (solo visiva, nessun file salvato).";
+    statusEl.style.color = "#4f7f45";
+  }catch(previewError){
+    statusEl.textContent = "Errore anteprima: " + (previewError.message || previewError);
+    statusEl.style.color = "#9c2f2f";
+  }
 }
 
 async function runWatermarkBatch(){
@@ -364,13 +455,7 @@ async function runWatermarkBatch(){
   var runStatus = document.getElementById("runStatus");
   var progressBar = document.getElementById("progressBar");
 
-  var allUrls = [];
-  opportunitiesData.forEach(function(o){
-    if(o.cover_image) allUrls.push({ url:o.cover_image, label:o.title + " — copertina" });
-    (o.gallery_images || []).forEach(function(u, idx){
-      allUrls.push({ url:u, label:o.title + " — gallery #" + (idx + 1) });
-    });
-  });
+  var allUrls = buildFlatPhotoList();
 
   if(testMode) allUrls = allUrls.slice(0, 1);
 
@@ -412,6 +497,10 @@ async function runWatermarkBatch(){
 document.getElementById("loadOppsBtn").addEventListener("click", loadOpportunities);
 document.getElementById("runBtn").addEventListener("click", runWatermarkBatch);
 document.getElementById("stopBtn").addEventListener("click", function(){ stopRequested = true; });
+document.getElementById("previewBtn").addEventListener("click", generatePreview);
+document.getElementById("opacitySlider").addEventListener("input", function(){
+  document.getElementById("opacityValueLabel").textContent = this.value + "%";
+});
 
 checkAuth();
 </script>
