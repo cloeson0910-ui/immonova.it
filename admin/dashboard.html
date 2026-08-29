@@ -67,6 +67,7 @@ body::after{
 }
 .nav-link:hover,.logout:hover{background:#a67f34;color:#fff}
 .admin-only{display:none}.admin-only-block{display:none}
+.owner-only{display:none}
 
 .nav-dropdown{position:relative}
 .nav-dropdown-btn{
@@ -472,6 +473,14 @@ body::after{
         <a href="responsive-preview.html" data-i18n="nav_responsive_preview">Anteprima Responsive</a>
       </div>
     </div>
+
+    <div class="nav-dropdown owner-only" data-dropdown>
+      <button type="button" class="nav-dropdown-btn"><span data-i18n="nav_group_owner">Strumenti</span><span class="nav-dropdown-caret"></span></button>
+      <div class="nav-dropdown-menu">
+        <a href="watermark-retroattivo.html" data-i18n="nav_watermark_retro">Watermark Retroattivo</a>
+        <a href="data-sources-bulk-import.html" data-i18n="nav_data_sources_bulk">Import Fonti Estero</a>
+      </div>
+    </div>
     <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
   </div>
 </header>
@@ -617,7 +626,7 @@ var UI_STRINGS = {
   nav_home:"Home", nav_opportunities:"Opportunità", nav_investors:"Contatti", nav_events:"Eventi",
   nav_success_stories:"Success Stories", nav_news:"Notizie", nav_data_sources:"Fonti Dati", nav_manual_overrides:"Dati Verificati",
   nav_destination_photos:"Foto Destinazioni", nav_users:"Utenti", nav_requests:"Richieste", nav_ads:"Pubblicità", nav_ads_ab:"Test A/B Meta Ads", nav_social_composer:"Post Social", nav_calendar:"Calendario", nav_social:"Social", nav_statistics:"Statistiche", nav_site_settings:"Impostazioni Sito", nav_broadcast_notifications:"Notifiche Broadcast", nav_responsive_preview:"Anteprima Responsive", logout:"Logout",
-  nav_group_business:"Attività", nav_group_data:"Dati", nav_group_admin:"Gestione", nav_search_mandates:"Mandati di Ricerca", nav_search_mandate:"Nuovo Mandato di Ricerca", nav_communications:"Comunicazioni", nav_valuations:"Valutazioni Immobiliari",
+  nav_group_business:"Attività", nav_group_data:"Dati", nav_group_admin:"Gestione", nav_group_owner:"Strumenti", nav_watermark_retro:"Watermark Retroattivo", nav_data_sources_bulk:"Import Fonti Estero", nav_search_mandates:"Mandati di Ricerca", nav_search_mandate:"Nuovo Mandato di Ricerca", nav_communications:"Comunicazioni", nav_valuations:"Valutazioni Immobiliari",
   role_reserved:"Area Riservata", role_admin:"Area Admin", role_collaborator:"Area Collaboratore",
   title:"Command Center",
   subtitle:"Una vista unica per aprire direttamente opportunità, investitori, eventi e attività CRM senza passaggi inutili.",
@@ -799,7 +808,8 @@ function applyViewText(){
 
 function setBoot(message,type){if(!bootStatus)return;bootStatus.textContent=message||"";bootStatus.className="boot-status "+(type||"");bootStatus.style.display=message?"block":"none"}
 async function checkAuth(){const {data:{session},error}=await client.auth.getSession();if(error||!session){window.location.href="login.html";return false}currentUser=session.user;return true}
-async function loadProfile(){const {data,error}=await client.from("profiles").select("id,email,full_name,role,language").eq("id",currentUser.id).single();if(error){console.error(error);return}currentProfile=data;isAdmin=currentProfile?.role==="admin"||currentProfile?.role==="ceo";await applyLanguage(currentProfile?.language||"it");roleLabel.textContent=isAdmin?T.role_admin:T.role_collaborator;document.querySelectorAll(".admin-only").forEach(el=>el.style.display=isAdmin?"inline-flex":"none");document.querySelectorAll(".admin-only-block").forEach(el=>el.style.display=isAdmin?"block":"none")}
+var OWNER_ONLY_EMAIL="claudio.romano@bluewin.ch";
+async function loadProfile(){const {data,error}=await client.from("profiles").select("id,email,full_name,role,language").eq("id",currentUser.id).single();if(error){console.error(error);return}currentProfile=data;isAdmin=currentProfile?.role==="admin"||currentProfile?.role==="ceo";await applyLanguage(currentProfile?.language||"it");roleLabel.textContent=isAdmin?T.role_admin:T.role_collaborator;document.querySelectorAll(".admin-only").forEach(el=>el.style.display=isAdmin?"inline-flex":"none");document.querySelectorAll(".admin-only-block").forEach(el=>el.style.display=isAdmin?"block":"none");var isOwner=String((currentProfile&&currentProfile.email)||currentUser.email||"").trim().toLowerCase()===OWNER_ONLY_EMAIL;document.querySelectorAll(".owner-only").forEach(el=>el.style.display=isOwner?"inline-flex":"none")}
 
 async function loadCollaborators(){
   if(!isAdmin){
