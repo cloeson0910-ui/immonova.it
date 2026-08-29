@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Import Fonti Estero | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+
+.page{
+  max-width:1080px;
+  margin:0 auto;
+  padding:42px 24px 80px;
+}
+
+.logo{
+  font-size:24px;
+  font-weight:300;
+  letter-spacing:.35em;
+  color:#a58139;
+  margin-bottom:34px;
+}
+
+h1{
+  font-size:20px;
+  font-weight:500;
+  letter-spacing:.04em;
+  margin-bottom:6px;
+  color:#5c4a20;
+}
+
+.subtitle{
+  font-size:13px;
+  color:#8f7643;
+  margin-bottom:26px;
+  line-height:1.6;
+}
+
+.warning-box{
+  border:1px solid rgba(165,129,57,.35);
+  background:rgba(165,129,57,.07);
+  color:#7f6430;
+  padding:18px 20px;
+  font-size:13px;
+  line-height:1.7;
+  margin-bottom:26px;
+}
+.warning-box strong{display:block;margin-bottom:6px;font-size:13.5px;letter-spacing:.03em;color:#5c4a20}
+
+.card{
+  border:1px solid rgba(165,129,57,.30);
+  background:rgba(255,252,244,.55);
+  padding:22px 24px;
+  margin-bottom:20px;
+}
+
+.card-title{
+  font-size:13px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#a58139;
+  font-weight:600;
+  margin-bottom:12px;
+}
+
+.row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:14px;
+  align-items:center;
+  margin-bottom:14px;
+}
+
+button{
+  border:1px solid rgba(165,129,57,.5);
+  background:#a58139;
+  color:#fff;
+  padding:10px 20px;
+  font-size:12px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+button.secondary{
+  background:transparent;
+  color:#a58139;
+}
+button:disabled{opacity:.5;cursor:not-allowed}
+
+.status-box{
+  font-size:12.5px;
+  color:#8f7643;
+  min-height:20px;
+  margin:10px 0;
+}
+
+.table-wrap{
+  overflow-x:auto;
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,255,255,.4);
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+th, td{
+  text-align:left;
+  padding:9px 10px;
+  border-bottom:1px solid rgba(165,129,57,.18);
+  vertical-align:top;
+}
+th{
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  font-size:10.5px;
+  color:#8f7643;
+  background:rgba(165,129,57,.08);
+}
+td a{color:#a58139}
+.country-tag{
+  display:inline-block;
+  font-size:9.5px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  padding:2px 6px;
+  background:rgba(165,129,57,.14);
+  color:#7f6430;
+  margin-right:4px;
+}
+.already-tag{
+  display:inline-block;
+  font-size:9.5px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  padding:2px 6px;
+  background:rgba(79,127,69,.16);
+  color:#4f7f45;
+}
+
+.log{
+  max-height:280px;
+  overflow-y:auto;
+  font-size:12px;
+  font-family:monospace;
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,255,255,.5);
+  padding:12px 14px;
+  margin-top:14px;
+  line-height:1.7;
+}
+.log-line{white-space:pre-wrap;word-break:break-all}
+.log-line.ok{color:#4f7f45}
+.log-line.err{color:#9c2f2f}
+.log-line.info{color:#8f7643}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="logo">IMMONOVA</div>
+
+  <h1>Import fonti dati — espansione Discovery estero</h1>
+  <div class="subtitle">
+    Inserisce in un colpo solo le fonti dati (Svizzera, Francia, Spagna, fallback Europa/Eurostat) nella tabella <code>immonova_data_sources</code> — le stesse che inseriresti a mano da "Fonti Dati" (data-sources.html), una per una. Vengono create con stato <strong>"Da verificare"</strong> ed <strong>estrazione disabilitata</strong>: non entrano in produzione finché non le controlli e le verifichi tu da data-sources.html, come per qualsiasi fonte nuova.
+  </div>
+
+  <div class="warning-box">
+    <strong>Cosa fa esattamente</strong>
+    Per ogni riga selezionata sotto, controlla se una fonte con lo stesso URL esiste già (per non duplicare se lo lanci due volte), poi la inserisce con <code>verification_status = pending</code> e <code>extraction_enabled = false</code>. Nessuna fonte esistente viene toccata o cancellata.
+  </div>
+
+  <div class="card">
+    <div class="card-title">Accesso</div>
+    <div id="authStatus" class="status-box">Verifica sessione...</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Fonti da importare</div>
+    <div class="row">
+      <button id="checkExistingBtn" type="button" class="secondary" disabled>Controlla quali esistono già</button>
+      <button id="selectAllBtn" type="button" class="secondary">Seleziona tutte</button>
+      <button id="deselectAllBtn" type="button" class="secondary">Deseleziona tutte</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>Paese</th><th>Categoria</th><th>Provider / cosa contiene</th><th>URL</th><th>Stato</th></tr>
+        </thead>
+        <tbody id="sourcesTableBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button id="importBtn" type="button" disabled>Importa selezionate</button>
+      <div id="importStatus" class="status-box"></div>
+    </div>
+    <div id="log" class="log"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var currentUser = null;
+
+var CANDIDATE_SOURCES = [
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"demography",
+    provider_name:"BFS/UST — Gemeindedaten (dati comunali di base)",
+    endpoint:"https://opendata.swiss/en/dataset/gemeindedaten",
+    source_url:"https://opendata.swiss/en/dataset/gemeindedaten",
+    format:"web_download", geography_level:"country", geography_name:"Switzerland",
+    source_type:"official",
+    extraction_notes:"Dataset ufficiale UST con dati comunali di base (popolazione, superficie ecc.) per tutti i comuni svizzeri."
+  },
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"demography",
+    provider_name:"BFS/UST — Statistica popolazione residente per Comune",
+    endpoint:"https://opendata.swiss/en/dataset/bevolkerungsstatistik-einwohner",
+    source_url:"https://opendata.swiss/en/dataset/bevolkerungsstatistik-einwohner",
+    format:"web_download", geography_level:"country", geography_name:"Switzerland",
+    source_type:"official",
+    extraction_notes:"Popolazione residente per comune, aggiornata periodicamente da UST."
+  },
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"demography",
+    provider_name:"swissBOUNDARIES3D — confini comunali",
+    endpoint:"https://opendata.swiss/en/dataset/swissboundaries3d-gemeindegrenzen",
+    source_url:"https://opendata.swiss/en/dataset/swissboundaries3d-gemeindegrenzen",
+    format:"web_download", geography_level:"country", geography_name:"Switzerland",
+    source_type:"official",
+    extraction_notes:"Confini amministrativi ufficiali dei comuni svizzeri, utile per aggregazione/geocoding."
+  },
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"tourism",
+    provider_name:"BFS — Hotellerie: arrivi e pernottamenti per Comune (equivalente ISTAT)",
+    endpoint:"https://www.pxweb.bfs.admin.ch/pxweb/en/px-x-1003020000_101/-/px-x-1003020000_101.px",
+    source_url:"https://www.pxweb.bfs.admin.ch/pxweb/en/px-x-1003020000_101/-/px-x-1003020000_101.px",
+    format:"web_download", geography_level:"country", geography_name:"Switzerland",
+    source_type:"official",
+    extraction_notes:"Tabella PX-Web: arrivi/pernottamenti alberghieri per Comune, per anno/mese. Colonna Comune presente — parser html_table/csv."
+  },
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"tourism",
+    provider_name:"BFS — Hotellerie: arrivi e pernottamenti per regione turistica",
+    endpoint:"https://www.pxweb.bfs.admin.ch/pxweb/en/px-x-1003020000_103/-/px-x-1003020000_103.px/",
+    source_url:"https://www.pxweb.bfs.admin.ch/pxweb/en/px-x-1003020000_103/-/px-x-1003020000_103.px/",
+    format:"web_download", geography_level:"country", geography_name:"Switzerland",
+    source_type:"official",
+    extraction_notes:"Stessa serie della tabella per Comune ma aggregata per regione turistica — utile come contesto regionale di supporto."
+  },
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"real_estate",
+    provider_name:"Geoda.ch — Prezzi immobiliari per Comune e CAP",
+    endpoint:"https://www.geoda.ch/en/data/market/prices",
+    source_url:"https://www.geoda.ch/en/data/market/prices",
+    format:"html", geography_level:"country", geography_name:"Switzerland",
+    source_type:"open_data",
+    extraction_notes:"Prezzi immobiliari stimati per comune/CAP, metodologia pubblica. Verificare formato pagina prima di abilitare estrazione."
+  },
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"market",
+    provider_name:"Wüest Partner — Indici di mercato immobiliare per regione",
+    endpoint:"https://www.wuestpartner.com/expertise/data/indices/",
+    source_url:"https://www.wuestpartner.com/expertise/data/indices/",
+    format:"html", geography_level:"country", geography_name:"Switzerland",
+    source_type:"market_provider",
+    extraction_notes:"Indici professionali di mercato immobiliare svizzero per regione/comune. Fonte commerciale di riferimento, non open data grezzo."
+  },
+  {
+    country_code:"CH", country_label:"Svizzera",
+    category:"market",
+    provider_name:"ESTV — Statistica fiscale svizzera (reddito/imposte per comune)",
+    endpoint:"https://www.estv.admin.ch/en/swiss-tax-statistics",
+    source_url:"https://www.estv.admin.ch/en/swiss-tax-statistics",
+    format:"web_download", geography_level:"country", geography_name:"Switzerland",
+    source_type:"official",
+    extraction_notes:"Statistica fiscale federale, equivalente svizzero dei dati reddito/contribuenti usati per l'Italia."
+  },
+  {
+    country_code:"FR", country_label:"Francia",
+    category:"real_estate",
+    provider_name:"DVF — Demandes de Valeurs Foncières (transazioni immobiliari ufficiali)",
+    endpoint:"https://www.data.gouv.fr/datasets/demandes-de-valeurs-foncieres",
+    source_url:"https://www.data.gouv.fr/datasets/demandes-de-valeurs-foncieres",
+    format:"web_download", geography_level:"country", geography_name:"France",
+    source_type:"official",
+    extraction_notes:"Registro ufficiale francese delle transazioni immobiliari (prezzo, superficie, indirizzo, comune)."
+  },
+  {
+    country_code:"FR", country_label:"Francia",
+    category:"real_estate",
+    provider_name:"api.gouv.fr — API dati fondiari (DVF)",
+    endpoint:"https://api.gouv.fr/les-api/api-donnees-foncieres",
+    source_url:"https://api.gouv.fr/les-api/api-donnees-foncieres",
+    format:"json", geography_level:"country", geography_name:"France",
+    source_type:"official",
+    extraction_notes:"API pronta sopra i dati DVF, alternativa al file grezzo per query mirate per comune."
+  },
+  {
+    country_code:"ES", country_label:"Spagna",
+    category:"tourism",
+    provider_name:"INE — Viajeros y pernoctaciones por puntos turísticos (EOH, per comune)",
+    endpoint:"https://datos.gob.es/es/catalogo/ea0042823-viajeros-y-pernoctaciones-por-puntos-turisticos-mensual-municipios-encuesta-de-ocupacion-hotelera-identificador-api-20781",
+    source_url:"https://datos.gob.es/es/catalogo/ea0042823-viajeros-y-pernoctaciones-por-puntos-turisticos-mensual-municipios-encuesta-de-ocupacion-hotelera-identificador-api-20781",
+    format:"web_download", geography_level:"country", geography_name:"Spain",
+    source_type:"official",
+    extraction_notes:"Encuesta de Ocupación Hotelera INE: viaggiatori e pernottamenti per punto turistico/comune, mensile."
+  },
+  {
+    country_code:"ES", country_label:"Spagna",
+    category:"tourism",
+    provider_name:"INE — Viajeros y pernoctaciones per Comunità Autonoma/Provincia (EOH)",
+    endpoint:"https://datos.gob.es/es/catalogo/ea0010587-viajeros-y-pernoctaciones-por-comunidades-ciudades-autonomas-y-provincias-eoh-identificador-api-49371",
+    source_url:"https://datos.gob.es/es/catalogo/ea0010587-viajeros-y-pernoctaciones-por-comunidades-ciudades-autonomas-y-provincias-eoh-identificador-api-49371",
+    format:"web_download", geography_level:"country", geography_name:"Spain",
+    source_type:"official",
+    extraction_notes:"Stessa serie aggregata per provincia/comunità autonoma, utile come contesto quando manca il dato di comune."
+  },
+  {
+    country_code:null, country_label:"Europa (fallback)",
+    category:"tourism",
+    provider_name:"Eurostat — API statistica ufficiale UE (turismo/economia/demografia, livello regionale NUTS)",
+    endpoint:"https://ec.europa.eu/eurostat/web/user-guides/data-browser/api-data-access/api-getting-started/api",
+    source_url:"https://ec.europa.eu/eurostat/web/user-guides/data-browser/api-data-access/api-getting-started/api",
+    format:"json", geography_level:"global", geography_name:null,
+    source_type:"official",
+    extraction_notes:"Fallback per qualsiasi paese UE quando manca ancora la fonte nazionale specifica: dati regionali (NUTS2/3), non scende a livello di singolo comune. Priorità bassa: usare solo se non ci sono fonti nazionali migliori per la categoria."
+  }
+];
+
+function logLine(message, type){
+  var log = document.getElementById("log");
+  var line = document.createElement("div");
+  line.className = "log-line " + (type || "info");
+  line.textContent = message;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderTable(){
+  var tbody = document.getElementById("sourcesTableBody");
+  tbody.innerHTML = "";
+  CANDIDATE_SOURCES.forEach(function(src, idx){
+    var tr = document.createElement("tr");
+    var alreadyBadge = src._alreadyExists ? '<span class="already-tag">Già presente</span>' : "";
+    tr.innerHTML =
+      '<td><input type="checkbox" class="src-check" data-idx="' + idx + '" ' + (src._alreadyExists ? "" : "checked") + '></td>' +
+      '<td><span class="country-tag">' + (src.country_label || "—") + '</span></td>' +
+      '<td>' + src.category + '</td>' +
+      '<td>' + src.provider_name + '<br>' + alreadyBadge + '</td>' +
+      '<td><a href="' + src.endpoint + '" target="_blank" rel="noopener">apri</a></td>' +
+      '<td>Da verificare</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+async function checkExisting(){
+  var statusEl = document.getElementById("importStatus");
+  statusEl.textContent = "Controllo fonti già esistenti...";
+  for(var i = 0; i < CANDIDATE_SOURCES.length; i++){
+    var src = CANDIDATE_SOURCES[i];
+    var result = await client.from("immonova_data_sources").select("id").eq("endpoint", src.endpoint).limit(1);
+    src._alreadyExists = !result.error && result.data && result.data.length > 0;
+  }
+  renderTable();
+  statusEl.textContent = "Controllo completato — le fonti già presenti sono deselezionate e segnate.";
+  statusEl.style.color = "#4f7f45";
+}
+
+async function importSelected(){
+  var checkboxes = document.querySelectorAll(".src-check:checked");
+  var importBtn = document.getElementById("importBtn");
+  var statusEl = document.getElementById("importStatus");
+
+  if(!checkboxes.length){
+    statusEl.textContent = "Nessuna fonte selezionata.";
+    return;
+  }
+
+  importBtn.disabled = true;
+  var okCount = 0, errCount = 0;
+
+  for(var i = 0; i < checkboxes.length; i++){
+    var idx = parseInt(checkboxes[i].getAttribute("data-idx"), 10);
+    var src = CANDIDATE_SOURCES[idx];
+    logLine("Importo: " + src.provider_name, "info");
+
+    var payload = {
+      category: src.category,
+      country_code: src.country_code || null,
+      region: null,
+      province: null,
+      city: null,
+      provider_name: src.provider_name,
+      endpoint: src.endpoint,
+      source_url: src.source_url || src.endpoint,
+      format: src.format || "web_download",
+      parser_hint: "auto",
+      auth_type: "none",
+      method: "GET",
+      enabled: true,
+      priority: src.country_code ? 100 : 500,
+      official: true,
+      source_type: src.source_type || "official",
+      geography_level: src.geography_level || "country",
+      geography_name: src.geography_name || null,
+      verification_status: "pending",
+      extraction_enabled: false,
+      extraction_notes: src.extraction_notes || null,
+      notes: "Importata automaticamente — da rivedere e verificare prima dell'uso in produzione.",
+      updated_at: new Date().toISOString()
+    };
+
+    var result = await client.from("immonova_data_sources").insert(payload).select().single();
+    if(result.error){
+      errCount++;
+      logLine("  Errore: " + result.error.message, "err");
+    }else{
+      okCount++;
+      logLine("  OK", "ok");
+    }
+  }
+
+  importBtn.disabled = false;
+  statusEl.textContent = "Import completato — OK: " + okCount + ", errori: " + errCount + ".";
+  statusEl.style.color = errCount ? "#9c2f2f" : "#4f7f45";
+  logLine("Terminato. Vai su data-sources.html per rivedere e verificare le nuove fonti.", errCount ? "err" : "ok");
+}
+
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  var el = document.getElementById("authStatus");
+  if(result.error || !result.data.session){
+    el.textContent = "Non sei autenticato: effettua il login dall'area admin in un'altra scheda, poi ricarica questa pagina.";
+    el.style.color = "#9c2f2f";
+    return false;
+  }
+  currentUser = result.data.session.user;
+  el.textContent = "Autenticato come: " + (currentUser.email || currentUser.id);
+  el.style.color = "#4f7f45";
+  document.getElementById("checkExistingBtn").disabled = false;
+  document.getElementById("importBtn").disabled = false;
+  return true;
+}
+
+document.getElementById("checkExistingBtn").addEventListener("click", checkExisting);
+document.getElementById("importBtn").addEventListener("click", importSelected);
+document.getElementById("selectAllBtn").addEventListener("click", function(){
+  document.querySelectorAll(".src-check").forEach(function(cb){ cb.checked = true; });
+});
+document.getElementById("deselectAllBtn").addEventListener("click", function(){
+  document.querySelectorAll(".src-check").forEach(function(cb){ cb.checked = false; });
+});
+
+renderTable();
+checkAuth();
+</script>
+</body>
+</html>
