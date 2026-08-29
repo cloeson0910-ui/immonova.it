@@ -410,6 +410,100 @@ textarea{
   border-radius:2px;
 }
 
+.watermark-box{
+  border:1px solid rgba(165,129,57,.30);
+  background:rgba(255,252,244,.30);
+  padding:20px;
+  margin-bottom:22px;
+}
+.watermark-title{
+  font-size:13px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--primary-color,#a58139);
+  font-weight:600;
+  margin-bottom:8px;
+}
+.watermark-hint{
+  font-size:12px;
+  line-height:1.6;
+  color:#8f7643;
+  margin-bottom:14px;
+}
+.watermark-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:14px;
+  align-items:center;
+  margin-bottom:14px;
+}
+.watermark-row:last-child{margin-bottom:0}
+.watermark-row label{
+  font-size:11px;
+  letter-spacing:.10em;
+  text-transform:uppercase;
+  color:#8f7643;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.watermark-row input[type="range"]{
+  width:200px;
+}
+#watermarkOpacityLabel{
+  font-size:12px;
+  color:#7f6430;
+  letter-spacing:0;
+  text-transform:none;
+  min-width:36px;
+}
+.watermark-row-position{
+  align-items:flex-start;
+}
+.watermark-position-label{
+  font-size:11px;
+  letter-spacing:.10em;
+  text-transform:uppercase;
+  color:#8f7643;
+}
+.watermark-position-grid{
+  display:grid;
+  grid-template-columns:repeat(3,32px);
+  grid-template-rows:repeat(3,32px);
+  gap:6px;
+}
+.wm-pos-cell{
+  position:relative;
+  width:32px;
+  height:32px;
+  border:1px solid rgba(165,129,57,.35);
+  background:rgba(255,255,255,.4);
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.wm-pos-cell input{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  margin:0;
+  cursor:pointer;
+}
+.wm-pos-cell span{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:rgba(165,129,57,.4);
+}
+.wm-pos-cell:has(input:checked){
+  background:rgba(165,129,57,.20);
+  border-color:var(--primary-color,#a58139);
+}
+.wm-pos-cell:has(input:checked) span{
+  background:var(--primary-color,#a58139);
+}
+
 .checks{
   grid-column:1 / -1;
   display:flex;
@@ -1173,6 +1267,35 @@ button.danger{
           </div>
           <div class="folder-import-status" id="folderImportStatus"></div>
           <div class="folder-import-grid" id="folderImportGrid"></div>
+        </div>
+      </div>
+
+      <div class="field full">
+        <div class="watermark-box">
+          <div class="watermark-title">Watermark logo Immonova</div>
+          <div class="watermark-hint">
+            Applicato automaticamente a copertina e gallery al salvataggio. L'opacità ideale può variare da foto a foto (es. foto scure/chiare) — regola qui e viene usata per tutte le foto di questo salvataggio.
+          </div>
+          <div class="watermark-row">
+            <label for="watermarkOpacitySlider">Opacità
+              <input type="range" id="watermarkOpacitySlider" min="5" max="100" value="50" step="5">
+              <span id="watermarkOpacityLabel">50%</span>
+            </label>
+          </div>
+          <div class="watermark-row watermark-row-position">
+            <span class="watermark-position-label">Posizione logo</span>
+            <div class="watermark-position-grid" id="watermarkPositionGrid">
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="top-left"><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="top-center"><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="top-right"><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="middle-left"><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="center" checked><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="middle-right"><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="bottom-left"><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="bottom-center"><span></span></label>
+              <label class="wm-pos-cell"><input type="radio" name="watermarkPosition" value="bottom-right"><span></span></label>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2937,6 +3060,45 @@ function loadImageFromBlob(blob){
   });
 }
 
+function getWatermarkOpacity(){
+  var slider = document.getElementById("watermarkOpacitySlider");
+  var value = slider ? parseInt(slider.value, 10) : 50;
+  if(isNaN(value)) value = 50;
+  return Math.min(100, Math.max(5, value)) / 100;
+}
+
+function getWatermarkPosition(){
+  var checked = document.querySelector('input[name="watermarkPosition"]:checked');
+  return checked ? checked.value : "center";
+}
+
+function computeWatermarkRect(canvasWidth, canvasHeight, logoAspectRatio, position){
+  var isCenter = position === "center";
+  var sizeRatio = isCenter ? 0.42 : 0.24;
+  var wmWidth = canvasWidth * sizeRatio;
+  var wmHeight = wmWidth * logoAspectRatio;
+  var margin = canvasWidth * 0.035;
+
+  var vert = "middle";
+  var horiz = "center";
+  if(position !== "center"){
+    var parts = position.split("-");
+    vert = parts[0];
+    horiz = parts[1];
+  }
+
+  var x, y;
+  if(vert === "top") y = margin;
+  else if(vert === "bottom") y = canvasHeight - wmHeight - margin;
+  else y = (canvasHeight - wmHeight) / 2;
+
+  if(horiz === "left") x = margin;
+  else if(horiz === "right") x = canvasWidth - wmWidth - margin;
+  else x = (canvasWidth - wmWidth) / 2;
+
+  return { x:x, y:y, width:wmWidth, height:wmHeight };
+}
+
 async function applyImmonovaWatermark(file){
   if(!file) return file;
   try{
@@ -2952,14 +3114,12 @@ async function applyImmonovaWatermark(file){
     var ctx = canvas.getContext("2d");
     ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
 
-    var wmWidth = canvas.width * 0.42;
-    var wmHeight = wmWidth * (logo.height / logo.width);
-    var wmX = (canvas.width - wmWidth) / 2;
-    var wmY = (canvas.height - wmHeight) / 2;
+    var position = getWatermarkPosition();
+    var rect = computeWatermarkRect(canvas.width, canvas.height, logo.height / logo.width, position);
 
     ctx.save();
-    ctx.globalAlpha = 0.5;
-    ctx.drawImage(logo, wmX, wmY, wmWidth, wmHeight);
+    ctx.globalAlpha = getWatermarkOpacity();
+    ctx.drawImage(logo, rect.x, rect.y, rect.width, rect.height);
     ctx.restore();
 
     var mimeType = (file.type === "image/png") ? "image/png" : "image/jpeg";
@@ -3367,6 +3527,16 @@ function clearFolderImport(){
   if(maxCountInput) maxCountInput.addEventListener("change", function(){
     if(folderImportItems.length){ applyFolderImportAutoSelection(); renderFolderImportGrid(); }
   });
+})();
+
+(function wireWatermarkControls(){
+  var opacitySlider = document.getElementById("watermarkOpacitySlider");
+  var opacityLabel = document.getElementById("watermarkOpacityLabel");
+  if(opacitySlider && opacityLabel){
+    opacitySlider.addEventListener("input", function(){
+      opacityLabel.textContent = opacitySlider.value + "%";
+    });
+  }
 })();
 
 var UI_STRINGS = {
