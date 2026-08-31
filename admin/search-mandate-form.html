@@ -541,6 +541,23 @@ var areaPreviewLine = null;
 var areaPolygons = []; // [{points:[[lat,lng],...], layer:L.Polygon}, ...] zone gia' completate
 var currentAreaGeoJSON = null;
 
+/* ---- Elenco COMPLETO (non riassunto, non troncato) di tutti i comuni rilevati dentro le zone
+   disegnate, anche quando il campo "Zona / Aree di interesse" mostra solo "Provincia di X" per
+   non intasarsi. Serve alla ricerca annunci: li' vogliamo un link per OGNI comune reale della
+   provincia, non solo per il termine riassuntivo. Si accumula ad ogni rilevamento (disegno di
+   una nuova zona o "Rileva di nuovo"), senza duplicati (case-insensitive). ---- */
+var allDetectedComuni = [];
+function mergeIntoAllDetectedComuni(towns){
+  if(!towns || !towns.length) return;
+  var existingLower = allDetectedComuni.map(function(s){ return s.toLowerCase(); });
+  towns.forEach(function(t){
+    if(existingLower.indexOf(t.toLowerCase()) === -1){
+      allDetectedComuni.push(t);
+      existingLower.push(t.toLowerCase());
+    }
+  });
+}
+
 function ringFromLatLngPoints(points){
   var ring = points.map(function(pt){ return [pt[1], pt[0]]; }); // GeoJSON vuole [lng,lat]
   ring.push(ring[0]); // il primo anello deve chiudersi sullo stesso punto
@@ -746,6 +763,7 @@ async function detectAreaNamesInPolygon(latlngPoints){
   }
 
   var towns = await detectPlacesInPolygon(latlngPoints);
+  mergeIntoAllDetectedComuni(towns); // elenco completo per la ricerca annunci, mai troncato
 
   if(!covered.length){
     return towns.slice(0, MAX_TOWN_NAMES);
@@ -965,8 +983,11 @@ async function loadMandateForEdit(){
 
     // Se il mandato ha gia' una zona disegnata sulla mappa ma non un valore di Provincia
     // salvato (es. mandati creati prima di questo campo, o salvati mentre Overpass era in
-    // rate-limit), lo si ricava ora dal poligono, senza dover ridisegnare nulla.
-    if(!data.province && areaPolygons.length){
+    // rate-limit), lo si ricava ora dal poligono, senza dover ridisegnare nulla. Lo si fa
+    // SEMPRE quando c'e' un poligono salvato (non solo se manca la provincia) perche' serve
+    // anche a ripopolare l'elenco completo dei comuni (allDetectedComuni) usato dalla ricerca
+    // annunci, che altrimenti al ricaricamento della pagina risulterebbe vuoto.
+    if(areaPolygons.length){
       retryAreaDetection();
     }
   }
@@ -1066,6 +1087,7 @@ async function triggerListingsSearch(id, payload){
         category: payload.category,
         location_areas: payload.location_areas,
         province: payload.province,
+        all_comuni: allDetectedComuni.length ? allDetectedComuni : undefined,
         budget_min: payload.budget_min,
         budget_max: payload.budget_max,
         bedrooms_min: payload.bedrooms_min,
