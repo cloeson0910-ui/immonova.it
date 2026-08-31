@@ -247,6 +247,10 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
           <label data-i18n="label_location_areas">Zona / Aree di interesse</label>
           <input id="locationAreas" data-i18n-placeholder="ph_areas" placeholder="Es. Salento, Valle d’Itria, Costa Adriatica">
         </div>
+        <div class="field">
+          <label data-i18n="label_province">Provincia</label>
+          <input id="province" data-i18n-placeholder="ph_province" placeholder="Es. Lecce">
+        </div>
       </div>
 
       <div class="field full map-field">
@@ -398,6 +402,7 @@ var UI_STRINGS = {
   cat_villa:"Ville", cat_apartment:"Appartamenti", cat_hotel:"Hotel", cat_resort:"Resort", cat_village:"Villaggi",
   cat_development:"Nuove Edificazioni", cat_commercial:"Commerciale", cat_land:"Terreni", cat_off_market:"Off Market",
   label_location_areas:"Zona / Aree di interesse", ph_areas:"Es. Salento, Valle d\u2019Itria, Costa Adriatica",
+  label_province:"Provincia", ph_province:"Es. Lecce",
   label_interest_area_map:"Disegna la zona di interesse sulla mappa (opzionale)",
   hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi \"Chiudi poligono\" per completarlo \u2014 puoi disegnare pi\u00f9 zone. Alla chiusura di ogni poligono i comuni al suo interno vengono rilevati automaticamente e aggiunti al campo \"Zona / Aree di interesse\" qui sopra. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
   btn_clear_area_map:"Cancella zona disegnata",
@@ -756,6 +761,29 @@ function mergeNamesIntoAreasField(names){
     }
   });
   field.value = existing.join(", ");
+  mergeProvincesIntoProvinceField(names);
+}
+
+/* ---- Le voci "Provincia di X" rilevate automaticamente vanno anche nel campo dedicato
+   "Provincia", non solo nell'elenco zone -- comodo per il filtro di ricerca annunci, che usa
+   la provincia in modo piu' affidabile di un elenco libero di zone. ---- */
+function mergeProvincesIntoProvinceField(names){
+  var provinceNames = names
+    .filter(function(n){ return /^provincia di /i.test(n); })
+    .map(function(n){ return n.replace(/^provincia di /i, "").trim(); });
+  if(!provinceNames.length) return;
+
+  var field = document.getElementById("province");
+  if(!field) return;
+  var existing = field.value.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+  var existingLower = existing.map(function(s){ return s.toLowerCase(); });
+  provinceNames.forEach(function(p){
+    if(existingLower.indexOf(p.toLowerCase()) === -1){
+      existing.push(p);
+      existingLower.push(p.toLowerCase());
+    }
+  });
+  field.value = existing.join(", ");
 }
 
 async function finishAreaPolygon(){
@@ -902,6 +930,7 @@ async function loadMandateForEdit(){
   document.getElementById("clientEmail").value = data.client_email || "";
   document.getElementById("category").value = data.category || "";
   document.getElementById("locationAreas").value = data.location_areas || "";
+  document.getElementById("province").value = data.province || "";
   document.getElementById("budgetMin").value = data.budget_min ?? "";
   document.getElementById("budgetMax").value = data.budget_max ?? "";
   document.getElementById("sqmMin").value = data.sqm_min ?? "";
@@ -980,6 +1009,7 @@ async function triggerListingsSearch(id, payload){
         mandate_id: id,
         category: payload.category,
         location_areas: payload.location_areas,
+        province: payload.province,
         budget_min: payload.budget_min,
         budget_max: payload.budget_max,
         bedrooms_min: payload.bedrooms_min,
@@ -1042,6 +1072,7 @@ form.addEventListener("submit", async function(event){
     client_email: val("clientEmail") || null,
     category: val("category") || null,
     location_areas: val("locationAreas") || null,
+    province: val("province") || null,
     budget_min: numVal("budgetMin"),
     budget_max: numVal("budgetMax"),
     sqm_min: numVal("sqmMin"),
@@ -1145,6 +1176,7 @@ document.getElementById("rerunListingsBtn").addEventListener("click", async func
   await triggerListingsSearch(mandateId, {
     category: val("category") || null,
     location_areas: val("locationAreas") || null,
+    province: val("province") || null,
     budget_min: numVal("budgetMin"),
     budget_max: numVal("budgetMax"),
     bedrooms_min: numVal("bedroomsMin"),
