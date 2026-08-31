@@ -251,6 +251,7 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
           <button type="button" class="map-secondary-btn" id="undoAreaPointBtn" data-i18n="btn_undo_area_point">Annulla ultimo punto</button>
           <button type="button" class="map-secondary-btn" id="finishAreaBtn" data-i18n="btn_finish_area">Chiudi poligono</button>
           <button type="button" class="map-secondary-btn" id="undoLastAreaBtn" data-i18n="btn_undo_last_area">Elimina ultima zona</button>
+          <button type="button" class="map-secondary-btn" id="retryAreaDetectBtn" data-i18n="btn_retry_area_detect">Rileva di nuovo comuni/provincia</button>
           <button type="button" class="map-clear-btn" id="clearAreaMapBtn" data-i18n="btn_clear_area_map">Cancella zona disegnata</button>
           <span class="map-status" id="areaMapStatus"></span>
         </div>
@@ -388,6 +389,8 @@ var UI_STRINGS = {
   btn_undo_area_point:"Annulla ultimo punto",
   btn_finish_area:"Chiudi poligono",
   btn_undo_last_area:"Elimina ultima zona",
+  btn_retry_area_detect:"Rileva di nuovo comuni/provincia",
+  map_status_detect_retry_none:"Nessuna zona disegnata: non c'è niente da rilevare di nuovo.",
   map_status_areas:"{n} zone disegnate",
   map_status_detecting:"Ricerca comuni nella zona in corso\u2026",
   map_status_detect_failed:"Zona salvata, ma non \u00e8 stato possibile rilevare automaticamente comuni/provincia (servizio esterno non raggiungibile in questo momento) \u2014 aggiungili manualmente qui sopra se vuoi, oppure riprova pi\u00f9 tardi.",
@@ -755,6 +758,35 @@ async function finishAreaPolygon(){
   }
 }
 
+/* ---- Rilancia il rilevamento comuni/provincia su TUTTE le zone gia' disegnate, senza doverle
+   ridisegnare -- utile quando la prima volta e' fallito (es. Overpass in rate-limit) e si vuole
+   solo riprovare. Interroga ogni poligono gia' salvato uno alla volta e unisce i risultati. ---- */
+async function retryAreaDetection(){
+  if(!areaPolygons.length){
+    updateAreaMapStatus(T.map_status_detect_retry_none);
+    setTimeout(updateAreaMapStatus, 3000);
+    return;
+  }
+
+  var btn = document.getElementById("retryAreaDetectBtn");
+  if(btn) btn.disabled = true;
+  updateAreaMapStatus(T.map_status_detecting);
+
+  var anyFailed = false;
+  for(var i=0; i<areaPolygons.length; i++){
+    try{
+      var names = await detectAreaNamesInPolygon(areaPolygons[i].points);
+      mergeNamesIntoAreasField(names);
+    }catch(e){
+      anyFailed = true;
+      console.warn("Rilevamento comuni/province nella zona "+(i+1)+" non riuscito (non bloccante):", e);
+    }
+  }
+
+  if(btn) btn.disabled = false;
+  updateAreaMapStatus(anyFailed ? T.map_status_detect_failed : undefined);
+}
+
 function undoLastAreaPolygon(){
   if(!areaPolygons.length) return;
   var last = areaPolygons.pop();
@@ -796,6 +828,7 @@ function initInterestAreaMap(){
     updateAreaMapStatus();
   });
   document.getElementById("undoLastAreaBtn").addEventListener("click", undoLastAreaPolygon);
+  document.getElementById("retryAreaDetectBtn").addEventListener("click", retryAreaDetection);
   document.getElementById("clearAreaMapBtn").addEventListener("click", resetAreaDrawing);
 
   updateAreaMapStatus();
