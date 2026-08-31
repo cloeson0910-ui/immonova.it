@@ -602,6 +602,7 @@ async function saveAcquisition(silent){
       msg.textContent = "Salvato ✓";
       document.getElementById("statusPill").textContent =
         payload.status === "completata" ? "Completata" : payload.status === "inviata" ? "Inviata" : "Bozza";
+      triggerSummaryEmail(currentId); // non bloccante: la mail di resoconto non deve mai ritardare/bloccare il salvataggio
       setTimeout(function(){ msg.textContent = ""; }, 2500);
     }
     return currentId;
@@ -611,6 +612,47 @@ async function saveAcquisition(silent){
     return currentId;
   }finally{
     if(!silent) saveBtn.disabled = false;
+  }
+}
+
+/* ---- Legge il messaggio di errore vero da una risposta non-2xx di una edge function --
+   supabase-js non lo mette in result.error.message (sempre un testo generico fisso), va letto
+   dal body della risposta originale via result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text === "function"){
+      var raw = await error.context.text();
+      try{
+        var parsed = JSON.parse(raw);
+        if(parsed && parsed.error) return parsed.error;
+      }catch(_e){}
+      if(raw) return raw;
+    }
+  }catch(_e){}
+  return (error && error.message) || String(error);
+}
+
+/* ---- Invia la mail di resoconto all'indirizzo del proprietario (raccolto durante
+   l'intervista, campo "Email" in Dati cliente/proprietario). Non bloccante: se fallisce
+   (mail non indicata, Resend non raggiungibile, ecc.) l'acquisizione resta comunque salvata,
+   si vede solo un avviso in console e un accenno nel messaggio di stato. ---- */
+async function triggerSummaryEmail(id){
+  if(!id) return;
+  try{
+    var res = await client.functions.invoke("send-acquisition-summary-email", { body:{ acquisition_id: id } });
+    if(res.error){
+      var msgText = await extractEdgeFunctionErrorMessage(res.error);
+      console.warn("Invio mail di resoconto non riuscito (non bloccante):", msgText);
+      return;
+    }
+    if(res.data && res.data.skipped){
+      console.info("Mail di resoconto non inviata:", res.data.error);
+      return;
+    }
+    var saveMsg = document.getElementById("saveMsg");
+    if(saveMsg) saveMsg.textContent = "Salvato ✓ · mail di resoconto inviata";
+  }catch(e){
+    console.warn("Invio mail di resoconto non riuscito (non bloccante):", e);
   }
 }
 
