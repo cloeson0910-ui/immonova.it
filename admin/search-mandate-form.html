@@ -559,14 +559,16 @@ async function detectPlacesInPolygon(latlngPoints){
    storta, si degrada verso il comportamento piu' semplice (elenco comuni), MAI verso un campo
    vuoto -- prima di questa versione un solo errore in una delle tante chiamate faceva saltare
    tutto il resto senza aggiungere nulla. ---- */
-/* ---- L'istanza pubblica principale (overpass-api.de) va spesso in 429/504 sotto carico:
-   se fallisce o va in timeout si ritenta UNA volta contro un mirror pubblico alternativo,
-   prima di arrendersi. Questo copre il caso piu' comune di "smette di funzionare" senza
-   che nulla sia cambiato nel codice. ---- */
-var OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter"
-];
+/* ---- L'istanza pubblica principale (overpass-api.de) puo' rispondere 429 (troppe richieste)
+   sotto carico: in quel caso la policy corretta e' aspettare un attimo e ritentare sullo STESSO
+   endpoint (non ha senso saltare altrove, il 429 e' un limite per IP), con backoff crescente.
+   Solo se anche i ritentativi fanno 429/errore, o l'errore non e' un 429 (rete, 5xx), si tenta
+   UNA volta un mirror pubblico alternativo con un timeout piu' corto, prima di arrendersi. ---- */
+var OVERPASS_PRIMARY = "https://overpass-api.de/api/interpreter";
+var OVERPASS_MIRROR = "https://overpass.kumi.systems/api/interpreter";
+var OVERPASS_429_RETRY_DELAYS_MS = [3000, 8000];
+
+function sleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
 
 async function runOverpassQueryOnce(endpoint, query, timeoutMs){
   var controller = new AbortController();
@@ -578,7 +580,11 @@ async function runOverpassQueryOnce(endpoint, query, timeoutMs){
       body:"data="+encodeURIComponent(query),
       signal: controller.signal
     });
-    if(!res.ok) throw new Error("HTTP "+res.status+" da "+endpoint);
+    if(!res.ok){
+      var err = new Error("HTTP "+res.status+" da "+endpoint);
+      err.httpStatus = res.status;
+      throw err;
+    }
     return await res.json();
   }finally{
     clearTimeout(timer);
@@ -587,13 +593,26 @@ async function runOverpassQueryOnce(endpoint, query, timeoutMs){
 
 async function runOverpassQuery(query, timeoutMs){
   var lastErr = null;
-  for(var i=0; i<OVERPASS_ENDPOINTS.length; i++){
+
+  // 1) endpoint principale, con ritentativi a distanza crescente se risponde 429
+  for(var attempt = 0; attempt <= OVERPASS_429_RETRY_DELAYS_MS.length; attempt++){
     try{
-      return await runOverpassQueryOnce(OVERPASS_ENDPOINTS[i], query, timeoutMs);
+      return await runOverpassQueryOnce(OVERPASS_PRIMARY, query, timeoutMs);
     }catch(e){
       lastErr = e;
-      console.warn("Overpass endpoint non raggiungibile ("+OVERPASS_ENDPOINTS[i]+"), provo il successivo se disponibile:", e);
+      var is429 = e && e.httpStatus === 429;
+      console.warn("Overpass principale non raggiungibile (tentativo "+(attempt+1)+"/"+(OVERPASS_429_RETRY_DELAYS_MS.length+1)+"):", e);
+      if(!is429 || attempt >= OVERPASS_429_RETRY_DELAYS_MS.length) break;
+      await sleep(OVERPASS_429_RETRY_DELAYS_MS[attempt]);
     }
+  }
+
+  // 2) mirror alternativo, un solo tentativo con timeout piu' corto (non deve bloccare a lungo)
+  try{
+    return await runOverpassQueryOnce(OVERPASS_MIRROR, query, Math.min(timeoutMs || 20000, 10000));
+  }catch(e){
+    lastErr = e;
+    console.warn("Overpass mirror non raggiungibile:", e);
   }
   throw lastErr;
 }
