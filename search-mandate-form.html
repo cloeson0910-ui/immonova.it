@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mandato di Ricerca | IMMONOVA Admin</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{text-decoration:none;color:#a67f34}
+.logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}
+.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:#a58139}
+.header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.header-actions a,.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.header-actions a:hover,.logout:hover{background:#a67f34;color:#fff}
+.container{max-width:1280px;margin:auto;padding:40px}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:12px}
+.title-row{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;flex-wrap:wrap;margin-bottom:18px}
+.title{font-size:42px;font-weight:200;letter-spacing:.05em;color:#a67f34}
+.subtitle{font-size:15px;line-height:1.8;color:#8f7643;max-width:860px;margin-bottom:28px}
+.secondary-link,.submit-btn{
+  display:inline-block;
+  padding:14px 22px;
+  border:1px solid rgba(166,127,52,.42);
+  background:#a67f34;
+  color:#fffaf0;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.18em;
+  cursor:pointer;
+  font-family:inherit;
+}
+.secondary-link{background:rgba(255,255,255,.25);color:#a67f34}
+.submit-btn:disabled{opacity:.55;cursor:not-allowed}
+.form-wrapper{
+  background:rgba(255,255,255,.20);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+  padding:34px;
+}
+.section{margin-bottom:34px;padding-bottom:30px;border-bottom:1px solid rgba(166,127,52,.12)}
+.section:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.section-title{font-size:18px;font-weight:300;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.field{display:flex;flex-direction:column;gap:8px}
+.field.full{grid-column:1/-1}
+label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#8f7643}
+input,select,textarea{
+  width:100%;
+  padding:14px 16px;
+  border:1px solid rgba(166,127,52,.22);
+  background:rgba(255,255,255,.25);
+  color:#7f6430;
+  outline:none;
+  font-size:14px;
+  font-family:inherit;
+}
+textarea{min-height:110px;resize:vertical;line-height:1.7}
+.checkbox-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.check-card{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:12px 14px;
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(255,255,255,.18);
+  color:#8f7643;
+  font-size:12px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  cursor:pointer;
+}
+.check-card input{width:auto}
+.map-field{margin-top:18px}
+.map-hint{font-size:12px;line-height:1.6;color:#8f7643;margin-bottom:10px}
+#interestAreaMap{width:100%;height:380px;border:1px solid rgba(166,127,52,.22)}
+.map-actions{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.map-clear-btn{
+  padding:9px 14px;
+  border:1px solid rgba(156,47,47,.30);
+  background:rgba(255,255,255,.20);
+  color:#9c2f2f;
+  cursor:pointer;
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.map-clear-btn:hover{background:#9c2f2f;color:#fff}
+.map-secondary-btn{
+  padding:9px 14px;
+  border:1px solid rgba(166,127,52,.28);
+  background:rgba(255,255,255,.20);
+  color:#a67f34;
+  cursor:pointer;
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+}
+.map-secondary-btn:hover{background:#a67f34;color:#fff}
+.map-status{font-size:11.5px;color:#8f7643}
+.listings-search-links{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.listings-search-links a{display:inline-block;padding:9px 16px;border:1px solid rgba(166,127,52,.4);color:#a67f34;text-decoration:none;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase}
+.listings-search-links a:hover{background:#a67f34;color:#fff}
+.listings-results{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.listings-results a{color:#4a3c1f;font-size:13.5px;text-decoration:underline;word-break:break-all}
+.listings-empty-hint{font-size:12.5px;color:#8f7643;font-style:italic}
+.listings-panels{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
+@media (max-width:900px){.listings-panels{grid-template-columns:1fr}}
+.listings-panel{border:1px solid rgba(166,127,52,.3);background:#fff;display:flex;flex-direction:column;min-height:520px}
+.listings-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(166,127,52,.2);background:#f4ecdf}
+.listings-panel-head strong{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#4a3c1f}
+.listings-panel-head a{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#a67f34;text-decoration:none;border:1px solid rgba(166,127,52,.4);padding:5px 10px;white-space:nowrap}
+.listings-panel-head a:hover{background:#a67f34;color:#fff}
+.listings-panel iframe{flex:1;width:100%;border:0;min-height:480px;background:#fdfaf3}
+.listings-panel-fallback-hint{padding:8px 14px;font-size:11px;color:#8f7643;font-style:italic;border-top:1px solid rgba(166,127,52,.15)}
+.footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
+.save-panel{min-width:340px;flex:1;max-width:560px}
+.progress-text{min-height:18px;margin-bottom:10px;font-size:13px;color:#8f7643}
+.progress-text.success{color:#4f7f45}
+.progress-text.error{color:#9c2f2f}
+.progress-bar{width:100%;height:6px;border:1px solid rgba(166,127,52,.20);background:rgba(255,255,255,.28);overflow:hidden;margin-bottom:14px}
+.progress-fill{width:0%;height:100%;background:#a67f34;transition:width .35s ease}
+@media(max-width:900px){.grid,.grid-3{grid-template-columns:1fr}}
+@media(max-width:700px){
+  .header{flex-direction:column;gap:18px}
+  .header-actions{justify-content:center}
+  .container{padding:28px 22px}
+  .form-wrapper{padding:24px}
+  .save-panel{min-width:100%;max-width:100%}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+  <div class="header-actions">
+    <a href="dashboard.html" data-i18n="nav_dashboard">Dashboard</a>
+    <a href="investors.html" data-i18n="nav_investors">Contatti</a>
+    <button class="logout" id="logoutBtn" data-i18n="logout">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="kicker" data-i18n="kicker">Mandato di Ricerca Cliente</div>
+
+  <div class="title-row">
+    <div><h1 class="title" data-i18n="title">Nuovo Mandato di Ricerca</h1></div>
+    <a class="secondary-link" href="search-mandates.html" data-i18n="btn_back">Vedi tutti i mandati</a>
+  </div>
+
+  <p class="subtitle" data-i18n="subtitle">
+    Un cliente ti ha chiesto di cercargli un immobile con caratteristiche precise: registra qui budget, metratura, camere, bagni e le caratteristiche richieste. Al salvataggio, tutti i collaboratori riceveranno una email con questi criteri di ricerca.
+  </p>
+
+  <form id="mandateForm" class="form-wrapper">
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_client">Cliente</h2>
+      <div class="grid">
+        <div class="field">
+          <label data-i18n="label_client_name">Nome cliente</label>
+          <input id="clientName" required>
+        </div>
+        <div class="field">
+          <label data-i18n="label_client_phone">Telefono</label>
+          <input id="clientPhone">
+        </div>
+        <div class="field full">
+          <label data-i18n="label_client_email">Email (opzionale)</label>
+          <input id="clientEmail" type="email">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_search">Cosa cerca</h2>
+      <div class="grid">
+        <div class="field">
+          <label data-i18n="label_category">Categoria</label>
+          <select id="category">
+            <option value="" data-i18n="opt_any_category">Qualsiasi</option>
+            <option value="Ville" data-i18n="cat_villa">Ville</option>
+            <option value="Appartamenti" data-i18n="cat_apartment">Appartamenti</option>
+            <option value="Hotel" data-i18n="cat_hotel">Hotel</option>
+            <option value="Resort" data-i18n="cat_resort">Resort</option>
+            <option value="Villaggi" data-i18n="cat_village">Villaggi</option>
+            <option value="Nuove Edificazioni" data-i18n="cat_development">Nuove Edificazioni</option>
+            <option value="Commerciale" data-i18n="cat_commercial">Commerciale</option>
+            <option value="Terreni" data-i18n="cat_land">Terreni</option>
+            <option value="Off Market" data-i18n="cat_off_market">Off Market</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-i18n="label_location_areas">Zona / Aree di interesse</label>
+          <input id="locationAreas" data-i18n-placeholder="ph_areas" placeholder="Es. Salento, Valle d’Itria, Costa Adriatica">
+        </div>
+        <div class="field">
+          <label data-i18n="label_province">Provincia</label>
+          <input id="province" data-i18n-placeholder="ph_province" placeholder="Es. Lecce">
+        </div>
+      </div>
+
+      <div class="field full map-field">
+        <label data-i18n="label_interest_area_map">Disegna la zona di interesse sulla mappa (opzionale)</label>
+        <div class="map-hint" data-i18n="hint_interest_area_map">Definisce l'area in modo più preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi "Chiudi poligono" per completarlo — puoi disegnare più zone. Alla chiusura di ogni poligono i comuni al suo interno vengono rilevati automaticamente e aggiunti al campo "Zona / Aree di interesse" qui sopra. Serve a far emergere le opportunità che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.</div>
+        <div id="interestAreaMap"></div>
+        <div class="map-actions">
+          <button type="button" class="map-secondary-btn" id="undoAreaPointBtn" data-i18n="btn_undo_area_point">Annulla ultimo punto</button>
+          <button type="button" class="map-secondary-btn" id="finishAreaBtn" data-i18n="btn_finish_area">Chiudi poligono</button>
+          <button type="button" class="map-secondary-btn" id="undoLastAreaBtn" data-i18n="btn_undo_last_area">Elimina ultima zona</button>
+          <button type="button" class="map-secondary-btn" id="retryAreaDetectBtn" data-i18n="btn_retry_area_detect">Rileva di nuovo comuni/provincia</button>
+          <button type="button" class="map-clear-btn" id="clearAreaMapBtn" data-i18n="btn_clear_area_map">Cancella zona disegnata</button>
+          <span class="map-status" id="areaMapStatus"></span>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:18px">
+        <div class="field">
+          <label data-i18n="label_budget_min">Budget minimo €</label>
+          <input id="budgetMin" type="number" min="0" step="1000">
+        </div>
+        <div class="field">
+          <label data-i18n="label_budget_max">Budget massimo €</label>
+          <input id="budgetMax" type="number" min="0" step="1000">
+        </div>
+        <div class="field"></div>
+        <div class="field">
+          <label data-i18n="label_sqm_min">Metratura minima mq</label>
+          <input id="sqmMin" type="number" min="0" step="5">
+        </div>
+        <div class="field">
+          <label data-i18n="label_sqm_max">Metratura massima mq</label>
+          <input id="sqmMax" type="number" min="0" step="5">
+        </div>
+        <div class="field"></div>
+        <div class="field">
+          <label data-i18n="label_bedrooms_min">Camere (almeno)</label>
+          <input id="bedroomsMin" type="number" min="0" step="1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_bathrooms_min">Bagni (almeno)</label>
+          <input id="bathroomsMin" type="number" min="0" step="1">
+        </div>
+        <div class="field"></div>
+        <div class="field">
+          <label data-i18n="label_bedrooms_max">Camere (al massimo, opzionale)</label>
+          <input id="bedroomsMax" type="number" min="0" step="1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_bathrooms_max">Bagni (al massimo, opzionale)</label>
+          <input id="bathroomsMax" type="number" min="0" step="1">
+        </div>
+      </div>
+
+      <div class="field full" style="margin-top:18px">
+        <label data-i18n="label_features">Caratteristiche richieste</label>
+        <div class="checkbox-row">
+          <label class="check-card"><input type="checkbox" id="wantsPool"> <span data-i18n="feat_pool">Piscina</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsGarden"> <span data-i18n="feat_garden">Giardino</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsGarage"> <span data-i18n="feat_garage">Box auto</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsParkingSpot"> <span data-i18n="feat_parking_spot">Posto auto</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsTerrace"> <span data-i18n="feat_terrace">Terrazza</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsBalcony"> <span data-i18n="feat_balcony">Balcone</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsSeaView"> <span data-i18n="feat_sea_view">Vista mare</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsHistoricCenter"> <span data-i18n="feat_historic_center">Centro storico</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsAirConditioning"> <span data-i18n="feat_air_conditioning">Aria condizionata</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsElevator"> <span data-i18n="feat_elevator">Ascensore</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsFireplace"> <span data-i18n="feat_fireplace">Camino</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsBeachfront"> <span data-i18n="feat_beachfront">Fronte mare</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsPhotovoltaic"> <span data-i18n="feat_photovoltaic">Impianto fotovoltaico</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsCarCharger"> <span data-i18n="feat_car_charger">Colonnina ricarica auto</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsSolarThermal"> <span data-i18n="feat_solar_thermal">Solare termico</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsStorageBattery"> <span data-i18n="feat_storage_battery">Batterie di accumulo</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsArtesianWell"> <span data-i18n="feat_artesian_well">Pozzo artesiano</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsHeatingSystem"> <span data-i18n="feat_heating_system">Impianto di riscaldamento</span></label>
+          <label class="check-card"><input type="checkbox" id="wantsHabitability"> <span data-i18n="feat_habitability">Agibilità</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title" data-i18n="section_notes">Note</h2>
+      <div class="field full">
+        <label data-i18n="label_notes">Note aggiuntive</label>
+        <textarea id="notes" data-i18n-placeholder="ph_notes" placeholder="Altri dettagli emersi dalla chiamata..."></textarea>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <a class="secondary-link" href="search-mandates.html" data-i18n="btn_cancel">Annulla</a>
+      <div class="save-panel">
+        <div id="progressText" class="progress-text"></div>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <button class="submit-btn" type="submit" id="saveBtn" data-i18n="btn_save">Salva e Notifica Collaboratori</button>
+      </div>
+    </div>
+
+  </form>
+
+  <div class="section" id="listingsSection" style="display:none">
+    <h2 class="section-title" data-i18n="section_listings">Immobili trovati</h2>
+    <p class="map-hint" data-i18n="hint_listings">Ricerca automatica su immobiliare.it, idealista.it e subito.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link "Ricerca su ..." aprono il portale gi&agrave; filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.</p>
+    <div id="listingsStatus" class="map-status"></div>
+    <div id="listingsSearchLinks" class="listings-search-links"></div>
+    <div id="listingsResults" class="listings-results"></div>
+    <button type="button" class="map-secondary-btn" id="rerunListingsBtn" data-i18n="btn_rerun_listings" style="margin-top:14px">Cerca di nuovo ora</button>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const form = document.getElementById("mandateForm");
+const params = new URLSearchParams(window.location.search);
+const mandateId = params.get("id");
+const saveBtn = document.getElementById("saveBtn");
+const progressText = document.getElementById("progressText");
+const progressFill = document.getElementById("progressFill");
+
+var MANDATE_FEATURES = [
+  { elementId:"wantsPool", column:"wants_pool" }, { elementId:"wantsGarden", column:"wants_garden" },
+  { elementId:"wantsGarage", column:"wants_garage" }, { elementId:"wantsParkingSpot", column:"wants_parking_spot" },
+  { elementId:"wantsTerrace", column:"wants_terrace" }, { elementId:"wantsBalcony", column:"wants_balcony" },
+  { elementId:"wantsSeaView", column:"wants_sea_view" }, { elementId:"wantsHistoricCenter", column:"wants_historic_center" },
+  { elementId:"wantsAirConditioning", column:"wants_air_conditioning" }, { elementId:"wantsElevator", column:"wants_elevator" },
+  { elementId:"wantsFireplace", column:"wants_fireplace" }, { elementId:"wantsBeachfront", column:"wants_beachfront" },
+  { elementId:"wantsPhotovoltaic", column:"wants_photovoltaic" }, { elementId:"wantsCarCharger", column:"wants_car_charger" },
+  { elementId:"wantsSolarThermal", column:"wants_solar_thermal" }, { elementId:"wantsStorageBattery", column:"wants_storage_battery" },
+  { elementId:"wantsArtesianWell", column:"wants_artesian_well" }, { elementId:"wantsHeatingSystem", column:"wants_heating_system" },
+  { elementId:"wantsHabitability", column:"wants_habitability" }
+];
+
+let currentUser = null;
+let currentUserLanguage = "it";
+
+var UI_STRINGS = {
+  nav_dashboard:"Dashboard", nav_investors:"Contatti", logout:"Logout",
+  kicker:"Mandato di Ricerca Cliente",
+  title:"Nuovo Mandato di Ricerca", title_edit:"Modifica Mandato di Ricerca",
+  btn_back:"Vedi tutti i mandati",
+  subtitle:"Un cliente ti ha chiesto di cercargli un immobile con caratteristiche precise: registra qui budget, metratura, camere, bagni e le caratteristiche richieste. Al salvataggio, tutti i collaboratori riceveranno una email con questi criteri di ricerca.",
+  section_client:"Cliente", label_client_name:"Nome cliente", label_client_phone:"Telefono", label_client_email:"Email (opzionale)",
+  section_search:"Cosa cerca", label_category:"Categoria", opt_any_category:"Qualsiasi",
+  cat_villa:"Ville", cat_apartment:"Appartamenti", cat_hotel:"Hotel", cat_resort:"Resort", cat_village:"Villaggi",
+  cat_development:"Nuove Edificazioni", cat_commercial:"Commerciale", cat_land:"Terreni", cat_off_market:"Off Market",
+  label_location_areas:"Zona / Aree di interesse", ph_areas:"Es. Salento, Valle d\u2019Itria, Costa Adriatica",
+  label_province:"Provincia", ph_province:"Es. Lecce",
+  label_interest_area_map:"Disegna la zona di interesse sulla mappa (opzionale)",
+  hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi \"Chiudi poligono\" per completarlo \u2014 puoi disegnare pi\u00f9 zone. Alla chiusura di ogni poligono i comuni al suo interno vengono rilevati automaticamente e aggiunti al campo \"Zona / Aree di interesse\" qui sopra. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
+  btn_clear_area_map:"Cancella zona disegnata",
+  btn_undo_area_point:"Annulla ultimo punto",
+  btn_finish_area:"Chiudi poligono",
+  btn_undo_last_area:"Elimina ultima zona",
+  btn_retry_area_detect:"Rileva di nuovo comuni/provincia",
+  map_status_detect_retry_none:"Nessuna zona disegnata: non c'è niente da rilevare di nuovo.",
+  section_listings:"Immobili trovati",
+  hint_listings:"Ricerca automatica su immobiliare.it, idealista.it e subito.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link “Ricerca su ...” aprono il portale già filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.",
+  btn_rerun_listings:"Cerca di nuovo ora",
+  listings_status_searching:"Ricerca in corso sui portali…",
+  listings_status_done:"Ultima ricerca completata.",
+  listings_status_error:"Ricerca non riuscita, riprova tra poco.",
+  listings_no_extra_results:"Nessun annuncio singolo recuperato automaticamente questa volta — usa i pannelli qui sopra per vedere i risultati direttamente sul portale.",
+  btn_open_new_tab:"Apri in nuova scheda",
+  listings_panel_fallback_hint:"Se il riquadro sopra resta vuoto, il portale sta bloccando la visualizzazione incorporata — usa \"Apri in nuova scheda\".",
+  map_status_areas:"{n} zone disegnate",
+  map_status_detecting:"Ricerca comuni nella zona in corso\u2026",
+  map_status_detect_failed:"Zona salvata, ma non \u00e8 stato possibile rilevare automaticamente comuni/provincia (servizio esterno non raggiungibile in questo momento) \u2014 aggiungili manualmente qui sopra se vuoi, oppure riprova pi\u00f9 tardi.",
+  map_status_drawn:"Zona salvata: verr\u00e0 usata per il matching geografico.",
+  map_status_drawing:"{n} punti aggiunti \u2014 continua a cliccare o premi \"Chiudi poligono\" (minimo 3 punti).",
+  map_status_none:"Nessuna zona disegnata: clicca sulla mappa per iniziare (verr\u00e0 usato solo il testo qui sopra finch\u00e9 non disegni nulla).",
+  label_budget_min:"Budget minimo €", label_budget_max:"Budget massimo €",
+  label_sqm_min:"Metratura minima mq", label_sqm_max:"Metratura massima mq",
+  label_bedrooms_min:"Camere (almeno)", label_bathrooms_min:"Bagni (almeno)",
+  label_bedrooms_max:"Camere (al massimo, opzionale)", label_bathrooms_max:"Bagni (al massimo, opzionale)",
+  label_features:"Caratteristiche richieste",
+  feat_garden:"Giardino", feat_pool:"Piscina", feat_garage:"Garage", feat_sea_view:"Vista mare",
+  feat_parking_spot:"Posto auto", feat_terrace:"Terrazza", feat_balcony:"Balcone", feat_historic_center:"Centro storico",
+  feat_air_conditioning:"Aria condizionata", feat_elevator:"Ascensore", feat_fireplace:"Camino", feat_beachfront:"Fronte mare",
+  feat_photovoltaic:"Impianto fotovoltaico", feat_car_charger:"Colonnina ricarica auto", feat_solar_thermal:"Solare termico",
+  feat_storage_battery:"Batterie di accumulo", feat_artesian_well:"Pozzo artesiano", feat_heating_system:"Impianto di riscaldamento",
+  feat_habitability:"Agibilità",
+  section_notes:"Note", label_notes:"Note aggiuntive", ph_notes:"Altri dettagli emersi dalla chiamata...",
+  btn_cancel:"Annulla", btn_save:"Salva e Notifica Collaboratori", btn_update:"Salva Modifiche",
+  msg_mandate_not_found:"Mandato non trovato.",
+  msg_required_name:"Il nome del cliente è obbligatorio.",
+  msg_saving:"Salvataggio mandato di ricerca...",
+  msg_notifying:"Invio notifica ai collaboratori...",
+  msg_saved_success:"Mandato salvato e collaboratori avvisati.",
+  msg_saved_no_notify:"Mandato salvato. Notifica ai collaboratori non riuscita: ",
+  msg_save_error:"Errore durante il salvataggio."
+};
+
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v3"; }
+
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){ var parsed = JSON.parse(cached); if(parsed && typeof parsed === "object") return parsed; }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+
+  var result = await client.functions.invoke("translate-public-content", {
+    body:{
+      language: lang,
+      source_language: "it",
+      context: "IMMONOVA luxury real estate investment website. Admin form to register a client's property search mandate: budget, size, rooms, features (garden, pool, garage, sea view).",
+      texts: texts
+    }
+  });
+
+  if(result.error || !result.data || !result.data.success || !Array.isArray(result.data.translations)){
+    console.error("Traduzione search-mandate-form non riuscita, uso italiano come fallback:", result.error || result.data);
+    return UI_STRINGS;
+  }
+
+  var translations = result.data.translations;
+  var translated = {};
+  keys.forEach(function(k, i){ translated[k] = translations[i] != null ? translations[i] : UI_STRINGS[k]; });
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(function(el){
+    var key = el.getAttribute("data-i18n-placeholder");
+    if(T[key]) el.setAttribute("placeholder", T[key]);
+  });
+}
+
+async function applyLanguage(lang){
+  currentUserLanguage = lang || "it";
+  document.documentElement.lang = currentUserLanguage;
+  T = await loadTranslatedStrings(currentUserLanguage);
+  renderTranslatedStaticText();
+}
+
+async function loadUserLanguage(){
+  var result = await client.from("profiles").select("id,language").eq("id", currentUser.id).single();
+  if(result.error){ await applyLanguage("it"); return; }
+  await applyLanguage((result.data && result.data.language) || "it");
+}
+
+/* ---- Zone di interesse disegnate sulla mappa: affiancano il campo "Zona / Aree di interesse"
+   a testo libero con perimetri reali (poligoni liberi, click per aggiungere ogni vertice),
+   salvate come GeoJSON MultiPolygon standard nella colonna
+   immonova_search_mandates.interest_area_geojson. Si possono disegnare PIU' zone: "Chiudi
+   poligono" completa quella corrente e ne apre subito una nuova (basta continuare a
+   cliccare); "Elimina ultima zona" toglie solo l'ultimo poligono completato; "Cancella tutto"
+   azzera tutto. Alla chiusura di ogni poligono viene interrogata la Overpass API
+   (OpenStreetMap, pubblica, gratuita, nessuna chiave) per trovare i comuni/paesi che ricadono
+   dentro quel perimetro e il loro nome viene aggiunto automaticamente al campo testo "Zona /
+   Aree di interesse" qui sopra (senza duplicati, senza cancellare quello che c'era gia').
+   Solo Leaflet core per la mappa -- nessun plugin di disegno: il click-to-vertex e' gestito a
+   mano qui sotto, cosi' il poligono puo' avere qualunque forma libera. ---- */
+var interestAreaMap = null;
+var areaPoints = []; // [[lat,lng], ...] della zona in corso di disegno
+var areaPreviewLine = null;
+var areaPolygons = []; // [{points:[[lat,lng],...], layer:L.Polygon}, ...] zone gia' completate
+var currentAreaGeoJSON = null;
+
+function ringFromLatLngPoints(points){
+  var ring = points.map(function(pt){ return [pt[1], pt[0]]; }); // GeoJSON vuole [lng,lat]
+  ring.push(ring[0]); // il primo anello deve chiudersi sullo stesso punto
+  return ring;
+}
+
+function recomputeAreaGeoJSON(){
+  currentAreaGeoJSON = areaPolygons.length
+    ? { type:"MultiPolygon", coordinates: areaPolygons.map(function(p){ return [ ringFromLatLngPoints(p.points) ]; }) }
+    : null;
+}
+
+function extractPolygonPointArraysFromGeoJSON(geojson){
+  if(!geojson) return [];
+  var polys = geojson.type === "MultiPolygon" ? geojson.coordinates
+    : geojson.type === "Polygon" ? [geojson.coordinates]
+    : [];
+  return polys.map(function(rings){
+    return rings[0].map(function(coord){ return [coord[1], coord[0]]; }); // torna a [lat,lng]
+  });
+}
+
+function updateAreaMapStatus(message){
+  var el = document.getElementById("areaMapStatus");
+  if(!el) return;
+  if(message){ el.textContent = message; return; }
+  var parts = [];
+  if(areaPolygons.length) parts.push(T.map_status_areas.replace("{n}", areaPolygons.length));
+  if(areaPoints.length) parts.push(T.map_status_drawing.replace("{n}", areaPoints.length));
+  el.textContent = parts.length ? parts.join(" — ") : T.map_status_none;
+}
+
+function redrawAreaPreview(){
+  if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
+  if(areaPoints.length > 1){
+    areaPreviewLine = L.polyline(areaPoints, { color:"#a67f34", weight:3, dashArray:"6,6" }).addTo(interestAreaMap);
+  }
+}
+
+/* ---- Overpass API: trova i nodi place=city/town/village/hamlet dentro il poligono appena
+   chiuso, e ne aggiunge il nome al campo "Zona / Aree di interesse" a testo libero. Best-effort:
+   se fallisce (rete, timeout, nessun risultato) non blocca nulla, resta solo il poligono salvato. ---- */
+async function detectPlacesInPolygon(latlngPoints){
+  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
+  var query = '[out:json][timeout:25];(node["place"~"^(city|town|village|hamlet)$"](poly:"'+polyStr+'"););out body;';
+  var json = await runOverpassQuery(query, 25000);
+  var names = (json.elements || [])
+    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
+    .filter(Boolean);
+  return Array.from(new Set(names));
+}
+
+/* ---- Se il poligono e' cosi' grande da coprire una BUONA PARTE del territorio di una o piu'
+   province, non ha senso elencare ogni singolo comune (lista infinita e illeggibile nel campo
+   testo): meglio scrivere direttamente "Provincia di X". Non basta controllare se il centro
+   (capoluogo) della provincia cade dentro il poligono -- un poligono puo' coprire quasi tutta
+   Brindisi e tagliare fuori solo il capoluogo stesso, e in quel caso Brindisi va comunque
+   riconosciuta. Si controlla invece quanti comuni della provincia ricadono nel poligono
+   rispetto al totale dei comuni della provincia (rapporto di copertura). ---- */
+/* ---- Ogni chiamata a Overpass e' incapsulata con un timeout lato browser (l'endpoint
+   pubblico a volte non risponde mai) e non fa mai fallire il resto: se una singola query va
+   storta, si degrada verso il comportamento piu' semplice (elenco comuni), MAI verso un campo
+   vuoto -- prima di questa versione un solo errore in una delle tante chiamate faceva saltare
+   tutto il resto senza aggiungere nulla. ---- */
+/* ---- L'istanza pubblica principale (overpass-api.de) puo' rispondere 429 (troppe richieste)
+   sotto carico: in quel caso la policy corretta e' aspettare un attimo e ritentare sullo STESSO
+   endpoint (non ha senso saltare altrove, il 429 e' un limite per IP), con backoff crescente.
+   Solo se anche i ritentativi fanno 429/errore, o l'errore non e' un 429 (rete, 5xx), si tenta
+   UNA volta un mirror pubblico alternativo con un timeout piu' corto, prima di arrendersi. ---- */
+var OVERPASS_PRIMARY = "https://overpass-api.de/api/interpreter";
+var OVERPASS_MIRROR = "https://overpass.kumi.systems/api/interpreter";
+var OVERPASS_429_RETRY_DELAYS_MS = [3000, 8000];
+
+function sleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
+
+async function runOverpassQueryOnce(endpoint, query, timeoutMs){
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, timeoutMs || 20000);
+  try{
+    var res = await fetch(endpoint, {
+      method:"POST",
+      headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+      body:"data="+encodeURIComponent(query),
+      signal: controller.signal
+    });
+    if(!res.ok){
+      var err = new Error("HTTP "+res.status+" da "+endpoint);
+      err.httpStatus = res.status;
+      throw err;
+    }
+    return await res.json();
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+async function runOverpassQuery(query, timeoutMs){
+  var lastErr = null;
+
+  // 1) endpoint principale, con ritentativi a distanza crescente se risponde 429
+  for(var attempt = 0; attempt <= OVERPASS_429_RETRY_DELAYS_MS.length; attempt++){
+    try{
+      return await runOverpassQueryOnce(OVERPASS_PRIMARY, query, timeoutMs);
+    }catch(e){
+      lastErr = e;
+      var is429 = e && e.httpStatus === 429;
+      console.warn("Overpass principale non raggiungibile (tentativo "+(attempt+1)+"/"+(OVERPASS_429_RETRY_DELAYS_MS.length+1)+"):", e);
+      if(!is429 || attempt >= OVERPASS_429_RETRY_DELAYS_MS.length) break;
+      await sleep(OVERPASS_429_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+
+  // 2) mirror alternativo, un solo tentativo con timeout piu' corto (non deve bloccare a lungo)
+  try{
+    return await runOverpassQueryOnce(OVERPASS_MIRROR, query, Math.min(timeoutMs || 20000, 10000));
+  }catch(e){
+    lastErr = e;
+    console.warn("Overpass mirror non raggiungibile:", e);
+  }
+  throw lastErr;
+}
+
+function overpassCountAt(json, index){
+  var el = (json.elements || [])[index];
+  return el && el.tags ? Number(el.tags.nodes || el.tags.total || 0) : 0;
+}
+
+async function findCandidateProvinces(polyStr){
+  var query = '[out:json][timeout:20];(relation["admin_level"="6"]["boundary"="administrative"](poly:"'+polyStr+'"););out ids tags;';
+  var json = await runOverpassQuery(query);
+  return (json.elements || [])
+    .map(function(el){ return { id: el.id, name: el.tags && (el.tags["name:it"] || el.tags.name) }; })
+    .filter(function(p){ return p.name; });
+}
+
+/* ---- Una SOLA richiesta a Overpass per TUTTE le province candidate insieme (conta comuni
+   totali e comuni dentro il poligono per ciascuna), invece di due richieste per provincia:
+   molto piu' veloce e molto meno soggetto ai limiti dell'endpoint pubblico. L'id di un'area
+   Overpass ricavata da una relation e' sempre 3600000000 + id relation. ---- */
+async function detectCoveredProvinces(candidates, polyStr){
+  if(!candidates.length) return [];
+
+  var stmts = "";
+  candidates.forEach(function(c, i){
+    var areaId = 3600000000 + c.id;
+    stmts += 'area(id:'+areaId+')->.a'+i+';';
+    stmts += 'node["place"~"^(city|town|village|hamlet)$"](area.a'+i+')->.all'+i+';';
+    stmts += 'node.all'+i+'(poly:"'+polyStr+'")->.matched'+i+';';
+  });
+  var outs = "";
+  candidates.forEach(function(c, i){
+    outs += '(.all'+i+';);out count;(.matched'+i+';);out count;';
+  });
+
+  var json = await runOverpassQuery('[out:json][timeout:20];' + stmts + outs, 25000);
+
+  var covered = [];
+  candidates.forEach(function(c, i){
+    var total = overpassCountAt(json, i*2);
+    var matched = overpassCountAt(json, i*2 + 1);
+    if(total > 0 && (matched >= 5 || (matched / total) >= 0.35)){
+      covered.push(c);
+    }
+  });
+  return covered;
+}
+
+/* ---- Una SOLA richiesta per i nomi di TUTTI i comuni delle province coperte insieme
+   (unione), da escludere dalla lista puntuale per non ripetere le stesse zone due volte. ---- */
+async function listPlaceNamesInProvinces(covered){
+  if(!covered.length) return [];
+
+  var stmts = "";
+  covered.forEach(function(c, i){
+    var areaId = 3600000000 + c.id;
+    stmts += 'area(id:'+areaId+')->.a'+i+';';
+    stmts += 'node["place"~"^(city|town|village|hamlet)$"](area.a'+i+')->.n'+i+';';
+  });
+  var union = covered.map(function(c, i){ return '.n'+i+';'; }).join("");
+
+  var json = await runOverpassQuery('[out:json][timeout:20];' + stmts + '(' + union + ');out body;', 25000);
+  return (json.elements || [])
+    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
+    .filter(Boolean);
+}
+
+/* ---- Prova prima con le province (zona molto grande): per quelle abbastanza coperte usa
+   "Provincia di X" ed esclude i loro comuni dalla lista puntuale, per non ripetere le stesse
+   zone due volte. I comuni restanti (fuori da qualsiasi provincia coperta) vengono comunque
+   elencati uno per uno, con un tetto massimo per non riempire il campo all'infinito.
+   Ogni fase e' isolata: se il rilevamento province fallisce (rete lenta, endpoint pubblico
+   sovraccarico), si torna comunque al semplice elenco comuni invece di lasciare tutto vuoto. ---- */
+async function detectAreaNamesInPolygon(latlngPoints){
+  var MAX_TOWN_NAMES = 20;
+  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
+
+  var covered = [];
+  try{
+    var candidates = await findCandidateProvinces(polyStr);
+    covered = await detectCoveredProvinces(candidates, polyStr);
+  }catch(e){
+    console.warn("Rilevamento province non riuscito, si prova comunque con i comuni (non bloccante):", e);
+  }
+
+  var towns = await detectPlacesInPolygon(latlngPoints);
+
+  if(!covered.length){
+    return towns.slice(0, MAX_TOWN_NAMES);
+  }
+
+  var excludeLower = new Set();
+  try{
+    var provinceTownNames = await listPlaceNamesInProvinces(covered);
+    provinceTownNames.forEach(function(n){ excludeLower.add(n.toLowerCase()); });
+  }catch(e){
+    console.warn("Lettura comuni delle province coperte non riuscita (non bloccante):", e);
+  }
+
+  var remainingTowns = towns.filter(function(t){ return !excludeLower.has(t.toLowerCase()); }).slice(0, MAX_TOWN_NAMES);
+  var provinceNames = covered.map(function(p){ return "Provincia di " + p.name; });
+  return provinceNames.concat(remainingTowns);
+}
+
+function mergeNamesIntoAreasField(names){
+  if(!names.length) return;
+  var field = document.getElementById("locationAreas");
+  if(!field) return;
+  var existing = field.value.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+  var existingLower = existing.map(function(s){ return s.toLowerCase(); });
+  names.forEach(function(n){
+    if(existingLower.indexOf(n.toLowerCase()) === -1){
+      existing.push(n);
+      existingLower.push(n.toLowerCase());
+    }
+  });
+  field.value = existing.join(", ");
+  mergeProvincesIntoProvinceField(names);
+}
+
+/* ---- Le voci "Provincia di X" rilevate automaticamente vanno anche nel campo dedicato
+   "Provincia", non solo nell'elenco zone -- comodo per il filtro di ricerca annunci, che usa
+   la provincia in modo piu' affidabile di un elenco libero di zone. ---- */
+function mergeProvincesIntoProvinceField(names){
+  var provinceNames = names
+    .filter(function(n){ return /^provincia di /i.test(n); })
+    .map(function(n){ return n.replace(/^provincia di /i, "").trim(); });
+  if(!provinceNames.length) return;
+
+  var field = document.getElementById("province");
+  if(!field) return;
+  var existing = field.value.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+  var existingLower = existing.map(function(s){ return s.toLowerCase(); });
+  provinceNames.forEach(function(p){
+    if(existingLower.indexOf(p.toLowerCase()) === -1){
+      existing.push(p);
+      existingLower.push(p.toLowerCase());
+    }
+  });
+  field.value = existing.join(", ");
+}
+
+async function finishAreaPolygon(){
+  if(areaPoints.length < 3) return;
+  if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
+
+  var closedPoints = areaPoints.slice();
+  var layer = L.polygon(closedPoints, { color:"#a67f34", weight:2, fillOpacity:.18 }).addTo(interestAreaMap);
+  areaPolygons.push({ points:closedPoints, layer:layer });
+  areaPoints = [];
+  recomputeAreaGeoJSON();
+  updateAreaMapStatus();
+
+  updateAreaMapStatus(T.map_status_detecting);
+  try{
+    var names = await detectAreaNamesInPolygon(closedPoints);
+    mergeNamesIntoAreasField(names);
+    updateAreaMapStatus();
+  }catch(e){
+    console.warn("Rilevamento comuni/province nella zona non riuscito (non bloccante):", e);
+    updateAreaMapStatus(T.map_status_detect_failed);
+  }
+}
+
+/* ---- Rilancia il rilevamento comuni/provincia su TUTTE le zone gia' disegnate, senza doverle
+   ridisegnare -- utile quando la prima volta e' fallito (es. Overpass in rate-limit) e si vuole
+   solo riprovare. Interroga ogni poligono gia' salvato uno alla volta e unisce i risultati. ---- */
+async function retryAreaDetection(){
+  if(!areaPolygons.length){
+    updateAreaMapStatus(T.map_status_detect_retry_none);
+    setTimeout(updateAreaMapStatus, 3000);
+    return;
+  }
+
+  var btn = document.getElementById("retryAreaDetectBtn");
+  if(btn) btn.disabled = true;
+  updateAreaMapStatus(T.map_status_detecting);
+
+  var anyFailed = false;
+  for(var i=0; i<areaPolygons.length; i++){
+    try{
+      var names = await detectAreaNamesInPolygon(areaPolygons[i].points);
+      mergeNamesIntoAreasField(names);
+    }catch(e){
+      anyFailed = true;
+      console.warn("Rilevamento comuni/province nella zona "+(i+1)+" non riuscito (non bloccante):", e);
+    }
+  }
+
+  if(btn) btn.disabled = false;
+  updateAreaMapStatus(anyFailed ? T.map_status_detect_failed : undefined);
+}
+
+function undoLastAreaPolygon(){
+  if(!areaPolygons.length) return;
+  var last = areaPolygons.pop();
+  interestAreaMap.removeLayer(last.layer);
+  recomputeAreaGeoJSON();
+  updateAreaMapStatus();
+}
+
+function resetAreaDrawing(){
+  areaPoints = [];
+  if(areaPreviewLine){ interestAreaMap.removeLayer(areaPreviewLine); areaPreviewLine = null; }
+  areaPolygons.forEach(function(p){ interestAreaMap.removeLayer(p.layer); });
+  areaPolygons = [];
+  currentAreaGeoJSON = null;
+  updateAreaMapStatus();
+}
+
+function initInterestAreaMap(){
+  if(interestAreaMap || typeof L === "undefined") return;
+
+  interestAreaMap = L.map("interestAreaMap").setView([41.9, 12.6], 6); // centro Italia
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19
+  }).addTo(interestAreaMap);
+
+  interestAreaMap.on("click", function(e){
+    areaPoints.push([e.latlng.lat, e.latlng.lng]);
+    redrawAreaPreview();
+    updateAreaMapStatus();
+  });
+
+  document.getElementById("finishAreaBtn").addEventListener("click", finishAreaPolygon);
+  document.getElementById("undoAreaPointBtn").addEventListener("click", function(){
+    if(!areaPoints.length) return;
+    areaPoints.pop();
+    redrawAreaPreview();
+    updateAreaMapStatus();
+  });
+  document.getElementById("undoLastAreaBtn").addEventListener("click", undoLastAreaPolygon);
+  document.getElementById("retryAreaDetectBtn").addEventListener("click", retryAreaDetection);
+  document.getElementById("clearAreaMapBtn").addEventListener("click", resetAreaDrawing);
+
+  updateAreaMapStatus();
+
+  // Il div della mappa e' dentro un form inizialmente nascosto da nessun display:none, ma
+  // Leaflet a volte calcola le dimensioni prima che il layout sia finale: un invalidateSize
+  // dopo il primo render evita una mappa tagliata/grigia.
+  setTimeout(function(){ interestAreaMap.invalidateSize(); }, 200);
+}
+
+function loadAreaGeoJSONOntoMap(geojson){
+  if(!interestAreaMap || !geojson) return;
+  try{
+    var pointArrays = extractPolygonPointArraysFromGeoJSON(geojson);
+    if(!pointArrays.length) return;
+    areaPolygons.forEach(function(p){ interestAreaMap.removeLayer(p.layer); });
+    areaPolygons = [];
+    var allBounds = null;
+    pointArrays.forEach(function(points){
+      var closedPoints = points.slice();
+      var layer = L.polygon(closedPoints, { color:"#a67f34", weight:2, fillOpacity:.18 }).addTo(interestAreaMap);
+      areaPolygons.push({ points:closedPoints, layer:layer });
+      allBounds = allBounds ? allBounds.extend(layer.getBounds()) : layer.getBounds();
+    });
+    recomputeAreaGeoJSON();
+    if(allBounds) interestAreaMap.fitBounds(allBounds, { maxZoom:12 });
+    updateAreaMapStatus();
+  }catch(e){
+    console.warn("Zona di interesse salvata non valida, mappa lasciata vuota:", e);
+  }
+}
+
+async function loadMandateForEdit(){
+  if(!mandateId) return;
+
+  document.querySelector(".title").textContent = T.title_edit;
+  document.title = "Modifica Mandato di Ricerca | IMMONOVA Admin";
+  saveBtn.textContent = T.btn_update;
+
+  var result = await client.from("immonova_search_mandates").select("*").eq("id", mandateId).single();
+  if(result.error || !result.data){
+    setProgress(T.msg_mandate_not_found, 100, "error");
+    return;
+  }
+
+  var data = result.data;
+  document.getElementById("clientName").value = data.client_name || "";
+  document.getElementById("clientPhone").value = data.client_phone || "";
+  document.getElementById("clientEmail").value = data.client_email || "";
+  document.getElementById("category").value = data.category || "";
+  document.getElementById("locationAreas").value = data.location_areas || "";
+  document.getElementById("province").value = data.province || "";
+  document.getElementById("budgetMin").value = data.budget_min ?? "";
+  document.getElementById("budgetMax").value = data.budget_max ?? "";
+  document.getElementById("sqmMin").value = data.sqm_min ?? "";
+  document.getElementById("sqmMax").value = data.sqm_max ?? "";
+  document.getElementById("bedroomsMin").value = data.bedrooms_min ?? "";
+  document.getElementById("bathroomsMin").value = data.bathrooms_min ?? "";
+  document.getElementById("bedroomsMax").value = data.bedrooms_max ?? "";
+  document.getElementById("bathroomsMax").value = data.bathrooms_max ?? "";
+  MANDATE_FEATURES.forEach(function(f){
+    document.getElementById(f.elementId).checked = !!data[f.column];
+  });
+  document.getElementById("notes").value = data.notes || "";
+
+  if(data.interest_area_geojson){
+    loadAreaGeoJSONOntoMap(data.interest_area_geojson);
+
+    // Se il mandato ha gia' una zona disegnata sulla mappa ma non un valore di Provincia
+    // salvato (es. mandati creati prima di questo campo, o salvati mentre Overpass era in
+    // rate-limit), lo si ricava ora dal poligono, senza dover ridisegnare nulla.
+    if(!data.province && areaPolygons.length){
+      retryAreaDetection();
+    }
+  }
+
+  document.getElementById("listingsSection").style.display = "";
+  await renderMandateListings(mandateId);
+}
+
+/* ---- Carica e mostra i risultati gia' salvati per questo mandato (link di ricerca sempre
+   presenti + eventuali annunci letti automaticamente da immobiliare.it, best-effort). ---- */
+async function renderMandateListings(id){
+  var statusEl = document.getElementById("listingsStatus");
+  var linksEl = document.getElementById("listingsSearchLinks");
+  var resultsEl = document.getElementById("listingsResults");
+  linksEl.innerHTML = "";
+  resultsEl.innerHTML = "";
+
+  var result = await client.from("immonova_search_mandate_listings").select("*").eq("mandate_id", id).order("is_search_link", { ascending:false });
+  if(result.error){
+    statusEl.textContent = T.listings_status_error;
+    return;
+  }
+
+  var rows = result.data || [];
+  var searchLinks = rows.filter(function(r){ return r.is_search_link; });
+  var listings = rows.filter(function(r){ return !r.is_search_link; });
+
+  searchLinks.forEach(function(r){
+    var a = document.createElement("a");
+    a.href = r.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = r.title || r.source;
+    linksEl.appendChild(a);
+  });
+
+  if(listings.length){
+    listings.forEach(function(r){
+      var a = document.createElement("a");
+      a.href = r.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = (r.title ? r.title + " — " : "") + r.url;
+      resultsEl.appendChild(a);
+    });
+  }else{
+    var hint = document.createElement("div");
+    hint.className = "listings-empty-hint";
+    hint.textContent = T.listings_no_extra_results;
+    resultsEl.appendChild(hint);
+  }
+
+  statusEl.textContent = rows.length ? T.listings_status_done : "";
+}
+
+/* ---- Invoca la edge function di ricerca annunci; non blocca mai il salvataggio del mandato
+   (fire-and-forget con solo un warn in console se fallisce) -- il mandato resta salvato anche
+   se la ricerca esterna va storta. ---- */
+async function triggerListingsSearch(id, payload){
+  try{
+    var res = await client.functions.invoke("search-mandate-listings", {
+      body:{
+        mandate_id: id,
+        category: payload.category,
+        location_areas: payload.location_areas,
+        province: payload.province,
+        budget_min: payload.budget_min,
+        budget_max: payload.budget_max,
+        bedrooms_min: payload.bedrooms_min,
+        bathrooms_min: payload.bathrooms_min
+      }
+    });
+    if(res.error){
+      var msg = await extractEdgeFunctionErrorMessage(res.error);
+      console.warn("Ricerca automatica annunci non riuscita (non bloccante):", msg);
+    }
+  }catch(e){
+    console.warn("Ricerca automatica annunci non riuscita (non bloccante):", e);
+  }
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function setProgress(message,percent,type){
+  progressText.className = "progress-text " + (type || "");
+  progressText.textContent = message || "";
+  progressFill.style.width = (percent || 0) + "%";
+}
+
+function val(id){ return document.getElementById(id).value.trim(); }
+function numVal(id){ var v = document.getElementById(id).value; return v === "" ? null : Number(v); }
+function boolVal(id){ return document.getElementById(id).checked; }
+
+/* ---- Lezione riutilizzata da users.html: leggere l'errore vero da result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text==="function"){
+      var raw=await error.context.text();
+      try{ var parsed=JSON.parse(raw); return parsed.error||parsed.message||raw||error.message; }
+      catch(parseErr){ return raw||error.message; }
+    }
+  }catch(e){}
+  return (error&&error.message)||String(error);
+}
+
+form.addEventListener("submit", async function(event){
+  event.preventDefault();
+
+  var clientName = val("clientName");
+  if(!clientName){
+    setProgress(T.msg_required_name, 100, "error");
+    return;
+  }
+
+  saveBtn.disabled = true;
+  setProgress(T.msg_saving, 30, "");
+
+  var payload = {
+    client_name: clientName,
+    client_phone: val("clientPhone") || null,
+    client_email: val("clientEmail") || null,
+    category: val("category") || null,
+    location_areas: val("locationAreas") || null,
+    province: val("province") || null,
+    budget_min: numVal("budgetMin"),
+    budget_max: numVal("budgetMax"),
+    sqm_min: numVal("sqmMin"),
+    sqm_max: numVal("sqmMax"),
+    bedrooms_min: numVal("bedroomsMin"),
+    bathrooms_min: numVal("bathroomsMin"),
+    bedrooms_max: numVal("bedroomsMax"),
+    bathrooms_max: numVal("bathroomsMax"),
+    notes: val("notes") || null,
+    interest_area_geojson: currentAreaGeoJSON || null
+  };
+
+  MANDATE_FEATURES.forEach(function(f){
+    payload[f.column] = boolVal(f.elementId);
+  });
+
+  if(!mandateId){
+    payload.created_by = currentUser.id;
+  }
+
+  try{
+    var savedId = mandateId;
+
+    if(mandateId){
+      var updateResult = await client.from("immonova_search_mandates").update(payload).eq("id", mandateId);
+      if(updateResult.error) throw updateResult.error;
+
+      triggerListingsSearch(mandateId, payload); // non bloccante, non atteso
+
+      setProgress(T.msg_saved_success, 100, "success");
+      setTimeout(function(){ window.location.href = "search-mandates.html"; }, 1000);
+    }else{
+      var insertResult = await client.from("immonova_search_mandates").insert(payload).select("id").single();
+      if(insertResult.error) throw insertResult.error;
+
+      savedId = insertResult.data.id;
+
+      triggerListingsSearch(savedId, payload); // non bloccante, non atteso
+
+      setProgress(T.msg_notifying, 70, "");
+
+      var notifyResult = await client.functions.invoke("notify-new-search-mandate", {
+        body:{
+          mandate_id: savedId,
+          client_name: payload.client_name,
+          category: payload.category,
+          location_areas: payload.location_areas,
+          budget_min: payload.budget_min,
+          budget_max: payload.budget_max,
+          sqm_min: payload.sqm_min,
+          sqm_max: payload.sqm_max,
+          bedrooms_min: payload.bedrooms_min,
+          bathrooms_min: payload.bathrooms_min,
+          bedrooms_max: payload.bedrooms_max,
+          bathrooms_max: payload.bathrooms_max,
+          wants_garden: payload.wants_garden,
+          wants_pool: payload.wants_pool,
+          wants_garage: payload.wants_garage,
+          wants_sea_view: payload.wants_sea_view,
+          wants_parking_spot: payload.wants_parking_spot,
+          wants_terrace: payload.wants_terrace,
+          wants_balcony: payload.wants_balcony,
+          wants_historic_center: payload.wants_historic_center,
+          wants_air_conditioning: payload.wants_air_conditioning,
+          wants_elevator: payload.wants_elevator,
+          wants_fireplace: payload.wants_fireplace,
+          wants_beachfront: payload.wants_beachfront,
+          wants_photovoltaic: payload.wants_photovoltaic,
+          wants_car_charger: payload.wants_car_charger,
+          wants_solar_thermal: payload.wants_solar_thermal,
+          wants_storage_battery: payload.wants_storage_battery,
+          wants_artesian_well: payload.wants_artesian_well,
+          wants_heating_system: payload.wants_heating_system,
+          wants_habitability: payload.wants_habitability,
+          notes: payload.notes,
+          interest_area_geojson: payload.interest_area_geojson
+        }
+      });
+
+      if(notifyResult.error){
+        var msg = await extractEdgeFunctionErrorMessage(notifyResult.error);
+        setProgress(T.msg_saved_no_notify + msg, 100, "error");
+      }else{
+        setProgress(T.msg_saved_success, 100, "success");
+      }
+
+      setTimeout(function(){ window.location.href = "search-mandates.html"; }, 1400);
+    }
+  }catch(error){
+    console.error(error);
+    setProgress(error.message || T.msg_save_error, 100, "error");
+    saveBtn.disabled = false;
+  }
+});
+
+document.getElementById("rerunListingsBtn").addEventListener("click", async function(){
+  if(!mandateId) return;
+  var btn = document.getElementById("rerunListingsBtn");
+  btn.disabled = true;
+  document.getElementById("listingsStatus").textContent = T.listings_status_searching;
+  await triggerListingsSearch(mandateId, {
+    category: val("category") || null,
+    location_areas: val("locationAreas") || null,
+    province: val("province") || null,
+    budget_min: numVal("budgetMin"),
+    budget_max: numVal("budgetMax"),
+    bedrooms_min: numVal("bedroomsMin"),
+    bathrooms_min: numVal("bathroomsMin")
+  });
+  await renderMandateListings(mandateId);
+  btn.disabled = false;
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  if(await checkAuth()){
+    await loadUserLanguage();
+    initInterestAreaMap();
+    await loadMandateForEdit();
+  }
+})();
+</script>
+</body>
+</html>
