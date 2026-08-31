@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Acquisizione immobile</title>
+<style>
+  :root{
+    --gold:#a67f34; --gold-dark:#7a5f27; --ink:#4a3c1f; --ink-soft:#8f7643;
+    --bg:#fdfaf3; --card:#ffffff; --line:rgba(166,127,52,.28); --good:#2f7a3d; --bad:#b23b3b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:120px}
+  header{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;letter-spacing:.02em}
+  .status-pill{font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:4px 10px;border-radius:20px;background:#f1e6cc;color:var(--gold-dark);font-weight:600}
+  .container{max-width:900px;margin:0 auto;padding:18px}
+  .loader-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);padding:10px 14px;border-radius:10px;margin-bottom:16px}
+  .loader-row input{flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+  .loader-row button{white-space:nowrap}
+  .section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 20px;margin-bottom:18px}
+  .section-title{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--gold-dark);margin:0 0 4px;font-weight:700}
+  .section-hint{font-size:12.5px;color:var(--ink-soft);margin:0 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 16px}
+  .grid.g3{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:640px){.grid,.grid.g3{grid-template-columns:1fr}}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field.span2{grid-column:span 2}
+  @media (max-width:640px){.field.span2{grid-column:span 1}}
+  label{font-size:12.5px;color:var(--ink-soft);font-weight:600}
+  input[type=text],input[type=number],input[type=date],input[type=email],input[type=tel],select,textarea{
+    padding:11px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px;background:#fff;color:var(--ink);font-family:inherit;width:100%
+  }
+  textarea{min-height:70px;resize:vertical}
+  .toggle-row{display:flex;align-items:center;gap:10px;padding:10px 4px}
+  .toggle-row input[type=checkbox]{width:22px;height:22px;accent-color:var(--gold)}
+  .toggle-row label{font-size:14px;color:var(--ink);font-weight:500}
+  .subsection{margin-top:18px;padding-top:14px;border-top:1px dashed var(--line)}
+  .subsection h3{font-size:13.5px;margin:0 0 8px;color:var(--ink);font-weight:700}
+  .check-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:2px 14px}
+  @media (max-width:640px){.check-grid{grid-template-columns:1fr}}
+  .radio-options{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+  .radio-options label{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:500;color:var(--ink);background:#faf6ea;border:1px solid var(--line);padding:8px 12px;border-radius:20px;cursor:pointer}
+  .radio-options input{width:17px;height:17px;accent-color:var(--gold)}
+  .radio-options label.checked{background:var(--gold);border-color:var(--gold);color:#fff}
+  .free-text{margin-top:8px}
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:8px}
+  .photo-cat-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px 8px;border:2px dashed var(--line);border-radius:10px;background:#faf6ea;color:var(--gold-dark);font-weight:600;font-size:12.5px;text-align:center;cursor:pointer;min-height:76px}
+  .photo-cat-btn:active{background:#f1e6cc}
+  .photo-cat-btn .icon{font-size:22px}
+  .photo-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:16px}
+  .photo-thumb{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee;aspect-ratio:1}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo-thumb .cat-tag{position:absolute;bottom:0;left:0;right:0;background:rgba(74,60,31,.75);color:#fff;font-size:10px;padding:3px 5px;text-align:center}
+  .photo-thumb .del-btn{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(178,59,59,.9);color:#fff;border:none;font-size:13px;line-height:1;cursor:pointer}
+  .photo-thumb.uploading{opacity:.5}
+  .photo-status{font-size:12px;color:var(--ink-soft);margin-top:6px}
+  .savebar{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);padding:12px 18px calc(12px + env(safe-area-inset-bottom));display:flex;gap:10px;align-items:center;justify-content:flex-end;z-index:20;flex-wrap:wrap}
+  .savebar .msg{margin-right:auto;font-size:12.5px;color:var(--ink-soft)}
+  button.primary{background:var(--gold);color:#fff;border:none;padding:13px 26px;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer}
+  button.primary:disabled{opacity:.55;cursor:default}
+  button.secondary,a.secondary{background:#fff;color:var(--gold-dark);border:1px solid var(--gold);padding:11px 18px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="dashboard.html" class="secondary" style="padding:9px 16px;font-size:13px">← Dashboard</a>
+  <h1 style="margin:0;flex:1;text-align:center">📋 Acquisizione immobile</h1>
+  <span class="status-pill" id="statusPill">Bozza</span>
+</header>
+
+<div class="container">
+
+  <div class="loader-row">
+    <input type="text" id="loadIdInput" placeholder="ID acquisizione da riaprire (lascia vuoto per una nuova)">
+    <button type="button" class="secondary" id="loadBtn">Apri</button>
+    <button type="button" class="secondary" id="newBtn">Nuova acquisizione</button>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Dati sopralluogo</h2>
+    <div class="grid g3">
+      <div class="field"><label>Data sopralluogo</label><input type="date" id="visitDate"></div>
+      <div class="field"><label>Agente</label><input type="text" id="agentName" placeholder="Nome cognome"></div>
+      <div class="field"><label>Stato pratica</label>
+        <select id="statusSelect">
+          <option value="bozza">Bozza</option>
+          <option value="completata">Completata</option>
+          <option value="inviata">Inviata in agenzia</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Dati cliente / proprietario</h2>
+    <div class="grid">
+      <div class="field"><label>Nome</label><input type="text" id="ownerFirstName"></div>
+      <div class="field"><label>Cognome</label><input type="text" id="ownerLastName"></div>
+      <div class="field"><label>Codice fiscale</label><input type="text" id="ownerFiscalCode"></div>
+      <div class="field"><label>Telefono</label><input type="tel" id="ownerPhone"></div>
+      <div class="field"><label>Email</label><input type="email" id="ownerEmail"></div>
+      <div class="field"><label>Indirizzo di residenza</label><input type="text" id="ownerAddress"></div>
+      <div class="field"><label>Numero comproprietari (oltre al presente)</label><input type="number" id="coOwnersCount" min="0"></div>
+      <div class="field"><label>Note su comproprietà / eredi</label><input type="text" id="coOwnersNotes" placeholder="Es. servono firme di 2 fratelli"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Dati immobile</h2>
+    <div class="grid g3">
+      <div class="field"><label>Tipologia</label>
+        <select id="propertyType">
+          <option value="">Seleziona…</option>
+          <option>Appartamento</option><option>Villa</option><option>Villetta a schiera</option>
+          <option>Attico</option><option>Trullo</option><option>Masseria</option>
+          <option>Terreno</option><option>Rustico / casale</option><option>Locale commerciale</option>
+          <option>Altro</option>
+        </select>
+      </div>
+      <div class="field span2"><label>Indirizzo immobile</label><input type="text" id="propertyAddress"></div>
+      <div class="field"><label>Comune</label><input type="text" id="municipality"></div>
+      <div class="field"><label>Provincia</label><input type="text" id="province"></div>
+      <div class="field span2"><label>Dati catastali (foglio/particella/sub, rendita)</label><input type="text" id="cadastralData"></div>
+      <div class="field"><label>Superficie commerciale (m²)</label><input type="number" id="commercialSqm" min="0"></div>
+      <div class="field"><label>Superficie catastale (m²)</label><input type="number" id="cadastralSqm" min="0"></div>
+      <div class="field"><label>Vani</label><input type="number" id="rooms" min="0"></div>
+      <div class="field"><label>Camere</label><input type="number" id="bedrooms" min="0"></div>
+      <div class="field"><label>Bagni</label><input type="number" id="bathrooms" min="0"></div>
+      <div class="field"><label>Piano</label><input type="text" id="floor" placeholder="Es. 2° o Piano terra"></div>
+      <div class="field"><label>Piani totali edificio</label><input type="number" id="buildingFloors" min="0"></div>
+      <div class="field"><label>Anno di costruzione</label><input type="number" id="constructionYear" min="1800" max="2100"></div>
+      <div class="field"><label>Classe energetica</label>
+        <select id="energyClass"><option value="">Non nota</option>
+          <option>A4</option><option>A3</option><option>A2</option><option>A1</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option><option>G</option>
+        </select>
+      </div>
+      <div class="field"><label>Stato di conservazione</label>
+        <select id="propertyCondition"><option value="">Seleziona…</option>
+          <option>Da ristrutturare</option><option>Abitabile / discreto</option><option>Buono stato</option><option>Ristrutturato</option><option>Nuovo / mai abitato</option>
+        </select>
+      </div>
+      <div class="field"><label>Tipo riscaldamento</label>
+        <select id="heatingType"><option value="">Seleziona…</option>
+          <option>Autonomo a gas</option><option>Centralizzato</option><option>Pompa di calore</option><option>Elettrico</option><option>Pellet/legna</option><option>Assente</option>
+        </select>
+      </div>
+      <div class="field"><label>Prezzo richiesto dal proprietario (€)</label><input type="number" id="requestedPrice" min="0"></div>
+    </div>
+
+    <div class="subsection">
+      <h3>Caratteristiche presenti</h3>
+      <div class="check-grid">
+        <div class="toggle-row"><input type="checkbox" id="hasElevator"><label for="hasElevator">Ascensore</label></div>
+        <div class="toggle-row"><input type="checkbox" id="hasGarden"><label for="hasGarden">Giardino</label></div>
+        <div class="toggle-row"><input type="checkbox" id="hasTerrace"><label for="hasTerrace">Terrazzo</label></div>
+        <div class="toggle-row"><input type="checkbox" id="hasBalcony"><label for="hasBalcony">Balcone</label></div>
+        <div class="toggle-row"><input type="checkbox" id="hasGarage"><label for="hasGarage">Garage</label></div>
+        <div class="toggle-row"><input type="checkbox" id="hasParkingSpot"><label for="hasParkingSpot">Posto auto</label></div>
+        <div class="toggle-row"><input type="checkbox" id="hasPool"><label for="hasPool">Piscina</label></div>
+        <div class="toggle-row"><input type="checkbox" id="hasSeaView"><label for="hasSeaView">Vista mare</label></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="interviewSection">
+    <h2 class="section-title">Intervista al proprietario</h2>
+    <p class="section-hint">Da compilare parlando col proprietario durante il sopralluogo.</p>
+    <!-- Le domande vengono generate da JS in base a INTERVIEW_QUESTIONS più sotto -->
+    <div id="interviewQuestions"></div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Note libere</h2>
+    <textarea id="notes" placeholder="Qualunque altra osservazione fatta durante il sopralluogo…"></textarea>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Foto</h2>
+    <p class="section-hint">Tocca una categoria per aprire subito la fotocamera (su iPad/cellulare parte direttamente lo scatto, non la libreria foto). Si può scattare più di una foto per categoria.</p>
+    <div class="photo-grid" id="photoCatGrid"></div>
+    <div class="photo-status" id="photoStatus"></div>
+    <div class="photo-thumbs" id="photoThumbs"></div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" multiple>
+  </div>
+
+</div>
+
+<div class="savebar">
+  <span class="msg" id="saveMsg"></span>
+  <a href="dashboard.html" class="secondary" id="dashboardBtn" style="display:none">✓ Torna alla Dashboard</a>
+  <button type="button" class="secondary" id="printBtn">Stampa / PDF</button>
+  <button type="button" class="primary" id="saveBtn">Salva acquisizione</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ==========================================================================================
+   Domande dell'intervista al proprietario. Pensate per coprire i punti che servono davvero
+   prima di prendere in carico un immobile: motivo/urgenza della vendita, titolarità e vincoli
+   legali (le cose che possono bloccare una vendita), stato tecnico/urbanistico, condominio,
+   occupazione attuale, arredamento, accesso per le visite. Ogni domanda è un gruppo di
+   checkbox (risposte multiple) o radio (una sola risposta) più, dove utile, un campo di testo
+   libero per i dettagli. Tutto viene salvato in interview_answers (JSON), così si possono
+   aggiungere o modificare domande in futuro senza toccare lo schema del database.
+   ========================================================================================== */
+const INTERVIEW_QUESTIONS = [
+  { key:"sale_reason", type:"checkbox", title:"Motivo della vendita",
+    options:["Trasferimento", "Eredità / successione", "Necessità economica", "Cambio casa (upgrade/downgrade)", "Investimento da liquidare", "Separazione/divorzio", "Altro"] },
+  { key:"timing", type:"radio", title:"Tempistica desiderata",
+    options:["Urgente (entro 3 mesi)", "Entro 6 mesi", "Entro 1 anno", "Nessuna fretta particolare"] },
+  { key:"exclusivity", type:"radio", title:"Disponibilità a dare incarico in esclusiva",
+    options:["Sì, esclusiva", "No, preferisce più agenzie", "Da valutare"], freeText:true, freeTextLabel:"Altre agenzie già incaricate (se sì, quali)" },
+  { key:"price_basis", type:"checkbox", title:"Come è stato stabilito il prezzo richiesto",
+    options:["Perizia/stima professionale", "Confronto con annunci simili", "Prezzo di acquisto + rivalutazione", "Sensazione personale / non stabilito"] },
+  { key:"price_flexibility", type:"radio", title:"Margine di trattativa sul prezzo",
+    options:["Nessuno, prezzo fisso", "Piccolo margine", "Margine consistente", "Da valutare in base all'offerta"] },
+  { key:"ownership", type:"radio", title:"Titolarità dell'immobile",
+    options:["Proprietà esclusiva", "Comproprietà (quote)", "Eredità non ancora divisa"], freeText:true, freeTextLabel:"Dettagli su comproprietari/eredi (nomi, quote, se serve firma di tutti)" },
+  { key:"cadastral_conformity", type:"radio", title:"Conformità catastale / urbanistica",
+    options:["Conforme, nessun problema noto", "Difformità note da sanare", "Condono edilizio presente", "Da verificare"], freeText:true, freeTextLabel:"Dettagli su difformità/condono" },
+  { key:"liens", type:"checkbox", title:"Vincoli e situazione ipotecaria",
+    options:["Mutuo in corso (residuo da saldare)", "Ipoteca presente", "Pignoramento in corso", "Nessun vincolo noto"], freeText:true, freeTextLabel:"Dettagli su mutuo/ipoteca (importo residuo, banca)" },
+  { key:"documents_available", type:"checkbox", title:"Documenti già disponibili",
+    options:["Planimetria catastale aggiornata", "Attestato di Prestazione Energetica (APE)", "Visura catastale", "Certificato di abitabilità/agibilità", "Nessuno di questi, da recuperare"] },
+  { key:"systems", type:"checkbox", title:"Impianti a norma",
+    options:["Impianto elettrico a norma / con dichiarazione di conformità", "Impianto idraulico a norma", "Impianto gas a norma", "Non a norma / da verificare"] },
+  { key:"defects", type:"checkbox", title:"Problemi noti sull'immobile",
+    options:["Infiltrazioni / umidità", "Problemi strutturali", "Infissi da sostituire", "Tetto/copertura da rifare", "Nessun problema noto"], freeText:true, freeTextLabel:"Descrizione dei problemi" },
+  { key:"condo", type:"checkbox", title:"Condominio",
+    options:["Spese condominiali regolari", "Spese condominiali arretrate", "Lavori condominiali in corso", "Lavori condominiali programmati/deliberati", "Non è in condominio"], freeText:true, freeTextLabel:"Importo spese mensili e dettagli lavori" },
+  { key:"occupancy", type:"radio", title:"Stato di occupazione attuale",
+    options:["Libero", "Abitato dal proprietario", "Affittato (contratto in corso)", "Occupato da terzi (comodato/altro)"], freeText:true, freeTextLabel:"Se affittato: scadenza contratto e canone" },
+  { key:"furniture", type:"radio", title:"Arredamento",
+    options:["Incluso nella vendita", "Escluso, venduto vuoto", "Parzialmente incluso (da definire)"], freeText:true, freeTextLabel:"Elementi specifici da lasciare o portare via" },
+  { key:"access", type:"checkbox", title:"Accesso e visite",
+    options:["Chiavi lasciabili in agenzia", "Serve sempre presenza del proprietario", "Animali in casa", "Orari di visita limitati"], freeText:true, freeTextLabel:"Orari/giorni preferiti per le visite" },
+  { key:"other_interest", type:"radio", title:"Altri interessati o trattative in corso",
+    options:["Nessuno", "Sì, trattative in corso con altri", "Sì, ma senza esito"], freeText:true, freeTextLabel:"Dettagli" },
+  { key:"strengths", type:"free", title:"Punti di forza percepiti dal proprietario", freeTextLabel:"Es. posizione, luce, vista, tranquillità…" },
+  { key:"privacy_consent", type:"checkbox", title:"Consensi",
+    options:["Consenso al trattamento dati (privacy)", "Consenso a foto e pubblicazione annuncio"] },
+];
+
+function renderInterviewQuestions(){
+  var wrap = document.getElementById("interviewQuestions");
+  wrap.innerHTML = "";
+  INTERVIEW_QUESTIONS.forEach(function(q){
+    var box = document.createElement("div");
+    box.className = "subsection";
+    var h3 = document.createElement("h3");
+    h3.textContent = q.title;
+    box.appendChild(h3);
+
+    if(q.type === "checkbox" || q.type === "radio"){
+      var optsWrap = document.createElement("div");
+      optsWrap.className = "radio-options";
+      q.options.forEach(function(opt, i){
+        var lbl = document.createElement("label");
+        var inp = document.createElement("input");
+        inp.type = q.type;
+        inp.name = q.key;
+        inp.value = opt;
+        inp.dataset.qkey = q.key;
+        inp.addEventListener("change", function(){ lbl.classList.toggle("checked", inp.checked); });
+        lbl.appendChild(inp);
+        lbl.appendChild(document.createTextNode(opt));
+        optsWrap.appendChild(lbl);
+      });
+      box.appendChild(optsWrap);
+    }
+
+    if(q.type === "free" || q.freeText){
+      var ft = document.createElement("div");
+      ft.className = "free-text";
+      var ta = document.createElement("textarea");
+      ta.placeholder = q.freeTextLabel || "Dettagli…";
+      ta.dataset.qkeyFree = q.key;
+      ft.appendChild(ta);
+      box.appendChild(ft);
+    }
+
+    wrap.appendChild(box);
+  });
+}
+renderInterviewQuestions();
+
+function collectInterviewAnswers(){
+  var out = {};
+  INTERVIEW_QUESTIONS.forEach(function(q){
+    if(q.type === "checkbox"){
+      var vals = Array.prototype.slice.call(document.querySelectorAll('input[type=checkbox][data-qkey="'+q.key+'"]:checked')).map(function(i){ return i.value; });
+      out[q.key] = vals;
+    }else if(q.type === "radio"){
+      var sel = document.querySelector('input[type=radio][data-qkey="'+q.key+'"]:checked');
+      out[q.key] = sel ? sel.value : null;
+    }
+    if(q.type === "free" || q.freeText){
+      var ta = document.querySelector('textarea[data-qkey-free="'+q.key+'"]');
+      if(ta && ta.value.trim()) out[q.key + "_note"] = ta.value.trim();
+    }
+  });
+  return out;
+}
+
+function applyInterviewAnswers(answers){
+  answers = answers || {};
+  INTERVIEW_QUESTIONS.forEach(function(q){
+    if(q.type === "checkbox"){
+      var vals = answers[q.key] || [];
+      document.querySelectorAll('input[type=checkbox][data-qkey="'+q.key+'"]').forEach(function(inp){
+        inp.checked = vals.indexOf(inp.value) !== -1;
+        inp.dispatchEvent(new Event("change"));
+      });
+    }else if(q.type === "radio"){
+      var val = answers[q.key];
+      document.querySelectorAll('input[type=radio][data-qkey="'+q.key+'"]').forEach(function(inp){
+        inp.checked = (inp.value === val);
+        inp.dispatchEvent(new Event("change"));
+      });
+    }
+    if(q.type === "free" || q.freeText){
+      var ta = document.querySelector('textarea[data-qkey-free="'+q.key+'"]');
+      if(ta) ta.value = answers[q.key + "_note"] || "";
+    }
+  });
+}
+
+/* ================================ Categorie foto ================================ */
+var PHOTO_CATEGORIES = [
+  { key:"esterno", label:"Esterno / facciata", icon:"🏠" },
+  { key:"ingresso", label:"Ingresso", icon:"🚪" },
+  { key:"soggiorno", label:"Soggiorno", icon:"🛋️" },
+  { key:"cucina", label:"Cucina", icon:"🍽️" },
+  { key:"camera", label:"Camere", icon:"🛏️" },
+  { key:"bagno", label:"Bagni", icon:"🚿" },
+  { key:"vista", label:"Vista / panorama", icon:"🌅" },
+  { key:"difetti", label:"Difetti / criticità", icon:"⚠️" },
+  { key:"altro", label:"Altro", icon:"📷" },
+];
+
+var pendingPhotoCategory = null;
+var photoRows = []; // cache locale delle foto già caricate per questa acquisizione
+
+function renderPhotoCategoryButtons(){
+  var grid = document.getElementById("photoCatGrid");
+  grid.innerHTML = "";
+  PHOTO_CATEGORIES.forEach(function(c){
+    var btn = document.createElement("div");
+    btn.className = "photo-cat-btn";
+    btn.innerHTML = '<span class="icon">'+c.icon+'</span><span>'+c.label+'</span>';
+    btn.addEventListener("click", function(){
+      pendingPhotoCategory = c.key;
+      document.getElementById("photoInput").click();
+    });
+    grid.appendChild(btn);
+  });
+}
+renderPhotoCategoryButtons();
+
+function getGeoPosition(){
+  return new Promise(function(resolve){
+    if(!navigator.geolocation){ resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      function(pos){ resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      function(){ resolve(null); },
+      { timeout: 5000, maximumAge: 60000 }
+    );
+  });
+}
+
+function ensureAcquisitionSaved(){
+  // Le foto vanno collegate a un id di acquisizione: se non è stata ancora salvata una prima
+  // volta (bozza), la si salva automaticamente prima di caricare la foto, così sul campo non
+  // si perde mai uno scatto in attesa che l'utente prema "Salva".
+  if(currentId) return Promise.resolve(currentId);
+  return saveAcquisition(true);
+}
+
+document.getElementById("photoInput").addEventListener("change", async function(e){
+  var files = Array.prototype.slice.call(e.target.files || []);
+  if(!files.length) return;
+  var category = pendingPhotoCategory || "altro";
+  var statusEl = document.getElementById("photoStatus");
+
+  var id = await ensureAcquisitionSaved();
+  if(!id){
+    statusEl.textContent = "Impossibile salvare l'acquisizione: le foto non sono state caricate.";
+    e.target.value = "";
+    return;
+  }
+
+  var geo = await getGeoPosition();
+  var takenAt = new Date().toISOString();
+
+  for(var i=0; i<files.length; i++){
+    var file = files[i];
+    statusEl.textContent = "Caricamento foto " + (i+1) + "/" + files.length + "…";
+
+    var thumb = addPhotoThumb(null, category, true);
+
+    try{
+      var ext = (file.name && file.name.includes(".")) ? file.name.split(".").pop() : "jpg";
+      var path = "acquisitions/" + id + "/" + category + "-" + Date.now() + "-" + i + "." + ext;
+      var up = await client.storage.from("acquisition-photos").upload(path, file, { cacheControl: "3600", upsert: false });
+      if(up.error) throw up.error;
+
+      var pub = client.storage.from("acquisition-photos").getPublicUrl(path);
+      var url = pub.data.publicUrl;
+
+      var row = {
+        acquisition_id: id, category: category, file_url: url, file_path: path,
+        latitude: geo ? geo.lat : null, longitude: geo ? geo.lng : null, taken_at: takenAt,
+      };
+      var ins = await client.from("immonova_acquisition_photos").insert(row).select().single();
+      if(ins.error) throw ins.error;
+
+      photoRows.push(ins.data);
+      updatePhotoThumb(thumb, ins.data);
+    }catch(err){
+      console.warn("Caricamento foto non riuscito:", err);
+      thumb.remove();
+      statusEl.textContent = "Una foto non è stata caricata (" + ((err && err.message) || "errore") + "). Riprova.";
+    }
+  }
+
+  statusEl.textContent = "Foto caricate.";
+  setTimeout(function(){ if(statusEl.textContent === "Foto caricate.") statusEl.textContent = ""; }, 3000);
+  e.target.value = "";
+});
+
+function addPhotoThumb(row, category, uploading){
+  var wrap = document.getElementById("photoThumbs");
+  var div = document.createElement("div");
+  div.className = "photo-thumb" + (uploading ? " uploading" : "");
+  var catLabel = (PHOTO_CATEGORIES.find(function(c){ return c.key === category; }) || {}).label || category;
+  div.innerHTML = '<img src="' + (row ? row.file_url : "") + '" onerror="this.style.opacity=0.2">' +
+    '<span class="cat-tag">' + catLabel + '</span>' +
+    '<button type="button" class="del-btn" title="Elimina">✕</button>';
+  if(row){
+    div.querySelector(".del-btn").addEventListener("click", function(){ deletePhoto(row, div); });
+  }
+  wrap.prepend(div);
+  return div;
+}
+function updatePhotoThumb(div, row){
+  div.classList.remove("uploading");
+  div.querySelector("img").src = row.file_url;
+  div.querySelector(".del-btn").addEventListener("click", function(){ deletePhoto(row, div); });
+}
+async function deletePhoto(row, div){
+  if(!confirm("Eliminare questa foto?")) return;
+  div.style.opacity = "0.4";
+  try{
+    await client.from("immonova_acquisition_photos").delete().eq("id", row.id);
+    if(row.file_path) await client.storage.from("acquisition-photos").remove([row.file_path]);
+    photoRows = photoRows.filter(function(r){ return r.id !== row.id; });
+    div.remove();
+  }catch(err){
+    console.warn("Eliminazione foto non riuscita:", err);
+    div.style.opacity = "1";
+    alert("Non è stato possibile eliminare la foto. Riprova.");
+  }
+}
+async function loadPhotos(id){
+  document.getElementById("photoThumbs").innerHTML = "";
+  photoRows = [];
+  var res = await client.from("immonova_acquisition_photos").select("*").eq("acquisition_id", id).order("created_at", { ascending:false });
+  if(res.error){ console.warn("Caricamento foto non riuscito:", res.error); return; }
+  (res.data || []).forEach(function(row){
+    photoRows.push(row);
+    addPhotoThumb(row, row.category, false);
+  });
+}
+
+/* ================================ Salvataggio / caricamento acquisizione ================================ */
+var params = new URLSearchParams(window.location.search);
+var currentId = params.get("id") ? Number(params.get("id")) : null;
+
+function val(id){ var el = document.getElementById(id); return el ? el.value : null; }
+function checked(id){ var el = document.getElementById(id); return el ? el.checked : false; }
+function numOrNull(v){ return (v === "" || v === null || v === undefined) ? null : Number(v); }
+
+function buildPayload(){
+  return {
+    status: val("statusSelect") || "bozza",
+    visit_date: val("visitDate") || null,
+    agent_name: val("agentName") || null,
+
+    owner_first_name: val("ownerFirstName") || null,
+    owner_last_name: val("ownerLastName") || null,
+    owner_fiscal_code: val("ownerFiscalCode") || null,
+    owner_phone: val("ownerPhone") || null,
+    owner_email: val("ownerEmail") || null,
+    owner_address: val("ownerAddress") || null,
+    co_owners_count: numOrNull(val("coOwnersCount")),
+    co_owners_notes: val("coOwnersNotes") || null,
+
+    property_type: val("propertyType") || null,
+    property_address: val("propertyAddress") || null,
+    municipality: val("municipality") || null,
+    province: val("province") || null,
+    cadastral_data: val("cadastralData") || null,
+    commercial_sqm: numOrNull(val("commercialSqm")),
+    cadastral_sqm: numOrNull(val("cadastralSqm")),
+    rooms: numOrNull(val("rooms")),
+    bedrooms: numOrNull(val("bedrooms")),
+    bathrooms: numOrNull(val("bathrooms")),
+    floor: val("floor") || null,
+    building_floors: numOrNull(val("buildingFloors")),
+    has_elevator: checked("hasElevator"),
+    construction_year: numOrNull(val("constructionYear")),
+    energy_class: val("energyClass") || null,
+    property_condition: val("propertyCondition") || null,
+    heating_type: val("heatingType") || null,
+    has_garden: checked("hasGarden"),
+    has_terrace: checked("hasTerrace"),
+    has_balcony: checked("hasBalcony"),
+    has_garage: checked("hasGarage"),
+    has_parking_spot: checked("hasParkingSpot"),
+    has_pool: checked("hasPool"),
+    has_sea_view: checked("hasSeaView"),
+    requested_price: numOrNull(val("requestedPrice")),
+
+    interview_answers: collectInterviewAnswers(),
+    notes: val("notes") || null,
+
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function applyPayload(data){
+  if(!data) return;
+  document.getElementById("statusSelect").value = data.status || "bozza";
+  document.getElementById("visitDate").value = data.visit_date || "";
+  document.getElementById("agentName").value = data.agent_name || "";
+
+  document.getElementById("ownerFirstName").value = data.owner_first_name || "";
+  document.getElementById("ownerLastName").value = data.owner_last_name || "";
+  document.getElementById("ownerFiscalCode").value = data.owner_fiscal_code || "";
+  document.getElementById("ownerPhone").value = data.owner_phone || "";
+  document.getElementById("ownerEmail").value = data.owner_email || "";
+  document.getElementById("ownerAddress").value = data.owner_address || "";
+  document.getElementById("coOwnersCount").value = data.co_owners_count ?? "";
+  document.getElementById("coOwnersNotes").value = data.co_owners_notes || "";
+
+  document.getElementById("propertyType").value = data.property_type || "";
+  document.getElementById("propertyAddress").value = data.property_address || "";
+  document.getElementById("municipality").value = data.municipality || "";
+  document.getElementById("province").value = data.province || "";
+  document.getElementById("cadastralData").value = data.cadastral_data || "";
+  document.getElementById("commercialSqm").value = data.commercial_sqm ?? "";
+  document.getElementById("cadastralSqm").value = data.cadastral_sqm ?? "";
+  document.getElementById("rooms").value = data.rooms ?? "";
+  document.getElementById("bedrooms").value = data.bedrooms ?? "";
+  document.getElementById("bathrooms").value = data.bathrooms ?? "";
+  document.getElementById("floor").value = data.floor || "";
+  document.getElementById("buildingFloors").value = data.building_floors ?? "";
+  document.getElementById("hasElevator").checked = !!data.has_elevator;
+  document.getElementById("constructionYear").value = data.construction_year ?? "";
+  document.getElementById("energyClass").value = data.energy_class || "";
+  document.getElementById("propertyCondition").value = data.property_condition || "";
+  document.getElementById("heatingType").value = data.heating_type || "";
+  document.getElementById("hasGarden").checked = !!data.has_garden;
+  document.getElementById("hasTerrace").checked = !!data.has_terrace;
+  document.getElementById("hasBalcony").checked = !!data.has_balcony;
+  document.getElementById("hasGarage").checked = !!data.has_garage;
+  document.getElementById("hasParkingSpot").checked = !!data.has_parking_spot;
+  document.getElementById("hasPool").checked = !!data.has_pool;
+  document.getElementById("hasSeaView").checked = !!data.has_sea_view;
+  document.getElementById("requestedPrice").value = data.requested_price ?? "";
+
+  applyInterviewAnswers(data.interview_answers);
+  document.getElementById("notes").value = data.notes || "";
+
+  document.getElementById("statusPill").textContent =
+    data.status === "completata" ? "Completata" : data.status === "inviata" ? "Inviata" : "Bozza";
+}
+
+async function saveAcquisition(silent){
+  var saveBtn = document.getElementById("saveBtn");
+  var msg = document.getElementById("saveMsg");
+  if(!silent){ saveBtn.disabled = true; msg.textContent = "Salvataggio…"; }
+
+  var payload = buildPayload();
+  try{
+    if(currentId){
+      var upd = await client.from("immonova_acquisitions").update(payload).eq("id", currentId).select().single();
+      if(upd.error) throw upd.error;
+    }else{
+      var ins = await client.from("immonova_acquisitions").insert(payload).select().single();
+      if(ins.error) throw ins.error;
+      currentId = ins.data.id;
+      var url = new URL(window.location.href);
+      url.searchParams.set("id", currentId);
+      window.history.replaceState({}, "", url);
+    }
+    if(!silent){
+      msg.textContent = "Salvato ✓";
+      document.getElementById("statusPill").textContent =
+        payload.status === "completata" ? "Completata" : payload.status === "inviata" ? "Inviata" : "Bozza";
+      triggerSummaryEmail(currentId); // non bloccante: la mail di resoconto non deve mai ritardare/bloccare il salvataggio
+      document.getElementById("dashboardBtn").style.display = ""; // dopo un salvataggio esplicito, un tasto pronto per tornare alla dashboard
+      setTimeout(function(){ msg.textContent = ""; }, 2500);
+    }
+    return currentId;
+  }catch(err){
+    console.warn("Salvataggio acquisizione non riuscito:", err);
+    if(!silent) msg.textContent = "Errore nel salvataggio: " + ((err && err.message) || "riprova");
+    return currentId;
+  }finally{
+    if(!silent) saveBtn.disabled = false;
+  }
+}
+
+/* ---- Legge il messaggio di errore vero da una risposta non-2xx di una edge function --
+   supabase-js non lo mette in result.error.message (sempre un testo generico fisso), va letto
+   dal body della risposta originale via result.error.context. ---- */
+async function extractEdgeFunctionErrorMessage(error){
+  try{
+    if(error && error.context && typeof error.context.text === "function"){
+      var raw = await error.context.text();
+      try{
+        var parsed = JSON.parse(raw);
+        if(parsed && parsed.error) return parsed.error;
+      }catch(_e){}
+      if(raw) return raw;
+    }
+  }catch(_e){}
+  return (error && error.message) || String(error);
+}
+
+/* ---- Invia la mail di resoconto all'indirizzo del proprietario (raccolto durante
+   l'intervista, campo "Email" in Dati cliente/proprietario). Non bloccante: se fallisce
+   (mail non indicata, Resend non raggiungibile, ecc.) l'acquisizione resta comunque salvata,
+   si vede solo un avviso in console e un accenno nel messaggio di stato. ---- */
+async function triggerSummaryEmail(id){
+  if(!id) return;
+  try{
+    var res = await client.functions.invoke("send-acquisition-summary-email", { body:{ acquisition_id: id } });
+    if(res.error){
+      var msgText = await extractEdgeFunctionErrorMessage(res.error);
+      console.warn("Invio mail di resoconto non riuscito (non bloccante):", msgText);
+      return;
+    }
+    if(res.data && res.data.skipped){
+      console.info("Mail di resoconto non inviata:", res.data.error);
+      return;
+    }
+    var saveMsg = document.getElementById("saveMsg");
+    if(saveMsg) saveMsg.textContent = "Salvato ✓ · mail di resoconto inviata";
+  }catch(e){
+    console.warn("Invio mail di resoconto non riuscito (non bloccante):", e);
+  }
+}
+
+async function loadAcquisition(id){
+  var msg = document.getElementById("saveMsg");
+  msg.textContent = "Caricamento…";
+  var res = await client.from("immonova_acquisitions").select("*").eq("id", id).single();
+  if(res.error){
+    msg.textContent = "Acquisizione non trovata.";
+    return;
+  }
+  currentId = id;
+  applyPayload(res.data);
+  await loadPhotos(id);
+  var url = new URL(window.location.href);
+  url.searchParams.set("id", id);
+  window.history.replaceState({}, "", url);
+  msg.textContent = "";
+}
+
+document.getElementById("saveBtn").addEventListener("click", function(){ saveAcquisition(false); });
+document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
+document.getElementById("loadBtn").addEventListener("click", function(){
+  var v = document.getElementById("loadIdInput").value.trim();
+  if(v) loadAcquisition(Number(v));
+});
+document.getElementById("newBtn").addEventListener("click", function(){
+  window.location.href = window.location.pathname;
+});
+
+if(currentId){
+  document.getElementById("loadIdInput").value = currentId;
+  loadAcquisition(currentId);
+}
+</script>
+</body>
+</html>
