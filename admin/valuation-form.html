@@ -183,6 +183,8 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
     Registra i dati del venditore e dell'immobile, con i dati catastali dalla visura. Il calcolo combina le opportunità IMMONOVA già pubblicate nella zona con i dati di mercato pubblici, con metodo comparativo.
   </p>
 
+  <div id="importBanner" style="display:none;margin-bottom:22px;padding:16px 20px;border:1px solid rgba(166,127,52,.35);background:rgba(166,127,52,.10);font-size:13px;line-height:1.7;color:#5a4a2a"></div>
+
   <form id="valuationForm" class="form-wrapper">
 
     <div class="section">
@@ -435,6 +437,7 @@ const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const params = new URLSearchParams(window.location.search);
 const valuationId = params.get("id");
+const acquisitionId = params.get("acquisition_id"); // import da property-acquisition-form.html, solo su una NUOVA valutazione
 
 const form = document.getElementById("valuationForm");
 const saveBtn = document.getElementById("saveBtn");
@@ -497,7 +500,10 @@ var UI_STRINGS = {
   msg_save_error:"Errore durante il salvataggio: ",
   detail_internal_prefix:"Opportunità IMMONOVA comparabili: ", detail_internal_none:"nessuna trovata",
   detail_market_prefix:"Dato di mercato pubblico (zona): ", detail_market_none:"non disponibile",
-  detail_based_on:"Stima calcolata su superficie interna di "
+  detail_based_on:"Stima calcolata su superficie interna di ",
+  import_banner_prefix:"Dati importati dall'acquisizione n. ",
+  import_banner_note:" — controlla e completa i campi mancanti prima di calcolare e salvare la valutazione.",
+  import_not_found:"Acquisizione non trovata: nessun dato importato."
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
@@ -1115,6 +1121,105 @@ async function loadValuationForEdit(){
   }
 }
 
+/* ================================ Importa dati da un'acquisizione ================================
+   Precompila il form con i dati raccolti durante il sopralluogo (property-acquisition-form.html):
+   dati venditore/proprietario, dati immobile, caratteristiche booleane (stessi nomi colonna in
+   entrambe le tabelle, copiate 1:1), e un riepilogo testuale delle risposte piu' rilevanti
+   dell'intervista aggiunto alle Note. Solo su una valutazione NUOVA (mai su una in modifica, per
+   non sovrascrivere dati gia' curati). L'agente resta comunque libero di correggere ogni campo
+   prima di calcolare/salvare -- l'import e' un punto di partenza, non un dato definitivo. ---- */
+
+// Il tipo immobile dell'acquisizione (singolare, libero) non coincide sempre con le categorie
+// fisse della valutazione (plurale, elenco chiuso) -- mappatura ragionevole, il campo resta
+// comunque modificabile manualmente se il risultato non è quello giusto.
+var ACQUISITION_TYPE_TO_CATEGORY = {
+  "Appartamento": "Appartamenti", "Attico": "Appartamenti",
+  "Villa": "Ville", "Villetta a schiera": "Ville", "Trullo": "Ville", "Masseria": "Ville", "Rustico / casale": "Ville",
+  "Terreno": "Terreni", "Locale commerciale": "Commerciale"
+};
+
+// Stato di conservazione: opzioni diverse tra le due pagine, stessa logica di mappatura ragionevole.
+var ACQUISITION_CONDITION_TO_VALUATION = {
+  "Da ristrutturare": "Da ristrutturare",
+  "Abitabile / discreto": "Buono",
+  "Buono stato": "Buono",
+  "Ristrutturato": "Nuovo/Ristrutturato",
+  "Nuovo / mai abitato": "Nuovo/Ristrutturato"
+};
+
+// Stesse 8 caratteristiche presenti in entrambe le tabelle, con lo stesso nome colonna --
+// copiate direttamente, nessuna mappatura necessaria.
+var SHARED_FEATURE_COLUMNS = ["has_elevator", "has_garden", "has_terrace", "has_balcony", "has_garage", "has_parking_spot", "has_pool", "has_sea_view"];
+
+var INTERVIEW_SUMMARY_TITLES = {
+  sale_reason: "Motivo vendita", timing: "Tempistica", price_flexibility: "Margine trattativa",
+  ownership: "Titolarità", liens: "Vincoli/ipoteca", defects: "Problemi noti",
+  occupancy: "Occupazione attuale", furniture: "Arredamento"
+};
+
+function summarizeInterviewAnswers(answers){
+  if(!answers || typeof answers !== "object") return "";
+  var lines = [];
+  Object.keys(INTERVIEW_SUMMARY_TITLES).forEach(function(key){
+    var v = answers[key];
+    var text = Array.isArray(v) ? v.join(", ") : (typeof v === "string" ? v : "");
+    if(text) lines.push(INTERVIEW_SUMMARY_TITLES[key] + ": " + text);
+  });
+  return lines.length ? "Dall'intervista al proprietario (sopralluogo):\n" + lines.join("\n") : "";
+}
+
+async function importFromAcquisition(){
+  if(!acquisitionId || valuationId) return; // mai su una valutazione esistente in modifica
+
+  var banner = document.getElementById("importBanner");
+  var result = await client.from("immonova_acquisitions").select("*").eq("id", acquisitionId).single();
+  if(result.error || !result.data){
+    banner.style.display = "block";
+    banner.textContent = T.import_not_found;
+    return;
+  }
+
+  var a = result.data;
+
+  document.getElementById("sellerFirstName").value = a.owner_first_name || "";
+  document.getElementById("sellerLastName").value = a.owner_last_name || "";
+  document.getElementById("sellerPhone").value = a.owner_phone || "";
+  document.getElementById("sellerEmail").value = a.owner_email || "";
+
+  document.getElementById("propertyTitle").value = [a.property_type, a.municipality].filter(Boolean).join(" — ");
+  document.getElementById("category").value = ACQUISITION_TYPE_TO_CATEGORY[a.property_type] || "";
+  document.getElementById("address").value = a.property_address || "";
+  document.getElementById("municipality").value = a.municipality || "";
+  document.getElementById("province").value = a.province || "";
+  document.getElementById("internalSize").value = a.commercial_sqm ?? "";
+  document.getElementById("bedrooms").value = a.bedrooms ?? "";
+  document.getElementById("bathrooms").value = a.bathrooms ?? "";
+  document.getElementById("constructionYear").value = a.construction_year ?? "";
+  document.getElementById("energyClass").value = a.energy_class || "";
+  document.getElementById("propertyCondition").value = ACQUISITION_CONDITION_TO_VALUATION[a.property_condition] || "";
+  document.getElementById("cadastralSurface").value = a.cadastral_sqm ?? "";
+
+  PROPERTY_FEATURES.forEach(function(f){
+    if(SHARED_FEATURE_COLUMNS.indexOf(f.column) !== -1 && a[f.column] !== undefined){
+      document.getElementById(f.elementId).checked = !!a[f.column];
+    }
+  });
+
+  var noteParts = [];
+  if(a.requested_price) noteParts.push("Prezzo richiesto dal proprietario: € " + Number(a.requested_price).toLocaleString("it-IT"));
+  if(a.heating_type) noteParts.push("Riscaldamento: " + a.heating_type);
+  if(a.floor) noteParts.push("Piano: " + a.floor + (a.building_floors ? " (edificio di " + a.building_floors + " piani)" : ""));
+  if(a.cadastral_data) noteParts.push("Dati catastali (da sopralluogo): " + a.cadastral_data);
+  if(a.co_owners_notes) noteParts.push("Comproprietari/eredi: " + a.co_owners_notes);
+  if(a.notes) noteParts.push("Note sopralluogo: " + a.notes);
+  var interviewSummary = summarizeInterviewAnswers(a.interview_answers);
+  if(interviewSummary) noteParts.push(interviewSummary);
+  document.getElementById("notes").value = noteParts.join("\n\n");
+
+  banner.style.display = "block";
+  banner.textContent = T.import_banner_prefix + acquisitionId + T.import_banner_note;
+}
+
 form.addEventListener("submit", async function(event){
   event.preventDefault();
 
@@ -1191,6 +1296,7 @@ form.addEventListener("submit", async function(event){
 
   if(!valuationId){
     payload.created_by = currentUser.id;
+    if(acquisitionId) payload.source_acquisition_id = Number(acquisitionId);
   }
 
   try{
@@ -1222,6 +1328,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   if(await checkAuth()){
     await loadUserLanguage();
     await loadValuationForEdit();
+    await importFromAcquisition();
   }
 })();
 </script>

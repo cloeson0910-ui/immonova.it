@@ -145,6 +145,24 @@ td{
 .action-btn.danger{border-color:rgba(156,47,47,.35);color:#9c2f2f}
 .action-btn.danger:hover{background:#9c2f2f;color:#fff}
 .empty{padding:40px;text-align:center;opacity:.7}
+.acq-panel{
+  background:rgba(255,255,255,.20);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 24px 70px rgba(127,100,48,.07);
+  padding:22px 24px;
+  margin-bottom:26px;
+}
+.acq-panel-title{font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:#a67f34;margin-bottom:4px}
+.acq-panel-note{font-size:12px;color:#8f7643;margin-bottom:16px;line-height:1.6}
+.acq-list{display:flex;flex-direction:column;gap:2px}
+.acq-row{display:flex;align-items:center;gap:14px;padding:12px 4px;border-bottom:1px solid rgba(166,127,52,.10)}
+.acq-row:last-child{border-bottom:0}
+.acq-row-main{flex:1;min-width:0}
+.acq-row-name{font-size:13.5px;color:#5a4a2a;font-weight:600}
+.acq-row-detail{font-size:12px;color:#8f7643;margin-top:2px}
+.acq-row-badge{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.3);color:#a67f34;white-space:nowrap}
+.acq-row-badge.imported{color:#4f7f45;border-color:rgba(79,127,69,.3)}
 @media(max-width:700px){
   .header{flex-direction:column;gap:18px}
   .container{padding:28px 22px}
@@ -177,6 +195,12 @@ td{
 <p class="subtitle" data-i18n="subtitle">
 Tutte le valutazioni immobiliari registrate per i venditori.
 </p>
+
+<div class="acq-panel">
+  <div class="acq-panel-title" data-i18n="acq_panel_title">Acquisizioni da importare</div>
+  <p class="acq-panel-note" data-i18n="acq_panel_note">Sopralluoghi registrati dagli agenti con la pagina "Acquisizione Immobile": importa i dati direttamente in una nuova valutazione invece di reinserirli a mano.</p>
+  <div class="acq-list" id="acqList"><div class="empty" data-i18n="acq_loading">Caricamento...</div></div>
+</div>
 
 <div class="toolbar">
 <input type="text" id="searchInput" class="search" data-i18n="search_placeholder" placeholder="Cerca per venditore, comune, categoria...">
@@ -228,7 +252,13 @@ var UI_STRINGS = {
   no_estimate:"Non calcolata",
   action_edit:"Modifica", action_report:"Vedi Relazione", action_delete:"Elimina",
   confirm_delete:"Eliminare definitivamente questa valutazione?",
-  msg_deleting:"Eliminazione in corso...", msg_deleted:"Valutazione eliminata."
+  msg_deleting:"Eliminazione in corso...", msg_deleted:"Valutazione eliminata.",
+  acq_panel_title:"Acquisizioni da importare",
+  acq_panel_note:"Sopralluoghi registrati dagli agenti con la pagina \"Acquisizione Immobile\": importa i dati direttamente in una nuova valutazione invece di reinserirli a mano.",
+  acq_loading:"Caricamento...", acq_loading_error:"Errore nel caricamento delle acquisizioni.",
+  acq_empty:"Nessuna acquisizione registrata.",
+  acq_badge_imported:"Già importata", acq_badge_draft:"Bozza", acq_badge_done:"Completata", acq_badge_sent:"Inviata",
+  acq_btn_import:"Importa → Nuova Valutazione"
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
@@ -321,6 +351,60 @@ async function loadValuations(){
   applyFilter();
 }
 
+/* ---- Pannello "Acquisizioni da importare": mostra i sopralluoghi registrati con
+   property-acquisition-form.html, cosi' da poterne importare i dati in una nuova valutazione con
+   un solo clic invece di ridigitarli. Segna con un badge quelle gia' importate (in base a
+   source_acquisition_id sulle valutazioni gia' salvate), ma non le nasconde: puo' sempre servire
+   ricrearne una seconda. ---- */
+var acqList = document.getElementById("acqList");
+
+async function loadAcquisitionsPanel(){
+  var acqResult = await client.from("immonova_acquisitions")
+    .select("id,status,owner_first_name,owner_last_name,property_type,property_address,municipality,province,created_at")
+    .order("created_at",{ascending:false})
+    .limit(30);
+
+  if(acqResult.error){
+    acqList.innerHTML = '<div class="empty">' + escapeHTML(T.acq_loading_error) + '</div>';
+    return;
+  }
+
+  var acquisitions = acqResult.data || [];
+  if(!acquisitions.length){
+    acqList.innerHTML = '<div class="empty">' + escapeHTML(T.acq_empty) + '</div>';
+    return;
+  }
+
+  var importedIds = {};
+  try{
+    var linkedResult = await client.from("immonova_property_valuations").select("source_acquisition_id").not("source_acquisition_id","is",null);
+    (linkedResult.data || []).forEach(function(v){ importedIds[v.source_acquisition_id] = true; });
+  }catch(e){
+    // colonna non ancora presente (migrazione non eseguita) o altro problema non bloccante --
+    // il pannello resta comunque utile senza il badge "già importata".
+  }
+
+  var statusBadgeText = { bozza:T.acq_badge_draft, completata:T.acq_badge_done, inviata:T.acq_badge_sent };
+
+  acqList.innerHTML = acquisitions.map(function(a){
+    var name = [a.owner_first_name, a.owner_last_name].filter(Boolean).join(" ") || "—";
+    var propertyBits = [a.property_type, a.property_address || a.municipality].filter(Boolean).join(" — ");
+    var location = [a.municipality, a.province].filter(Boolean).join(" (") + (a.province ? ")" : "");
+    var isImported = !!importedIds[a.id];
+    var badge = isImported
+      ? '<span class="acq-row-badge imported">' + escapeHTML(T.acq_badge_imported) + '</span>'
+      : '<span class="acq-row-badge">' + escapeHTML(statusBadgeText[a.status] || a.status || "") + '</span>';
+    return '<div class="acq-row">'
+      + '<div class="acq-row-main">'
+        + '<div class="acq-row-name">' + escapeHTML(name) + '</div>'
+        + '<div class="acq-row-detail">' + escapeHTML(propertyBits) + (location.trim() && location.trim() !== "()" ? ' · ' + escapeHTML(location) : '') + '</div>'
+      + '</div>'
+      + badge
+      + '<a class="action-btn" href="valuation-form.html?acquisition_id=' + encodeURIComponent(a.id) + '">' + escapeHTML(T.acq_btn_import) + '</a>'
+    + '</div>';
+  }).join("");
+}
+
 function applyFilter(){
   var query = (searchInput.value || "").trim().toLowerCase();
   var filtered = allValuations.filter(function(v){
@@ -377,6 +461,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   if(await checkAuth()){
     await loadUserLanguage();
     await loadValuations();
+    await loadAcquisitionsPanel();
   }
 })();
 </script>
