@@ -361,9 +361,9 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 
   <div class="section" id="listingsSection" style="display:none">
     <h2 class="section-title" data-i18n="section_listings">Immobili trovati</h2>
-    <p class="map-hint" data-i18n="hint_listings">Ricerca automatica su immobiliare.it, idealista.it e subito.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I pannelli sotto mostrano il portale gi&agrave; filtrato direttamente qui dentro, dove il portale lo permette; se un portale blocca la visualizzazione incorporata (capita spesso, e' una scelta di sicurezza loro, non modificabile da qui) usa il pulsante "Apri in nuova scheda" in alto al pannello. Gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.</p>
+    <p class="map-hint" data-i18n="hint_listings">Ricerca automatica su immobiliare.it, idealista.it e subito.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link "Ricerca su ..." aprono il portale gi&agrave; filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.</p>
     <div id="listingsStatus" class="map-status"></div>
-    <div id="listingsPanels" class="listings-panels"></div>
+    <div id="listingsSearchLinks" class="listings-search-links"></div>
     <div id="listingsResults" class="listings-results"></div>
     <button type="button" class="map-secondary-btn" id="rerunListingsBtn" data-i18n="btn_rerun_listings" style="margin-top:14px">Cerca di nuovo ora</button>
   </div>
@@ -376,7 +376,6 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 
 <script>
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const PORTAL_PREVIEW_PROXY_URL = SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/portal-preview-proxy";
 
 const form = document.getElementById("mandateForm");
 const params = new URLSearchParams(window.location.search);
@@ -975,9 +974,9 @@ async function loadMandateForEdit(){
    presenti + eventuali annunci letti automaticamente da immobiliare.it, best-effort). ---- */
 async function renderMandateListings(id){
   var statusEl = document.getElementById("listingsStatus");
-  var panelsEl = document.getElementById("listingsPanels");
+  var linksEl = document.getElementById("listingsSearchLinks");
   var resultsEl = document.getElementById("listingsResults");
-  panelsEl.innerHTML = "";
+  linksEl.innerHTML = "";
   resultsEl.innerHTML = "";
 
   var result = await client.from("immonova_search_mandate_listings").select("*").eq("mandate_id", id).order("is_search_link", { ascending:false });
@@ -990,42 +989,13 @@ async function renderMandateListings(id){
   var searchLinks = rows.filter(function(r){ return r.is_search_link; });
   var listings = rows.filter(function(r){ return !r.is_search_link; });
 
-  /* ---- Un pannello per portale, con l'iframe che punta alla ricerca gia' filtrata. Il link
-     "Apri in nuova scheda" resta sempre visibile in alto: molti portali immobiliari bloccano
-     deliberatamente l'incorporazione in iframe (X-Frame-Options / CSP, sicurezza lato loro, non
-     aggirabile da qui) e in quel caso il pannello resta vuoto -- non c'e' un modo affidabile
-     per rilevarlo via JavaScript e nascondere l'iframe automaticamente, quindi il pulsante resta
-     l'alternativa sempre pronta. ---- */
   searchLinks.forEach(function(r){
-    var panel = document.createElement("div");
-    panel.className = "listings-panel";
-
-    var head = document.createElement("div");
-    head.className = "listings-panel-head";
-    var label = document.createElement("strong");
-    label.textContent = r.source;
-    var openLink = document.createElement("a");
-    openLink.href = r.url;
-    openLink.target = "_blank";
-    openLink.rel = "noopener";
-    openLink.textContent = T.btn_open_new_tab;
-    head.appendChild(label);
-    head.appendChild(openLink);
-
-    var frame = document.createElement("iframe");
-    frame.src = PORTAL_PREVIEW_PROXY_URL + "?url=" + encodeURIComponent(r.url);
-    frame.loading = "lazy";
-    frame.referrerPolicy = "no-referrer-when-downgrade";
-    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox");
-
-    var fallbackHint = document.createElement("div");
-    fallbackHint.className = "listings-panel-fallback-hint";
-    fallbackHint.textContent = T.listings_panel_fallback_hint;
-
-    panel.appendChild(head);
-    panel.appendChild(frame);
-    panel.appendChild(fallbackHint);
-    panelsEl.appendChild(panel);
+    var a = document.createElement("a");
+    a.href = r.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = r.title || r.source;
+    linksEl.appendChild(a);
   });
 
   if(listings.length){
