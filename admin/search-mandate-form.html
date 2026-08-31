@@ -154,6 +154,12 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 }
 .map-secondary-btn:hover{background:#a67f34;color:#fff}
 .map-status{font-size:11.5px;color:#8f7643}
+.listings-search-links{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.listings-search-links a{display:inline-block;padding:9px 16px;border:1px solid rgba(166,127,52,.4);color:#a67f34;text-decoration:none;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase}
+.listings-search-links a:hover{background:#a67f34;color:#fff}
+.listings-results{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.listings-results a{color:#4a3c1f;font-size:13.5px;text-decoration:underline;word-break:break-all}
+.listings-empty-hint{font-size:12.5px;color:#8f7643;font-style:italic}
 .footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
 .save-panel{min-width:340px;flex:1;max-width:560px}
 .progress-text{min-height:18px;margin-bottom:10px;font-size:13px;color:#8f7643}
@@ -340,6 +346,15 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 
   </form>
 
+  <div class="section" id="listingsSection" style="display:none">
+    <h2 class="section-title" data-i18n="section_listings">Immobili trovati</h2>
+    <p class="map-hint" data-i18n="hint_listings">Ricerca automatica su immobiliare.it, idealista.it e subito.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link "Ricerca su ..." aprono il portale gi&agrave; filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.</p>
+    <div id="listingsStatus" class="map-status"></div>
+    <div id="listingsSearchLinks" class="listings-search-links"></div>
+    <div id="listingsResults" class="listings-results"></div>
+    <button type="button" class="map-secondary-btn" id="rerunListingsBtn" data-i18n="btn_rerun_listings" style="margin-top:14px">Cerca di nuovo ora</button>
+  </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -391,6 +406,13 @@ var UI_STRINGS = {
   btn_undo_last_area:"Elimina ultima zona",
   btn_retry_area_detect:"Rileva di nuovo comuni/provincia",
   map_status_detect_retry_none:"Nessuna zona disegnata: non c'è niente da rilevare di nuovo.",
+  section_listings:"Immobili trovati",
+  hint_listings:"Ricerca automatica su immobiliare.it, idealista.it e subito.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link “Ricerca su ...” aprono il portale già filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.",
+  btn_rerun_listings:"Cerca di nuovo ora",
+  listings_status_searching:"Ricerca in corso sui portali…",
+  listings_status_done:"Ultima ricerca completata.",
+  listings_status_error:"Ricerca non riuscita, riprova tra poco.",
+  listings_no_extra_results:"Nessun annuncio singolo recuperato automaticamente questa volta — usa i link di ricerca qui sopra per vedere i risultati direttamente sul portale.",
   map_status_areas:"{n} zone disegnate",
   map_status_detecting:"Ricerca comuni nella zona in corso\u2026",
   map_status_detect_failed:"Zona salvata, ma non \u00e8 stato possibile rilevare automaticamente comuni/provincia (servizio esterno non raggiungibile in questo momento) \u2014 aggiungili manualmente qui sopra se vuoi, oppure riprova pi\u00f9 tardi.",
@@ -896,6 +918,81 @@ async function loadMandateForEdit(){
   if(data.interest_area_geojson){
     loadAreaGeoJSONOntoMap(data.interest_area_geojson);
   }
+
+  document.getElementById("listingsSection").style.display = "";
+  await renderMandateListings(mandateId);
+}
+
+/* ---- Carica e mostra i risultati gia' salvati per questo mandato (link di ricerca sempre
+   presenti + eventuali annunci letti automaticamente da immobiliare.it, best-effort). ---- */
+async function renderMandateListings(id){
+  var statusEl = document.getElementById("listingsStatus");
+  var linksEl = document.getElementById("listingsSearchLinks");
+  var resultsEl = document.getElementById("listingsResults");
+  linksEl.innerHTML = "";
+  resultsEl.innerHTML = "";
+
+  var result = await client.from("immonova_search_mandate_listings").select("*").eq("mandate_id", id).order("is_search_link", { ascending:false });
+  if(result.error){
+    statusEl.textContent = T.listings_status_error;
+    return;
+  }
+
+  var rows = result.data || [];
+  var searchLinks = rows.filter(function(r){ return r.is_search_link; });
+  var listings = rows.filter(function(r){ return !r.is_search_link; });
+
+  searchLinks.forEach(function(r){
+    var a = document.createElement("a");
+    a.href = r.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = r.title || r.source;
+    linksEl.appendChild(a);
+  });
+
+  if(listings.length){
+    listings.forEach(function(r){
+      var a = document.createElement("a");
+      a.href = r.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = (r.title ? r.title + " — " : "") + r.url;
+      resultsEl.appendChild(a);
+    });
+  }else{
+    var hint = document.createElement("div");
+    hint.className = "listings-empty-hint";
+    hint.textContent = T.listings_no_extra_results;
+    resultsEl.appendChild(hint);
+  }
+
+  statusEl.textContent = rows.length ? T.listings_status_done : "";
+}
+
+/* ---- Invoca la edge function di ricerca annunci; non blocca mai il salvataggio del mandato
+   (fire-and-forget con solo un warn in console se fallisce) -- il mandato resta salvato anche
+   se la ricerca esterna va storta. ---- */
+async function triggerListingsSearch(id, payload){
+  try{
+    var res = await client.functions.invoke("search-mandate-listings", {
+      body:{
+        mandate_id: id,
+        category: payload.category,
+        location_areas: payload.location_areas,
+        budget_min: payload.budget_min,
+        budget_max: payload.budget_max,
+        bedrooms_min: payload.bedrooms_min,
+        bathrooms_min: payload.bathrooms_min
+      }
+    });
+    if(res.error){
+      var msg = await extractEdgeFunctionErrorMessage(res.error);
+      console.warn("Ricerca automatica annunci non riuscita (non bloccante):", msg);
+    }
+  }catch(e){
+    console.warn("Ricerca automatica annunci non riuscita (non bloccante):", e);
+  }
 }
 
 async function checkAuth(){
@@ -972,6 +1069,8 @@ form.addEventListener("submit", async function(event){
       var updateResult = await client.from("immonova_search_mandates").update(payload).eq("id", mandateId);
       if(updateResult.error) throw updateResult.error;
 
+      triggerListingsSearch(mandateId, payload); // non bloccante, non atteso
+
       setProgress(T.msg_saved_success, 100, "success");
       setTimeout(function(){ window.location.href = "search-mandates.html"; }, 1000);
     }else{
@@ -979,6 +1078,8 @@ form.addEventListener("submit", async function(event){
       if(insertResult.error) throw insertResult.error;
 
       savedId = insertResult.data.id;
+
+      triggerListingsSearch(savedId, payload); // non bloccante, non atteso
 
       setProgress(T.msg_notifying, 70, "");
 
@@ -1034,6 +1135,23 @@ form.addEventListener("submit", async function(event){
     setProgress(error.message || T.msg_save_error, 100, "error");
     saveBtn.disabled = false;
   }
+});
+
+document.getElementById("rerunListingsBtn").addEventListener("click", async function(){
+  if(!mandateId) return;
+  var btn = document.getElementById("rerunListingsBtn");
+  btn.disabled = true;
+  document.getElementById("listingsStatus").textContent = T.listings_status_searching;
+  await triggerListingsSearch(mandateId, {
+    category: val("category") || null,
+    location_areas: val("locationAreas") || null,
+    budget_min: numVal("budgetMin"),
+    budget_max: numVal("budgetMax"),
+    bedrooms_min: numVal("bedroomsMin"),
+    bathrooms_min: numVal("bathroomsMin")
+  });
+  await renderMandateListings(mandateId);
+  btn.disabled = false;
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async () => {
