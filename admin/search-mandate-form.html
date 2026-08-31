@@ -154,9 +154,14 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 }
 .map-secondary-btn:hover{background:#a67f34;color:#fff}
 .map-status{font-size:11.5px;color:#8f7643}
-.listings-search-links{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
-.listings-search-links a{display:inline-block;padding:9px 16px;border:1px solid rgba(166,127,52,.4);color:#a67f34;text-decoration:none;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase}
-.listings-search-links a:hover{background:#a67f34;color:#fff}
+.listings-search-links{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:14px 0}
+@media (max-width:900px){.listings-search-links{grid-template-columns:1fr}}
+.listings-search-group{border:1px solid rgba(166,127,52,.3);background:#fff;padding:12px 14px}
+.listings-search-group h4{margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#4a3c1f;display:flex;align-items:center;gap:8px}
+.listings-source-favicon{border-radius:3px;flex-shrink:0}
+.listings-search-group a{display:block;padding:7px 0;color:#a67f34;text-decoration:none;font-size:12.5px;border-bottom:1px dashed rgba(166,127,52,.25)}
+.listings-search-group a:last-child{border-bottom:none}
+.listings-search-group a:hover{color:#7a5f27;text-decoration:underline}
 .listings-results{display:flex;flex-direction:column;gap:6px;margin-top:6px}
 .listings-results a{color:#4a3c1f;font-size:13.5px;text-decoration:underline;word-break:break-all}
 .listings-empty-hint{font-size:12.5px;color:#8f7643;font-style:italic}
@@ -426,7 +431,7 @@ var UI_STRINGS = {
   listings_status_searching:"Ricerca in corso sui portali…",
   listings_status_done:"Ultima ricerca completata.",
   listings_status_error:"Ricerca non riuscita, riprova tra poco.",
-  listings_no_extra_results:"Nessun annuncio singolo recuperato automaticamente questa volta — usa i pannelli qui sopra per vedere i risultati direttamente sul portale.",
+  listings_no_extra_results:"Nessun annuncio singolo recuperato automaticamente questa volta — usa i link qui sopra per vedere i risultati direttamente sul portale.",
   btn_open_new_tab:"Apri in nuova scheda",
   listings_panel_fallback_hint:"Se il riquadro sopra resta vuoto, il portale sta bloccando la visualizzazione incorporata — usa \"Apri in nuova scheda\".",
   map_status_areas:"{n} zone disegnate",
@@ -989,13 +994,46 @@ async function renderMandateListings(id){
   var searchLinks = rows.filter(function(r){ return r.is_search_link; });
   var listings = rows.filter(function(r){ return !r.is_search_link; });
 
+  /* ---- Un riquadro per portale (immobiliare.it / idealista.it / subito.it), con dentro
+     l'elenco dei link -- puo' essercene piu' di uno per portale quando la zona disegnata
+     copre piu' comuni, dato che la ricerca testuale dei portali accetta un comune alla volta. ---- */
+  var groupsBySource = {};
+  var sourceOrder = [];
   searchLinks.forEach(function(r){
-    var a = document.createElement("a");
-    a.href = r.url;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = r.title || r.source;
-    linksEl.appendChild(a);
+    if(!groupsBySource[r.source]){
+      groupsBySource[r.source] = [];
+      sourceOrder.push(r.source);
+    }
+    groupsBySource[r.source].push(r);
+  });
+  sourceOrder.sort();
+  sourceOrder.forEach(function(source){
+    var group = document.createElement("div");
+    group.className = "listings-search-group";
+
+    var heading = document.createElement("h4");
+    var favicon = document.createElement("img");
+    favicon.src = "https://www.google.com/s2/favicons?domain=" + source + "&sz=32";
+    favicon.alt = "";
+    favicon.width = 16;
+    favicon.height = 16;
+    favicon.className = "listings-source-favicon";
+    heading.appendChild(favicon);
+    heading.appendChild(document.createTextNode(source));
+    group.appendChild(heading);
+
+    var links = groupsBySource[source].slice().sort(function(a, b){
+      return (a.title || "").localeCompare(b.title || "", "it");
+    });
+    links.forEach(function(r){
+      var a = document.createElement("a");
+      a.href = r.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = r.title || r.source;
+      group.appendChild(a);
+    });
+    linksEl.appendChild(group);
   });
 
   if(listings.length){
