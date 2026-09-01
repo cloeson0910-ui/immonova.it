@@ -649,8 +649,14 @@ function weightedExtrasValue(pricePerSqm, garageSqm, gardenSqm){
    Ora il comune ha SEMPRE priorita' assoluta: si allarga alla provincia SOLO se non c'e'
    proprio nessun comparabile nello stesso comune, e in quel caso il risultato viene segnato
    chiaramente come "a livello provinciale" (meno preciso), non spacciato per locale. ---- */
-async function findInternalComparables(category, province, municipality){
-  var query = client.from("opportunities").select("id,title,price,internal_size,municipality,province").eq("published", true);
+/* ---- Comparabili interni IMMONOVA. Prima si cerca nello STESSO comune E con le stesse
+   caratteristiche di zona che spostano davvero il prezzo (vista mare, centro storico) -- una
+   casa fronte mare non e' comparabile a una casa in terza fila anche se e' nello stesso paese.
+   Solo se non ci sono abbastanza comparabili così stretti si allarga, prima togliendo il
+   vincolo di zona (stesso comune, qualunque posizione) e poi alla provincia -- sempre
+   dichiarando il livello usato, mai spacciando un dato piu' largo per uno stretto. ---- */
+async function findInternalComparables(category, province, municipality, hasSeaView, hasHistoricCenter){
+  var query = client.from("opportunities").select("id,title,price,internal_size,municipality,province,has_sea_view,has_historic_center").eq("published", true);
   if(category) query = query.eq("category", category);
 
   var result = await query;
@@ -663,13 +669,22 @@ async function findInternalComparables(category, province, municipality){
     return { id: o.id, title: o.title, pricePerSqm: price / size };
   }
 
-  var sameMunicipality = municipality
-    ? result.data.filter(function(o){ return o.municipality && String(o.municipality).toLowerCase() === String(municipality).toLowerCase(); }).map(toComparable).filter(Boolean)
+  var inMunicipality = municipality
+    ? result.data.filter(function(o){ return o.municipality && String(o.municipality).toLowerCase() === String(municipality).toLowerCase(); })
     : [];
 
+  var sameZone = inMunicipality.filter(function(o){
+    return !!o.has_sea_view === !!hasSeaView && !!o.has_historic_center === !!hasHistoricCenter;
+  }).map(toComparable).filter(Boolean);
+
+  var sameMunicipalityAnyZone = inMunicipality.map(toComparable).filter(Boolean);
+
   var withPricePerSqm, geographyLevel;
-  if(sameMunicipality.length){
-    withPricePerSqm = sameMunicipality;
+  if(sameZone.length){
+    withPricePerSqm = sameZone;
+    geographyLevel = "municipality_zone";
+  }else if(sameMunicipalityAnyZone.length){
+    withPricePerSqm = sameMunicipalityAnyZone;
     geographyLevel = "municipality";
   }else{
     withPricePerSqm = (province
@@ -829,13 +844,14 @@ document.getElementById("cadastralIsPrimaCasa").addEventListener("change", compu
 /* ---- Trova comparabili reali via AI (motore dedicato, separato -- immonova-ai-valuation-engine),
    con ricerca web attiva, stesso principio del resto del sistema: se non trova nulla di
    verificabile lo dice chiaramente, non inventa mai un prezzo. ---- */
-async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent){
+async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter){
   try{
     var result = await client.functions.invoke("immonova-ai-valuation-engine", {
       body:{
         category: category || null, municipality: municipality || null, province: province || null, region: region || null,
         internal_size: internalSize || null, address: address || null, property_condition: propertyCondition || null,
-        is_rented: !!isRented, current_annual_rent: currentAnnualRent || null
+        is_rented: !!isRented, current_annual_rent: currentAnnualRent || null,
+        has_sea_view: !!hasSeaView, has_historic_center: !!hasHistoricCenter
       }
     });
     if(result.error) return { comparables:[], position_analysis:null, positive_elements:[], risk_elements:[], conclusion:null, ai_disclaimer:"Ricerca AI non disponibile: " + result.error.message };
@@ -878,13 +894,16 @@ calculateBtn.addEventListener("click", async function(){
   calculateBtn.disabled = true;
   setProgress(T.msg_calculating, 30, "");
 
+  var hasSeaView = document.getElementById("hasSeaView").checked;
+  var hasHistoricCenter = document.getElementById("hasHistoricCenter").checked;
+
   try{
-    var internalResult = await findInternalComparables(category, province, municipality);
+    var internalResult = await findInternalComparables(category, province, municipality, hasSeaView, hasHistoricCenter);
     var marketResult = await findMarketPricePerSqm(municipality, province, region);
     var populationComposition = await findPopulationComposition(municipality, province, region);
     setProgress((T.msg_calculating||"") + " (ricerca AI comparabili...)", 65, "");
     var propertyCondition = val("propertyCondition");
-    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent);
+    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter);
 
     /* ---- Metodo comparativo: pool unificato di tutte le fonti disponibili -- comparabili
        interni IMMONOVA, dato di mercato pubblico (se abbastanza locale), comparabili trovati

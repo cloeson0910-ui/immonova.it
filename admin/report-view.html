@@ -1300,8 +1300,13 @@ function renderHalfAdBlock(ad){
     +(contactLine?'<div class="ad-half-meta">'+escapeHTML(contactLine)+'</div>':'')
     +'</div></div></div>';
 }
-function renderAdPagesForPosition(positionKey){
-  var ads=(dossierAds||[]).filter(function(a){return a.position===positionKey;});
+function renderAdPagesForPosition(positionKey,legacyPositionKey){
+  /* legacyPositionKey: compatibilita' con pubblicita' salvate prima che le posizioni "dopo
+     la sezione" diventassero "prima della sezione" -- finche' l'operatore non riapre e
+     risalva ogni pubblicita' dal pannello admin, il valore vecchio in tabella (es.
+     "after_financial") deve continuare a funzionare, solo spostato in cima alla sezione
+     invece che in fondo. */
+  var ads=(dossierAds||[]).filter(function(a){return a.position===positionKey || (legacyPositionKey && a.position===legacyPositionKey);});
   var fullAds=ads.filter(function(a){return a.size==="full";});
   var halfAds=ads.filter(function(a){return a.size==="half";});
   var pages=fullAds.map(function(ad){ return {html:renderFullAdPage(ad), divider:true}; });
@@ -2884,6 +2889,7 @@ function renderBook(){
      Ecosistema, poi Immobile (foto/render/documenti). Valutazione IMMONOVA chiude come
      verdetto sintetico prima delle fonti. */
 
+  renderAdPagesForPosition("before_territory","after_territory").forEach(function(p){ push(T.chapter_territory, p.html, p.divider, true); });
   push(T.chapter_territory, dividerPageHTML(T.divider_territory_title,T.divider_territory_kicker), true);
   push(T.chapter_territory, renderLocationPage());
   push(T.chapter_territory, renderTerritorialAndTourismPage());
@@ -2894,16 +2900,15 @@ function renderBook(){
   push(T.chapter_territory, renderTourismSeriesPage());
   push(T.chapter_territory, renderTourismForecastPage());
   push(T.chapter_territory, renderEnvironmentPage());
-  renderAdPagesForPosition("after_territory").forEach(function(p){ push(T.chapter_territory, p.html, p.divider, true); });
 
   if(!isLandCategory()){
+    renderAdPagesForPosition("before_financial","after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider, true); });
     push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
     push(T.chapter_financial, renderInternalFacts());
     push(T.chapter_financial, renderInvestmentStructure());
     push(T.chapter_financial, renderTourismDemandPage());
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderFinancialSnapshot());
-    renderAdPagesForPosition("after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider, true); });
   }
 
   var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["shopping",T.eco_shopping,T.eco_shopping_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
@@ -2929,9 +2934,9 @@ function renderBook(){
     if(p) ecoPages.push(p);
   });
   if(ecoPages.length){
+    renderAdPagesForPosition("before_ecosystem","after_ecosystem").forEach(function(p){ push(T.chapter_ecosystem, p.html, p.divider, true); });
     push(T.chapter_ecosystem, dividerPageHTML(T.divider_ecosystem_title,T.divider_ecosystem_kicker), true);
     ecoPages.forEach(function(p){push(T.chapter_ecosystem,p);});
-    renderAdPagesForPosition("after_ecosystem").forEach(function(p){ push(T.chapter_ecosystem, p.html, p.divider, true); });
   }
 
   var docPages = preparedDocumentPages;
@@ -2939,21 +2944,21 @@ function renderBook(){
   var characteristicsPage = renderAssetCharacteristicsPage();
   var hasMedia = normalizeGallery(opportunity&&opportunity.gallery_images).length || clean(opportunity&&opportunity.cover_image) || docPages.length || renovationPages.length;
   if(hasMedia || characteristicsPage){
+    renderAdPagesForPosition("before_property","after_property").forEach(function(p){ push(T.chapter_property, p.html, p.divider, true); });
     push(T.chapter_property, dividerPageHTML(T.divider_property_title,T.divider_property_kicker), true);
     push(T.chapter_property, characteristicsPage);
     renderMediaGalleryPage().forEach(function(p){ push(T.chapter_property, p); });
     renovationPages.forEach(function(p){ push(T.chapter_property, p); });
     docPages.forEach(function(p){ push(T.chapter_property, p); });
-    renderAdPagesForPosition("after_property").forEach(function(p){ push(T.chapter_property, p.html, p.divider, true); });
   }
 
   var narrHtml=renderNarrativePage();
   var scoreHtml=renderScorePage();
   if(narrHtml||scoreHtml){
+    renderAdPagesForPosition("before_evaluation","after_evaluation").forEach(function(p){ push(T.chapter_evaluation, p.html, p.divider, true); });
     push(T.chapter_evaluation, dividerPageHTML(T.divider_evaluation_title,T.divider_evaluation_kicker), true);
     push(T.chapter_evaluation, narrHtml);
     push(T.chapter_evaluation, scoreHtml);
-    renderAdPagesForPosition("after_evaluation").forEach(function(p){ push(T.chapter_evaluation, p.html, p.divider, true); });
   }
 
   push(T.chapter_sources, dividerPageHTML(T.divider_sources_title,T.divider_sources_kicker), true);
