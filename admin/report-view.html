@@ -15,6 +15,10 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .header-actions{display:flex;gap:12px;flex-wrap:wrap}.header-actions a,.header-actions button{padding:10px 15px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.26);color:#a67f34;text-decoration:none;cursor:pointer;font-size:10px;letter-spacing:.16em;text-transform:uppercase}
 .container{max-width:1320px;margin:auto;padding:38px 42px 80px}.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px}.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}.title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}.btn.secondary{background:transparent;color:#a67f34}.version-badge{display:inline-flex;align-items:center;padding:6px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#8f7643;letter-spacing:.08em;text-transform:none;font-size:10px;font-family:monospace;border-radius:3px}
 .lang-switch{padding:8px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#a67f34;font-size:11px;font-family:inherit;cursor:pointer;border-radius:3px}
+.btn.btn-busy,.btn.secondary.btn-busy{background:#e0a83a!important;border-color:#e0a83a!important;color:#3a2c0d!important;cursor:wait!important;opacity:1!important}
+.btn.btn-success,.btn.secondary.btn-success{background:#4f7f45!important;border-color:#4f7f45!important;color:#fff!important}
+select.lang-switch.btn-busy{background:#e0a83a!important;border-color:#e0a83a!important;color:#3a2c0d!important}
+select.lang-switch.btn-success{background:#4f7f45!important;border-color:#4f7f45!important;color:#fff!important}
 @media print{.lang-switch{display:none!important}}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
 .dossier-link-row{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;letter-spacing:.04em;color:#7f6430}
 .dossier-link-row .link-label{color:#a67f34;font-weight:600;white-space:nowrap}
@@ -142,6 +146,7 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
 .pie-row{display:flex;gap:40px;margin:24px 0 6px;flex-wrap:wrap}
 .pie-block{display:flex;flex-direction:column;align-items:center;flex:1;min-width:180px}
 .pie-chart{width:150px;height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.pie-chart .pie-svg{position:absolute;top:0;left:0;width:100%;height:100%}
 .pie-center{width:92px;height:92px;border-radius:50%;background:#fffdf8;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 0 1px rgba(166,127,52,.14) inset}
 .pie-center .pie-value{font-size:20px;font-weight:300;color:#a67f34;line-height:1.1}
 .pie-legend{display:flex;gap:16px;margin-top:14px;font-size:9px;letter-spacing:.06em;color:#8f7643}
@@ -325,6 +330,23 @@ var params = new URLSearchParams(window.location.search);
 var opportunityId = params.get("id");
 var statusBox = document.getElementById("status");
 var book = document.getElementById("book");
+/* ---- Stato visivo giallo (in corso) / verde (completato) per i pulsanti/controlli di
+   "Rigenera link dossier", "Aggiorna dati territoriali" e il selettore lingua rapido:
+   giallo per tutta la durata dell'operazione, poi verde per qualche secondo a conferma,
+   poi torna allo stile normale. ---- */
+function setControlBusy(el){
+  if(!el) return;
+  el.classList.remove("btn-success");
+  el.classList.add("btn-busy");
+}
+function setControlDone(el, ok, holdMs){
+  if(!el) return;
+  el.classList.remove("btn-busy");
+  if(ok){
+    el.classList.add("btn-success");
+    setTimeout(function(){ el.classList.remove("btn-success"); }, holdMs||3000);
+  }
+}
 var pageTitle = document.getElementById("pageTitle");
 var editLink = document.getElementById("editLink");
 var loadBtn = document.getElementById("loadBtn");
@@ -1152,26 +1174,35 @@ async function forceRefreshDossier(){
   var qls=document.getElementById("quickLangSwitch");
   if(qls) qls.value=options.lang;
   setStatus("Aggiornamento forzato dei dati territoriali dal Discovery Engine in corso...","");
-  var fresh=await fetchLiveDossier(radius,options.minCityPopulation,options.cityRadiusKm);
-  if(!fresh){
-    var refreshedNoDataMarker={_no_territorial_data:true,_checked_at:new Date().toISOString(),_last_error:lastDiscoveryFetchError||null};
-    await persistDossierData(refreshedNoDataMarker);
-    dossierData=refreshedNoDataMarker;
-    dossierSource="none_cached";
-    setStatus("Impossibile recuperare nuovi dati territoriali dal Discovery Engine. Causa: "+(lastDiscoveryFetchError||"sconosciuta")+" — segnaposto aggiornato, non verrà richiesto di nuovo automaticamente.","error");
-    return;
+  setControlBusy(refreshDossierBtn);
+  try{
+    var fresh=await fetchLiveDossier(radius,options.minCityPopulation,options.cityRadiusKm);
+    if(!fresh){
+      var refreshedNoDataMarker={_no_territorial_data:true,_checked_at:new Date().toISOString(),_last_error:lastDiscoveryFetchError||null};
+      await persistDossierData(refreshedNoDataMarker);
+      dossierData=refreshedNoDataMarker;
+      dossierSource="none_cached";
+      setStatus("Impossibile recuperare nuovi dati territoriali dal Discovery Engine. Causa: "+(lastDiscoveryFetchError||"sconosciuta")+" — segnaposto aggiornato, non verrà richiesto di nuovo automaticamente.","error");
+      setControlDone(refreshDossierBtn,false);
+      return;
+    }
+    dossierData=fresh;
+    dossierSource="live";
+    await persistDossierData(fresh);
+    /* ---- BUG RISOLTO: "Aggiorna dati" sostituiva dossierData per intero con i dati freschi
+       del Discovery Engine, cancellando la composizione demografica (eta'/reddito) gia'
+       eventualmente calcolata in precedenza, senza mai richiamarla di nuovo -- da qui la
+       segnalazione "manca sempre la demografia nel dossier di vendita". ensurePopulationComposition()
+       controlla gia' da sola se il dato manca e lo recupera, quindi basta richiamarla di nuovo qui. ---- */
+    await ensurePopulationComposition();
+    renderBook();
+    setStatus("Dati territoriali aggiornati e salvati. Non verranno richiesti di nuovo automaticamente alle prossime aperture.","success");
+    setControlDone(refreshDossierBtn,true);
+  }catch(e){
+    console.error("Aggiornamento dati territoriali fallito:",e);
+    setStatus("Errore durante l'aggiornamento dei dati territoriali: "+(e&&e.message||e),"error");
+    setControlDone(refreshDossierBtn,false);
   }
-  dossierData=fresh;
-  dossierSource="live";
-  await persistDossierData(fresh);
-  /* ---- BUG RISOLTO: "Aggiorna dati" sostituiva dossierData per intero con i dati freschi
-     del Discovery Engine, cancellando la composizione demografica (eta'/reddito) gia'
-     eventualmente calcolata in precedenza, senza mai richiamarla di nuovo -- da qui la
-     segnalazione "manca sempre la demografia nel dossier di vendita". ensurePopulationComposition()
-     controlla gia' da sola se il dato manca e lo recupera, quindi basta richiamarla di nuovo qui. ---- */
-  await ensurePopulationComposition();
-  renderBook();
-  setStatus("Dati territoriali aggiornati e salvati. Non verranno richiesti di nuovo automaticamente alle prossime aperture.","success");
 }
 function metricFromDossier(section,field){
   var d=dossierData||{};var bucket=d[section];if(!bucket)return null;
@@ -2734,10 +2765,44 @@ function computeBreakEvenDemand(adrMetric, units, totalCost, demandTotals){
   var marketSharePct = demandTotals ? Math.min(100,(roomNightsRequired/demandTotals.pernottamenti)*100) : null;
   return {occupancyPct: occupancyDisplay*100, occupancyRawPct: occupancyRequired*100, exceedsHorizon: exceedsHorizon, roomNightsRequired: roomNightsRequired, marketSharePct: marketSharePct};
 }
+/* v2: prima il grafico era un div con background:conic-gradient(...). Sullo schermo/nella
+   stampa nativa funzionava perfettamente, ma html2canvas (usato per generare il PDF allegato
+   al "Link diretto al dossier": vedi generateDossierPdfBlob) NON sa disegnare i gradient
+   conici -- li lascia vuoti o incompleti, motivo per cui quel PDF aveva i grafici a torta
+   mancanti/incompleti anche se il dossier "normale" era corretto. Ora e' un anello disegnato
+   con un vero <svg><circle> (stroke-dasharray), che html2canvas renderizza correttamente in
+   ogni caso, con lo stesso identico risultato visivo di prima. */
+/* v3: la v2 (due <circle> con stroke-dasharray + transform="rotate(...)" sul secondo cerchio)
+   nel browser normale funzionava, ma nel PDF generato via html2canvas l'arco colorato
+   spariva comunque -- html2canvas ha un supporto inaffidabile per l'attributo SVG
+   "transform" sui singoli elementi. Questa versione disegna l'arco con un <path> (comando
+   "A", arco vero e proprio) calcolato in coordinate assolute, senza NESSUN transform: e'
+   il modo piu' compatibile per disegnare un anello parziale via SVG, e html2canvas lo
+   renderizza correttamente. */
+function polarPointOnCircle(cx, cy, r, angleDeg){
+  var rad = (angleDeg - 90) * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
 function pieChartHTML(pct, caption, note){
   var p = (pct==null) ? 0 : Math.max(0, Math.min(100, pct));
   var valueLabel = (pct==null) ? T.not_available : percent(p);
-  return '<div class="pie-block"><div class="pie-chart" style="background:conic-gradient(#c79c43 0 '+(p*3.6)+'deg,#ece3d0 '+(p*3.6)+'deg 360deg)"><div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
+  var size=150, strokeW=29, cx=size/2, cy=size/2, r=(size-strokeW)/2;
+  var arcSvg = "";
+  if(p>=99.995){
+    // Cerchio pieno: un arco da 0 a ~360 gradi degenera, disegniamo un cerchio completo.
+    arcSvg = '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#c79c43" stroke-width="'+strokeW+'"></circle>';
+  }else if(p>0.005){
+    var endAngle = p*3.6;
+    var start = polarPointOnCircle(cx,cy,r,0);
+    var end = polarPointOnCircle(cx,cy,r,endAngle);
+    var largeArc = endAngle>180 ? 1 : 0;
+    arcSvg = '<path d="M '+start.x.toFixed(2)+' '+start.y.toFixed(2)+' A '+r+' '+r+' 0 '+largeArc+' 1 '+end.x.toFixed(2)+' '+end.y.toFixed(2)+'" fill="none" stroke="#c79c43" stroke-width="'+strokeW+'" stroke-linecap="butt"></path>';
+  }
+  var svg='<svg class="pie-svg" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#ece3d0" stroke-width="'+strokeW+'"></circle>'
+    +arcSvg
+    +'</svg>';
+  return '<div class="pie-block"><div class="pie-chart">'+svg+'<div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
 }
 function renderTourismDemandPage(){
   if(isLandCategory()||isCommercialCategory()) return "";
@@ -3145,10 +3210,18 @@ async function init(){
           return;
         }
         setStatus("Traduzione a schermo in corso (nessuna chiamata al Discovery Engine, nessun costo)...","");
-        await applyLanguage(chosen);
-        setLangInUrl(chosen);
-        renderBook();
-        setStatus("Dossier mostrato in "+quickLangSwitch.options[quickLangSwitch.selectedIndex].text+". Pronto per Stampa / PDF.","success");
+        setControlBusy(quickLangSwitch);
+        try{
+          await applyLanguage(chosen);
+          setLangInUrl(chosen);
+          renderBook();
+          setStatus("Dossier mostrato in "+quickLangSwitch.options[quickLangSwitch.selectedIndex].text+". Pronto per Stampa / PDF.","success");
+          setControlDone(quickLangSwitch,true);
+        }catch(e){
+          console.error("Cambio lingua fallito:",e);
+          setStatus("Errore durante il cambio lingua: "+(e&&e.message||e),"error");
+          setControlDone(quickLangSwitch,false);
+        }
       });
     }
     setStatus("Caricamento dati interni IMMONOVA...","");
@@ -3334,6 +3407,28 @@ async function renderDossierPageToCanvas(pageEl){
     return await html2canvas(pageEl,{scale:2,useCORS:true,backgroundColor:"#ffffff",foreignObjectRendering:true});
   }
 }
+/* Aspetta che tutte le <img> dentro root abbiano finito di caricare (o siano fallite) prima
+   di continuare, con un timeout per immagine cosi' un'immagine irraggiungibile (es. un annuncio
+   con URL rotto) non blocca per sempre la generazione del PDF. Le foto delle ad (renderAdPagesForPosition)
+   e altre immagini a caricamento diretto (senza il meccanismo "blob:" gia' usato per la mappa)
+   non venivano MAI aspettate prima di questo fix: se al momento dello scatto di html2canvas
+   l'immagine non aveva ancora finito di scaricarsi, quella pagina veniva catturata senza
+   immagine -- causa delle ad "mancanti" nel PDF generato per il link (il dossier a schermo/in
+   stampa nativa non soffriva di questo perche' il browser aspetta da solo il caricamento). */
+function waitForImagesToLoad(root, timeoutMs){
+  timeoutMs = timeoutMs || 8000;
+  var imgs = Array.prototype.slice.call((root||document).querySelectorAll("img"));
+  return Promise.all(imgs.map(function(img){
+    if(img.complete && img.naturalWidth>0) return Promise.resolve();
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){ if(!done){ done=true; resolve(); } }
+      img.addEventListener("load",finish,{once:true});
+      img.addEventListener("error",finish,{once:true});
+      setTimeout(finish,timeoutMs);
+    });
+  }));
+}
 async function generateDossierPdfBlob(){
   var mapImg=document.getElementById("locationMapImg");
   if(mapImg){
@@ -3345,6 +3440,7 @@ async function generateDossierPdfBlob(){
   }
   document.body.classList.add("pdf-export-mode");
   await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
+  await waitForImagesToLoad(document.getElementById("book")||document.body,8000);
   try{
     var pages=Array.prototype.slice.call(document.querySelectorAll("#book .report-page"));
     if(!pages.length) throw new Error("Nessuna pagina del dossier trovata da esportare.");
@@ -3496,6 +3592,7 @@ async function generateDossierLink(){
   generateDossierLinkBtn.disabled = true;
   var originalLabel = generateDossierLinkBtn.textContent;
   generateDossierLinkBtn.textContent = "Generazione in corso...";
+  setControlBusy(generateDossierLinkBtn);
   try{
     /* Forziamo un ri-render fresco nella lingua corrente PRIMA di catturare il PDF: elimina
        qualunque possibilità che venga catturata una versione del dossier non aggiornata alla
@@ -3557,9 +3654,11 @@ async function generateDossierLink(){
     var shareSave = await client.from("opportunities").update({dossier_share_url:shareUrl, dossier_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
     if(shareSave.error) console.warn("Salvataggio link dossier su opportunities fallito:",shareSave.error);
     setStatus(shareUrl?"Link al dossier generato, con anteprima.":"Link al dossier generato (senza anteprima: crea il bucket pubblico \"dossier-pages\" su Supabase Storage per attivarla).","success");
+    setControlDone(generateDossierLinkBtn,true);
   }catch(e){
     console.error(e);
     setStatus("Errore nella generazione del link: "+(e.message||e),"error");
+    setControlDone(generateDossierLinkBtn,false);
   }
   generateDossierLinkBtn.disabled = false;
   generateDossierLinkBtn.textContent = originalLabel;
