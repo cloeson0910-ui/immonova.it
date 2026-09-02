@@ -169,6 +169,15 @@ var FEATURE_PICTOGRAMS = [
   { key:"has_car_charger", icon:"🔌", label:"Colonnina ricarica" }
 ];
 
+/* ---- Etichette stato di occupazione: stessi 4 valori del select "occupancy_status"
+   aggiunto in opportunity-edit.html (scheda Informazioni). ---- */
+var OCCUPANCY_LABELS = {
+  libero: "Libero",
+  locato: "Locato",
+  occupato_proprietario: "Occupato dal proprietario",
+  libero_al_rogito: "Libero al rogito"
+};
+
 function escapeHTML(value){return String(value===null||value===undefined?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");}
 function clean(v){return String(v||"").trim();}
 function firstFiniteOpp(){for(var i=0;i<arguments.length;i++){var n=Number(arguments[i]);if(Number.isFinite(n)&&n!==0)return n;}return null;}
@@ -240,6 +249,11 @@ function renderDataAndPictogramsPage(){
   if(year) rows.push(["Anno costruzione", number(year)]);
   if(clean(o.energy_class) && clean(o.energy_class)!=="Non disponibile") rows.push(["Classe energetica", clean(o.energy_class)]);
   if(clean(o.property_condition)) rows.push(["Stato", clean(o.property_condition)]);
+  var occupancyLabel = OCCUPANCY_LABELS[o.occupancy_status];
+  if(occupancyLabel){
+    rows.push(["Stato occupazione", occupancyLabel]);
+    if(o.occupancy_status === "locato" && firstFiniteOpp(o.monthly_rent)) rows.push(["Canone mensile", number(o.monthly_rent) + " €/mese"]);
+  }
 
   var metricsHTML = rows.length
     ? '<div class="metric-grid">' + rows.map(function(r){ return '<div class="metric-card"><div class="metric-label">'+escapeHTML(r[0])+'</div><div class="metric-value">'+escapeHTML(r[1])+'</div></div>'; }).join("") + '</div>'
@@ -261,8 +275,41 @@ function renderDataAndPictogramsPage(){
     + '</div></article>';
 }
 
+/* ---- Descrizione completa: testo di lunghezza variabile, quindi lo spezziamo su più
+   pagine fisiche (stesso approccio anti-overflow già usato per il dossier completo)
+   invece di rimpicciolire il font o rischiare che il testo esca dalla pagina A4. ---- */
+function chunkText(text, maxCharsPerPage){
+  var words = String(text||"").split(/\s+/).filter(Boolean);
+  var pages = [];
+  var current = "";
+  for(var i=0;i<words.length;i++){
+    var candidate = current ? (current + " " + words[i]) : words[i];
+    if(candidate.length > maxCharsPerPage && current){
+      pages.push(current);
+      current = words[i];
+    } else {
+      current = candidate;
+    }
+  }
+  if(current) pages.push(current);
+  return pages.length ? pages : [""];
+}
+function renderFullDescriptionPages(){
+  var o = opportunity || {};
+  var fullDesc = clean(o.full_description);
+  if(!fullDesc) return "";
+  var chunks = chunkText(fullDesc, 2200);
+  return chunks.map(function(chunk, idx){
+    var heading = idx === 0 ? "Descrizione Completa" : "Descrizione Completa (continua)";
+    return '<article class="report-page"><div class="page-inner">'
+      + '<div class="section-kicker">DOSSIER SINTETICO</div><h2 class="section-title">'+heading+'</h2><div class="lux-rule"></div>'
+      + '<p class="desc-text">'+escapeHTML(chunk)+'</p>'
+      + '</div></article>';
+  }).join("");
+}
+
 function renderBook(){
-  var html = renderCover() + renderDataAndPictogramsPage();
+  var html = renderCover() + renderDataAndPictogramsPage() + renderFullDescriptionPages();
   book.innerHTML = html;
   document.getElementById("pageTitle").textContent = getTitle();
 }
