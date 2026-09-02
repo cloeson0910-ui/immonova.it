@@ -481,6 +481,7 @@ async function loadPhotos(id){
 /* ================================ Salvataggio / caricamento acquisizione ================================ */
 var params = new URLSearchParams(window.location.search);
 var currentId = params.get("id") ? Number(params.get("id")) : null;
+var investorId = params.get("investor_id"); // import dati anagrafici dal cliente selezionato in documenti.html, solo su una NUOVA acquisizione
 
 function val(id){ var el = document.getElementById(id); return el ? el.value : null; }
 function checked(id){ var el = document.getElementById(id); return el ? el.checked : false; }
@@ -593,6 +594,7 @@ async function saveAcquisition(silent){
       var upd = await client.from("immonova_acquisitions").update(payload).eq("id", currentId).select().single();
       if(upd.error) throw upd.error;
     }else{
+      if(investorId) payload.source_investor_id = Number(investorId);
       var ins = await client.from("immonova_acquisitions").insert(payload).select().single();
       if(ins.error) throw ins.error;
       currentId = ins.data.id;
@@ -676,6 +678,25 @@ async function loadAcquisition(id){
   msg.textContent = "";
 }
 
+/* ---- Import dati anagrafici dal cliente/investitore scelto (o creato al volo) nella pagina
+   documenti.html: precompila solo i campi anagrafici del proprietario, mai su un'acquisizione
+   gia' esistente in modifica -- stesso principio usato per l'import in valuationform.html. ---- */
+async function importFromInvestor(){
+  if(!investorId || currentId) return;
+  var res = await client.from("investors").select("*").eq("id", investorId).single();
+  if(res.error || !res.data){
+    document.getElementById("saveMsg").textContent = "Cliente/investitore non trovato: nessun dato importato.";
+    return;
+  }
+  var inv = res.data;
+  document.getElementById("ownerFirstName").value = inv.first_name || "";
+  document.getElementById("ownerLastName").value = inv.last_name || "";
+  document.getElementById("ownerPhone").value = inv.phone || inv.whatsapp || "";
+  document.getElementById("ownerEmail").value = inv.email || "";
+  document.getElementById("saveMsg").textContent = "Dati anagrafici importati da " + [inv.first_name, inv.last_name].filter(Boolean).join(" ") + " — completa i campi immobile.";
+  setTimeout(function(){ if(document.getElementById("saveMsg").textContent.indexOf("importati") !== -1) document.getElementById("saveMsg").textContent = ""; }, 6000);
+}
+
 document.getElementById("saveBtn").addEventListener("click", function(){ saveAcquisition(false); });
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
 document.getElementById("loadBtn").addEventListener("click", function(){
@@ -689,6 +710,8 @@ document.getElementById("newBtn").addEventListener("click", function(){
 if(currentId){
   document.getElementById("loadIdInput").value = currentId;
   loadAcquisition(currentId);
+}else{
+  importFromInvestor();
 }
 </script>
 </body>

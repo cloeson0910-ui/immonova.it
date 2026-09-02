@@ -438,6 +438,7 @@ const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const params = new URLSearchParams(window.location.search);
 const valuationId = params.get("id");
 const acquisitionId = params.get("acquisition_id"); // import da property-acquisition-form.html, solo su una NUOVA valutazione
+const investorId = params.get("investor_id"); // import dati anagrafici dal cliente selezionato in documenti.html, solo su una NUOVA valutazione
 
 const form = document.getElementById("valuationForm");
 const saveBtn = document.getElementById("saveBtn");
@@ -451,6 +452,7 @@ const resultDetail = document.getElementById("resultDetail");
 let currentUser = null;
 let currentUserLanguage = "it";
 let lastCalculation = null;
+let lastGeocode = null; // { lat, lng, precision } dell'ultima geocodifica riuscita, per il salvataggio
 
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_valuations:"Valutazioni", logout:"Logout",
@@ -503,7 +505,9 @@ var UI_STRINGS = {
   detail_based_on:"Stima calcolata su superficie interna di ",
   import_banner_prefix:"Dati importati dall'acquisizione n. ",
   import_banner_note:" — controlla e completa i campi mancanti prima di calcolare e salvare la valutazione.",
-  import_not_found:"Acquisizione non trovata: nessun dato importato."
+  import_not_found:"Acquisizione non trovata: nessun dato importato.",
+  import_investor_banner:" — dati anagrafici importati dal cliente/investitore selezionato. Controlla e completa i campi mancanti.",
+  import_investor_not_found:"Cliente/investitore non trovato: nessun dato importato."
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
@@ -638,6 +642,52 @@ function weightedExtrasValue(pricePerSqm, garageSqm, gardenSqm){
   return garageValue + gardenValue;
 }
 
+/* ---- Geolocalizzazione dell'indirizzo (v2): prima di cercare i comparabili, l'indirizzo
+   inserito (via + comune + provincia + regione) viene geocodificato in coordinate reali
+   tramite Nominatim (OpenStreetMap, nessuna chiave richiesta). Se la geocodifica riesce, i
+   comparabili vengono cercati per DISTANZA REALE dall'immobile (raggio in km), non solo per
+   "stesso comune": due immobili a 300 metri ma su comuni confinanti diversi sono comparabili
+   quanto (o piu' di) due nello stesso comune ma a 15km di distanza. Se la geocodifica fallisce
+   (indirizzo non trovato, servizio non raggiungibile), il sistema NON si blocca: ripiega
+   automaticamente sul criterio precedente (comune + vista mare/centro storico), esattamente
+   come funzionava prima -- e lo dichiara chiaramente nel risultato, mai spacciando una stima
+   piu' larga per una basata sulla posizione esatta. ---- */
+var GEO_RADIUS_KM = 2.5; // raggio di ricerca comparabili per prossimita' reale
+var GEOCODE_TIMEOUT_MS = 8000;
+
+function haversineDistanceKm(lat1, lng1, lat2, lng2){
+  if(lat1==null || lng1==null || lat2==null || lng2==null) return null;
+  var R = 6371;
+  var dLat = (lat2-lat1) * Math.PI/180;
+  var dLng = (lng2-lng1) * Math.PI/180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+async function geocodeAddress(address, municipality, province, region){
+  var queryParts = [address, municipality, province, region, "Italia"].filter(Boolean);
+  if(!queryParts.length) return { lat:null, lng:null, precision:null };
+  var q = queryParts.join(", ");
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, GEOCODE_TIMEOUT_MS);
+  try{
+    var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q=" + encodeURIComponent(q);
+    var res = await fetch(url, { signal: controller.signal, headers: { "Accept":"application/json" } });
+    if(!res.ok) return { lat:null, lng:null, precision:null };
+    var data = await res.json();
+    if(!Array.isArray(data) || !data.length) return { lat:null, lng:null, precision:null };
+    var lat = Number(data[0].lat), lng = Number(data[0].lon);
+    if(!Number.isFinite(lat) || !Number.isFinite(lng)) return { lat:null, lng:null, precision:null };
+    return { lat:lat, lng:lng, precision: address ? "address" : "municipality" };
+  }catch(e){
+    console.warn("Geocodifica non disponibile (non bloccante), si ripiega sul criterio comune/zona:", e);
+    return { lat:null, lng:null, precision:null };
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
 /* ---- Comparabili interni: altre opportunita' IMMONOVA gia' pubblicate, stessa categoria,
    stessa provincia (o comune se la provincia non e' compilata), con prezzo e superficie
    validi. Calcola prezzo/mq per ciascuna, poi la mediana (piu' robusta della media contro
@@ -655,29 +705,53 @@ function weightedExtrasValue(pricePerSqm, garageSqm, gardenSqm){
    Solo se non ci sono abbastanza comparabili così stretti si allarga, prima togliendo il
    vincolo di zona (stesso comune, qualunque posizione) e poi alla provincia -- sempre
    dichiarando il livello usato, mai spacciando un dato piu' largo per uno stretto. ---- */
-async function findInternalComparables(category, province, municipality, hasSeaView, hasHistoricCenter){
-  var query = client.from("opportunities").select("id,title,price,internal_size,municipality,province,has_sea_view,has_historic_center").eq("published", true);
+async function findInternalComparables(category, province, municipality, hasSeaView, hasHistoricCenter, propertyLat, propertyLng){
+  var query = client.from("opportunities").select("id,title,price,internal_size,municipality,province,has_sea_view,has_historic_center,latitude,longitude").eq("published", true);
   if(category) query = query.eq("category", category);
 
   var result = await query;
-  if(result.error || !result.data) return { comparables: [], pricePerSqm: null, geography_level: null };
+  if(result.error || !result.data) return { comparables: [], pricePerSqm: null, geography_level: null, geo_radius_km: null };
 
-  function toComparable(o){
+  function toComparable(o, distanceKm){
     var price = parsePriceNumber(o.price);
     var size = Number(o.internal_size);
     if(!price || !size || size <= 0) return null;
-    return { id: o.id, title: o.title, pricePerSqm: price / size };
+    return { id: o.id, title: o.title, pricePerSqm: price / size, distance_km: (distanceKm!=null ? Math.round(distanceKm*10)/10 : null) };
   }
 
+  // ---- Tier 0 (il piu' preciso, se disponibile): distanza reale dalle coordinate. Non
+  // dipende dal confine comunale -- un immobile a 400m oltre il confine del comune vicino e'
+  // comunque un comparabile piu' valido di uno a 20km nello stesso comune. ----
+  if(propertyLat != null && propertyLng != null){
+    var withDistance = result.data
+      .map(function(o){
+        if(o.latitude == null || o.longitude == null) return null;
+        var d = haversineDistanceKm(propertyLat, propertyLng, Number(o.latitude), Number(o.longitude));
+        return d != null && d <= GEO_RADIUS_KM ? toComparable(o, d) : null;
+      })
+      .filter(Boolean)
+      .sort(function(a,b){ return a.distance_km - b.distance_km; });
+
+    if(withDistance.length){
+      var sortedGeo = withDistance.map(function(c){ return c.pricePerSqm; }).sort(function(a,b){ return a-b; });
+      var midGeo = Math.floor(sortedGeo.length / 2);
+      var medianGeo = sortedGeo.length % 2 ? sortedGeo[midGeo] : (sortedGeo[midGeo-1] + sortedGeo[midGeo]) / 2;
+      return { comparables: withDistance, pricePerSqm: medianGeo, geography_level: "geo_radius", geo_radius_km: GEO_RADIUS_KM };
+    }
+  }
+
+  // ---- Fallback (nessuna coordinata disponibile, o nessun comparabile nel raggio): stesso
+  // criterio di prima, comune + caratteristiche di zona (vista mare/centro storico), poi
+  // comune, poi provincia -- mai spacciato per basato sulla posizione esatta. ----
   var inMunicipality = municipality
     ? result.data.filter(function(o){ return o.municipality && String(o.municipality).toLowerCase() === String(municipality).toLowerCase(); })
     : [];
 
   var sameZone = inMunicipality.filter(function(o){
     return !!o.has_sea_view === !!hasSeaView && !!o.has_historic_center === !!hasHistoricCenter;
-  }).map(toComparable).filter(Boolean);
+  }).map(function(o){ return toComparable(o, null); }).filter(Boolean);
 
-  var sameMunicipalityAnyZone = inMunicipality.map(toComparable).filter(Boolean);
+  var sameMunicipalityAnyZone = inMunicipality.map(function(o){ return toComparable(o, null); }).filter(Boolean);
 
   var withPricePerSqm, geographyLevel;
   if(sameZone.length){
@@ -688,18 +762,18 @@ async function findInternalComparables(category, province, municipality, hasSeaV
     geographyLevel = "municipality";
   }else{
     withPricePerSqm = (province
-      ? result.data.filter(function(o){ return o.province && String(o.province).toLowerCase() === String(province).toLowerCase(); }).map(toComparable).filter(Boolean)
+      ? result.data.filter(function(o){ return o.province && String(o.province).toLowerCase() === String(province).toLowerCase(); }).map(function(o){ return toComparable(o, null); }).filter(Boolean)
       : []);
     geographyLevel = "province";
   }
 
-  if(!withPricePerSqm.length) return { comparables: [], pricePerSqm: null, geography_level: null };
+  if(!withPricePerSqm.length) return { comparables: [], pricePerSqm: null, geography_level: null, geo_radius_km: null };
 
   var sorted = withPricePerSqm.map(function(c){ return c.pricePerSqm; }).sort(function(a,b){ return a-b; });
   var mid = Math.floor(sorted.length / 2);
   var median = sorted.length % 2 ? sorted[mid] : (sorted[mid-1] + sorted[mid]) / 2;
 
-  return { comparables: withPricePerSqm, pricePerSqm: median, geography_level: geographyLevel };
+  return { comparables: withPricePerSqm, pricePerSqm: median, geography_level: geographyLevel, geo_radius_km: null };
 }
 
 /* ---- Dato di mercato pubblico: motore specializzato immonova-global-data-provider,
@@ -844,14 +918,15 @@ document.getElementById("cadastralIsPrimaCasa").addEventListener("change", compu
 /* ---- Trova comparabili reali via AI (motore dedicato, separato -- immonova-ai-valuation-engine),
    con ricerca web attiva, stesso principio del resto del sistema: se non trova nulla di
    verificabile lo dice chiaramente, non inventa mai un prezzo. ---- */
-async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter){
+async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter, propertyLat, propertyLng){
   try{
     var result = await client.functions.invoke("immonova-ai-valuation-engine", {
       body:{
         category: category || null, municipality: municipality || null, province: province || null, region: region || null,
         internal_size: internalSize || null, address: address || null, property_condition: propertyCondition || null,
         is_rented: !!isRented, current_annual_rent: currentAnnualRent || null,
-        has_sea_view: !!hasSeaView, has_historic_center: !!hasHistoricCenter
+        has_sea_view: !!hasSeaView, has_historic_center: !!hasHistoricCenter,
+        latitude: propertyLat != null ? propertyLat : null, longitude: propertyLng != null ? propertyLng : null
       }
     });
     if(result.error) return { comparables:[], position_analysis:null, positive_elements:[], risk_elements:[], conclusion:null, ai_disclaimer:"Ricerca AI non disponibile: " + result.error.message };
@@ -898,12 +973,16 @@ calculateBtn.addEventListener("click", async function(){
   var hasHistoricCenter = document.getElementById("hasHistoricCenter").checked;
 
   try{
-    var internalResult = await findInternalComparables(category, province, municipality, hasSeaView, hasHistoricCenter);
+    setProgress((T.msg_calculating||"") + " (geolocalizzazione indirizzo...)", 20, "");
+    var geocodeResult = await geocodeAddress(address, municipality, province, region);
+    lastGeocode = geocodeResult;
+
+    var internalResult = await findInternalComparables(category, province, municipality, hasSeaView, hasHistoricCenter, geocodeResult.lat, geocodeResult.lng);
     var marketResult = await findMarketPricePerSqm(municipality, province, region);
     var populationComposition = await findPopulationComposition(municipality, province, region);
     setProgress((T.msg_calculating||"") + " (ricerca AI comparabili...)", 65, "");
     var propertyCondition = val("propertyCondition");
-    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter);
+    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter, geocodeResult.lat, geocodeResult.lng);
 
     /* ---- Metodo comparativo: pool unificato di tutte le fonti disponibili -- comparabili
        interni IMMONOVA, dato di mercato pubblico (se abbastanza locale), comparabili trovati
@@ -972,7 +1051,7 @@ calculateBtn.addEventListener("click", async function(){
       resultBox.classList.remove("visible");
       setProgress(T.msg_no_data_at_all, 100, "error");
       lastCalculation = {
-        comparables_snapshot: { internal: internalResult.comparables, internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
+        comparables_snapshot: { internal: internalResult.comparables, internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, internal_geo_radius_km: internalResult.geo_radius_km, geocoded_lat: geocodeResult.lat, geocoded_lng: geocodeResult.lng, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
         ai_comparables: aiResult.comparables || [], ai_narrative: aiResult,
         valuation_comparativo_min:null, valuation_comparativo_max:null, valuation_reddituale_min:null, valuation_reddituale_max:null,
         estimated_value_min:null, estimated_value_max:null, estimated_value_per_sqm:null, suggested_listing_price:null
@@ -1014,6 +1093,9 @@ calculateBtn.addEventListener("click", async function(){
         internal: internalResult.comparables,
         internal_price_per_sqm: internalResult.pricePerSqm,
         internal_geography_level: internalResult.geography_level,
+        internal_geo_radius_km: internalResult.geo_radius_km,
+        geocoded_lat: geocodeResult.lat,
+        geocoded_lng: geocodeResult.lng,
         market_price_per_sqm: marketResult.value,
         market_geography_level: marketResult.geography_level,
         population_composition: populationComposition,
@@ -1052,6 +1134,9 @@ calculateBtn.addEventListener("click", async function(){
     var detailParts = [];
     var discardedCount = pricesPerSqm.length - trimmedPricesPerSqm.length;
     detailParts.push("<strong>Metodo comparativo:</strong> " + (hasComparativo ? formatEuro(comparativoMin) + " – " + formatEuro(comparativoMax) + " (" + trimmedPricesPerSqm.length + " fonti" + (discardedCount>0 ? ", " + discardedCount + " scartate come anomale" : "") + ")" : "non calcolabile"));
+    if(internalResult.geography_level === "geo_radius") detailParts.push("<em>Comparabili IMMONOVA: cercati per distanza reale dall'indirizzo geolocalizzato (raggio " + internalResult.geo_radius_km + " km).</em>");
+    else if(geocodeResult.lat == null) detailParts.push("<em>Comparabili IMMONOVA: indirizzo non geolocalizzabile, criterio basato su comune/zona (fallback).</em>");
+    else detailParts.push("<em>Comparabili IMMONOVA: nessun risultato nel raggio di " + GEO_RADIUS_KM + " km, allargato a comune/zona (fallback).</em>");
     if(internalResult.geography_level === "province") detailParts.push("<em>Comparabili IMMONOVA: nessuno nello stesso comune, allargato a livello provinciale (meno preciso).</em>");
     detailParts.push("<strong>Metodo reddituale:</strong> " + (hasReddituale ? formatEuro(reddituraleMin) + " – " + formatEuro(reddituraleMax) : (isRented ? "canone non inserito" : "immobile non locato")));
     detailParts.push("<strong>Prezzo di immissione consigliato:</strong> " + formatEuro(suggestedListingPrice));
@@ -1115,6 +1200,10 @@ async function loadValuationForEdit(){
   document.getElementById("notes").value = data.notes || "";
   document.getElementById("cadastralIsPrimaCasa").checked = !!data.cadastral_is_prima_casa;
   computeAndRenderCadastralValue();
+
+  if(data.latitude != null && data.longitude != null){
+    lastGeocode = { lat: Number(data.latitude), lng: Number(data.longitude), precision: "saved" };
+  }
 
   PROPERTY_FEATURES.forEach(function(f){
     var el = document.getElementById(f.elementId);
@@ -1239,6 +1328,33 @@ async function importFromAcquisition(){
   banner.textContent = T.import_banner_prefix + acquisitionId + T.import_banner_note;
 }
 
+/* ---- Import dati anagrafici dal cliente/investitore scelto (o creato al volo) nella
+   pagina documenti.html: precompila solo i campi anagrafici del venditore, l'agente resta
+   libero di correggere/completare tutto il resto -- stesso principio di importFromAcquisition,
+   mai su una valutazione gia' esistente in modifica. Il legame con l'investors.id viene
+   comunque salvato (source_investor_id), cosi' la valutazione resta tracciabile fino al
+   cliente anche se poi i campi testuali vengono modificati a mano. ---- */
+async function importFromInvestor(){
+  if(!investorId || valuationId) return;
+
+  var banner = document.getElementById("importBanner");
+  var result = await client.from("investors").select("*").eq("id", investorId).single();
+  if(result.error || !result.data){
+    banner.style.display = "block";
+    banner.textContent = T.import_investor_not_found;
+    return;
+  }
+
+  var inv = result.data;
+  document.getElementById("sellerFirstName").value = inv.first_name || "";
+  document.getElementById("sellerLastName").value = inv.last_name || "";
+  document.getElementById("sellerPhone").value = inv.phone || inv.whatsapp || "";
+  document.getElementById("sellerEmail").value = inv.email || "";
+
+  banner.style.display = "block";
+  banner.textContent = [inv.first_name, inv.last_name].filter(Boolean).join(" ") + T.import_investor_banner;
+}
+
 form.addEventListener("submit", async function(event){
   event.preventDefault();
 
@@ -1290,7 +1406,9 @@ form.addEventListener("submit", async function(event){
     notes: val("notes") || null,
     cadastral_is_prima_casa: document.getElementById("cadastralIsPrimaCasa").checked,
     cadastral_value: lastCadastralCalc ? lastCadastralCalc.cadastral_value : null,
-    cadastral_multiplier: lastCadastralCalc ? lastCadastralCalc.cadastral_multiplier : null
+    cadastral_multiplier: lastCadastralCalc ? lastCadastralCalc.cadastral_multiplier : null,
+    latitude: lastGeocode && lastGeocode.lat != null ? lastGeocode.lat : null,
+    longitude: lastGeocode && lastGeocode.lng != null ? lastGeocode.lng : null
   };
 
   PROPERTY_FEATURES.forEach(function(f){
@@ -1316,6 +1434,7 @@ form.addEventListener("submit", async function(event){
   if(!valuationId){
     payload.created_by = currentUser.id;
     if(acquisitionId) payload.source_acquisition_id = Number(acquisitionId);
+    if(investorId) payload.source_investor_id = Number(investorId);
   }
 
   try{
@@ -1348,6 +1467,7 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
     await loadUserLanguage();
     await loadValuationForEdit();
     await importFromAcquisition();
+    await importFromInvestor();
   }
 })();
 </script>

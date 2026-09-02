@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documenti | IMMONOVA Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430;padding-bottom:60px}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+header{position:sticky;top:0;z-index:20;background:rgba(244,236,223,.9);backdrop-filter:blur(14px);border-bottom:1px solid rgba(166,127,52,.18);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+header a.back{color:#a67f34;text-decoration:none;font-size:11px;letter-spacing:.16em;text-transform:uppercase;border:1px solid rgba(166,127,52,.28);padding:10px 16px}
+header h1{font-size:18px;font-weight:300;letter-spacing:.1em;color:#a67f34;margin:0}
+.container{max-width:1080px;margin:0 auto;padding:36px 32px 60px}
+.panel{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.07);padding:26px 26px 28px;margin-bottom:24px}
+.panel-title{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#9a793c;margin-bottom:16px}
+.client-search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.client-search-row input{flex:1;min-width:220px;padding:13px 14px;border:1px solid rgba(166,127,52,.28);background:#fff;font-size:14px;font-family:inherit;color:#4a3c1f}
+button, .btn{cursor:pointer;font-family:inherit}
+.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.btn.secondary{background:rgba(255,255,255,.3);color:#a67f34}
+.btn:disabled{opacity:.5;cursor:default}
+.results-list{margin-top:12px;border:1px solid rgba(166,127,52,.16);max-height:260px;overflow-y:auto;display:none}
+.results-list.visible{display:block}
+.result-row{padding:12px 14px;border-bottom:1px solid rgba(166,127,52,.10);cursor:pointer;font-size:13.5px;color:#5a4a2a}
+.result-row:last-child{border-bottom:none}
+.result-row:hover{background:rgba(166,127,52,.10)}
+.result-row .r-name{color:#a67f34;font-weight:600}
+.result-row .r-meta{font-size:11.5px;color:#8f7643;margin-top:2px}
+.new-client-toggle{margin-top:14px;font-size:12px;color:#a67f34;text-decoration:underline;cursor:pointer;display:inline-block}
+.new-client-form{display:none;margin-top:16px;padding:16px;border:1px dashed rgba(166,127,52,.3);background:rgba(255,255,255,.2)}
+.new-client-form.visible{display:block}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 14px}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.field label{font-size:11.5px;color:#8f7643;font-weight:600}
+.field input,.field select{padding:10px 12px;border:1px solid rgba(166,127,52,.28);font-size:14px;font-family:inherit;background:#fff;color:#4a3c1f}
+.selected-client{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;background:rgba(166,127,52,.10);border:1px solid rgba(166,127,52,.24);flex-wrap:wrap}
+.selected-client .sc-name{font-size:17px;color:#a67f34}
+.selected-client .sc-meta{font-size:12.5px;color:#8f7643;margin-top:4px}
+.doc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}
+@media(max-width:900px){.doc-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.doc-grid{grid-template-columns:1fr}}
+.doc-card{background:rgba(255,255,255,.22);border:1px solid rgba(166,127,52,.18);padding:20px;display:flex;flex-direction:column;gap:10px;min-height:150px}
+.doc-card .dc-icon{font-size:24px}
+.doc-card .dc-title{font-size:14.5px;color:#a67f34;font-weight:600}
+.doc-card .dc-note{font-size:12px;color:#8f7643;line-height:1.5;flex:1}
+.doc-card .dc-status{font-size:11px;color:#517a4f}
+.disabled-hint{opacity:.5;pointer-events:none}
+.msg-box{margin-top:14px;font-size:12.5px;color:#8f7643}
+.msg-box.error{color:#9c2f2f}
+.msg-box.success{color:#4f7f45}
+
+/* ---- Generatore documento (NDA / Incarico): pannello sovrapposto, stampabile isolatamente
+   via @media print che nasconde tutto il resto della pagina. ---- */
+.gen-overlay{display:none;position:fixed;inset:0;background:rgba(74,60,31,.55);z-index:50;padding:30px;overflow-y:auto}
+.gen-overlay.visible{display:block}
+.gen-sheet{max-width:760px;margin:0 auto;background:#fffdf7;padding:52px 56px;box-shadow:0 30px 90px rgba(0,0,0,.35);position:relative}
+.gen-close{position:absolute;top:18px;right:18px;background:none;border:none;font-size:20px;color:#a67f34;cursor:pointer}
+.gen-letterhead{font-size:20px;letter-spacing:.3em;color:#a67f34;font-weight:300;margin-bottom:6px}
+.gen-sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:32px;border-bottom:1px solid rgba(166,127,52,.25);padding-bottom:18px}
+.gen-doc-title{font-size:24px;color:#4a3c1f;font-weight:400;margin-bottom:22px}
+.gen-doc-body p{font-size:13.5px;line-height:1.85;color:#3f321c;margin-bottom:14px}
+.gen-doc-body h4{font-size:13px;color:#a67f34;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+.gen-sign-row{display:flex;justify-content:space-between;margin-top:50px;font-size:12.5px;color:#4a3c1f}
+.gen-actions{margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
+.gen-form-fields{margin-bottom:22px;padding:14px;background:rgba(166,127,52,.06);border:1px solid rgba(166,127,52,.16)}
+@media print{
+  body *{visibility:hidden}
+  .gen-sheet, .gen-sheet *{visibility:visible}
+  .gen-sheet{position:absolute;left:0;top:0;box-shadow:none;padding:0;max-width:100%}
+  .gen-close, .gen-actions, .gen-form-fields{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="dashboard.html" class="back">← Dashboard</a>
+  <h1>📄 Documenti</h1>
+  <span></span>
+</header>
+
+<div class="container">
+
+  <div class="panel" id="clientPanel">
+    <div class="panel-title">Cliente / Investitore</div>
+
+    <div id="clientSearchBlock">
+      <div class="client-search-row">
+        <input type="text" id="clientSearchInput" placeholder="Cerca per nome, cognome, email o azienda…">
+        <button type="button" class="btn secondary" id="clearSearchBtn">Pulisci</button>
+      </div>
+      <div class="results-list" id="clientResults"></div>
+      <span class="new-client-toggle" id="newClientToggle">+ Nuovo cliente/investitore</span>
+
+      <div class="new-client-form" id="newClientForm">
+        <div class="grid2">
+          <div class="field"><label>Nome *</label><input type="text" id="newFirstName"></div>
+          <div class="field"><label>Cognome *</label><input type="text" id="newLastName"></div>
+          <div class="field"><label>Email</label><input type="email" id="newEmail"></div>
+          <div class="field"><label>Telefono</label><input type="tel" id="newPhone"></div>
+          <div class="field"><label>Azienda</label><input type="text" id="newCompany"></div>
+        </div>
+        <button type="button" class="btn" id="createClientBtn">Crea e seleziona</button>
+      </div>
+    </div>
+
+    <div class="selected-client" id="selectedClientBox" style="display:none">
+      <div>
+        <div class="sc-name" id="scName"></div>
+        <div class="sc-meta" id="scMeta"></div>
+      </div>
+      <button type="button" class="btn secondary" id="changeClientBtn">Cambia cliente</button>
+    </div>
+
+    <div class="msg-box" id="clientMsg"></div>
+  </div>
+
+  <div class="panel" id="docsPanel" style="display:none">
+    <div class="panel-title">Documenti per questo cliente</div>
+    <div class="doc-grid">
+
+      <div class="doc-card">
+        <div class="dc-icon">🔒</div>
+        <div class="dc-title">NDA — Accordo di Riservatezza</div>
+        <div class="dc-note">Impegno formale di IMMONOVA: trattamento riservato dei dati del cliente, divulgazione limitata allo staff interno e a investitori verificati.</div>
+        <button type="button" class="btn" id="openNdaBtn">Genera NDA</button>
+      </div>
+
+      <div class="doc-card">
+        <div class="dc-icon">🛡️</div>
+        <div class="dc-title">Informativa Privacy</div>
+        <div class="dc-note">Informativa GDPR sul trattamento dati (documento generale del sito). Apre in una nuova scheda; la consegna viene registrata su questo cliente.</div>
+        <button type="button" class="btn" id="openPrivacyBtn">Invia informativa</button>
+      </div>
+
+      <div class="doc-card">
+        <div class="dc-icon">✍️</div>
+        <div class="dc-title">Incarico di Mediazione</div>
+        <div class="dc-note">Incarico di vendita/mediazione immobiliare, con i dati dell'immobile e le condizioni economiche (esclusiva, durata, provvigione).</div>
+        <button type="button" class="btn" id="openIncaricoBtn">Genera Incarico</button>
+      </div>
+
+      <div class="doc-card">
+        <div class="dc-icon">📐</div>
+        <div class="dc-title">Valutazione Immobiliare</div>
+        <div class="dc-note">Apre il form di valutazione con i dati anagrafici del cliente già precompilati.</div>
+        <button type="button" class="btn" id="openValuationBtn">Apri valutazione</button>
+      </div>
+
+      <div class="doc-card">
+        <div class="dc-icon">📋</div>
+        <div class="dc-title">Acquisizione Immobile</div>
+        <div class="dc-note">Apre il form di sopralluogo/acquisizione con i dati anagrafici del cliente/proprietario già precompilati.</div>
+        <button type="button" class="btn" id="openAcquisitionBtn">Apri acquisizione</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="panel" id="historyPanel" style="display:none">
+    <div class="panel-title">Documenti recenti di questo cliente</div>
+    <div id="historyList" style="font-size:13px;color:#5a4a2a">Nessun documento ancora registrato per questo cliente.</div>
+  </div>
+
+</div>
+
+<!-- Overlay generatore documento -->
+<div class="gen-overlay" id="genOverlay">
+  <div class="gen-sheet" id="genSheet">
+    <button type="button" class="gen-close" id="genCloseBtn">✕</button>
+    <div class="gen-letterhead">IMMONOVA</div>
+    <div class="gen-sub">OFF MARKET · CONSULTING</div>
+    <div id="genFormFields"></div>
+    <div class="gen-doc-title" id="genDocTitle"></div>
+    <div class="gen-doc-body" id="genDocBody"></div>
+    <div class="gen-sign-row">
+      <div>Cliente: <span id="genSignClient"></span></div>
+      <div>Data: <span id="genSignDate"></span></div>
+    </div>
+    <div class="gen-actions">
+      <button type="button" class="btn" id="genPrintBtn">Stampa / Salva PDF</button>
+      <button type="button" class="btn secondary" id="genSaveBtn">Registra documento</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser = null;
+let selectedClient = null;
+let currentGenType = null; // 'nda' | 'incarico'
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function escapeHTML(v){ return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
+function fullName(inv){ return [inv.first_name, inv.last_name].filter(Boolean).join(" "); }
+function todayIt(){ return new Date().toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }); }
+
+/* ================================ Ricerca / selezione cliente ================================ */
+const searchInput = document.getElementById("clientSearchInput");
+const resultsList = document.getElementById("clientResults");
+let searchDebounce = null;
+
+searchInput.addEventListener("input", function(){
+  clearTimeout(searchDebounce);
+  var q = searchInput.value.trim();
+  if(!q){ resultsList.classList.remove("visible"); resultsList.innerHTML = ""; return; }
+  searchDebounce = setTimeout(function(){ runClientSearch(q); }, 280);
+});
+
+async function runClientSearch(q){
+  var like = "%" + q.replace(/[%_]/g, "") + "%";
+  var res = await client.from("investors")
+    .select("id,first_name,last_name,email,phone,company")
+    .or("first_name.ilike." + like + ",last_name.ilike." + like + ",email.ilike." + like + ",company.ilike." + like)
+    .order("created_at", { ascending:false })
+    .limit(15);
+  resultsList.innerHTML = "";
+  if(res.error || !res.data || !res.data.length){
+    resultsList.innerHTML = '<div class="result-row" style="cursor:default;color:#8f7643">Nessun cliente trovato per questa ricerca.</div>';
+    resultsList.classList.add("visible");
+    return;
+  }
+  res.data.forEach(function(inv){
+    var row = document.createElement("div");
+    row.className = "result-row";
+    row.innerHTML = '<div class="r-name">' + escapeHTML(fullName(inv)) + (inv.company ? " — " + escapeHTML(inv.company) : "") + '</div>' +
+      '<div class="r-meta">' + escapeHTML([inv.email, inv.phone].filter(Boolean).join(" · ") || "—") + '</div>';
+    row.addEventListener("click", function(){ selectClient(inv); });
+    resultsList.appendChild(row);
+  });
+  resultsList.classList.add("visible");
+}
+
+document.getElementById("clearSearchBtn").addEventListener("click", function(){
+  searchInput.value = ""; resultsList.classList.remove("visible"); resultsList.innerHTML = "";
+});
+
+document.getElementById("newClientToggle").addEventListener("click", function(){
+  document.getElementById("newClientForm").classList.toggle("visible");
+});
+
+document.getElementById("createClientBtn").addEventListener("click", async function(){
+  var firstName = document.getElementById("newFirstName").value.trim();
+  var lastName = document.getElementById("newLastName").value.trim();
+  var msg = document.getElementById("clientMsg");
+  if(!firstName || !lastName){
+    msg.className = "msg-box error"; msg.textContent = "Nome e cognome sono obbligatori.";
+    return;
+  }
+  var payload = {
+    first_name: firstName, last_name: lastName,
+    email: document.getElementById("newEmail").value.trim() || null,
+    phone: document.getElementById("newPhone").value.trim() || null,
+    company: document.getElementById("newCompany").value.trim() || null,
+    created_by: currentUser.id
+  };
+  var ins = await client.from("investors").insert(payload).select().single();
+  if(ins.error){
+    msg.className = "msg-box error"; msg.textContent = "Errore nella creazione del cliente: " + ins.error.message;
+    return;
+  }
+  msg.className = "msg-box success"; msg.textContent = "Cliente creato.";
+  selectClient(ins.data);
+});
+
+function selectClient(inv){
+  selectedClient = inv;
+  document.getElementById("clientSearchBlock").style.display = "none";
+  document.getElementById("selectedClientBox").style.display = "flex";
+  document.getElementById("scName").textContent = fullName(inv) + (inv.company ? " — " + inv.company : "");
+  document.getElementById("scMeta").textContent = [inv.email, inv.phone].filter(Boolean).join(" · ") || "Nessun contatto registrato";
+  document.getElementById("docsPanel").style.display = "block";
+  document.getElementById("historyPanel").style.display = "block";
+  document.getElementById("clientMsg").textContent = "";
+  loadClientHistory(inv.id);
+}
+
+document.getElementById("changeClientBtn").addEventListener("click", function(){
+  selectedClient = null;
+  document.getElementById("clientSearchBlock").style.display = "block";
+  document.getElementById("selectedClientBox").style.display = "none";
+  document.getElementById("docsPanel").style.display = "none";
+  document.getElementById("historyPanel").style.display = "none";
+  searchInput.value = ""; resultsList.classList.remove("visible"); resultsList.innerHTML = "";
+});
+
+/* ================================ Cronologia documenti del cliente ================================ */
+async function loadClientHistory(investorId){
+  var list = document.getElementById("historyList");
+  list.textContent = "Caricamento…";
+
+  var docsRes = await client.from("immonova_client_documents").select("document_type,created_at,sent_via").eq("investor_id", investorId).order("created_at", { ascending:false }).limit(20);
+  var valRes = await client.from("immonova_property_valuations").select("id,created_at,estimated_value_min,estimated_value_max").eq("source_investor_id", investorId).order("created_at", { ascending:false }).limit(10);
+  var acqRes = await client.from("immonova_acquisitions").select("id,created_at,status,property_address").eq("source_investor_id", investorId).order("created_at", { ascending:false }).limit(10);
+
+  var rows = [];
+  var typeLabels = { nda:"NDA — Accordo di Riservatezza", privacy:"Informativa Privacy", incarico:"Incarico di Mediazione" };
+  (docsRes.data || []).forEach(function(d){
+    rows.push({ date:d.created_at, label: typeLabels[d.document_type] || d.document_type, meta: d.sent_via || "" });
+  });
+  (valRes.data || []).forEach(function(v){
+    rows.push({ date:v.created_at, label:"Valutazione Immobiliare #" + v.id, link:"valuationform.html?id=" + v.id });
+  });
+  (acqRes.data || []).forEach(function(a){
+    rows.push({ date:a.created_at, label:"Acquisizione #" + a.id + (a.property_address ? " — " + a.property_address : ""), link:"property-acquisition-form.html?id=" + a.id });
+  });
+
+  rows.sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+
+  if(!rows.length){
+    list.textContent = "Nessun documento ancora registrato per questo cliente.";
+    return;
+  }
+  list.innerHTML = rows.map(function(r){
+    var dateStr = new Date(r.date).toLocaleDateString("it-IT");
+    var label = r.link ? '<a href="' + r.link + '" style="color:#a67f34">' + escapeHTML(r.label) + '</a>' : escapeHTML(r.label);
+    return '<div style="padding:9px 0;border-bottom:1px solid rgba(166,127,52,.10)">' + dateStr + ' — ' + label + (r.meta ? ' <span style="color:#8f7643">(' + escapeHTML(r.meta) + ')</span>' : '') + '</div>';
+  }).join("");
+}
+
+/* ================================ Link diretti: Valutazione / Acquisizione ================================ */
+document.getElementById("openValuationBtn").addEventListener("click", function(){
+  if(!selectedClient) return;
+  window.open("valuationform.html?investor_id=" + selectedClient.id, "_blank");
+});
+document.getElementById("openAcquisitionBtn").addEventListener("click", function(){
+  if(!selectedClient) return;
+  window.open("property-acquisition-form.html?investor_id=" + selectedClient.id, "_blank");
+});
+
+/* ================================ Informativa Privacy: apre + registra consegna ================================ */
+document.getElementById("openPrivacyBtn").addEventListener("click", async function(){
+  if(!selectedClient) return;
+  window.open("privacy.html", "_blank");
+  await client.from("immonova_client_documents").insert({
+    investor_id: selectedClient.id, document_type:"privacy", sent_via:"apertura_link", created_by: currentUser.id,
+    details:{ client_name: fullName(selectedClient) }
+  });
+  loadClientHistory(selectedClient.id);
+});
+
+/* ================================ Generatore NDA / Incarico ================================ */
+const genOverlay = document.getElementById("genOverlay");
+const genDocTitle = document.getElementById("genDocTitle");
+const genDocBody = document.getElementById("genDocBody");
+const genFormFields = document.getElementById("genFormFields");
+
+function ndaBodyHTML(){
+  return '<p>Il presente documento formalizza l\'impegno di <strong>IMMONOVA S.r.l.</strong> (di seguito "IMMONOVA") nei confronti di <strong>' + escapeHTML(fullName(selectedClient)) + '</strong> (di seguito "il Cliente") in merito al trattamento strettamente riservato dei dati e delle informazioni condivise nell\'ambito del rapporto professionale in corso.</p>'
+    + '<h4>1. Riservatezza dei dati</h4><p>IMMONOVA garantisce che tutti i dati personali, finanziari, patrimoniali e di qualsiasi altra natura forniti dal Cliente saranno trattati con la massima riservatezza, in conformità al Regolamento (UE) 2016/679 (GDPR) e alla normativa italiana applicabile.</p>'
+    + '<h4>2. Limitazione della divulgazione</h4><p>Le informazioni fornite dal Cliente non saranno in alcun modo divulgate, cedute o rese accessibili a terzi, fatta eccezione esclusivamente per: il personale interno di IMMONOVA direttamente coinvolto nella gestione della pratica, tenuto anch\'esso al medesimo obbligo di riservatezza; e investitori o controparti verificate da IMMONOVA, e solo nella misura strettamente necessaria a valutare una concreta opportunità di investimento o acquisto, previa adeguata verifica della loro affidabilità e serietà.</p>'
+    + '<h4>3. Finalità del trattamento</h4><p>I dati saranno utilizzati esclusivamente per le finalità connesse all\'incarico conferito (valutazione, commercializzazione, acquisizione dell\'immobile) e non per scopi ulteriori senza il consenso esplicito del Cliente.</p>'
+    + '<h4>4. Durata</h4><p>Il presente impegno di riservatezza rimane valido per tutta la durata del rapporto professionale con il Cliente e per i cinque anni successivi alla sua eventuale cessazione.</p>';
+}
+
+function openNda(){
+  currentGenType = "nda";
+  genFormFields.innerHTML = "";
+  genDocTitle.textContent = "Accordo di Riservatezza (NDA)";
+  genDocBody.innerHTML = ndaBodyHTML();
+  document.getElementById("genSignClient").textContent = fullName(selectedClient);
+  document.getElementById("genSignDate").textContent = todayIt();
+  genOverlay.classList.add("visible");
+}
+document.getElementById("openNdaBtn").addEventListener("click", function(){ if(selectedClient) openNda(); });
+
+function incaricoBodyHTML(f){
+  var esclusivaText = f.esclusiva === "si" ? "in esclusiva" : "senza vincolo di esclusiva";
+  return '<p>Con il presente atto, <strong>' + escapeHTML(fullName(selectedClient)) + '</strong> (di seguito "il Proponente"), conferisce a <strong>IMMONOVA S.r.l.</strong> incarico di mediazione immobiliare ' + esclusivaText + ' per la vendita dell\'immobile di seguito descritto.</p>'
+    + '<h4>1. Immobile oggetto dell\'incarico</h4><p>' + escapeHTML(f.indirizzo || "—") + (f.categoria ? " — " + escapeHTML(f.categoria) : "") + '</p>'
+    + '<h4>2. Prezzo richiesto</h4><p>€ ' + (f.prezzo ? Number(f.prezzo).toLocaleString("it-IT") : "da definire") + '</p>'
+    + '<h4>3. Durata dell\'incarico</h4><p>Il presente incarico ha durata di ' + escapeHTML(f.durata || "6") + ' mesi dalla data di sottoscrizione, con rinnovo tacito salvo disdetta scritta di una delle parti con almeno 15 giorni di preavviso.</p>'
+    + '<h4>4. Provvigione</h4><p>In caso di conclusione dell\'affare per effetto dell\'attività di mediazione di IMMONOVA, è dovuta una provvigione pari al ' + escapeHTML(f.provvigione || "3") + '% del prezzo di vendita definitivo, a carico del Proponente, da corrispondersi alla stipula del contratto preliminare o definitivo.</p>'
+    + '<h4>5. Obblighi del Proponente</h4><p>Il Proponente dichiara la piena e libera disponibilità dell\'immobile e si impegna a comunicare tempestivamente a IMMONOVA eventuali trattative parallele o offerte ricevute autonomamente durante la vigenza del presente incarico.</p>'
+    + (f.note ? '<h4>6. Note aggiuntive</h4><p>' + escapeHTML(f.note) + '</p>' : "");
+}
+
+function openIncarico(){
+  currentGenType = "incarico";
+  genFormFields.innerHTML =
+    '<div class="gen-form-fields"><div class="grid2">' +
+    '<div class="field"><label>Indirizzo immobile</label><input type="text" id="incIndirizzo"></div>' +
+    '<div class="field"><label>Categoria</label><input type="text" id="incCategoria" placeholder="Es. Appartamento, Villa…"></div>' +
+    '<div class="field"><label>Prezzo richiesto (€)</label><input type="number" id="incPrezzo" min="0"></div>' +
+    '<div class="field"><label>Esclusiva</label><select id="incEsclusiva"><option value="si">Sì, in esclusiva</option><option value="no">No, senza esclusiva</option></select></div>' +
+    '<div class="field"><label>Durata (mesi)</label><input type="number" id="incDurata" value="6" min="1"></div>' +
+    '<div class="field"><label>Provvigione (%)</label><input type="number" id="incProvvigione" value="3" step="0.1" min="0"></div>' +
+    '</div><div class="field"><label>Note aggiuntive</label><input type="text" id="incNote"></div>' +
+    '<button type="button" class="btn secondary" id="incRefreshBtn" style="margin-top:6px">Aggiorna anteprima</button></div>';
+
+  function refresh(){
+    var f = {
+      indirizzo: document.getElementById("incIndirizzo").value.trim(),
+      categoria: document.getElementById("incCategoria").value.trim(),
+      prezzo: document.getElementById("incPrezzo").value,
+      esclusiva: document.getElementById("incEsclusiva").value,
+      durata: document.getElementById("incDurata").value,
+      provvigione: document.getElementById("incProvvigione").value,
+      note: document.getElementById("incNote").value.trim()
+    };
+    genDocBody.innerHTML = incaricoBodyHTML(f);
+    return f;
+  }
+  genDocTitle.textContent = "Incarico di Mediazione Immobiliare";
+  var initial = refresh();
+  document.getElementById("incRefreshBtn").addEventListener("click", refresh);
+  ["incIndirizzo","incCategoria","incPrezzo","incEsclusiva","incDurata","incProvvigione","incNote"].forEach(function(id){
+    document.getElementById(id).addEventListener("change", refresh);
+  });
+  document.getElementById("genSignClient").textContent = fullName(selectedClient);
+  document.getElementById("genSignDate").textContent = todayIt();
+  genOverlay.classList.add("visible");
+}
+document.getElementById("openIncaricoBtn").addEventListener("click", function(){ if(selectedClient) openIncarico(); });
+
+document.getElementById("genCloseBtn").addEventListener("click", function(){ genOverlay.classList.remove("visible"); });
+document.getElementById("genPrintBtn").addEventListener("click", function(){ window.print(); });
+
+document.getElementById("genSaveBtn").addEventListener("click", async function(){
+  if(!selectedClient || !currentGenType) return;
+  var details = {};
+  if(currentGenType === "incarico"){
+    details = {
+      indirizzo: (document.getElementById("incIndirizzo")||{}).value || null,
+      categoria: (document.getElementById("incCategoria")||{}).value || null,
+      prezzo: (document.getElementById("incPrezzo")||{}).value || null,
+      esclusiva: (document.getElementById("incEsclusiva")||{}).value || null,
+      durata: (document.getElementById("incDurata")||{}).value || null,
+      provvigione: (document.getElementById("incProvvigione")||{}).value || null,
+      note: (document.getElementById("incNote")||{}).value || null
+    };
+  }
+  var snapshot = genDocTitle.textContent + "\n\n" + genDocBody.innerText;
+  var ins = await client.from("immonova_client_documents").insert({
+    investor_id: selectedClient.id, document_type: currentGenType, sent_via:"stampa_pdf",
+    details: details, document_html: snapshot, created_by: currentUser.id
+  });
+  var btn = document.getElementById("genSaveBtn");
+  if(ins.error){
+    btn.textContent = "Errore nel salvataggio";
+  }else{
+    btn.textContent = "Registrato ✓";
+    loadClientHistory(selectedClient.id);
+  }
+  setTimeout(function(){ btn.textContent = "Registra documento"; }, 2500);
+});
+
+(async function init(){
+  await checkAuth();
+})();
+</script>
+</body>
+</html>
