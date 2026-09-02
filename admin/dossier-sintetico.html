@@ -262,17 +262,36 @@ function renderDataAndPictogramsPage(){
   var descText = clean(o.short_description);
   var descHTML = descText ? '<p class="desc-text">'+escapeHTML(descText)+'</p>' : '';
 
-  var activePictos = FEATURE_PICTOGRAMS.filter(function(p){ return !!o[p.key]; });
-  var pictoHTML = activePictos.length
-    ? '<div class="section-kicker" style="margin-top:6px">Specifiche</div><div class="picto-grid">'
-      + activePictos.map(function(p){ return '<div class="picto-cell"><span class="picto-icon">'+p.icon+'</span><span class="picto-label">'+escapeHTML(p.label)+'</span></div>'; }).join("")
-      + '</div>'
-    : '';
-
   return '<article class="report-page"><div class="page-inner">'
     + '<div class="section-kicker">DOSSIER SINTETICO</div><h2 class="section-title">Dati Immobile</h2><div class="lux-rule"></div>'
-    + descHTML + metricsHTML + pictoHTML
+    + descHTML + metricsHTML
     + '</div></article>';
+}
+
+/* ---- Pittogrammi su pagina/e dedicata/e: la pagina del dossier ha altezza fissa
+   (overflow:hidden) in stampa/export, quindi se li mettiamo insieme a descrizione+dati
+   e ce ne sono molti selezionati, quelli in fondo vengono tagliati fuori e non si vedono
+   nel PDF/link generato. Con una pagina a parte, spezzata su più pagine se necessario,
+   sono sempre tutti visibili. ---- */
+function renderPictogramsPages(){
+  var o = opportunity || {};
+  var activePictos = FEATURE_PICTOGRAMS.filter(function(p){ return !!o[p.key]; });
+  if(!activePictos.length) return "";
+  var PER_PAGE = 12;
+  var pages = [];
+  for(var i=0;i<activePictos.length;i+=PER_PAGE){
+    pages.push(activePictos.slice(i, i+PER_PAGE));
+  }
+  return pages.map(function(group, idx){
+    var heading = idx === 0 ? "Specifiche" : "Specifiche (continua)";
+    var pictoHTML = '<div class="picto-grid">'
+      + group.map(function(p){ return '<div class="picto-cell"><span class="picto-icon">'+p.icon+'</span><span class="picto-label">'+escapeHTML(p.label)+'</span></div>'; }).join("")
+      + '</div>';
+    return '<article class="report-page"><div class="page-inner">'
+      + '<div class="section-kicker">DOSSIER SINTETICO</div><h2 class="section-title">'+heading+'</h2><div class="lux-rule"></div>'
+      + pictoHTML
+      + '</div></article>';
+  }).join("");
 }
 
 /* ---- Descrizione completa: testo di lunghezza variabile, quindi lo spezziamo su più
@@ -309,7 +328,7 @@ function renderFullDescriptionPages(){
 }
 
 function renderBook(){
-  var html = renderCover() + renderDataAndPictogramsPage() + renderFullDescriptionPages();
+  var html = renderCover() + renderDataAndPictogramsPage() + renderPictogramsPages() + renderFullDescriptionPages();
   book.innerHTML = html;
   document.getElementById("pageTitle").textContent = getTitle();
 }
