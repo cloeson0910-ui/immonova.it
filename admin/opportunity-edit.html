@@ -1546,6 +1546,22 @@ button.danger{
         <input type="text" id="price">
       </div>
 
+      <div class="field">
+        <label for="occupancy_status" data-i18n="label_occupancy_status">Stato di occupazione</label>
+        <select id="occupancy_status">
+          <option value="" data-i18n="opt_occupancy_select">Seleziona…</option>
+          <option value="libero" data-i18n="opt_occupancy_free">Libero</option>
+          <option value="locato" data-i18n="opt_occupancy_rented">Locato</option>
+          <option value="occupato_proprietario" data-i18n="opt_occupancy_owner">Occupato dal proprietario</option>
+          <option value="libero_al_rogito" data-i18n="opt_occupancy_at_deed">Libero al rogito</option>
+        </select>
+      </div>
+
+      <div class="field" id="monthlyRentField" style="display:none">
+        <label for="monthly_rent" data-i18n="label_monthly_rent">Canone di locazione mensile (€)</label>
+        <input type="number" id="monthly_rent" min="0" step="1">
+      </div>
+
       <div class="checks">
         <label class="check">
           <input type="checkbox" id="show_price_public" checked>
@@ -3547,6 +3563,16 @@ function isRenovationRequired(){
   return selected === "true" || condition === "Da ristrutturare";
 }
 
+/* ---- Il canone di locazione mensile ha senso mostrarlo/salvarlo solo quando lo stato di
+   occupazione è "Locato" -- stesso principio già usato per i campi di ristrutturazione
+   (mostrati solo se isRenovationRequired()). ---- */
+function toggleMonthlyRentField(){
+  var status = document.getElementById("occupancy_status").value;
+  var field = document.getElementById("monthlyRentField");
+  field.style.display = (status === "locato") ? "" : "none";
+}
+document.getElementById("occupancy_status").addEventListener("change", toggleMonthlyRentField);
+
 function syncRenovationRequired(){
   var box = document.getElementById("renovationBox");
   var requiredSelect = document.getElementById("renovation_required");
@@ -4594,6 +4620,8 @@ var UI_STRINGS = {
   opt_loading_categories:"Caricamento categorie...", label_investment_type:"Tipo Investimento",
   label_location:"Location", label_municipality:"Comune", label_province:"Provincia", label_region:"Regione",
   label_price:"Prezzo / Valore investimento",
+  label_occupancy_status:"Stato di occupazione", opt_occupancy_select:"Seleziona…", opt_occupancy_free:"Libero", opt_occupancy_rented:"Locato", opt_occupancy_owner:"Occupato dal proprietario", opt_occupancy_at_deed:"Libero al rogito",
+  label_monthly_rent:"Canone di locazione mensile (€)",
   section_media:"Media", label_current_cover:"Copertina attuale", no_cover_text:"Nessuna copertina caricata.",
   btn_remove_cover:"Rimuovi Copertina", label_replace_cover:"Sostituisci / Aggiungi Copertina",
   label_current_gallery:"Gallery attuale", no_gallery_text:"Nessuna immagine gallery caricata.",
@@ -4874,6 +4902,9 @@ async function loadOpportunity(){
   setValue("province", data.province || "");
   setValue("region", data.region || "");
   setValue("price", data.price || "");
+  setValue("occupancy_status", data.occupancy_status || "");
+  setValue("monthly_rent", data.monthly_rent);
+  toggleMonthlyRentField();
 
   setValue("bedrooms", data.bedrooms);
   setValue("bathrooms", data.bathrooms);
@@ -5794,6 +5825,8 @@ form.addEventListener("submit", async function(e){
       province:textOrNull("province"),
       region:textOrNull("region"),
       price:textOrNull("price"),
+      occupancy_status:textOrNull("occupancy_status"),
+      monthly_rent:document.getElementById("occupancy_status").value === "locato" ? numberOrNull("monthly_rent") : null,
 
       cover_image:finalCoverUrl,
       gallery_images:galleryImages,
