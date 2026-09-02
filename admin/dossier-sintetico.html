@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dossier Sintetico | IMMONOVA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#735f36}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.30}
+.container{max-width:1320px;margin:auto;padding:38px 42px 80px}
+.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px;flex-wrap:wrap}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}
+.title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34}
+.actions{display:flex;gap:12px;flex-wrap:wrap}
+.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}
+.btn.secondary{background:transparent;color:#a67f34}
+.btn.btn-busy,.btn.secondary.btn-busy{background:#e0a83a!important;border-color:#e0a83a!important;color:#3a2c0d!important;cursor:wait!important;opacity:1!important}
+.btn.btn-success,.btn.secondary.btn-success{background:#4f7f45!important;border-color:#4f7f45!important;color:#fff!important}
+.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}
+.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
+.dossier-link-row{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;letter-spacing:.04em;color:#7f6430}
+.dossier-link-row .link-label{color:#a67f34;font-weight:600;white-space:nowrap}
+.dossier-link-row input{flex:1;min-width:220px;padding:9px 10px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:12px;font-family:inherit}
+.dossier-link-row .copy-btn{padding:9px 14px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:10px;cursor:pointer}
+.dossier-link-row .copy-btn:hover{background:#8f6d2c}
+.dossier-link-row .copy-feedback{color:#4f7f45;font-weight:600}
+.share-image-box{display:none;flex-direction:column;gap:14px;padding:20px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30)}
+.share-image-box .share-image-title{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;font-weight:600}
+.share-image-box .share-image-hint{font-size:12px;line-height:1.6;color:#8f7643}
+.share-image-box canvas{max-width:100%;height:auto;border:1px solid rgba(166,127,52,.25);background:#fff}
+.share-image-box .share-image-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.share-image-box .copy-feedback{color:#4f7f45;font-weight:600;font-size:12px}
+
+.report-page{position:relative;width:100%;min-height:720px;background:#fffdf8;border-bottom:1px solid rgba(166,127,52,.12);overflow:hidden}
+.report-page.pattern{background:#f4ecdf}
+.report-page.pattern::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.30) 42%,rgba(244,236,223,.06) 75%),#f4ecdf;z-index:0}
+.report-page.pattern::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.34;z-index:0}
+.page-inner{position:relative;z-index:2;padding:54px}
+.cover{height:720px;display:flex;flex-direction:column;justify-content:space-between}
+.cover.with-image{color:white}
+.cover.with-image::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(31,22,8,.78),rgba(31,22,8,.48),rgba(31,22,8,.10));z-index:1}
+.cover-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.brand{font-size:31px;letter-spacing:.20em;color:#a67f34;font-weight:300}
+.cover.with-image .brand,.cover.with-image .cover-kicker,.cover.with-image .cover-title,.cover.with-image .cover-meta{color:#f1d27a}
+.brand-sub{margin-top:8px;font-size:9px;letter-spacing:.22em;color:#a58139;text-transform:uppercase}
+.cover-kicker{font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:#a67f34;margin-bottom:22px}
+.cover-title{max-width:930px;font-size:54px;line-height:1.08;font-weight:200;letter-spacing:.08em;text-transform:uppercase;color:#a67f34}
+.cover-meta{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#8f7643;line-height:2}
+
+.section-kicker{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:#a67f34;margin-bottom:8px}
+.section-title{font-size:26px;font-weight:200;letter-spacing:.05em;color:#4a3c1f;margin-bottom:14px}
+.lux-rule{height:1px;background:linear-gradient(to right,rgba(166,127,52,.5),transparent);margin:0 0 26px}
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:30px}
+.metric-card{background:rgba(166,127,52,.07);border:1px solid rgba(166,127,52,.16);padding:16px;min-height:78px}
+.metric-label{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;margin-bottom:8px}
+.metric-value{font-size:22px;color:#a67f34;font-weight:400}
+.desc-text{font-size:13.5px;line-height:1.75;color:#5a4a2a;margin-bottom:30px;max-width:820px}
+.picto-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.picto-cell{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,255,255,.4);border:1px solid rgba(166,127,52,.14)}
+.picto-icon{font-size:22px;line-height:1;flex:none}
+.picto-label{font-size:12px;color:#5a4a2a}
+.empty-note{font-size:12px;color:#8f7643;font-style:italic}
+
+@media print{
+  @page{size:A4 landscape;margin:0}
+  html,body{width:297mm;min-height:210mm;background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body::before,body::after,.topbar,.actions,.status,.dossier-link-row,.share-image-box{display:none!important}
+  .container{width:297mm;max-width:none;margin:0;padding:0}
+  .book{width:297mm;border:0;box-shadow:none;background:white}
+  .report-page{width:297mm;height:210mm;min-height:210mm;max-height:210mm;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;border-bottom:0}
+  .report-page:last-child{page-break-after:auto;break-after:auto}
+  .page-inner{padding:18mm}
+  .cover{height:210mm}
+  .cover-title{font-size:33pt;max-width:180mm}
+  .brand{font-size:19pt}.brand-sub{font-size:6pt}.cover-kicker{font-size:8pt}.cover-meta{font-size:8pt}
+  .section-title{font-size:19pt}.section-kicker{font-size:8pt}
+  .metric-grid{gap:6mm}.metric-card{padding:6mm;min-height:0}.metric-label{font-size:6.5pt}.metric-value{font-size:15pt}
+  .desc-text{font-size:9pt}
+  .picto-cell{padding:5mm}.picto-icon{font-size:16pt}.picto-label{font-size:8pt}
+}
+body.pdf-export-mode{width:297mm;min-height:210mm;background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body.pdf-export-mode::before,body.pdf-export-mode::after,.pdf-export-mode .topbar,.pdf-export-mode .actions,.pdf-export-mode .status,.pdf-export-mode .dossier-link-row,.pdf-export-mode .share-image-box{display:none!important}
+.pdf-export-mode .container{width:297mm;max-width:none;margin:0;padding:0}
+.pdf-export-mode .book{width:297mm;border:0;box-shadow:none;background:white}
+.pdf-export-mode .report-page{width:297mm;height:210mm;min-height:210mm;max-height:210mm;overflow:hidden;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;border-bottom:0}
+.pdf-export-mode .report-page:last-child{page-break-after:auto;break-after:auto}
+.pdf-export-mode .page-inner{padding:18mm}
+.pdf-export-mode .cover{height:210mm}
+.pdf-export-mode .cover-title{font-size:33pt;max-width:180mm}
+.pdf-export-mode .brand{font-size:19pt}.pdf-export-mode .brand-sub{font-size:6pt}.pdf-export-mode .cover-kicker{font-size:8pt}.pdf-export-mode .cover-meta{font-size:8pt}
+.pdf-export-mode .section-title{font-size:19pt}.pdf-export-mode .section-kicker{font-size:8pt}
+.pdf-export-mode .metric-grid{gap:6mm}.pdf-export-mode .metric-card{padding:6mm;min-height:0}.pdf-export-mode .metric-label{font-size:6.5pt}.pdf-export-mode .metric-value{font-size:15pt}
+.pdf-export-mode .desc-text{font-size:9pt}
+.pdf-export-mode .picto-cell{padding:5mm}.pdf-export-mode .picto-icon{font-size:16pt}.pdf-export-mode .picto-label{font-size:8pt}
+</style>
+</head>
+<body>
+
+<main class="container">
+  <div class="topbar">
+    <div>
+      <div class="kicker">Investment Book · Dossier Sintetico</div>
+      <h1 class="title" id="pageTitle">Dossier Sintetico</h1>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" onclick="window.print()" type="button">Stampa / PDF</button>
+      <button class="btn secondary" id="generateDossierLinkBtn" type="button" title="Genera (o rigenera) il link diretto al dossier sintetico scaricabile">Genera link download</button>
+      <a class="btn secondary" id="editLink" href="#">Torna alla proposta</a>
+      <a class="btn secondary" id="fullDossierLink" href="#">Apri Dossier Completo</a>
+    </div>
+  </div>
+  <div id="dossierLinkRow" class="dossier-link-row"></div>
+  <div id="shareImageBox" class="share-image-box">
+    <div class="share-image-title">Immagine di copertina (allegato visivo)</div>
+    <div class="share-image-hint">Questa immagine non è cliccabile: usala solo come allegato visivo di corredo. Per il link cliccabile su WhatsApp usa "Copia link" e incollalo come testo — WhatsApp lo trasforma da solo in un'anteprima.</div>
+    <canvas id="dossierShareCanvas"></canvas>
+    <div class="share-image-actions">
+      <button type="button" class="btn secondary" id="copyShareImageBtn">Copia immagine</button>
+      <button type="button" class="btn secondary" id="downloadShareImageBtn">Scarica immagine</button>
+      <span class="copy-feedback" id="shareImageFeedback"></span>
+    </div>
+  </div>
+  <div id="status" class="status"></div>
+  <section id="book" class="book"><div style="padding:60px;text-align:center;color:#8f7643">Caricamento dossier sintetico...</div></section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="../js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var params = new URLSearchParams(window.location.search);
+var opportunityId = params.get("id");
+var statusBox = document.getElementById("status");
+var book = document.getElementById("book");
+var dossierLinkRow = document.getElementById("dossierLinkRow");
+var shareImageBox = document.getElementById("shareImageBox");
+var editLink = document.getElementById("editLink");
+var fullDossierLink = document.getElementById("fullDossierLink");
+var generateDossierLinkBtn = document.getElementById("generateDossierLinkBtn");
+var currentUser = null;
+var opportunity = null;
+var currentDossierPdfUrl = null;
+var shareImageObjectUrl = null;
+
+/* ---- Pittogrammi caratteristiche: stesso set di colonne booleane "has_*" già usato in
+   opportunity-edit.html/valuationform.html/property-acquisition-form.html. Qui in versione
+   grafica a icone per una lettura rapida "a colpo d'occhio", coerente con l'uso di emoji come
+   pittogrammi già presente altrove nell'admin (documenti.html, property-acquisition-form.html). ---- */
+var FEATURE_PICTOGRAMS = [
+  { key:"has_pool", icon:"🏊", label:"Piscina" },
+  { key:"has_sea_view", icon:"🌊", label:"Vista mare" },
+  { key:"has_beachfront", icon:"🏖️", label:"Fronte spiaggia" },
+  { key:"has_garden", icon:"🌳", label:"Giardino" },
+  { key:"has_terrace", icon:"🏞️", label:"Terrazzo" },
+  { key:"has_balcony", icon:"🚪", label:"Balcone" },
+  { key:"has_garage", icon:"🚗", label:"Garage" },
+  { key:"has_parking_spot", icon:"🅿️", label:"Posto auto" },
+  { key:"has_elevator", icon:"🛗", label:"Ascensore" },
+  { key:"has_air_conditioning", icon:"❄️", label:"Climatizzazione" },
+  { key:"has_fireplace", icon:"🔥", label:"Camino" },
+  { key:"has_historic_center", icon:"🏛️", label:"Centro storico" },
+  { key:"has_photovoltaic", icon:"☀️", label:"Fotovoltaico" },
+  { key:"has_car_charger", icon:"🔌", label:"Colonnina ricarica" }
+];
+
+function escapeHTML(value){return String(value===null||value===undefined?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");}
+function clean(v){return String(v||"").trim();}
+function firstFiniteOpp(){for(var i=0;i<arguments.length;i++){var n=Number(arguments[i]);if(Number.isFinite(n)&&n!==0)return n;}return null;}
+function slugify(value){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "opportunita";}
+function setStatus(message,type){statusBox.className="status "+(type||"");statusBox.textContent=message||"";}
+function number(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat("it-IT").format(n);}
+function normalizeGallery(value){if(!value)return[];if(Array.isArray(value))return value.filter(Boolean);try{var p=JSON.parse(value);return Array.isArray(p)?p.filter(Boolean):[]}catch(e){return[]}}
+function getTitle(){return clean(opportunity&&opportunity.title)||"Dossier IMMONOVA";}
+function getLocation(){return clean(opportunity&&opportunity.location)||clean(opportunity&&opportunity.municipality)||"";}
+function getCategory(){return clean(opportunity&&opportunity.category)||"";}
+function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||gallery[0]||"";}
+function getGeneratedDate(){var d=(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat("it-IT").format(new Date(d));}catch(e){return "";}}
+
+function setControlBusy(el){ if(!el) return; el.classList.remove("btn-success"); el.classList.add("btn-busy"); }
+function setControlDone(el, ok, holdMs){
+  if(!el) return;
+  el.classList.remove("btn-busy");
+  if(ok){ el.classList.add("btn-success"); setTimeout(function(){ el.classList.remove("btn-success"); }, holdMs||3000); }
+}
+
+async function checkAuth(){
+  var sessionRes = await client.auth.getSession();
+  var session = sessionRes && sessionRes.data && sessionRes.data.session;
+  if(!session){ window.location.href = "login.html"; return null; }
+  currentUser = session.user;
+  return session;
+}
+
+async function loadOpportunity(){
+  if(!opportunityId) throw new Error("ID opportunità mancante nella URL.");
+  var res = await client.from("opportunities").select("*").eq("id", opportunityId).single();
+  if(res.error) throw res.error;
+  opportunity = res.data;
+  if(editLink) editLink.href = "opportunity-edit.html?id=" + encodeURIComponent(opportunityId);
+  if(fullDossierLink) fullDossierLink.href = "report-view.html?id=" + encodeURIComponent(opportunityId);
+  if(opportunity.dossier_sintetico_pdf_url){
+    currentDossierPdfUrl = opportunity.dossier_sintetico_share_url || opportunity.dossier_sintetico_pdf_url;
+    renderDossierLinkRow();
+  }
+}
+
+/* ================================ Rendering pagine ================================ */
+function renderCover(){
+  var cover = getCoverImage();
+  var withImage = !!cover;
+  return '<article class="report-page '+(withImage?'':'pattern')+' cover '+(withImage?'with-image':'')+'">'
+    + (withImage ? '<img class="cover-bg" src="'+escapeHTML(cover)+'" alt="">' : '')
+    + '<div class="page-inner cover">'
+    + '<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>'
+    + '<div><div class="cover-kicker">DOSSIER SINTETICO</div><h1 class="cover-title">'+escapeHTML(getTitle())+'</h1></div>'
+    + '<div class="cover-meta">'+[getLocation(), getCategory(), "Generato il "+getGeneratedDate()].filter(Boolean).map(escapeHTML).join('<br>')+'</div>'
+    + '</div></article>';
+}
+
+function renderDataAndPictogramsPage(){
+  var o = opportunity || {};
+  var rows = [];
+  var priceText = clean(o.price);
+  if(priceText) rows.push(["Prezzo", priceText]);
+  var internalSize = firstFiniteOpp(o.internal_size);
+  if(internalSize) rows.push(["Superficie interna", number(internalSize)+" mq"]);
+  var landSize = firstFiniteOpp(o.land_size);
+  if(landSize) rows.push(["Superficie terreno", number(landSize)+" mq"]);
+  var bedrooms = firstFiniteOpp(o.bedrooms);
+  if(bedrooms) rows.push(["Camere", number(bedrooms)]);
+  var bathrooms = firstFiniteOpp(o.bathrooms);
+  if(bathrooms) rows.push(["Bagni", number(bathrooms)]);
+  var year = firstFiniteOpp(o.construction_year);
+  if(year) rows.push(["Anno costruzione", number(year)]);
+  if(clean(o.energy_class) && clean(o.energy_class)!=="Non disponibile") rows.push(["Classe energetica", clean(o.energy_class)]);
+  if(clean(o.property_condition)) rows.push(["Stato", clean(o.property_condition)]);
+
+  var metricsHTML = rows.length
+    ? '<div class="metric-grid">' + rows.map(function(r){ return '<div class="metric-card"><div class="metric-label">'+escapeHTML(r[0])+'</div><div class="metric-value">'+escapeHTML(r[1])+'</div></div>'; }).join("") + '</div>'
+    : '<p class="empty-note">Nessun dato immobile disponibile.</p>';
+
+  var descText = clean(o.short_description);
+  var descHTML = descText ? '<p class="desc-text">'+escapeHTML(descText)+'</p>' : '';
+
+  var activePictos = FEATURE_PICTOGRAMS.filter(function(p){ return !!o[p.key]; });
+  var pictoHTML = activePictos.length
+    ? '<div class="section-kicker" style="margin-top:6px">Specifiche</div><div class="picto-grid">'
+      + activePictos.map(function(p){ return '<div class="picto-cell"><span class="picto-icon">'+p.icon+'</span><span class="picto-label">'+escapeHTML(p.label)+'</span></div>'; }).join("")
+      + '</div>'
+    : '';
+
+  return '<article class="report-page"><div class="page-inner">'
+    + '<div class="section-kicker">DOSSIER SINTETICO</div><h2 class="section-title">Dati Immobile</h2><div class="lux-rule"></div>'
+    + descHTML + metricsHTML + pictoHTML
+    + '</div></article>';
+}
+
+function renderBook(){
+  var html = renderCover() + renderDataAndPictogramsPage();
+  book.innerHTML = html;
+  document.getElementById("pageTitle").textContent = getTitle();
+}
+
+/* ================================ Generazione PDF / link (stesso meccanismo di report-view.html) ================================ */
+async function renderDossierPageToCanvas(pageEl){
+  try{
+    return await html2canvas(pageEl,{scale:2,useCORS:true,backgroundColor:"#ffffff"});
+  }catch(err){
+    var isRangeBug = err && /setEnd|Range/i.test(String(err.message||err));
+    if(!isRangeBug) throw err;
+    console.warn("html2canvas: bug noto Range.setEnd, ritento con foreignObjectRendering", err);
+    return await html2canvas(pageEl,{scale:2,useCORS:true,backgroundColor:"#ffffff",foreignObjectRendering:true});
+  }
+}
+function waitForImagesToLoad(root, timeoutMs){
+  timeoutMs = timeoutMs || 8000;
+  var imgs = Array.prototype.slice.call((root||document).querySelectorAll("img"));
+  return Promise.all(imgs.map(function(img){
+    if(img.complete && img.naturalWidth>0) return Promise.resolve();
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){ if(!done){ done=true; resolve(); } }
+      img.addEventListener("load",finish,{once:true});
+      img.addEventListener("error",finish,{once:true});
+      setTimeout(finish,timeoutMs);
+    });
+  }));
+}
+async function generateDossierPdfBlob(){
+  document.body.classList.add("pdf-export-mode");
+  await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
+  await waitForImagesToLoad(book, 8000);
+  try{
+    var pages = Array.prototype.slice.call(document.querySelectorAll("#book .report-page"));
+    if(!pages.length) throw new Error("Nessuna pagina del dossier sintetico trovata da esportare.");
+    var pdf = new window.jspdf.jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
+    for(var i=0;i<pages.length;i++){
+      var canvas = await renderDossierPageToCanvas(pages[i]);
+      var imgData = canvas.toDataURL("image/jpeg",0.92);
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData,"JPEG",0,0,297,210);
+    }
+    return pdf.output("blob");
+  }finally{
+    document.body.classList.remove("pdf-export-mode");
+  }
+}
+function buildDossierFilename(){
+  return "dossier_sintetico_IMMONOVA_"+slugify(getTitle())+".pdf";
+}
+function renderDossierLinkRow(){
+  if(!dossierLinkRow) return;
+  var url = currentDossierPdfUrl;
+  if(!url){
+    dossierLinkRow.style.display="none"; dossierLinkRow.innerHTML=""; if(shareImageBox) shareImageBox.style.display="none"; return;
+  }
+  dossierLinkRow.style.display="flex";
+  dossierLinkRow.innerHTML =
+    "<span class=\"link-label\">Link diretto al dossier sintetico:</span>"+
+    "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\">"+
+    "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">Copia link</button>"+
+    "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
+    "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>";
+  generateShareImage(url, getCoverImage());
+}
+function sendDossierWhatsApp(){
+  if(!currentDossierPdfUrl) return;
+  var message = getTitle()+" — Dossier Sintetico IMMONOVA\n"+currentDossierPdfUrl;
+  window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
+}
+async function copyDossierLink(){
+  var input = document.getElementById("dossierLinkInput");
+  var feedback = document.getElementById("copyFeedback");
+  if(!input) return;
+  var url = input.value;
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(url); }
+    else{ input.select(); document.execCommand("copy"); }
+    if(feedback){ feedback.textContent="Copiato ✓"; setTimeout(function(){ feedback.textContent=""; },2500); }
+  }catch(e){
+    input.select();
+    if(feedback) feedback.textContent="Seleziona e copia manualmente (Ctrl/Cmd+C)";
+  }
+}
+function loadImageForCanvas(url){
+  return new Promise(function(resolve, reject){
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function(){ resolve(img); };
+    img.onerror = function(){ reject(new Error("Impossibile caricare l'immagine di copertina (CORS o URL non raggiungibile).")); };
+    img.src = url;
+  });
+}
+async function generateShareImage(pdfUrl, coverImageUrl){
+  if(!shareImageBox) return;
+  if(!pdfUrl || !coverImageUrl){ shareImageBox.style.display="none"; return; }
+  var canvas = document.getElementById("dossierShareCanvas");
+  if(!canvas) return;
+  try{
+    var W = 1000, BAR_H = 110;
+    var coverImg = await loadImageForCanvas(coverImageUrl);
+    var coverH = Math.round(W * (coverImg.height / coverImg.width));
+    canvas.width = W; canvas.height = coverH + BAR_H;
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(coverImg, 0, 0, W, coverH);
+    ctx.fillStyle = "#a67f34"; ctx.fillRect(0, coverH, W, BAR_H);
+    ctx.fillStyle = "#fffaf0";
+    ctx.font = "700 30px 'Avenir Next','Helvetica Neue',Arial,sans-serif"; ctx.textBaseline = "middle";
+    ctx.fillText("SCARICA IL DOSSIER SINTETICO", 28, coverH + BAR_H/2 - 8, W - 170);
+    ctx.font = "400 13px 'Avenir Next','Helvetica Neue',Arial,sans-serif";
+    ctx.fillText("Tocca il codice per aprire il link", 28, coverH + BAR_H/2 + 22, W - 170);
+    var qrHolder = document.createElement("div");
+    qrHolder.style.position = "fixed"; qrHolder.style.left = "-9999px";
+    document.body.appendChild(qrHolder);
+    new QRCode(qrHolder, { text: pdfUrl, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M });
+    await new Promise(function(r){ setTimeout(r, 60); });
+    var qrCanvasEl = qrHolder.querySelector("canvas");
+    var qrSize = BAR_H - 16;
+    if(qrCanvasEl){
+      ctx.fillStyle = "#fffaf0"; ctx.fillRect(W - qrSize - 20, coverH + 8, qrSize, qrSize);
+      ctx.drawImage(qrCanvasEl, W - qrSize - 16, coverH + 12, qrSize - 8, qrSize - 8);
+    }
+    document.body.removeChild(qrHolder);
+    shareImageBox.style.display = "flex";
+  }catch(e){
+    console.warn("Immagine condivisibile non generata:", e.message || e);
+    shareImageBox.style.display = "none";
+  }
+}
+async function copyShareImage(){
+  var canvas = document.getElementById("dossierShareCanvas");
+  var feedback = document.getElementById("shareImageFeedback");
+  if(!canvas) return;
+  try{
+    var blob = await new Promise(function(resolve){ canvas.toBlob(resolve, "image/png"); });
+    if(!blob) throw new Error("Immagine non pronta.");
+    if(navigator.clipboard && window.ClipboardItem){
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      if(feedback){ feedback.textContent="Immagine copiata ✓"; setTimeout(function(){ feedback.textContent=""; },3500); }
+    }else{
+      throw new Error("Copia immagine non supportata da questo browser: usa 'Scarica immagine'.");
+    }
+  }catch(e){
+    if(feedback) feedback.textContent = e.message || "Copia non riuscita: usa 'Scarica immagine'.";
+  }
+}
+function downloadShareImage(){
+  var canvas = document.getElementById("dossierShareCanvas");
+  if(!canvas) return;
+  canvas.toBlob(function(blob){
+    if(!blob) return;
+    if(shareImageObjectUrl) URL.revokeObjectURL(shareImageObjectUrl);
+    shareImageObjectUrl = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = shareImageObjectUrl;
+    a.download = "dossier-sintetico-" + (opportunityId || "immonova") + ".png";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }, "image/png");
+}
+
+/* ---- Genera il link: STESSO meccanismo (storage + publish-dossier-page) del dossier
+   completo di report-view.html, ma con un id distinto ("<opportunityId>-sintetico") sia nel
+   percorso dello Storage sia nella pagina di condivisione GitHub, cosi' non sovrascrive MAI il
+   link/PDF del dossier completo -- i due dossier restano due file e due link separati, anche
+   se generati per la stessa opportunità. Il link viene salvato su due colonne dedicate
+   (dossier_sintetico_pdf_url / dossier_sintetico_share_url), distinte da quelle del dossier
+   completo (dossier_pdf_url / dossier_share_url). ---- */
+async function generateDossierLink(){
+  if(!generateDossierLinkBtn) return;
+  generateDossierLinkBtn.disabled = true;
+  var originalLabel = generateDossierLinkBtn.textContent;
+  generateDossierLinkBtn.textContent = "Generazione in corso...";
+  setControlBusy(generateDossierLinkBtn);
+  try{
+    renderBook();
+    await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
+    setStatus("Generazione PDF del dossier sintetico in corso...","");
+    var pdfBlob = await generateDossierPdfBlob();
+    var filename = buildDossierFilename();
+    var syntheticId = String(opportunityId) + "-sintetico";
+    var path = "opportunity-"+syntheticId+"/"+Date.now()+"_"+filename;
+    var upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
+    if(upload.error) throw upload.error;
+    var pub = client.storage.from("dossier-pdfs").getPublicUrl(path);
+
+    var shareUrl = null;
+    try{
+      var publishResp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/publish-dossier-page",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
+        body:JSON.stringify({
+          opportunityId: syntheticId,
+          title: (getTitle()||"Dossier IMMONOVA") + " — Sintetico",
+          coverUrl: (opportunity && opportunity.cover_image)||"",
+          pdfUrl: pub.data.publicUrl,
+          lang: "it"
+        })
+      });
+      var publishData = await publishResp.json();
+      if(publishResp.ok && publishData && publishData.url){ shareUrl = publishData.url; }
+      else{ console.warn("Pubblicazione pagina share su GitHub fallita:",publishData); }
+    }catch(publishErr){
+      console.warn("Pubblicazione pagina share su GitHub fallita:",publishErr);
+    }
+
+    currentDossierPdfUrl = shareUrl || pub.data.publicUrl;
+    renderDossierLinkRow();
+
+    if(opportunity){ opportunity.dossier_sintetico_share_url = shareUrl; opportunity.dossier_sintetico_pdf_url = pub.data.publicUrl; }
+    var save = await client.from("opportunities").update({dossier_sintetico_share_url:shareUrl, dossier_sintetico_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
+    if(save.error) console.warn("Salvataggio link dossier sintetico su opportunities fallito:", save.error);
+
+    setStatus(shareUrl?"Link al dossier sintetico generato, con anteprima.":"Link generato (senza anteprima).","success");
+    setControlDone(generateDossierLinkBtn, true);
+  }catch(e){
+    console.error(e);
+    setStatus("Errore nella generazione del link: "+(e.message||e),"error");
+    setControlDone(generateDossierLinkBtn, false);
+  }
+  generateDossierLinkBtn.disabled = false;
+  generateDossierLinkBtn.textContent = originalLabel;
+}
+if(generateDossierLinkBtn) generateDossierLinkBtn.addEventListener("click", generateDossierLink);
+var copyShareImageBtn = document.getElementById("copyShareImageBtn");
+var downloadShareImageBtn = document.getElementById("downloadShareImageBtn");
+if(copyShareImageBtn) copyShareImageBtn.addEventListener("click", copyShareImage);
+if(downloadShareImageBtn) downloadShareImageBtn.addEventListener("click", downloadShareImage);
+
+async function init(){
+  var session = await checkAuth();
+  if(!session) return;
+  try{
+    setStatus("Caricamento dati opportunità...","");
+    await loadOpportunity();
+    renderBook();
+    setStatus("","");
+  }catch(e){
+    console.error(e);
+    book.innerHTML = '<div style="padding:60px;text-align:center;color:#9c2f2f">Errore nel caricamento: '+escapeHTML(e.message||e)+'</div>';
+  }
+}
+init();
+</script>
+</body>
+</html>
