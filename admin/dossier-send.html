@@ -3117,17 +3117,12 @@ async function sendDossierToClient(){
   sendDossierBtn.disabled=true;
   sendDossierBtn.textContent="Invio in corso...";
   try{
-    /* Le pubblicità (dossierAds) vengono caricate UNA SOLA volta all'apertura di questa
-       pagina (init -> loadDossierAds) e mai piu' aggiornate da sole: se l'admin disattiva
-       una pubblicità dal pannello "Pubblicità" della dashboard mentre questa scheda resta
-       aperta, restava comunque nel dossier generato perché la lista in memoria era ormai
-       vecchia. La ricarichiamo sempre appena prima di generare il PDF, cosi' rispecchia lo
-       stato attivo/disattivo più recente. renderBook() ricostruisce il dossier con le
-       pubblicità aggiornate e alla fine applica gia' da solo la selezione corrente
-       (deselectedPageKeys) — copre anche il caso in cui l'utente ha chiuso il pannello
-       "Personalizza Sezioni" senza premere "Applica". */
-    await loadDossierAds();
-    renderBook();
+    /* Applichiamo SEMPRE la selezione corrente (deselectedPageKeys) al dossier a schermo
+       PRIMA di esportare, anche se l'utente ha chiuso il pannello "Personalizza Sezioni"
+       senza premere "Applica" (es. cliccando fuori dal pannello o su "Chiudi"): altrimenti
+       l'export cattura semplicemente quello che era gia' disegnato nel DOM in quel momento,
+       che puo' ancora contenere le sezioni deselezionate mai rimosse dalla vista. */
+    applyChapterSelection();
     setStatus("Generazione PDF del dossier in corso...","");
     var pdfBlob=await generateDossierPdfBlob();
     var filename=buildDossierFilename();
