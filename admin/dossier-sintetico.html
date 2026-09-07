@@ -233,8 +233,9 @@ var UI_STRINGS = {
   image_copied_feedback:"Immagine copiata ✓",
   status_loading_opportunity:"Caricamento dati opportunità...",
   status_generating_pdf:"Generazione PDF del dossier sintetico in corso...",
-  status_link_generated_preview:"Link al dossier sintetico generato, con anteprima.",
-  status_link_generated_no_preview:"Link generato (senza anteprima).",
+  status_link_generated_preview:"Link al dossier sintetico generato, con anteprima. Se è la primissima volta che generi il link per questa proposta, GitHub può impiegare fino a circa un minuto per pubblicarlo: se dà \"pagina non trovata\" appena generato, riprova tra poco.",
+  status_link_generated_no_preview:"Link generato (senza anteprima). Se è la primissima volta che generi il link per questa proposta, GitHub può impiegare fino a circa un minuto per pubblicarlo: se dà \"pagina non trovata\" appena generato, riprova tra poco.",
+  link_publishing_hint:"Prima pubblicazione di questo link: può richiedere fino a un minuto prima di essere raggiungibile. Se ora dà \"pagina non trovata\", riprova tra poco — il file è già stato creato correttamente.",
   status_link_error:"Errore nella generazione del link: ",
   status_loading_error:"Errore nel caricamento: ",
   whatsapp_message_suffix:" — Dossier Sintetico IMMONOVA",
@@ -738,8 +739,50 @@ function renderDossierLinkRow(){
     "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\">"+
     "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">"+escapeHTML(T.btn_copy_link||UI_STRINGS.btn_copy_link)+"</button>"+
     "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">"+escapeHTML(T.btn_send_whatsapp||UI_STRINGS.btn_send_whatsapp)+"</button>"+
-    "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>";
+    "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>"+
+    "<span class=\"copy-feedback\" id=\"linkPublishStatus\" style=\"color:#a67f34\"></span>";
   generateShareImage(url, getCoverImage());
+}
+
+/* ---- La primissima pubblicazione di un nuovo percorso su GitHub Pages può richiedere
+   qualche decina di secondi prima di essere raggiungibile, anche se il file è già stato
+   correttamente scritto nel repository (confermato: il commit va sempre a buon fine subito).
+   Non possiamo verificare la pagina HTML stessa via fetch() da un altro dominio (CORS blocca
+   la lettura dello stato), ma possiamo verificare la copertina compressa pubblicata insieme
+   alla pagina (stesso commit, stesso dominio) caricandola come <img>: il caricamento di
+   un'immagine segnala successo/fallimento via onload/onerror anche cross-origin, senza bisogno
+   di intestazioni CORS. Se risponde, la build è pubblicata e il link è raggiungibile. ---- */
+function pollCoverReachable(coverUrl, timeoutMs){
+  return new Promise(function(resolve){
+    var start = Date.now();
+    var settled = false;
+    function attempt(){
+      if(settled) return;
+      var img = new Image();
+      img.onload = function(){ if(!settled){ settled = true; resolve(true); } };
+      img.onerror = function(){
+        if(settled) return;
+        if(Date.now() - start > timeoutMs){ settled = true; resolve(false); return; }
+        setTimeout(attempt, 4000);
+      };
+      img.src = coverUrl + (coverUrl.indexOf("?")>=0?"&":"?") + "_cb=" + Date.now();
+    }
+    attempt();
+  });
+}
+async function watchLinkPublishStatus(coverUrl){
+  var el = document.getElementById("linkPublishStatus");
+  if(!el) return;
+  if(!coverUrl){
+    el.textContent = T.link_publishing_hint||UI_STRINGS.link_publishing_hint;
+    return;
+  }
+  el.textContent = "Pubblicazione su GitHub Pages in corso...";
+  var reachable = await pollCoverReachable(coverUrl, 75000);
+  el = document.getElementById("linkPublishStatus");
+  if(!el) return;
+  el.textContent = reachable ? "Link raggiungibile ✓" : (T.link_publishing_hint||UI_STRINGS.link_publishing_hint);
+  if(reachable) setTimeout(function(){ if(el) el.textContent=""; }, 5000);
 }
 function sendDossierWhatsApp(){
   if(!currentDossierPdfUrl) return;
@@ -884,6 +927,10 @@ async function generateDossierLink(){
 
     currentDossierPdfUrl = shareUrl || pub.data.publicUrl;
     renderDossierLinkRow();
+    if(shareUrl){
+      var coverCheckUrl = getCoverImage() ? String(shareUrl).replace(/\.html$/, "-cover.jpg") : "";
+      watchLinkPublishStatus(coverCheckUrl);
+    }
 
     if(opportunity){ opportunity.dossier_sintetico_share_url = shareUrl; opportunity.dossier_sintetico_pdf_url = pub.data.publicUrl; }
     var save = await client.from("opportunities").update({dossier_sintetico_share_url:shareUrl, dossier_sintetico_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
