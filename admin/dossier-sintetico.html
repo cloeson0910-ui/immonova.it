@@ -14,11 +14,15 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px;flex-wrap:wrap}
 .kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}
 .title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34}
-.actions{display:flex;gap:12px;flex-wrap:wrap}
+.actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}
 .btn.secondary{background:transparent;color:#a67f34}
 .btn.btn-busy,.btn.secondary.btn-busy{background:#e0a83a!important;border-color:#e0a83a!important;color:#3a2c0d!important;cursor:wait!important;opacity:1!important}
 .btn.btn-success,.btn.secondary.btn-success{background:#4f7f45!important;border-color:#4f7f45!important;color:#fff!important}
+.lang-switch{padding:8px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#a67f34;font-size:11px;font-family:inherit;cursor:pointer;border-radius:3px}
+select.lang-switch.btn-busy{background:#e0a83a!important;border-color:#e0a83a!important;color:#3a2c0d!important}
+select.lang-switch.btn-success{background:#4f7f45!important;border-color:#4f7f45!important;color:#fff!important}
+@media print{.lang-switch{display:none!important}}
 .status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}
 .book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
 .dossier-link-row{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;letter-spacing:.04em;color:#7f6430}
@@ -102,29 +106,37 @@ body.pdf-export-mode::before,body.pdf-export-mode::after,.pdf-export-mode .topba
 <main class="container">
   <div class="topbar">
     <div>
-      <div class="kicker">Investment Book · Dossier Sintetico</div>
+      <div class="kicker" data-i18n="topbar_kicker">Investment Book · Dossier Sintetico</div>
       <h1 class="title" id="pageTitle">Dossier Sintetico</h1>
     </div>
     <div class="actions">
-      <button class="btn secondary" onclick="window.print()" type="button">Stampa / PDF</button>
-      <button class="btn secondary" id="generateDossierLinkBtn" type="button" title="Genera (o rigenera) il link diretto al dossier sintetico scaricabile">Genera link download</button>
-      <a class="btn secondary" id="editLink" href="#">Torna alla proposta</a>
-      <a class="btn secondary" id="fullDossierLink" href="#">Apri Dossier Completo</a>
+      <select id="quickLangSwitch" class="lang-switch" title="Traduci a schermo il dossier sintetico già generato — nessuna chiamata al Discovery Engine, nessun costo">
+        <option value="it">IT · Italiano</option>
+        <option value="en">EN · English</option>
+        <option value="fr">FR · Français</option>
+        <option value="de">DE · Deutsch</option>
+        <option value="es">ES · Español</option>
+        <option value="ar">AR · العربية</option>
+      </select>
+      <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
+      <button class="btn secondary" id="generateDossierLinkBtn" type="button" title="Genera (o rigenera) il link diretto al dossier sintetico scaricabile" data-i18n="btn_generate_link">Genera link download</button>
+      <a class="btn secondary" id="editLink" href="#" data-i18n="btn_back_to_proposal">Torna alla proposta</a>
+      <a class="btn secondary" id="fullDossierLink" href="#" data-i18n="btn_full_dossier">Apri Dossier Completo</a>
     </div>
   </div>
   <div id="dossierLinkRow" class="dossier-link-row"></div>
   <div id="shareImageBox" class="share-image-box">
-    <div class="share-image-title">Immagine di copertina (allegato visivo)</div>
-    <div class="share-image-hint">Questa immagine non è cliccabile: usala solo come allegato visivo di corredo. Per il link cliccabile su WhatsApp usa "Copia link" e incollalo come testo — WhatsApp lo trasforma da solo in un'anteprima.</div>
+    <div class="share-image-title" data-i18n="share_image_title">Immagine di copertina (allegato visivo)</div>
+    <div class="share-image-hint" data-i18n="share_image_hint">Questa immagine non è cliccabile: usala solo come allegato visivo di corredo. Per il link cliccabile su WhatsApp usa "Copia link" e incollalo come testo — WhatsApp lo trasforma da solo in un'anteprima.</div>
     <canvas id="dossierShareCanvas"></canvas>
     <div class="share-image-actions">
-      <button type="button" class="btn secondary" id="copyShareImageBtn">Copia immagine</button>
-      <button type="button" class="btn secondary" id="downloadShareImageBtn">Scarica immagine</button>
+      <button type="button" class="btn secondary" id="copyShareImageBtn" data-i18n="btn_copy_image">Copia immagine</button>
+      <button type="button" class="btn secondary" id="downloadShareImageBtn" data-i18n="btn_download_image">Scarica immagine</button>
       <span class="copy-feedback" id="shareImageFeedback"></span>
     </div>
   </div>
   <div id="status" class="status"></div>
-  <section id="book" class="book"><div style="padding:60px;text-align:center;color:#8f7643">Caricamento dossier sintetico...</div></section>
+  <section id="book" class="book"><div style="padding:60px;text-align:center;color:#8f7643" data-i18n="loading_dossier">Caricamento dossier sintetico...</div></section>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -148,53 +160,243 @@ var opportunity = null;
 var currentDossierPdfUrl = null;
 var shareImageObjectUrl = null;
 
+/* ================================ Traduzione a schermo (i18n) ================================
+   Stesso identico meccanismo usato in report-view.html/dossiersend.html: le etichette fisse
+   (UI_STRINGS) sono già scritte in italiano come default e vengono tradotte UNA SOLA VOLTA per
+   lingua tramite la edge function "translate-public-content" (nessuna chiamata al Discovery
+   Engine, nessun costo AI aggiuntivo), con cache in localStorage — quindi cambiare lingua non
+   richiama mai più l'AI dopo la prima volta. La descrizione dell'immobile (short/full
+   description), essendo testo libero specifico per ogni proposta, viene tradotta a parte con
+   la stessa funzione, cache separata per opportunità+lingua. ---- */
+var CURRENT_LANG = "it";
+var T = {};
+var UI_STRINGS = {
+  topbar_kicker:"Investment Book · Dossier Sintetico",
+  btn_print_pdf:"Stampa / PDF",
+  btn_generate_link:"Genera link download",
+  btn_back_to_proposal:"Torna alla proposta",
+  btn_full_dossier:"Apri Dossier Completo",
+  loading_dossier:"Caricamento dossier sintetico...",
+  cover_kicker:"DOSSIER SINTETICO",
+  generated_prefix:"Generato il ",
+  fallback_title:"Dossier IMMONOVA",
+  section_kicker:"DOSSIER SINTETICO",
+  title_data_page:"Dati Immobile",
+  title_specs:"Specifiche",
+  title_specs_continued:"Specifiche (continua)",
+  title_full_desc:"Descrizione Completa",
+  title_full_desc_continued:"Descrizione Completa (continua)",
+  label_price:"Prezzo",
+  label_internal_size:"Superficie interna",
+  label_land_size:"Superficie terreno",
+  label_bedrooms:"Camere",
+  label_bathrooms:"Bagni",
+  label_construction_year:"Anno costruzione",
+  label_energy_class:"Classe energetica",
+  label_condition:"Stato",
+  label_occupancy:"Stato occupazione",
+  label_monthly_rent:"Canone mensile",
+  unit_sqm:" mq",
+  unit_month_rent:" €/mese",
+  empty_note:"Nessun dato immobile disponibile.",
+  share_link_label:"Link diretto al dossier sintetico:",
+  btn_copy_link:"Copia link",
+  btn_send_whatsapp:"Invia su WhatsApp",
+  copied_feedback:"Copiato ✓",
+  copy_manual_feedback:"Seleziona e copia manualmente (Ctrl/Cmd+C)",
+  share_image_title:"Immagine di copertina (allegato visivo)",
+  share_image_hint:"Questa immagine non è cliccabile: usala solo come allegato visivo di corredo. Per il link cliccabile su WhatsApp usa \"Copia link\" e incollalo come testo — WhatsApp lo trasforma da solo in un'anteprima.",
+  btn_copy_image:"Copia immagine",
+  btn_download_image:"Scarica immagine",
+  image_copied_feedback:"Immagine copiata ✓",
+  status_loading_opportunity:"Caricamento dati opportunità...",
+  status_generating_pdf:"Generazione PDF del dossier sintetico in corso...",
+  status_link_generated_preview:"Link al dossier sintetico generato, con anteprima.",
+  status_link_generated_no_preview:"Link generato (senza anteprima).",
+  status_link_error:"Errore nella generazione del link: ",
+  status_loading_error:"Errore nel caricamento: ",
+  whatsapp_message_suffix:" — Dossier Sintetico IMMONOVA",
+  occ_libero:"Libero",
+  occ_locato:"Locato",
+  occ_occupato_proprietario:"Occupato dal proprietario",
+  occ_libero_al_rogito:"Libero al rogito",
+  pic_pool:"Piscina", pic_sea_view:"Vista mare", pic_beachfront:"Fronte spiaggia", pic_garden:"Giardino",
+  pic_terrace:"Terrazzo", pic_balcony:"Balcone", pic_garage:"Garage", pic_parking:"Posto auto",
+  pic_elevator:"Ascensore", pic_ac:"Climatizzazione", pic_fireplace:"Camino", pic_historic:"Centro storico",
+  pic_photovoltaic:"Fotovoltaico", pic_car_charger:"Colonnina ricarica", pic_solar_thermal:"Solare termico",
+  pic_battery:"Batterie di accumulo", pic_well:"Pozzo artesiano", pic_heating:"Impianto di riscaldamento",
+  pic_habitability:"Agibilità"
+};
+
+function i18nCacheKey(lang){ return "immonova_i18n_dossier_sintetico_" + lang + "_v1"; }
+function protectPlaceholders(text){
+  var tokens = [];
+  var protectedText = String(text).replace(/\{[a-zA-Z0-9_]+\}/g, function(m){ tokens.push(m); return "§" + (tokens.length-1) + "§"; });
+  return { text: protectedText, tokens: tokens };
+}
+function restorePlaceholders(text, tokens){
+  if(!tokens.length) return text;
+  return String(text).replace(/§(\d+)§/g, function(m, idx){ var t = tokens[Number(idx)]; return t != null ? t : m; });
+}
+function translationLooksSuspicious(source, candidate){
+  if(candidate == null) return true;
+  var srcLen = String(source).length;
+  var candLen = String(candidate).length;
+  if(srcLen > 20 && (candLen > srcLen*4 || candLen < srcLen*0.2)) return true;
+  return false;
+}
+async function translateOneText(lang, text, context){
+  var protectedItem = protectPlaceholders(text);
+  var result = null;
+  try{
+    var url = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/translate-public-content";
+    var res = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify({
+      language: lang, source_language: "it", context: context || "", texts: [protectedItem.text]
+    })});
+    if(!res.ok) return null;
+    result = await res.json();
+  }catch(e){ return null; }
+  if(!result || !result.success || !Array.isArray(result.translations) || result.translations.length !== 1) return null;
+  var raw = result.translations[0];
+  if(raw == null) return null;
+  return restorePlaceholders(raw, protectedItem.tokens);
+}
+async function translateTextsSafe(lang, keys, texts, fallbackByKey, context){
+  var CONCURRENCY = 6;
+  var translated = {};
+  var index = 0;
+  async function worker(){
+    while(index < keys.length){
+      var i = index++;
+      var k = keys[i];
+      var source = texts[i];
+      var result = await translateOneText(lang, source, context);
+      translated[k] = translationLooksSuspicious(source, result) ? fallbackByKey[k] : result;
+    }
+  }
+  var workers = [];
+  for(var w=0; w<Math.min(CONCURRENCY, keys.length); w++) workers.push(worker());
+  await Promise.all(workers);
+  return translated;
+}
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){
+      var parsed = JSON.parse(cached);
+      var hasAllKeys = parsed && typeof parsed === "object" &&
+        Object.keys(UI_STRINGS).every(function(k){ return Object.prototype.hasOwnProperty.call(parsed, k) && parsed[k] != null; });
+      if(hasAllKeys) return parsed;
+    }
+  }catch(e){}
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+  var translated = await translateTextsSafe(lang, keys, texts, UI_STRINGS,
+    "IMMONOVA luxury real estate — synthetic/summary investment dossier (cover, key property data, feature icons, full description) delivered to an international investor.");
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+}
+
+var NARRATIVE_FIELDS = ["short_description","full_description"];
+var translatedNarrative = {};
+function narrativeCacheKey(lang){ return "immonova_i18n_narrative_dossier_sintetico_" + lang + "_" + (opportunityId||"na") + "_v1"; }
+async function loadNarrativeTranslations(){
+  translatedNarrative = {};
+  var o = opportunity || {};
+  var present = NARRATIVE_FIELDS.filter(function(f){ return clean(o[f]); });
+  if(!present.length) return;
+  if(CURRENT_LANG === "it"){
+    present.forEach(function(f){ translatedNarrative[f] = clean(o[f]); });
+    return;
+  }
+  var fallbackByKey = {};
+  present.forEach(function(f){ fallbackByKey[f] = clean(o[f]); });
+  var cacheKey = narrativeCacheKey(CURRENT_LANG);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){
+      var parsed = JSON.parse(cached);
+      var hasAll = parsed && typeof parsed === "object" && present.every(function(f){ return Object.prototype.hasOwnProperty.call(parsed, f) && parsed[f] != null; });
+      if(hasAll){ translatedNarrative = parsed; return; }
+    }
+  }catch(e){}
+  var texts = present.map(function(f){ return clean(o[f]); });
+  translatedNarrative = await translateTextsSafe(CURRENT_LANG, present, texts, fallbackByKey,
+    "IMMONOVA luxury real estate investment dossier — editorial text describing a specific property proposal for an international investor.");
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translatedNarrative)); }catch(e){}
+}
+function narrativeField(name){
+  var o = opportunity || {};
+  return translatedNarrative[name] != null ? translatedNarrative[name] : clean(o[name]);
+}
+async function applyLanguage(lang){
+  CURRENT_LANG = lang || "it";
+  document.documentElement.lang = CURRENT_LANG;
+  T = await loadTranslatedStrings(CURRENT_LANG);
+  renderTranslatedStaticText();
+  await loadNarrativeTranslations();
+}
+
 /* ---- Pittogrammi caratteristiche: stesso set di colonne booleane "has_*" già usato in
    opportunity-edit.html/valuationform.html/property-acquisition-form.html. Qui in versione
    grafica a icone per una lettura rapida "a colpo d'occhio", coerente con l'uso di emoji come
-   pittogrammi già presente altrove nell'admin (documenti.html, property-acquisition-form.html). ---- */
-var FEATURE_PICTOGRAMS = [
-  { key:"has_pool", icon:"🏊", label:"Piscina" },
-  { key:"has_sea_view", icon:"🌊", label:"Vista mare" },
-  { key:"has_beachfront", icon:"🏖️", label:"Fronte spiaggia" },
-  { key:"has_garden", icon:"🌳", label:"Giardino" },
-  { key:"has_terrace", icon:"🏞️", label:"Terrazzo" },
-  { key:"has_balcony", icon:"🚪", label:"Balcone" },
-  { key:"has_garage", icon:"🚗", label:"Garage" },
-  { key:"has_parking_spot", icon:"🅿️", label:"Posto auto" },
-  { key:"has_elevator", icon:"🛗", label:"Ascensore" },
-  { key:"has_air_conditioning", icon:"❄️", label:"Climatizzazione" },
-  { key:"has_fireplace", icon:"🔥", label:"Camino" },
-  { key:"has_historic_center", icon:"🏛️", label:"Centro storico" },
-  { key:"has_photovoltaic", icon:"☀️", label:"Fotovoltaico" },
-  { key:"has_car_charger", icon:"🔌", label:"Colonnina ricarica" },
-  { key:"has_solar_thermal", icon:"🌡️", label:"Solare termico" },
-  { key:"has_storage_battery", icon:"🔋", label:"Batterie di accumulo" },
-  { key:"has_artesian_well", icon:"💧", label:"Pozzo artesiano" },
-  { key:"has_heating_system", icon:"♨️", label:"Impianto di riscaldamento" },
-  { key:"has_habitability", icon:"✅", label:"Agibilità" }
-];
+   pittogrammi già presente altrove nell'admin (documenti.html, property-acquisition-form.html).
+   Le etichette usano le chiavi T.pic_* (tradotte), UI_STRINGS.pic_* come fallback italiano. ---- */
+function FEATURE_PICTOGRAMS(){
+  return [
+    { key:"has_pool", icon:"🏊", label:T.pic_pool||UI_STRINGS.pic_pool },
+    { key:"has_sea_view", icon:"🌊", label:T.pic_sea_view||UI_STRINGS.pic_sea_view },
+    { key:"has_beachfront", icon:"🏖️", label:T.pic_beachfront||UI_STRINGS.pic_beachfront },
+    { key:"has_garden", icon:"🌳", label:T.pic_garden||UI_STRINGS.pic_garden },
+    { key:"has_terrace", icon:"🏞️", label:T.pic_terrace||UI_STRINGS.pic_terrace },
+    { key:"has_balcony", icon:"🚪", label:T.pic_balcony||UI_STRINGS.pic_balcony },
+    { key:"has_garage", icon:"🚗", label:T.pic_garage||UI_STRINGS.pic_garage },
+    { key:"has_parking_spot", icon:"🅿️", label:T.pic_parking||UI_STRINGS.pic_parking },
+    { key:"has_elevator", icon:"🛗", label:T.pic_elevator||UI_STRINGS.pic_elevator },
+    { key:"has_air_conditioning", icon:"❄️", label:T.pic_ac||UI_STRINGS.pic_ac },
+    { key:"has_fireplace", icon:"🔥", label:T.pic_fireplace||UI_STRINGS.pic_fireplace },
+    { key:"has_historic_center", icon:"🏛️", label:T.pic_historic||UI_STRINGS.pic_historic },
+    { key:"has_photovoltaic", icon:"☀️", label:T.pic_photovoltaic||UI_STRINGS.pic_photovoltaic },
+    { key:"has_car_charger", icon:"🔌", label:T.pic_car_charger||UI_STRINGS.pic_car_charger },
+    { key:"has_solar_thermal", icon:"🌡️", label:T.pic_solar_thermal||UI_STRINGS.pic_solar_thermal },
+    { key:"has_storage_battery", icon:"🔋", label:T.pic_battery||UI_STRINGS.pic_battery },
+    { key:"has_artesian_well", icon:"💧", label:T.pic_well||UI_STRINGS.pic_well },
+    { key:"has_heating_system", icon:"♨️", label:T.pic_heating||UI_STRINGS.pic_heating },
+    { key:"has_habitability", icon:"✅", label:T.pic_habitability||UI_STRINGS.pic_habitability }
+  ];
+}
 
 /* ---- Etichette stato di occupazione: stessi 4 valori del select "occupancy_status"
-   aggiunto in opportunity-edit.html (scheda Informazioni). ---- */
-var OCCUPANCY_LABELS = {
-  libero: "Libero",
-  locato: "Locato",
-  occupato_proprietario: "Occupato dal proprietario",
-  libero_al_rogito: "Libero al rogito"
-};
+   aggiunto in opportunity-edit.html (scheda Informazioni). Tradotte via T.occ_*. ---- */
+function OCCUPANCY_LABELS(){
+  return {
+    libero: T.occ_libero||UI_STRINGS.occ_libero,
+    locato: T.occ_locato||UI_STRINGS.occ_locato,
+    occupato_proprietario: T.occ_occupato_proprietario||UI_STRINGS.occ_occupato_proprietario,
+    libero_al_rogito: T.occ_libero_al_rogito||UI_STRINGS.occ_libero_al_rogito
+  };
+}
 
 function escapeHTML(value){return String(value===null||value===undefined?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");}
 function clean(v){return String(v||"").trim();}
 function firstFiniteOpp(){for(var i=0;i<arguments.length;i++){var n=Number(arguments[i]);if(Number.isFinite(n)&&n!==0)return n;}return null;}
 function slugify(value){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "opportunita";}
 function setStatus(message,type){statusBox.className="status "+(type||"");statusBox.textContent=message||"";}
-function number(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat("it-IT").format(n);}
+function number(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG).format(n);}
 function normalizeGallery(value){if(!value)return[];if(Array.isArray(value))return value.filter(Boolean);try{var p=JSON.parse(value);return Array.isArray(p)?p.filter(Boolean):[]}catch(e){return[]}}
-function getTitle(){return clean(opportunity&&opportunity.title)||"Dossier IMMONOVA";}
+function getTitle(){return clean(opportunity&&opportunity.title)||(T.fallback_title||UI_STRINGS.fallback_title);}
 function getLocation(){return clean(opportunity&&opportunity.location)||clean(opportunity&&opportunity.municipality)||"";}
 function getCategory(){return clean(opportunity&&opportunity.category)||"";}
 function getCoverImage(){var gallery=normalizeGallery(opportunity&&opportunity.gallery_images);return clean(opportunity&&opportunity.cover_image)||gallery[0]||"";}
-function getGeneratedDate(){var d=(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat("it-IT").format(new Date(d));}catch(e){return "";}}
+function getGeneratedDate(){var d=(opportunity&&opportunity.created_at)||new Date().toISOString();try{return new Intl.DateTimeFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG).format(new Date(d));}catch(e){return "";}}
 
 function setControlBusy(el){ if(!el) return; el.classList.remove("btn-success"); el.classList.add("btn-busy"); }
 function setControlDone(el, ok, holdMs){
@@ -232,8 +434,8 @@ function renderCover(){
     + (withImage ? '<img class="cover-bg" src="'+escapeHTML(cover)+'" alt="">' : '')
     + '<div class="page-inner cover">'
     + '<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>'
-    + '<div><div class="cover-kicker">DOSSIER SINTETICO</div><h1 class="cover-title">'+escapeHTML(getTitle())+'</h1></div>'
-    + '<div class="cover-meta">'+[getLocation(), getCategory(), "Generato il "+getGeneratedDate()].filter(Boolean).map(escapeHTML).join('<br>')+'</div>'
+    + '<div><div class="cover-kicker">'+escapeHTML(T.cover_kicker||UI_STRINGS.cover_kicker)+'</div><h1 class="cover-title">'+escapeHTML(getTitle())+'</h1></div>'
+    + '<div class="cover-meta">'+[getLocation(), getCategory(), (T.generated_prefix||UI_STRINGS.generated_prefix)+getGeneratedDate()].filter(Boolean).map(escapeHTML).join('<br>')+'</div>'
     + '</div></article>';
 }
 
@@ -241,34 +443,34 @@ function renderDataAndPictogramsPage(){
   var o = opportunity || {};
   var rows = [];
   var priceText = clean(o.price);
-  if(priceText) rows.push(["Prezzo", priceText]);
+  if(priceText) rows.push([T.label_price||UI_STRINGS.label_price, priceText]);
   var internalSize = firstFiniteOpp(o.internal_size);
-  if(internalSize) rows.push(["Superficie interna", number(internalSize)+" mq"]);
+  if(internalSize) rows.push([T.label_internal_size||UI_STRINGS.label_internal_size, number(internalSize)+(T.unit_sqm||UI_STRINGS.unit_sqm)]);
   var landSize = firstFiniteOpp(o.land_size);
-  if(landSize) rows.push(["Superficie terreno", number(landSize)+" mq"]);
+  if(landSize) rows.push([T.label_land_size||UI_STRINGS.label_land_size, number(landSize)+(T.unit_sqm||UI_STRINGS.unit_sqm)]);
   var bedrooms = firstFiniteOpp(o.bedrooms);
-  if(bedrooms) rows.push(["Camere", number(bedrooms)]);
+  if(bedrooms) rows.push([T.label_bedrooms||UI_STRINGS.label_bedrooms, number(bedrooms)]);
   var bathrooms = firstFiniteOpp(o.bathrooms);
-  if(bathrooms) rows.push(["Bagni", number(bathrooms)]);
+  if(bathrooms) rows.push([T.label_bathrooms||UI_STRINGS.label_bathrooms, number(bathrooms)]);
   var year = firstFiniteOpp(o.construction_year);
-  if(year) rows.push(["Anno costruzione", number(year)]);
-  if(clean(o.energy_class) && clean(o.energy_class)!=="Non disponibile") rows.push(["Classe energetica", clean(o.energy_class)]);
-  if(clean(o.property_condition)) rows.push(["Stato", clean(o.property_condition)]);
-  var occupancyLabel = OCCUPANCY_LABELS[o.occupancy_status];
+  if(year) rows.push([T.label_construction_year||UI_STRINGS.label_construction_year, number(year)]);
+  if(clean(o.energy_class) && clean(o.energy_class)!=="Non disponibile") rows.push([T.label_energy_class||UI_STRINGS.label_energy_class, clean(o.energy_class)]);
+  if(clean(o.property_condition)) rows.push([T.label_condition||UI_STRINGS.label_condition, clean(o.property_condition)]);
+  var occupancyLabel = OCCUPANCY_LABELS()[o.occupancy_status];
   if(occupancyLabel){
-    rows.push(["Stato occupazione", occupancyLabel]);
-    if(o.occupancy_status === "locato" && firstFiniteOpp(o.monthly_rent)) rows.push(["Canone mensile", number(o.monthly_rent) + " €/mese"]);
+    rows.push([T.label_occupancy||UI_STRINGS.label_occupancy, occupancyLabel]);
+    if(o.occupancy_status === "locato" && firstFiniteOpp(o.monthly_rent)) rows.push([T.label_monthly_rent||UI_STRINGS.label_monthly_rent, number(o.monthly_rent) + (T.unit_month_rent||UI_STRINGS.unit_month_rent)]);
   }
 
   var metricsHTML = rows.length
     ? '<div class="metric-grid">' + rows.map(function(r){ return '<div class="metric-card"><div class="metric-label">'+escapeHTML(r[0])+'</div><div class="metric-value">'+escapeHTML(r[1])+'</div></div>'; }).join("") + '</div>'
-    : '<p class="empty-note">Nessun dato immobile disponibile.</p>';
+    : '<p class="empty-note">'+escapeHTML(T.empty_note||UI_STRINGS.empty_note)+'</p>';
 
-  var descText = clean(o.short_description);
+  var descText = narrativeField("short_description");
   var descHTML = descText ? '<p class="desc-text">'+escapeHTML(descText)+'</p>' : '';
 
   return '<article class="report-page"><div class="page-inner">'
-    + '<div class="section-kicker">DOSSIER SINTETICO</div><h2 class="section-title">Dati Immobile</h2><div class="lux-rule"></div>'
+    + '<div class="section-kicker">'+escapeHTML(T.section_kicker||UI_STRINGS.section_kicker)+'</div><h2 class="section-title">'+escapeHTML(T.title_data_page||UI_STRINGS.title_data_page)+'</h2><div class="lux-rule"></div>'
     + descHTML + metricsHTML
     + '</div></article>';
 }
@@ -280,7 +482,7 @@ function renderDataAndPictogramsPage(){
    sono sempre tutti visibili. ---- */
 function renderPictogramsPages(){
   var o = opportunity || {};
-  var activePictos = FEATURE_PICTOGRAMS.filter(function(p){ return !!o[p.key]; });
+  var activePictos = FEATURE_PICTOGRAMS().filter(function(p){ return !!o[p.key]; });
   if(!activePictos.length) return "";
   var PER_PAGE = 12;
   var pages = [];
@@ -288,12 +490,12 @@ function renderPictogramsPages(){
     pages.push(activePictos.slice(i, i+PER_PAGE));
   }
   return pages.map(function(group, idx){
-    var heading = idx === 0 ? "Specifiche" : "Specifiche (continua)";
+    var heading = idx === 0 ? (T.title_specs||UI_STRINGS.title_specs) : (T.title_specs_continued||UI_STRINGS.title_specs_continued);
     var pictoHTML = '<div class="picto-grid">'
       + group.map(function(p){ return '<div class="picto-cell"><span class="picto-icon">'+p.icon+'</span><span class="picto-label">'+escapeHTML(p.label)+'</span></div>'; }).join("")
       + '</div>';
     return '<article class="report-page"><div class="page-inner">'
-      + '<div class="section-kicker">DOSSIER SINTETICO</div><h2 class="section-title">'+heading+'</h2><div class="lux-rule"></div>'
+      + '<div class="section-kicker">'+escapeHTML(T.section_kicker||UI_STRINGS.section_kicker)+'</div><h2 class="section-title">'+escapeHTML(heading)+'</h2><div class="lux-rule"></div>'
       + pictoHTML
       + '</div></article>';
   }).join("");
@@ -319,14 +521,13 @@ function chunkText(text, maxCharsPerPage){
   return pages.length ? pages : [""];
 }
 function renderFullDescriptionPages(){
-  var o = opportunity || {};
-  var fullDesc = clean(o.full_description);
+  var fullDesc = narrativeField("full_description");
   if(!fullDesc) return "";
   var chunks = chunkText(fullDesc, 2200);
   return chunks.map(function(chunk, idx){
-    var heading = idx === 0 ? "Descrizione Completa" : "Descrizione Completa (continua)";
+    var heading = idx === 0 ? (T.title_full_desc||UI_STRINGS.title_full_desc) : (T.title_full_desc_continued||UI_STRINGS.title_full_desc_continued);
     return '<article class="report-page"><div class="page-inner">'
-      + '<div class="section-kicker">DOSSIER SINTETICO</div><h2 class="section-title">'+heading+'</h2><div class="lux-rule"></div>'
+      + '<div class="section-kicker">'+escapeHTML(T.section_kicker||UI_STRINGS.section_kicker)+'</div><h2 class="section-title">'+escapeHTML(heading)+'</h2><div class="lux-rule"></div>'
       + '<p class="desc-text">'+escapeHTML(chunk)+'</p>'
       + '</div></article>';
   }).join("");
@@ -393,16 +594,16 @@ function renderDossierLinkRow(){
   }
   dossierLinkRow.style.display="flex";
   dossierLinkRow.innerHTML =
-    "<span class=\"link-label\">Link diretto al dossier sintetico:</span>"+
+    "<span class=\"link-label\">"+escapeHTML(T.share_link_label||UI_STRINGS.share_link_label)+"</span>"+
     "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\">"+
-    "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">Copia link</button>"+
-    "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
+    "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">"+escapeHTML(T.btn_copy_link||UI_STRINGS.btn_copy_link)+"</button>"+
+    "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">"+escapeHTML(T.btn_send_whatsapp||UI_STRINGS.btn_send_whatsapp)+"</button>"+
     "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>";
   generateShareImage(url, getCoverImage());
 }
 function sendDossierWhatsApp(){
   if(!currentDossierPdfUrl) return;
-  var message = getTitle()+" — Dossier Sintetico IMMONOVA\n"+currentDossierPdfUrl;
+  var message = getTitle()+(T.whatsapp_message_suffix||UI_STRINGS.whatsapp_message_suffix)+"\n"+currentDossierPdfUrl;
   window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
 }
 async function copyDossierLink(){
@@ -413,10 +614,10 @@ async function copyDossierLink(){
   try{
     if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(url); }
     else{ input.select(); document.execCommand("copy"); }
-    if(feedback){ feedback.textContent="Copiato ✓"; setTimeout(function(){ feedback.textContent=""; },2500); }
+    if(feedback){ feedback.textContent=T.copied_feedback||UI_STRINGS.copied_feedback; setTimeout(function(){ feedback.textContent=""; },2500); }
   }catch(e){
     input.select();
-    if(feedback) feedback.textContent="Seleziona e copia manualmente (Ctrl/Cmd+C)";
+    if(feedback) feedback.textContent=T.copy_manual_feedback||UI_STRINGS.copy_manual_feedback;
   }
 }
 function loadImageForCanvas(url){
@@ -473,7 +674,7 @@ async function copyShareImage(){
     if(!blob) throw new Error("Immagine non pronta.");
     if(navigator.clipboard && window.ClipboardItem){
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      if(feedback){ feedback.textContent="Immagine copiata ✓"; setTimeout(function(){ feedback.textContent=""; },3500); }
+      if(feedback){ feedback.textContent=T.image_copied_feedback||UI_STRINGS.image_copied_feedback; setTimeout(function(){ feedback.textContent=""; },3500); }
     }else{
       throw new Error("Copia immagine non supportata da questo browser: usa 'Scarica immagine'.");
     }
@@ -506,12 +707,12 @@ async function generateDossierLink(){
   if(!generateDossierLinkBtn) return;
   generateDossierLinkBtn.disabled = true;
   var originalLabel = generateDossierLinkBtn.textContent;
-  generateDossierLinkBtn.textContent = "Generazione in corso...";
+  generateDossierLinkBtn.textContent = "...";
   setControlBusy(generateDossierLinkBtn);
   try{
     renderBook();
     await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
-    setStatus("Generazione PDF del dossier sintetico in corso...","");
+    setStatus(T.status_generating_pdf||UI_STRINGS.status_generating_pdf,"");
     var pdfBlob = await generateDossierPdfBlob();
     var filename = buildDossierFilename();
     var syntheticId = String(opportunityId) + "-sintetico";
@@ -526,11 +727,11 @@ async function generateDossierLink(){
         method:"POST",
         headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
         body:JSON.stringify({
-          opportunityId: syntheticId,
-          title: (getTitle()||"Dossier IMMONOVA") + " — Sintetico",
-          coverUrl: (opportunity && opportunity.cover_image)||"",
+          opportunityId: syntheticId + "-" + CURRENT_LANG,
+          title: (getTitle()||(T.fallback_title||UI_STRINGS.fallback_title)) + " — Sintetico",
+          coverUrl: getCoverImage(),
           pdfUrl: pub.data.publicUrl,
-          lang: "it"
+          lang: CURRENT_LANG
         })
       });
       var publishData = await publishResp.json();
@@ -547,11 +748,11 @@ async function generateDossierLink(){
     var save = await client.from("opportunities").update({dossier_sintetico_share_url:shareUrl, dossier_sintetico_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
     if(save.error) console.warn("Salvataggio link dossier sintetico su opportunities fallito:", save.error);
 
-    setStatus(shareUrl?"Link al dossier sintetico generato, con anteprima.":"Link generato (senza anteprima).","success");
+    setStatus(shareUrl?(T.status_link_generated_preview||UI_STRINGS.status_link_generated_preview):(T.status_link_generated_no_preview||UI_STRINGS.status_link_generated_no_preview),"success");
     setControlDone(generateDossierLinkBtn, true);
   }catch(e){
     console.error(e);
-    setStatus("Errore nella generazione del link: "+(e.message||e),"error");
+    setStatus((T.status_link_error||UI_STRINGS.status_link_error)+(e.message||e),"error");
     setControlDone(generateDossierLinkBtn, false);
   }
   generateDossierLinkBtn.disabled = false;
@@ -564,16 +765,37 @@ if(copyShareImageBtn) copyShareImageBtn.addEventListener("click", copyShareImage
 if(downloadShareImageBtn) downloadShareImageBtn.addEventListener("click", downloadShareImage);
 
 async function init(){
+  await applyLanguage("it");
+  var quickLangSwitch = document.getElementById("quickLangSwitch");
+  if(quickLangSwitch){
+    quickLangSwitch.value = CURRENT_LANG;
+    quickLangSwitch.addEventListener("change", async function(){
+      var chosen = quickLangSwitch.value;
+      setStatus("","");
+      setControlBusy(quickLangSwitch);
+      try{
+        await applyLanguage(chosen);
+        renderBook();
+        setStatus("","success");
+        setControlDone(quickLangSwitch, true);
+      }catch(e){
+        console.error("Cambio lingua fallito:",e);
+        setStatus((T.status_loading_error||UI_STRINGS.status_loading_error)+(e&&e.message||e),"error");
+        setControlDone(quickLangSwitch, false);
+      }
+    });
+  }
   var session = await checkAuth();
   if(!session) return;
   try{
-    setStatus("Caricamento dati opportunità...","");
+    setStatus(T.status_loading_opportunity||UI_STRINGS.status_loading_opportunity,"");
     await loadOpportunity();
+    await loadNarrativeTranslations();
     renderBook();
     setStatus("","");
   }catch(e){
     console.error(e);
-    book.innerHTML = '<div style="padding:60px;text-align:center;color:#9c2f2f">Errore nel caricamento: '+escapeHTML(e.message||e)+'</div>';
+    book.innerHTML = '<div style="padding:60px;text-align:center;color:#9c2f2f">'+escapeHTML((T.status_loading_error||UI_STRINGS.status_loading_error)+(e.message||e))+'</div>';
   }
 }
 init();
