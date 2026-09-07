@@ -67,6 +67,14 @@ select.lang-switch.btn-success{background:#4f7f45!important;border-color:#4f7f45
 .picto-icon{font-size:22px;line-height:1;flex:none}
 .picto-label{font-size:12px;color:#5a4a2a}
 .empty-note{font-size:12px;color:#8f7643;font-style:italic}
+.location-layout{display:grid;grid-template-columns:.85fr 1.3fr;gap:30px}
+.addr-row{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(166,127,52,.12);padding:9px 0;font-size:13px;color:#735f36}
+.addr-row strong{color:#a67f34;min-width:130px}
+.map-frame{width:100%;height:420px;border:1px solid rgba(166,127,52,.2);display:block;object-fit:cover}
+.gallery-photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:6px}
+.gallery-photo-grid.single{grid-template-columns:1fr;max-width:70%;margin-left:auto;margin-right:auto}
+.gallery-photo-cell{border:1px solid rgba(166,127,52,.18);background:#f4ecdf;overflow:hidden;aspect-ratio:3/2}
+.gallery-photo-cell img{width:100%;height:100%;object-fit:cover;display:block}
 
 @media print{
   @page{size:A4 landscape;margin:0}
@@ -84,6 +92,9 @@ select.lang-switch.btn-success{background:#4f7f45!important;border-color:#4f7f45
   .metric-grid{gap:6mm}.metric-card{padding:6mm;min-height:0}.metric-label{font-size:6.5pt}.metric-value{font-size:15pt}
   .desc-text{font-size:9pt}
   .picto-cell{padding:5mm}.picto-icon{font-size:16pt}.picto-label{font-size:8pt}
+  .addr-row{font-size:8pt;padding:2mm 0}.addr-row strong{min-width:30mm}
+  .map-frame{height:100mm}
+  .gallery-photo-grid{gap:8mm}.gallery-photo-cell{aspect-ratio:3/2}
 }
 body.pdf-export-mode{width:297mm;min-height:210mm;background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body.pdf-export-mode::before,body.pdf-export-mode::after,.pdf-export-mode .topbar,.pdf-export-mode .actions,.pdf-export-mode .status,.pdf-export-mode .dossier-link-row,.pdf-export-mode .share-image-box{display:none!important}
@@ -99,6 +110,9 @@ body.pdf-export-mode::before,body.pdf-export-mode::after,.pdf-export-mode .topba
 .pdf-export-mode .metric-grid{gap:6mm}.pdf-export-mode .metric-card{padding:6mm;min-height:0}.pdf-export-mode .metric-label{font-size:6.5pt}.pdf-export-mode .metric-value{font-size:15pt}
 .pdf-export-mode .desc-text{font-size:9pt}
 .pdf-export-mode .picto-cell{padding:5mm}.pdf-export-mode .picto-icon{font-size:16pt}.pdf-export-mode .picto-label{font-size:8pt}
+.pdf-export-mode .addr-row{font-size:8pt;padding:2mm 0}.pdf-export-mode .addr-row strong{min-width:30mm}
+.pdf-export-mode .map-frame{height:100mm}
+.pdf-export-mode .gallery-photo-grid{gap:8mm}.pdf-export-mode .gallery-photo-cell{aspect-ratio:3/2}
 </style>
 </head>
 <body>
@@ -186,6 +200,14 @@ var UI_STRINGS = {
   title_specs_continued:"Specifiche (continua)",
   title_full_desc:"Descrizione Completa",
   title_full_desc_continued:"Descrizione Completa (continua)",
+  title_location:"Posizione",
+  label_address_row:"Indirizzo",
+  label_locality_row:"Località",
+  label_zip_row:"CAP",
+  label_city_row:"Comune",
+  label_province_row:"Provincia",
+  label_region_row:"Regione",
+  title_media_gallery:"Fotografie",
   label_price:"Prezzo",
   label_internal_size:"Superficie interna",
   label_land_size:"Superficie terreno",
@@ -307,7 +329,15 @@ function renderTranslatedStaticText(){
 
 var NARRATIVE_FIELDS = ["short_description","full_description"];
 var translatedNarrative = {};
-function narrativeCacheKey(lang){ return "immonova_i18n_narrative_dossier_sintetico_" + lang + "_" + (opportunityId||"na") + "_v1"; }
+/* La cache includeva solo lingua+id opportunità: se poi modificavi la descrizione in
+   opportunity-edit.html, la traduzione restava quella vecchia anche rigenerando il link
+   (il testo italiano cambiava ma la cache no). Aggiungiamo updated_at dell'opportunità
+   (aggiornato automaticamente ad ogni salvataggio in opportunity-edit.html) alla chiave:
+   qualunque modifica ai dati invalida da sola la cache, senza bisogno di svuotarla a mano. */
+function narrativeCacheKey(lang){
+  var version = clean(opportunity&&opportunity.updated_at) || "na";
+  return "immonova_i18n_narrative_dossier_sintetico_" + lang + "_" + (opportunityId||"na") + "_" + version + "_v2";
+}
 async function loadNarrativeTranslations(){
   translatedNarrative = {};
   var o = opportunity || {};
@@ -439,11 +469,31 @@ function renderCover(){
     + '</div></article>';
 }
 
+/* ---- Il prezzo arriva come testo libero (campo "price" su opportunities, non numerico),
+   quindi non possiamo usare Intl currency formatting direttamente. Estraiamo la parte
+   numerica, la formattiamo con il separatore delle migliaia (in base alla lingua corrente)
+   e aggiungiamo il simbolo € DOPO il numero (es. "1.200.000 €"). Se il testo non è un
+   prezzo puramente numerico (es. "Trattativa riservata"), lo mostriamo così com'è, senza
+   toccarlo. ---- */
+function formatPriceDisplay(priceText){
+  var raw = String(priceText||"").trim();
+  var withoutSymbols = raw.replace(/[€$£\s]/g,"");
+  var digits = raw.replace(/[^\d]/g,"");
+  /* Solo cifre, separatori (. , ') e simboli di valuta: nessuna lettera -> prezzo
+     puramente numerico, lo riformattiamo. Se contiene lettere (es. "Trattativa
+     riservata", "Su richiesta") lo lasciamo intatto. */
+  var isPurelyNumeric = digits.length>=3 && /^[\d.,']+$/.test(withoutSymbols);
+  if(isPurelyNumeric){
+    return number(Number(digits)) + " €";
+  }
+  return priceText;
+}
+
 function renderDataAndPictogramsPage(){
   var o = opportunity || {};
   var rows = [];
   var priceText = clean(o.price);
-  if(priceText) rows.push([T.label_price||UI_STRINGS.label_price, priceText]);
+  if(priceText) rows.push([T.label_price||UI_STRINGS.label_price, formatPriceDisplay(priceText)]);
   var internalSize = firstFiniteOpp(o.internal_size);
   if(internalSize) rows.push([T.label_internal_size||UI_STRINGS.label_internal_size, number(internalSize)+(T.unit_sqm||UI_STRINGS.unit_sqm)]);
   var landSize = firstFiniteOpp(o.land_size);
@@ -533,8 +583,98 @@ function renderFullDescriptionPages(){
   }).join("");
 }
 
+/* ---- Posizione immobile: stesso meccanismo di report-view.html/dossiersend.html — mappa
+   statica scaricata via l'edge function "static-map-proxy" (già usata altrove nell'app, nessun
+   nuovo costo introdotto) e mostrata come blob URL locale, così è catturabile da html2canvas
+   nel PDF (un iframe live non lo è). Se non ci sono coordinate salvate, mostriamo un iframe
+   Google Maps embed (visibile solo a schermo, non nel PDF). ---- */
+function getAddressParts(){
+  var o = opportunity || {};
+  return {
+    address: clean(o.address),
+    locality: clean(o.locality),
+    zip: clean(o.postal_code),
+    city: clean(o.municipality),
+    province: clean(o.province),
+    region: clean(o.region),
+    country: "Italia",
+    formatted: clean(o.formatted_address)
+  };
+}
+function mapQuery(){
+  var a = getAddressParts();
+  var o = opportunity || {};
+  var lat = Number(o.latitude), lng = Number(o.longitude);
+  if(Number.isFinite(lat) && Number.isFinite(lng)) return lat+","+lng;
+  if(a.formatted) return a.formatted;
+  return [a.address,a.locality,a.city,a.province,a.region,a.country].filter(Boolean).join(", ");
+}
+function renderLocationPage(){
+  var a = getAddressParts();
+  var q = mapQuery();
+  if(!q) return "";
+  var o = opportunity || {};
+  var lat = Number(o.latitude), lng = Number(o.longitude);
+  var hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+  var mapHTML;
+  if(hasCoords){
+    mapHTML = '<img class="map-frame" id="locationMapImg" data-lat="'+escapeHTML(String(lat))+'" data-lng="'+escapeHTML(String(lng))+'" alt="Mappa posizione immobile" style="object-fit:cover">';
+  }else{
+    var mapSrc = "https://www.google.com/maps?q="+encodeURIComponent(q)+"&output=embed";
+    mapHTML = '<iframe class="map-frame" src="'+escapeHTML(mapSrc)+'" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>';
+  }
+  function row(label,val){ return val?'<div class="addr-row"><strong>'+escapeHTML(label)+'</strong><span>'+escapeHTML(val)+'</span></div>':''; }
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.section_kicker||UI_STRINGS.section_kicker)+'</div><h2 class="section-title">'+escapeHTML(T.title_location||UI_STRINGS.title_location)+'</h2><div class="lux-rule"></div><div class="location-layout"><div>'
+    + row(T.label_address_row||UI_STRINGS.label_address_row, a.address||"-")
+    + row(T.label_locality_row||UI_STRINGS.label_locality_row, a.locality||"-")
+    + row(T.label_zip_row||UI_STRINGS.label_zip_row, a.zip||"-")
+    + row(T.label_city_row||UI_STRINGS.label_city_row, a.city||"-")
+    + row(T.label_province_row||UI_STRINGS.label_province_row, a.province||"-")
+    + row(T.label_region_row||UI_STRINGS.label_region_row, a.region||"-")
+    + '</div>'+mapHTML+'</div></div></article>';
+}
+async function loadLocationMapImage(){
+  var img = document.getElementById("locationMapImg");
+  if(!img) return;
+  var lat = img.getAttribute("data-lat");
+  var lng = img.getAttribute("data-lng");
+  if(!lat || !lng) return;
+  try{
+    var url = SUPABASE_URL+"/functions/v1/static-map-proxy?lat="+encodeURIComponent(lat)+"&lng="+encodeURIComponent(lng)+"&zoom=15&size=1200x700&scale=2";
+    var res = await fetch(url,{headers:{"Authorization":"Bearer "+SUPABASE_ANON_KEY,"apikey":SUPABASE_ANON_KEY}});
+    if(!res.ok){ console.warn("Mappa posizione non caricata:",res.status,await res.text()); return; }
+    var blob = await res.blob();
+    img.src = URL.createObjectURL(blob);
+  }catch(e){
+    console.warn("Mappa posizione: errore fetch",e);
+  }
+}
+
+/* ---- Fotografie immobile: copertina + galleria, max 2 per pagina (mai rimpicciolite o
+   deformate — object-fit:cover ritaglia mantenendo le proporzioni). Stesso meccanismo di
+   report-view.html. ---- */
+function renderMediaGalleryPage(){
+  var o = opportunity || {};
+  var images = normalizeGallery(o.gallery_images);
+  var cover = clean(o.cover_image);
+  var all = (cover?[cover]:[]).concat(images).filter(Boolean);
+  var seen = {};
+  all = all.filter(function(u){ if(seen[u]) return false; seen[u]=true; return true; });
+  if(!all.length) return "";
+
+  var pages = [];
+  var PER_PAGE = 2;
+  for(var i=0;i<all.length;i+=PER_PAGE){
+    var chunk = all.slice(i,i+PER_PAGE);
+    var gridClass = "gallery-photo-grid"+(chunk.length===1?" single":"");
+    var cells = chunk.map(function(u){ return '<div class="gallery-photo-cell"><img src="'+escapeHTML(u)+'" alt=""></div>'; }).join("");
+    pages.push('<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.section_kicker||UI_STRINGS.section_kicker)+'</div><h2 class="section-title">'+escapeHTML(T.title_media_gallery||UI_STRINGS.title_media_gallery)+'</h2><div class="lux-rule"></div><div class="'+gridClass+'">'+cells+'</div></div></article>');
+  }
+  return pages.join("");
+}
+
 function renderBook(){
-  var html = renderCover() + renderDataAndPictogramsPage() + renderPictogramsPages() + renderFullDescriptionPages();
+  var html = renderCover() + renderDataAndPictogramsPage() + renderPictogramsPages() + renderLocationPage() + renderMediaGalleryPage() + renderFullDescriptionPages();
   book.innerHTML = html;
   document.getElementById("pageTitle").textContent = getTitle();
 }
@@ -711,6 +851,7 @@ async function generateDossierLink(){
   setControlBusy(generateDossierLinkBtn);
   try{
     renderBook();
+    await loadLocationMapImage();
     await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
     setStatus(T.status_generating_pdf||UI_STRINGS.status_generating_pdf,"");
     var pdfBlob = await generateDossierPdfBlob();
@@ -727,7 +868,7 @@ async function generateDossierLink(){
         method:"POST",
         headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
         body:JSON.stringify({
-          opportunityId: syntheticId + "-" + CURRENT_LANG,
+          opportunityId: syntheticId,
           title: (getTitle()||(T.fallback_title||UI_STRINGS.fallback_title)) + " — Sintetico",
           coverUrl: getCoverImage(),
           pdfUrl: pub.data.publicUrl,
@@ -776,6 +917,7 @@ async function init(){
       try{
         await applyLanguage(chosen);
         renderBook();
+        loadLocationMapImage();
         setStatus("","success");
         setControlDone(quickLangSwitch, true);
       }catch(e){
@@ -792,6 +934,7 @@ async function init(){
     await loadOpportunity();
     await loadNarrativeTranslations();
     renderBook();
+    loadLocationMapImage();
     setStatus("","");
   }catch(e){
     console.error(e);
