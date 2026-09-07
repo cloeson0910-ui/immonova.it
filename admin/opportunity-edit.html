@@ -4280,7 +4280,13 @@ function canvasToBlob(canvas, quality){
 }
 
 async function handleFolderImportFiles(fileList){
-  var files = Array.prototype.filter.call(fileList, function(f){ return /^image\//.test(f.type); });
+  var files = Array.prototype.filter.call(fileList, function(f){
+    if(/^image\//.test(f.type)) return true;
+    // Fallback: alcuni browser/OS non valorizzano f.type per i file letti tramite
+    // selezione cartella (webkitdirectory) e restituiscono file.type vuoto anche
+    // per immagini valide -> in quel caso si riconosce l'immagine dall'estensione.
+    return /\.(jpe?g|png|webp|gif|heic|heif|bmp|tiff?|avif)$/i.test(f.name || "");
+  });
   if(!files.length){
     folderImportSetStatus("Nessuna immagine trovata in questa cartella.", "error");
     return;
