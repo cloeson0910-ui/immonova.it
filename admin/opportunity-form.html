@@ -1200,6 +1200,7 @@ button.danger{
 .virtual-tour-note{font-size:13px;line-height:1.65;color:#6d6253;margin-bottom:16px}
 .virtual-tour-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .virtual-tour-row input[type=file]{flex:1;min-width:240px}
+.virtual-tour-quality{min-width:220px}.virtual-tour-quality label{display:block;margin-bottom:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8b6a32}.virtual-tour-quality select{width:100%}
 .virtual-tour-progress{display:none;margin-top:16px}.virtual-tour-progress.active{display:block}
 .virtual-tour-progress-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#6d6253;margin-bottom:7px}
 .virtual-tour-track{height:8px;background:#e3d8c7;overflow:hidden}.virtual-tour-bar{height:100%;width:0;background:linear-gradient(90deg,#9d773a,#d3b575);transition:width .35s ease}
@@ -1432,6 +1433,15 @@ button.danger{
         <div class="virtual-tour-note">Carica un video lento e stabile che attraversi tutti gli ambienti. Dopo il primo salvataggio IMMONOVA avvierà automaticamente la ricostruzione 3D; potrai controllarla e pubblicarla dalla pagina di modifica.</div>
         <div class="virtual-tour-row">
           <input type="file" id="virtualTourVideo" accept="video/mp4,video/quicktime,video/webm">
+          <div class="virtual-tour-quality">
+            <label for="virtualTourPreset">Qualità ricostruzione</label>
+            <select id="virtualTourPreset">
+              <option value="fast" selected>Fast · prova rapida</option>
+              <option value="standard">Standard · qualità di produzione</option>
+              <option value="quality">Quality · alta definizione</option>
+              <option value="ultra">Ultra · qualità massima</option>
+            </select>
+          </div>
         </div>
         <div class="file-note">Formati: MP4, MOV o WebM. Ripresa continua, buona luce, movimenti lenti e ogni stanza mostrata da più angolazioni.</div>
         <div id="virtualTourProgress" class="virtual-tour-progress">
@@ -2569,7 +2579,7 @@ async function createVirtualTourForOpportunity(opportunityId){
   try{
     setVirtualTourProgress("Preparazione ricostruzione 3D...", 3);
     var created = await client.functions.invoke("virtual-tour", {
-      body:{action:"create", opportunity_id:Number(opportunityId), title:document.getElementById("title").value.trim(), content_type:file.type || "video/mp4"}
+      body:{action:"create", opportunity_id:Number(opportunityId), title:document.getElementById("title").value.trim(), content_type:file.type || "video/mp4", preset:document.getElementById("virtualTourPreset").value || "fast"}
     });
     if(created.error || !created.data || !created.data.success || !created.data.upload_url){
       throw new Error((created.data && created.data.message) || (created.error && created.error.message) || "Impossibile preparare il virtual tour.");

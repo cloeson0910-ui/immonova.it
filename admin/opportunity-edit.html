@@ -1440,6 +1440,7 @@ button.danger{
 .virtual-tour-title{font-size:17px;letter-spacing:.08em;text-transform:uppercase;color:#8b6a32;margin-bottom:8px}
 .virtual-tour-note{font-size:13px;line-height:1.65;color:#6d6253;margin-bottom:16px}
 .virtual-tour-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.virtual-tour-row input[type=file]{flex:1;min-width:240px}
+.virtual-tour-quality{min-width:220px}.virtual-tour-quality label{display:block;margin-bottom:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8b6a32}.virtual-tour-quality select{width:100%}
 .virtual-tour-progress{display:none;margin-top:16px}.virtual-tour-progress.active{display:block}
 .virtual-tour-progress-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#6d6253;margin-bottom:7px}
 .virtual-tour-track{height:8px;background:#e3d8c7;overflow:hidden}.virtual-tour-bar{height:100%;width:0;background:linear-gradient(90deg,#9d773a,#d3b575);transition:width .35s ease}
@@ -1686,6 +1687,15 @@ button.danger{
         <div class="virtual-tour-note">Carica il video dell’immobile e avvia la ricostruzione automatica. Puoi lasciare la pagina: lo stato verrà recuperato alla riapertura.</div>
         <div class="virtual-tour-row">
           <input type="file" id="virtualTourVideo" accept="video/mp4,video/quicktime,video/webm">
+          <div class="virtual-tour-quality">
+            <label for="virtualTourPreset">Qualità ricostruzione</label>
+            <select id="virtualTourPreset">
+              <option value="fast" selected>Fast · prova rapida</option>
+              <option value="standard">Standard · qualità di produzione</option>
+              <option value="quality">Quality · alta definizione</option>
+              <option value="ultra">Ultra · qualità massima</option>
+            </select>
+          </div>
           <button type="button" class="primary" id="generateVirtualTourBtn">Genera Virtual Tour</button>
           <button type="button" class="soft" id="refreshVirtualTourBtn">Aggiorna stato</button>
           <button type="button" class="danger" id="deleteVirtualTourBtn" style="display:none">Elimina tour</button>
@@ -3279,7 +3289,7 @@ async function generateVirtualTour(){
   virtualTourUploadRunning = true;
   try{
     setVirtualTourProgress("Preparazione ricostruzione 3D...", 3);
-    var created = await client.functions.invoke("virtual-tour", {body:{action:"create", opportunity_id:Number(id), title:document.getElementById("title").value.trim(), content_type:file.type || "video/mp4"}});
+    var created = await client.functions.invoke("virtual-tour", {body:{action:"create", opportunity_id:Number(id), title:document.getElementById("title").value.trim(), content_type:file.type || "video/mp4", preset:document.getElementById("virtualTourPreset").value || "fast"}});
     if(created.error || !created.data || !created.data.success || !created.data.upload_url) throw new Error((created.data && created.data.message) || (created.error && created.error.message) || "Impossibile preparare il virtual tour.");
     loadedOpportunity.virtual_tour_scene_id = created.data.scene_id;
     await uploadVirtualTourVideo(created.data.upload_url, file);
@@ -5090,6 +5100,7 @@ async function loadOpportunity(){
   loadedPublished = data.published === true;
   document.getElementById("show_price_public").checked = data.show_price_public !== false;
   document.getElementById("ownerId").value = data.owner_id || "";
+  setValue("virtualTourPreset", data.virtual_tour_preset || "fast");
   document.getElementById("virtualTourPublished").checked = data.virtual_tour_published === true;
   renderVirtualTour(data);
 
@@ -6050,6 +6061,7 @@ form.addEventListener("submit", async function(e){
       published:isAdmin ? document.getElementById("published").checked : loadedPublished,
       show_price_public:document.getElementById("show_price_public").checked,
       virtual_tour_published:document.getElementById("virtualTourPublished").checked && !!(loadedOpportunity && loadedOpportunity.virtual_tour_url),
+      virtual_tour_preset:document.getElementById("virtualTourPreset").value || "fast",
       owner_id:document.getElementById("ownerId").value || null,
       updated_at:new Date().toISOString()
     };
