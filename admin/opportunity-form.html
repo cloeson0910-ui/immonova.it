@@ -1200,7 +1200,7 @@ button.danger{
 .virtual-tour-note{font-size:13px;line-height:1.65;color:#6d6253;margin-bottom:16px}
 .virtual-tour-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .virtual-tour-row input[type=file]{flex:1;min-width:240px}
-.virtual-tour-quality{min-width:220px}.virtual-tour-quality label{display:block;margin-bottom:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8b6a32}.virtual-tour-quality select{width:100%}
+.virtual-tour-quality{min-width:220px}.virtual-tour-quality select{width:100%}
 .virtual-tour-progress{display:none;margin-top:16px}.virtual-tour-progress.active{display:block}
 .virtual-tour-progress-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#6d6253;margin-bottom:7px}
 .virtual-tour-track{height:8px;background:#e3d8c7;overflow:hidden}.virtual-tour-bar{height:100%;width:0;background:linear-gradient(90deg,#9d773a,#d3b575);transition:width .35s ease}
@@ -1434,8 +1434,7 @@ button.danger{
         <div class="virtual-tour-row">
           <input type="file" id="virtualTourVideo" accept="video/mp4,video/quicktime,video/webm">
           <div class="virtual-tour-quality">
-            <label for="virtualTourPreset">Qualità ricostruzione</label>
-            <select id="virtualTourPreset">
+            <select id="virtualTourPreset" aria-label="Qualità ricostruzione Virtual Tour">
               <option value="fast" selected>Fast · prova rapida</option>
               <option value="standard">Standard · qualità di produzione</option>
               <option value="quality">Quality · alta definizione</option>
@@ -2548,24 +2547,17 @@ function setVirtualTourProgress(message, percent, type){
   if(status){ status.textContent = message || ""; status.className = "virtual-tour-status " + (type || ""); }
 }
 
-function uploadVirtualTourVideo(uploadUrl, file){
-  return new Promise(function(resolve, reject){
-    var xhr = new XMLHttpRequest();
-    xhr.open("PUT", uploadUrl, true);
-    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-    xhr.upload.onprogress = function(event){
-      if(event.lengthComputable){
-        var value = Math.max(5, Math.min(70, Math.round((event.loaded / event.total) * 70)));
-        setVirtualTourProgress("Caricamento video...", value);
-      }
-    };
-    xhr.onload = function(){
-      if(xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error("Caricamento video non riuscito (HTTP " + xhr.status + ")."));
-    };
-    xhr.onerror = function(){ reject(new Error("Connessione interrotta durante il caricamento del video.")); };
-    xhr.send(file);
+async function uploadVirtualTourVideo(opportunityId, file){
+  var path = "virtual-tours/" + opportunityId + "/" + Date.now() + "-" + cleanFileName(file.name || "video.mp4");
+  setVirtualTourProgress("Caricamento protetto del video...", 18);
+  var result = await client.storage.from("opportunities").upload(path, file, {
+    cacheControl:"3600",
+    contentType:file.type || "video/mp4",
+    upsert:false
   });
+  if(result.error) throw new Error("Caricamento video su Supabase non riuscito: " + result.error.message);
+  setVirtualTourProgress("Video caricato. Trasferimento al motore 3D...", 62);
+  return path;
 }
 
 async function createVirtualTourForOpportunity(opportunityId){
@@ -2577,22 +2569,14 @@ async function createVirtualTourForOpportunity(opportunityId){
 
   virtualTourUploadRunning = true;
   try{
-    setVirtualTourProgress("Preparazione ricostruzione 3D...", 3);
+    var storagePath = await uploadVirtualTourVideo(opportunityId, file);
     var created = await client.functions.invoke("virtual-tour", {
-      body:{action:"create", opportunity_id:Number(opportunityId), title:document.getElementById("title").value.trim(), content_type:file.type || "video/mp4", preset:document.getElementById("virtualTourPreset").value || "fast"}
+      body:{action:"create_from_storage", opportunity_id:Number(opportunityId), title:document.getElementById("title").value.trim(), content_type:file.type || "video/mp4", preset:document.getElementById("virtualTourPreset").value || "fast", storage_path:storagePath}
     });
-    if(created.error || !created.data || !created.data.success || !created.data.upload_url){
+    if(created.error || !created.data || !created.data.success || !created.data.scene_id){
       throw new Error((created.data && created.data.message) || (created.error && created.error.message) || "Impossibile preparare il virtual tour.");
     }
-    await uploadVirtualTourVideo(created.data.upload_url, file);
-    setVirtualTourProgress("Avvio ricostruzione 3D...", 76);
-    var started = await client.functions.invoke("virtual-tour", {
-      body:{action:"start", opportunity_id:Number(opportunityId), scene_id:created.data.scene_id}
-    });
-    if(started.error || !started.data || !started.data.success){
-      throw new Error((started.data && started.data.message) || (started.error && started.error.message) || "Impossibile avviare la ricostruzione.");
-    }
-    setVirtualTourProgress("Video acquisito. Ricostruzione 3D avviata: proseguirà anche dopo aver chiuso questa pagina.", 82, "success");
+    setVirtualTourProgress("Video acquisito e ricostruzione 3D avviata. Puoi lasciare questa pagina.", 82, "success");
     return true;
   }catch(error){
     setVirtualTourProgress(error.message || "Errore virtual tour.", 100, "error");
