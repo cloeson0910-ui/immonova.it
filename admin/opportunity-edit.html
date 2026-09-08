@@ -1436,6 +1436,17 @@ button.danger{
     flex-direction:column;
   }
 }
+.virtual-tour-box{grid-column:1/-1;border:1px solid rgba(174,139,78,.42);background:linear-gradient(145deg,rgba(255,255,255,.78),rgba(244,236,223,.82));padding:22px;margin-top:8px}
+.virtual-tour-title{font-size:17px;letter-spacing:.08em;text-transform:uppercase;color:#8b6a32;margin-bottom:8px}
+.virtual-tour-note{font-size:13px;line-height:1.65;color:#6d6253;margin-bottom:16px}
+.virtual-tour-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.virtual-tour-row input[type=file]{flex:1;min-width:240px}
+.virtual-tour-progress{display:none;margin-top:16px}.virtual-tour-progress.active{display:block}
+.virtual-tour-progress-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#6d6253;margin-bottom:7px}
+.virtual-tour-track{height:8px;background:#e3d8c7;overflow:hidden}.virtual-tour-bar{height:100%;width:0;background:linear-gradient(90deg,#9d773a,#d3b575);transition:width .35s ease}
+.virtual-tour-status{margin-top:10px;font-size:13px;line-height:1.5}.virtual-tour-status.error{color:#9c2f2f}.virtual-tour-status.success{color:#4e704f}
+.virtual-tour-preview{display:none;margin-top:16px}.virtual-tour-preview.visible{display:block}.virtual-tour-preview iframe{width:100%;height:520px;border:1px solid rgba(174,139,78,.35);background:#eee}
+.virtual-tour-publish{display:none;margin-top:14px;align-items:center;gap:10px}.virtual-tour-publish.visible{display:flex}
+@media(max-width:700px){.virtual-tour-preview iframe{height:420px}}
 </style>
 </head>
 
@@ -1668,6 +1679,28 @@ button.danger{
       <div class="field full">
         <label for="galleryFiles" data-i18n="label_add_gallery">Aggiungi immagini alla gallery</label>
         <input type="file" id="galleryFiles" accept="image/*" multiple>
+      </div>
+
+      <div class="virtual-tour-box">
+        <div class="virtual-tour-title">Virtual Tour 3D automatico</div>
+        <div class="virtual-tour-note">Carica il video dell’immobile e avvia la ricostruzione automatica. Puoi lasciare la pagina: lo stato verrà recuperato alla riapertura.</div>
+        <div class="virtual-tour-row">
+          <input type="file" id="virtualTourVideo" accept="video/mp4,video/quicktime,video/webm">
+          <button type="button" class="primary" id="generateVirtualTourBtn">Genera Virtual Tour</button>
+          <button type="button" class="soft" id="refreshVirtualTourBtn">Aggiorna stato</button>
+          <button type="button" class="danger" id="deleteVirtualTourBtn" style="display:none">Elimina tour</button>
+        </div>
+        <div class="file-note">Formati: MP4, MOV o WebM. Ripresa continua, buona luce, movimenti lenti e ogni stanza mostrata da più angolazioni.</div>
+        <div id="virtualTourProgress" class="virtual-tour-progress">
+          <div class="virtual-tour-progress-top"><span id="virtualTourProgressText">Preparazione...</span><strong id="virtualTourPercent">0%</strong></div>
+          <div class="virtual-tour-track"><div id="virtualTourBar" class="virtual-tour-bar"></div></div>
+        </div>
+        <div id="virtualTourStatus" class="virtual-tour-status"></div>
+        <label id="virtualTourPublishWrap" class="check virtual-tour-publish">
+          <input type="checkbox" id="virtualTourPublished">
+          <span>Pubblica il Virtual Tour nella pagina pubblica dell’opportunità</span>
+        </label>
+        <div id="virtualTourPreview" class="virtual-tour-preview"><iframe id="virtualTourFrame" title="Virtual Tour 3D" allowfullscreen loading="lazy"></iframe></div>
       </div>
 
 
@@ -2214,6 +2247,8 @@ var loadedOpportunity = null;
 var currentUser = null;
 var allInvestors = [];
 var investorMatches = [];
+var virtualTourUploadRunning = false;
+var virtualTourPollTimer = null;
 
 
 var REQUIRED_DOCUMENTS = [
@@ -3155,6 +3190,105 @@ document.addEventListener("DOMContentLoaded", function(){
 function setStatus(message, type){
   statusBox.className = "status " + (type || "");
   statusBox.textContent = message || "";
+}
+
+function setVirtualTourProgress(message, percent, type){
+  var box = document.getElementById("virtualTourProgress");
+  var bar = document.getElementById("virtualTourBar");
+  var pct = document.getElementById("virtualTourPercent");
+  var text = document.getElementById("virtualTourProgressText");
+  var status = document.getElementById("virtualTourStatus");
+  var safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+  if(box) box.classList.add("active");
+  if(bar) bar.style.width = safePercent + "%";
+  if(pct) pct.textContent = safePercent + "%";
+  if(text) text.textContent = message || "Elaborazione...";
+  if(status){ status.textContent = message || ""; status.className = "virtual-tour-status " + (type || ""); }
+}
+
+function uploadVirtualTourVideo(uploadUrl, file){
+  return new Promise(function(resolve, reject){
+    var xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl, true);
+    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    xhr.upload.onprogress = function(event){
+      if(event.lengthComputable) setVirtualTourProgress("Caricamento video...", Math.max(5, Math.min(70, Math.round((event.loaded / event.total) * 70))));
+    };
+    xhr.onload = function(){ xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Caricamento video non riuscito (HTTP " + xhr.status + ").")); };
+    xhr.onerror = function(){ reject(new Error("Connessione interrotta durante il caricamento del video.")); };
+    xhr.send(file);
+  });
+}
+
+function virtualTourStatusLabel(data){
+  var status = String(data.status || "").toLowerCase();
+  var stage = String(data.processing_stage || "").replace(/_/g, " ");
+  if(status === "complete") return "Virtual Tour 3D completato.";
+  if(status === "failed") return "Generazione fallita: " + (data.processing_error || "errore non specificato");
+  if(status === "cancelled") return "Generazione annullata.";
+  if(status === "uploading") return "In attesa del caricamento video.";
+  return "Ricostruzione 3D in corso" + (stage ? " · " + stage : "") + "...";
+}
+
+function renderVirtualTour(data){
+  data = data || {};
+  var status = String(data.status || data.virtual_tour_status || "").toLowerCase();
+  var viewerUrl = data.viewer_url || data.virtual_tour_url || "";
+  var percent = status === "complete" ? 100 : Number(data.processing_pct || data.virtual_tour_progress || 0);
+  var message = virtualTourStatusLabel({status:status, processing_stage:data.processing_stage, processing_error:data.processing_error || data.virtual_tour_error});
+  if(status) setVirtualTourProgress(message, percent, status === "complete" ? "success" : (status === "failed" ? "error" : ""));
+
+  var preview = document.getElementById("virtualTourPreview");
+  var frame = document.getElementById("virtualTourFrame");
+  var publish = document.getElementById("virtualTourPublishWrap");
+  var del = document.getElementById("deleteVirtualTourBtn");
+  if(del) del.style.display = data.scene_id || data.virtual_tour_scene_id ? "" : "none";
+  if(viewerUrl && status === "complete"){
+    if(frame && frame.src !== viewerUrl) frame.src = viewerUrl;
+    if(preview) preview.classList.add("visible");
+    if(publish) publish.classList.add("visible");
+  }else{
+    if(preview) preview.classList.remove("visible");
+    if(publish) publish.classList.remove("visible");
+  }
+}
+
+async function refreshVirtualTourStatus(silent){
+  if(!id || !(loadedOpportunity && loadedOpportunity.virtual_tour_scene_id)) return;
+  var result = await client.functions.invoke("virtual-tour", {body:{action:"status", opportunity_id:Number(id)}});
+  if(result.error || !result.data || !result.data.success){
+    if(!silent) setVirtualTourProgress((result.data && result.data.message) || (result.error && result.error.message) || "Impossibile aggiornare lo stato.", 100, "error");
+    return;
+  }
+  loadedOpportunity.virtual_tour_scene_id = result.data.scene_id || loadedOpportunity.virtual_tour_scene_id;
+  loadedOpportunity.virtual_tour_status = result.data.status;
+  loadedOpportunity.virtual_tour_url = result.data.viewer_url || loadedOpportunity.virtual_tour_url;
+  renderVirtualTour(result.data);
+  clearTimeout(virtualTourPollTimer);
+  if(result.data.status && !["complete","failed","cancelled"].includes(String(result.data.status).toLowerCase())){
+    virtualTourPollTimer = setTimeout(function(){ refreshVirtualTourStatus(true); }, 15000);
+  }
+}
+
+async function generateVirtualTour(){
+  var input = document.getElementById("virtualTourVideo");
+  var file = input && input.files ? input.files[0] : null;
+  if(!file) throw new Error("Seleziona prima il video dell’immobile.");
+  if(virtualTourUploadRunning) throw new Error("Il virtual tour è già in caricamento.");
+  if(!/^video\/(mp4|quicktime|webm)$/i.test(file.type || "")) throw new Error("Usa un video MP4, MOV o WebM.");
+  virtualTourUploadRunning = true;
+  try{
+    setVirtualTourProgress("Preparazione ricostruzione 3D...", 3);
+    var created = await client.functions.invoke("virtual-tour", {body:{action:"create", opportunity_id:Number(id), title:document.getElementById("title").value.trim(), content_type:file.type || "video/mp4"}});
+    if(created.error || !created.data || !created.data.success || !created.data.upload_url) throw new Error((created.data && created.data.message) || (created.error && created.error.message) || "Impossibile preparare il virtual tour.");
+    loadedOpportunity.virtual_tour_scene_id = created.data.scene_id;
+    await uploadVirtualTourVideo(created.data.upload_url, file);
+    setVirtualTourProgress("Avvio ricostruzione 3D...", 76);
+    var started = await client.functions.invoke("virtual-tour", {body:{action:"start", opportunity_id:Number(id), scene_id:created.data.scene_id}});
+    if(started.error || !started.data || !started.data.success) throw new Error((started.data && started.data.message) || (started.error && started.error.message) || "Impossibile avviare la ricostruzione.");
+    setVirtualTourProgress("Ricostruzione 3D avviata. Puoi lasciare questa pagina.", 82, "success");
+    await refreshVirtualTourStatus(true);
+  }finally{ virtualTourUploadRunning = false; }
 }
 
 function setRenovationStatus(message, type){
@@ -4956,6 +5090,8 @@ async function loadOpportunity(){
   loadedPublished = data.published === true;
   document.getElementById("show_price_public").checked = data.show_price_public !== false;
   document.getElementById("ownerId").value = data.owner_id || "";
+  document.getElementById("virtualTourPublished").checked = data.virtual_tour_published === true;
+  renderVirtualTour(data);
 
   aiGenerated = data.ai_generated_description === true;
 
@@ -4971,6 +5107,10 @@ async function loadOpportunity(){
   await loadOpportunityDocuments();
   await loadInvestorsForCrm();
   await loadTimeline();
+
+  if(data.virtual_tour_scene_id && !["complete","failed","cancelled"].includes(String(data.virtual_tour_status || "").toLowerCase())){
+    refreshVirtualTourStatus(true);
+  }
 
   applyOwnershipLock(data);
 
@@ -5764,6 +5904,41 @@ document.getElementById("removeCoverBtn").addEventListener("click", function(){
   renderCover();
 });
 
+document.getElementById("generateVirtualTourBtn").addEventListener("click", async function(){
+  var btn = this;
+  try{
+    if(loadedOpportunity && loadedOpportunity.virtual_tour_scene_id && !confirm("Esiste già un Virtual Tour. Vuoi sostituirlo con una nuova ricostruzione?")) return;
+    btn.disabled = true;
+    btn.textContent = "Caricamento...";
+    await generateVirtualTour();
+  }catch(error){
+    setVirtualTourProgress(error.message || "Errore durante la generazione del Virtual Tour.", 100, "error");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Genera Virtual Tour";
+  }
+});
+
+document.getElementById("refreshVirtualTourBtn").addEventListener("click", function(){ refreshVirtualTourStatus(false); });
+
+document.getElementById("deleteVirtualTourBtn").addEventListener("click", async function(){
+  if(!confirm("Eliminare il Virtual Tour associato a questa opportunità?")) return;
+  var result = await client.functions.invoke("virtual-tour", {body:{action:"delete", opportunity_id:Number(id)}});
+  if(result.error || !result.data || !result.data.success){
+    setVirtualTourProgress((result.data && result.data.message) || (result.error && result.error.message) || "Eliminazione non riuscita.", 100, "error");
+    return;
+  }
+  clearTimeout(virtualTourPollTimer);
+  loadedOpportunity.virtual_tour_scene_id = null;
+  loadedOpportunity.virtual_tour_status = null;
+  loadedOpportunity.virtual_tour_url = null;
+  document.getElementById("virtualTourPublished").checked = false;
+  document.getElementById("virtualTourPreview").classList.remove("visible");
+  document.getElementById("virtualTourPublishWrap").classList.remove("visible");
+  document.getElementById("deleteVirtualTourBtn").style.display = "none";
+  setVirtualTourProgress("Virtual Tour eliminato.", 0, "success");
+});
+
 form.addEventListener("submit", async function(e){
   e.preventDefault();
 
@@ -5874,6 +6049,7 @@ form.addEventListener("submit", async function(e){
       featured:isAdmin ? document.getElementById("featured").checked : loadedFeatured,
       published:isAdmin ? document.getElementById("published").checked : loadedPublished,
       show_price_public:document.getElementById("show_price_public").checked,
+      virtual_tour_published:document.getElementById("virtualTourPublished").checked && !!(loadedOpportunity && loadedOpportunity.virtual_tour_url),
       owner_id:document.getElementById("ownerId").value || null,
       updated_at:new Date().toISOString()
     };
