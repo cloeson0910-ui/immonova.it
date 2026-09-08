@@ -496,6 +496,15 @@ h1{
   text-transform:uppercase;
   line-height:1.7;
 }
+.virtual-tour-public{
+  position:relative;
+  border:1px solid rgba(166,127,52,.22);
+  background:#e9e1d5;
+  overflow:hidden;
+  aspect-ratio:16/9;
+  min-height:420px;
+}
+.virtual-tour-public iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#e9e1d5}
 .lock-box{
   margin-top:22px;
   padding:22px;
@@ -754,6 +763,7 @@ html[dir="rtl"] .data-grid{direction:rtl}
   .nav{justify-content:center;gap:18px}
   .page{padding:38px 22px 80px}
   .form-grid,.data-grid,.gallery,.events-grid{grid-template-columns:1fr}
+  .virtual-tour-public{min-height:300px}
   .timeline-item{grid-template-columns:1fr}
   .panel{padding:26px}
 }
@@ -857,6 +867,9 @@ const UI_TRANSLATIONS = {
     overview:"Overview",
     investment:"Investment Snapshot",
     gallery:"Gallery Preview",
+    virtual_tour:"Virtual Tour 3D",
+    virtual_tour_intro:"Esplora liberamente gli ambienti dell’immobile in una ricostruzione tridimensionale interattiva.",
+    virtual_tour_fullscreen:"Apri Virtual Tour 3D",
     ai_analysis:"AI Analysis Preview",
     timeline:"Timeline",
     events:"Eventi Collegati",
@@ -950,6 +963,9 @@ const UI_TRANSLATIONS = {
     overview:"Overview",
     investment:"Investment Snapshot",
     gallery:"Gallery Preview",
+    virtual_tour:"3D Virtual Tour",
+    virtual_tour_intro:"Explore the property freely through an interactive three-dimensional reconstruction.",
+    virtual_tour_fullscreen:"Open 3D Virtual Tour",
     ai_analysis:"AI Analysis Preview",
     timeline:"Timeline",
     events:"Linked Events",
@@ -1315,6 +1331,18 @@ function renderAmenitiesPanel(data){
   return '<div class="panel"><h2 class="section-title">' + escapeHTML(dict("amenities_title")) + '</h2><div class="amenities-grid">' + items + '</div></div>';
 }
 
+function safeVirtualTourUrl(data){
+  if(!data || data.virtual_tour_published !== true || String(data.virtual_tour_status || "").toLowerCase() !== "complete") return "";
+  try{
+    var url = new URL(String(data.virtual_tour_model_url || ""));
+    var host = url.hostname.toLowerCase();
+    if(url.protocol !== "https:" || !host.endsWith(".supabase.co") || url.pathname.indexOf("/storage/v1/object/public/virtual-tours-3d/") === -1) return "";
+    return url.href;
+  }catch(error){
+    return "";
+  }
+}
+
 async function renderOpportunity(data){
   data = await getRenderData(data);
   updatePageMeta(data);
@@ -1331,6 +1359,8 @@ async function renderOpportunity(data){
   const lockedCount = lockedGalleryCount(data);
   const timeline = timelineFor(data);
   const events = data.immonova_events || [];
+  const virtualTourUrl = safeVirtualTourUrl(data);
+  const virtualTourViewerUrl = virtualTourUrl ? "virtual-tour-viewer.html?model=" + encodeURIComponent(virtualTourUrl) : "";
 
   pageContent.className = "";
   pageContent.innerHTML = `
@@ -1389,6 +1419,14 @@ async function renderOpportunity(data){
             <div class="gallery-item"><div class="gallery-locked">${lockedCount > 0 ? "+" + lockedCount + " " : ""}${escapeHTML(dict("gallery_locked"))}</div></div>
           </div>
         </div>
+
+        ${virtualTourUrl ? `
+        <div class="panel">
+          <h2 class="section-title">${escapeHTML(dict("virtual_tour"))}</h2>
+          <div class="virtual-tour-public">
+            <iframe src="${escapeHTML(virtualTourViewerUrl)}" title="${escapeHTML(dict("virtual_tour"))}" loading="lazy" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
+          </div>
+        </div>` : ""}
 
         <div class="panel">
           <h2 class="section-title">${escapeHTML(dict("ai_analysis"))}</h2>

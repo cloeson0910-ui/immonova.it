@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Virtual Tour 3D | IMMONOVA</title>
+  <style>
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#eee6d9;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430}
+    canvas{display:block;width:100%;height:100%;touch-action:none}
+    .brand{position:fixed;top:18px;left:20px;z-index:5;padding:9px 13px;background:rgba(244,236,223,.82);border:1px solid rgba(166,127,52,.32);backdrop-filter:blur(10px);font-size:11px;letter-spacing:.26em;text-transform:uppercase;pointer-events:none}
+    .tools{position:fixed;top:18px;right:20px;z-index:6;display:flex;gap:8px}
+    button{min-height:40px;padding:0 15px;border:1px solid rgba(166,127,52,.45);background:rgba(244,236,223,.86);color:#7f6430;font:600 10px/1 "Avenir Next","Helvetica Neue",Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;backdrop-filter:blur(10px)}
+    button:hover{background:#a67f34;color:#fff}
+    .help{position:fixed;left:50%;bottom:18px;z-index:5;transform:translateX(-50%);padding:9px 14px;background:rgba(244,236,223,.82);border:1px solid rgba(166,127,52,.25);backdrop-filter:blur(10px);font-size:11px;white-space:nowrap;color:#6d6253;pointer-events:none}
+    .state{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:#f4ecdf;text-align:center;padding:28px}
+    .state.hidden{display:none}.state-box{max-width:520px}.state-title{font-size:14px;letter-spacing:.2em;text-transform:uppercase;color:#9d773a;margin-bottom:12px}.state-text{font-size:14px;line-height:1.7;color:#6d6253}.spinner{width:34px;height:34px;margin:0 auto 22px;border:2px solid rgba(166,127,52,.2);border-top-color:#a67f34;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:620px){.brand{top:12px;left:12px}.tools{top:12px;right:12px}.tools button{padding:0 11px}.help{bottom:10px;font-size:9px;width:calc(100% - 24px);white-space:normal;text-align:center}}
+  </style>
+  <script type="importmap">{"imports":{"playcanvas":"https://cdn.jsdelivr.net/npm/playcanvas/+esm"}}</script>
+</head>
+<body>
+  <div class="brand">IMMONOVA · Virtual Tour</div>
+  <div class="tools"><button type="button" id="resetBtn">Centra</button><button type="button" id="fullBtn">Schermo intero</button></div>
+  <div class="help">Trascina per ruotare · rotella o gesto per avvicinarti · tasto destro per spostare</div>
+  <div class="state" id="state"><div class="state-box"><div class="spinner" id="spinner"></div><div class="state-title" id="stateTitle">Caricamento tour 3D</div><div class="state-text" id="stateText">Preparazione dell’esperienza interattiva…</div></div></div>
+
+  <script type="module">
+    import { Application, Asset, AssetListLoader, Color, Entity, FILLMODE_FILL_WINDOW, RESOLUTION_AUTO, Vec3 } from "playcanvas";
+
+    const state = document.getElementById("state");
+    const title = document.getElementById("stateTitle");
+    const text = document.getElementById("stateText");
+    const spinner = document.getElementById("spinner");
+    const fail = (message) => { spinner.style.display="none"; title.textContent="Tour non disponibile"; text.textContent=message; };
+    const params = new URLSearchParams(location.search);
+    const source = params.get("model") || "";
+    let modelUrl = "";
+    try {
+      const parsed = new URL(source);
+      const validHost = parsed.hostname.endsWith(".supabase.co");
+      const validPath = parsed.pathname.includes("/storage/v1/object/public/virtual-tours-3d/");
+      if (parsed.protocol !== "https:" || !validHost || !validPath) throw new Error();
+      modelUrl = parsed.href;
+    } catch { fail("Il collegamento al modello 3D non è valido."); throw new Error("Invalid model URL"); }
+
+    const canvas = document.createElement("canvas");
+    document.body.prepend(canvas);
+    const app = new Application(canvas, { graphicsDeviceOptions:{ antialias:false, alpha:false } });
+    app.setCanvasFillMode(FILLMODE_FILL_WINDOW);
+    app.setCanvasResolution(RESOLUTION_AUTO);
+    app.start();
+    app.scene.ambientLight = new Color(1,1,1);
+    window.addEventListener("resize", () => app.resizeCanvas());
+
+    const model = new Asset("IMMONOVA Virtual Tour", "gsplat", { url:modelUrl });
+    const loader = new AssetListLoader([model], app.assets);
+    await new Promise((resolve, reject) => loader.load(resolve, reject)).catch(() => { fail("Non è stato possibile caricare il modello 3D."); throw new Error("Model load failed"); });
+
+    const splat = new Entity("Virtual Tour");
+    splat.addComponent("gsplat", { asset:model });
+    app.root.addChild(splat);
+
+    const camera = new Entity("Camera");
+    camera.addComponent("camera", { clearColor:new Color(0.93,0.90,0.85), fov:72, nearClip:0.01, farClip:10000 });
+    app.root.addChild(camera);
+
+    const center = new Vec3(0,0,0);
+    let radius = 3;
+    const aabb = model.resource && model.resource.aabb;
+    if (aabb && aabb.center && aabb.halfExtents) {
+      center.copy(aabb.center);
+      radius = Math.max(1, aabb.halfExtents.length());
+    }
+    let yaw = Math.PI * .25;
+    let pitch = -.12;
+    let distance = radius * 1.7;
+    const initial = { center:center.clone(), yaw, pitch, distance };
+
+    function updateCamera(){
+      const cp=Math.cos(pitch), sp=Math.sin(pitch), sy=Math.sin(yaw), cy=Math.cos(yaw);
+      camera.setPosition(center.x + distance*cp*sy, center.y + distance*sp, center.z + distance*cp*cy);
+      camera.lookAt(center);
+    }
+    function reset(){ center.copy(initial.center); yaw=initial.yaw; pitch=initial.pitch; distance=initial.distance; updateCamera(); }
+    updateCamera();
+
+    let dragging=false, mode="orbit", lastX=0, lastY=0, pinch=0;
+    canvas.addEventListener("contextmenu", e => e.preventDefault());
+    canvas.addEventListener("pointerdown", e => { dragging=true; mode=(e.button===2||e.shiftKey)?"pan":"orbit"; lastX=e.clientX; lastY=e.clientY; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener("pointerup", e => { dragging=false; try{canvas.releasePointerCapture(e.pointerId)}catch{} });
+    canvas.addEventListener("pointermove", e => {
+      if(!dragging) return;
+      const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+      if(mode==="orbit") { yaw-=dx*.006; pitch=Math.max(-1.45,Math.min(1.45,pitch-dy*.006)); }
+      else {
+        const scale=distance*.0018;
+        const right=camera.right.clone().mulScalar(-dx*scale);
+        const up=camera.up.clone().mulScalar(dy*scale);
+        center.add(right).add(up);
+      }
+      updateCamera();
+    });
+    canvas.addEventListener("wheel", e => { e.preventDefault(); distance=Math.max(radius*.015,Math.min(radius*8,distance*Math.exp(e.deltaY*.001))); updateCamera(); }, {passive:false});
+    canvas.addEventListener("touchmove", e => {
+      if(e.touches.length===2){
+        const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+        if(pinch) distance=Math.max(radius*.015,Math.min(radius*8,distance*(pinch/d)));
+        pinch=d; updateCamera();
+      }
+    },{passive:false});
+    canvas.addEventListener("touchend",()=>{pinch=0});
+    document.getElementById("resetBtn").addEventListener("click",reset);
+    document.getElementById("fullBtn").addEventListener("click",async()=>{ if(!document.fullscreenElement) await document.documentElement.requestFullscreen(); else await document.exitFullscreen(); });
+    state.classList.add("hidden");
+  </script>
+</body>
+</html>
