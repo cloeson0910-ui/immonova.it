@@ -608,27 +608,64 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
       console.error("Chiamata a share-offer fallita, uso il link diretto al PDF:", shareErr);
     }
 
+    var shareIsFreshGithubLink = (shareUrl !== publicUrl);
+
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#4f7f45";
     linkBox.innerHTML = "PDF generato correttamente — logo IMMONOVA su ogni pagina.<br>" +
       '<a href="' + publicUrl + '" target="_blank" rel="noopener">Apri il PDF direttamente</a>' +
       ' &nbsp;·&nbsp; ' +
-      '<a href="' + shareUrl + '" target="_blank" rel="noopener">Link da condividere (con anteprima)</a>' +
-      ' &nbsp;·&nbsp; ' +
-      '<button type="button" class="btn secondary" id="copyShareLinkBtn" style="padding:6px 12px;font-size:10px">Copia link</button>';
+      '<span id="shareLinkSlot"></span>';
 
-    document.getElementById("copyShareLinkBtn").addEventListener("click", async function(){
-      var copyBtn = this;
-      try{
-        await navigator.clipboard.writeText(shareUrl);
-        copyBtn.textContent = "Copiato ✓";
-      }catch(copyErr){
-        /* Clipboard API può essere bloccata (contesto non sicuro, permessi) — fallback con
-           un box di testo selezionabile invece di lasciare l'utente senza alternativa. */
-        window.prompt("Copia manualmente il link:", shareUrl);
-      }
-      setTimeout(function(){ copyBtn.textContent = "Copia link"; }, 2000);
-    });
+    var shareSlot = document.getElementById("shareLinkSlot");
+
+    function renderShareLinkReady(){
+      shareSlot.innerHTML = '<a href="' + shareUrl + '" target="_blank" rel="noopener">Link da condividere (con anteprima)</a>' +
+        ' &nbsp;·&nbsp; ' +
+        '<button type="button" class="btn secondary" id="copyShareLinkBtn" style="padding:6px 12px;font-size:10px">Copia link</button>';
+      document.getElementById("copyShareLinkBtn").addEventListener("click", async function(){
+        var copyBtn = this;
+        try{
+          await navigator.clipboard.writeText(shareUrl);
+          copyBtn.textContent = "Copiato ✓";
+        }catch(copyErr){
+          /* Clipboard API può essere bloccata (contesto non sicuro, permessi) — fallback con
+             un box di testo selezionabile invece di lasciare l'utente senza alternativa. */
+          window.prompt("Copia manualmente il link:", shareUrl);
+        }
+        setTimeout(function(){ copyBtn.textContent = "Copia link"; }, 2000);
+      });
+    }
+
+    if(!shareIsFreshGithubLink){
+      // Nessuna pubblicazione da attendere: è già il link diretto al PDF, disponibile subito.
+      renderShareLinkReady();
+    }else{
+      // Il link punta a un file appena scritto su GitHub: GitHub Pages impiega qualche istante
+      // a pubblicarlo dopo il commit. Il link resta nascosto (non copiabile/apribile) finché
+      // non risulta davvero raggiungibile — nessun avviso, solo un controllo automatico.
+      shareSlot.textContent = "Pubblicazione in corso...";
+      (async function waitUntilShareLinkIsLive(){
+        var attempts = 0;
+        var maxAttempts = 40; // ~ fino a 2 minuti (40 tentativi x 3s)
+        while(attempts < maxAttempts){
+          attempts++;
+          try{
+            var checkResp = await fetch(shareUrl, { method: "GET", cache: "no-store" });
+            if(checkResp.ok){
+              renderShareLinkReady();
+              return;
+            }
+          }catch(checkErr){
+            // rete/CORS momentanei durante la propagazione: si continua a riprovare
+          }
+          await new Promise(function(resolve){ setTimeout(resolve, 3000); });
+        }
+        // Oltre il timeout: si mostra comunque il link (l'utente può riprovare da solo),
+        // invece di lasciare la scritta "Pubblicazione in corso..." per sempre.
+        renderShareLinkReady();
+      })();
+    }
   }catch(err){
     console.error(err);
     linkBox.className = "pdf-link-box visible";
