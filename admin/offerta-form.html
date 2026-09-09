@@ -1470,6 +1470,32 @@ var sellerSigPad = null;
       var insertResult = await client.from("opportunity_offers").insert(payload).select().single();
       if(insertResult.error) throw insertResult.error;
 
+      /* Follow-up email al professionista che ha creato la proposta — best effort: un
+         fallimento qui non deve mai far sembrare fallito il salvataggio, che è già andato
+         a buon fine sopra. */
+      try{
+        await fetch(String(SUPABASE_URL).replace(/\/+$/, "") + "/functions/v1/notify-offer-status", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": "Bearer " + SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({
+            offer_id: insertResult.data.id,
+            offer_kind: "proposta",
+            opportunity_id: selectedOpportunity.id,
+            opportunity_title: selectedOpportunity.title,
+            offered_price: payload.offered_price,
+            buyer_name: (payload.buyer_first_name + " " + payload.buyer_last_name).trim(),
+            seller_name: (payload.seller_first_name + " " + payload.seller_last_name).trim(),
+            created_by: currentUser ? currentUser.id : null
+          })
+        });
+      }catch(notifyErr){
+        console.error("Notifica follow-up non riuscita:", notifyErr);
+      }
+
       setSaveStatus("Proposta salvata correttamente.", "success");
       setStatus("Proposta creata. Puoi ora compilarne una nuova o tornare alle Proposte.", "success");
       document.getElementById("offerForm").reset();
