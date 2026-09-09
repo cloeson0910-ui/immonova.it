@@ -558,7 +558,11 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
     var doc = buildOfferPdf(currentOfferData, null, currentPropertyTitle, currentPropertyAddress, currentIsCounter);
 
     var blob = doc.output("blob");
-    var path = "pdf/" + currentOfferId + "/proposta.pdf";
+    /* Path SEMPRE nuovo (con timestamp): la versione precedente sovrascriveva sempre lo
+       stesso file, e la CDN di Supabase Storage poteva continuare a servire il PDF vecchio
+       in cache anche dopo la sovrascrittura. Con un nome diverso ad ogni generazione non
+       esiste più un URL "vecchio" che la CDN possa servire per sbaglio. */
+    var path = "pdf/" + currentOfferId + "/proposta-" + Date.now() + ".pdf";
 
     var uploadResult = await client.storage.from("offer-documents").upload(path, blob, {
       contentType: "application/pdf",
@@ -569,6 +573,15 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
     var publicUrlResult = client.storage.from("offer-documents").getPublicUrl(path);
     var publicUrl = publicUrlResult.data ? publicUrlResult.data.publicUrl : null;
     if(!publicUrl) throw new Error("URL pubblico del PDF non disponibile.");
+
+    /* Salva il path dell'ultimo PDF generato sulla riga della proposta, cosi' offer-share.html
+       trova sempre la versione più recente invece di un path fisso — best effort, un
+       fallimento qui non deve far sembrare fallita la generazione, già riuscita sopra. */
+    try{
+      await client.from("opportunity_offers").update({ pdf_storage_path: path }).eq("id", currentOfferId);
+    }catch(pdfPathErr){
+      console.error("Salvataggio pdf_storage_path non riuscito:", pdfPathErr);
+    }
 
     var shareUrl = window.location.origin + window.location.pathname.replace(/offer-detail\.html$/, "offer-share.html") + "?offer_id=" + encodeURIComponent(currentOfferId);
 

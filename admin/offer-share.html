@@ -66,11 +66,16 @@ var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     return;
   }
 
-  var path = "pdf/" + offerId + "/proposta.pdf";
-  var pub = client.storage.from("offer-documents").getPublicUrl(path);
-  var pdfUrl = pub.data ? pub.data.publicUrl : null;
+  var result = await client.from("opportunity_offers").select("offer_kind,offered_price,opportunity_id,pdf_storage_path").eq("id", offerId).single();
 
-  var result = await client.from("opportunity_offers").select("offer_kind,offered_price,opportunity_id").eq("id", offerId).single();
+  /* Il path del PDF non è più fisso (vedi offer-detail.html): ogni generazione crea un file
+     con nome nuovo per evitare che la CDN di Supabase Storage serva una versione vecchia in
+     cache. Qui si legge sempre l'ultimo path salvato sulla riga della proposta. */
+  var pdfUrl = null;
+  if(result.data && result.data.pdf_storage_path){
+    var pub = client.storage.from("offer-documents").getPublicUrl(result.data.pdf_storage_path);
+    pdfUrl = pub.data ? pub.data.publicUrl : null;
+  }
   var propertyTitle = "";
   if(!result.error && result.data && result.data.opportunity_id){
     var oppResult = await client.from("opportunities").select("title").eq("id", result.data.opportunity_id).single();
