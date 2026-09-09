@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposta | IMMONOVA Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430;padding-bottom:60px}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+header{position:sticky;top:0;z-index:20;background:rgba(244,236,223,.9);backdrop-filter:blur(14px);border-bottom:1px solid rgba(166,127,52,.18);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+header a.back{color:#a67f34;text-decoration:none;font-size:11px;letter-spacing:.16em;text-transform:uppercase;border:1px solid rgba(166,127,52,.28);padding:10px 16px}
+header h1{font-size:18px;font-weight:300;letter-spacing:.1em;color:#a67f34;margin:0}
+.container{max-width:900px;margin:0 auto;padding:36px 32px 60px}
+.panel{background:#fffdf7;border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.07);padding:44px 48px}
+.top-actions{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+button,.btn{cursor:pointer;font-family:inherit}
+.btn{padding:11px 18px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.btn.secondary{background:transparent;color:#a67f34}
+.badge{padding:6px 14px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid transparent}
+.badge-bozza{background:rgba(143,118,67,.15);color:#8f7643;border-color:rgba(143,118,67,.3)}
+.badge-inviata{background:rgba(166,127,52,.15);color:#a67f34;border-color:rgba(166,127,52,.35)}
+.badge-accettata{background:rgba(81,122,79,.15);color:#4f7f45;border-color:rgba(81,122,79,.35)}
+.badge-rifiutata{background:rgba(156,47,47,.12);color:#9c2f2f;border-color:rgba(156,47,47,.3)}
+.badge-controfferta_ricevuta{background:rgba(166,100,52,.15);color:#a66434;border-color:rgba(166,100,52,.35)}
+.badge-ritirata{background:rgba(143,118,67,.1);color:#8f7643;border-color:rgba(143,118,67,.25)}
+.badge-scaduta{background:rgba(120,120,120,.15);color:#666;border-color:rgba(120,120,120,.3)}
+
+.letterhead{font-size:20px;letter-spacing:.3em;color:#a67f34;font-weight:300;margin-bottom:6px;text-align:center}
+.sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:32px;border-bottom:1px solid rgba(166,127,52,.25);padding-bottom:18px;text-align:center}
+.doc-title{font-size:22px;color:#4a3c1f;font-weight:400;margin-bottom:6px}
+.doc-meta{font-size:12px;color:#8f7643;margin-bottom:26px}
+.doc-body h4{font-size:13px;color:#a67f34;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+.doc-body p,.doc-body li{font-size:13.5px;line-height:1.85;color:#3f321c}
+.doc-body ul{margin-left:20px;margin-bottom:6px}
+.sign-row{display:flex;justify-content:space-between;gap:30px;margin-top:60px;flex-wrap:wrap}
+.sign-col{flex:1;min-width:220px;text-align:center}
+.sign-col img{max-width:220px;max-height:90px;border-bottom:1px solid #4a3c1f;margin-bottom:6px}
+.sign-line{border-top:1px solid #4a3c1f;padding-top:8px;font-size:12px;color:#4a3c1f;margin-top:60px}
+.sign-col img + .sign-line{margin-top:0;border-top:none}
+.loading-state,.empty-state{text-align:center;padding:60px 20px;color:#8f7643;font-size:13.5px}
+.msg-box{margin-top:14px;font-size:12.5px}
+.msg-box.error{color:#9c2f2f}
+.pdf-link-box{display:none;margin-bottom:18px;padding:14px 16px;background:rgba(81,122,79,.1);border:1px solid rgba(81,122,79,.3);font-size:13px;color:#4f7f45;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.pdf-link-box.visible{display:flex}
+.pdf-link-box a{color:#4f7f45;font-weight:600}
+
+@media print{
+  body *{visibility:hidden}
+  .panel, .panel *{visibility:visible}
+  .panel{position:absolute;left:0;top:0;box-shadow:none;border:none;padding:0;max-width:100%}
+  header, .top-actions{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="opportunities-pipeline.html" class="back">← Proposte</a>
+  <h1>🖋️ Dettaglio proposta</h1>
+  <span></span>
+</header>
+
+<div class="container">
+  <div class="top-actions" id="topActions" style="display:none">
+    <span class="badge" id="statusBadge"></span>
+    <div style="display:flex;gap:10px">
+      <a href="#" class="btn secondary" id="editBtn">Modifica proposta</a>
+      <button type="button" class="btn" id="generatePdfBtn">Genera PDF (con link)</button>
+      <button type="button" class="btn secondary" id="printBtn">Stampa dal browser</button>
+    </div>
+  </div>
+
+  <div class="pdf-link-box" id="pdfLinkBox"></div>
+
+  <div id="stateBox" class="loading-state">Caricamento proposta…</div>
+
+  <div class="panel" id="docPanel" style="display:none">
+    <div class="letterhead">IMMONOVA</div>
+    <div class="sub">OFF MARKET · CONSULTING</div>
+    <div class="doc-title" id="docTitle"></div>
+    <div class="doc-meta" id="docMeta"></div>
+    <div class="doc-body" id="docBody"></div>
+    <div class="sign-row" id="signRow"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+var STATUS_LABELS = {
+  bozza:"Bozza", inviata:"Inviata", accettata:"Accettata", rifiutata:"Rifiutata",
+  controfferta_ricevuta:"Controfferta ricevuta", ritirata:"Ritirata", scaduta:"Scaduta"
+};
+var DECL_VALUE_LABELS = { si:"Sì", no:"No", da_verificare:"Da verificare" };
+
+function escapeHTML(v){ return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
+function fmtDate(d){ if(!d) return ""; try{ return new Date(d).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}); }catch(e){ return d; } }
+function fmtPrice(p){ if(p == null || p === "") return ""; return "€ " + Number(p).toLocaleString("it-IT"); }
+function fullName(first, last){ return [first, last].filter(Boolean).join(" ") || "—"; }
+
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  if(result.error || !result.data.session){
+    window.location.href = "login.html";
+    return false;
+  }
+  return true;
+}
+
+function clauseListHTML(list, emptyText){
+  if(!list || !list.length) return "<p>" + escapeHTML(emptyText) + "</p>";
+  return "<ul>" + list.map(function(c){
+    return "<li>" + escapeHTML(c.label || c.key || "") + (c.notes ? " — " + escapeHTML(c.notes) : "") + "</li>";
+  }).join("") + "</ul>";
+}
+
+function declarationsHTML(list){
+  if(!list || !list.length) return "<p>Nessuna dichiarazione compilata.</p>";
+  return "<ul>" + list.map(function(d){
+    var valueLabel = DECL_VALUE_LABELS[d.value] || d.value || "";
+    return "<li>" + escapeHTML(d.label || d.key || "") + (valueLabel ? ": " + escapeHTML(valueLabel) : "") + (d.notes ? " — " + escapeHTML(d.notes) : "") + "</li>";
+  }).join("") + "</ul>";
+}
+
+function cadastralUnitsHTML(units, comune){
+  var html = "";
+  if(comune) html += "<p>Comune catastale: " + escapeHTML(comune) + "</p>";
+  if(!units || !units.length){
+    html += "<p>Non inserite.</p>";
+    return html;
+  }
+  html += "<ul>" + units.map(function(u){
+    var parts = [];
+    if(u.sezione) parts.push("Sez. " + escapeHTML(u.sezione));
+    if(u.foglio) parts.push("Foglio " + escapeHTML(u.foglio));
+    if(u.particella) parts.push("Particella " + escapeHTML(u.particella));
+    if(u.subalterno) parts.push("Sub. " + escapeHTML(u.subalterno));
+    if(u.categoria) parts.push("Categoria " + escapeHTML(u.categoria));
+    if(u.classe) parts.push("Classe " + escapeHTML(u.classe));
+    if(u.rendita) parts.push("Rendita € " + escapeHTML(u.rendita));
+    if(u.vani) parts.push("Vani " + escapeHTML(u.vani));
+    if(u.mq) parts.push(escapeHTML(u.mq) + " mq");
+    return "<li>" + parts.join(" · ") + "</li>";
+  }).join("") + "</ul>";
+  return html;
+}
+
+function leaseHTML(o){
+  if(!o.is_leased){
+    return "<p>Immobile libero da locazioni in corso, per quanto dichiarato dal venditore.</p>";
+  }
+  return "<p>Immobile locato" + (o.lease_tenant_name ? " a " + escapeHTML(o.lease_tenant_name) : "") +
+    (o.lease_expiry_date ? " — scadenza contratto: " + escapeHTML(fmtDate(o.lease_expiry_date)) : "") +
+    (o.lease_monthly_rent ? " — canone mensile: " + escapeHTML(fmtPrice(o.lease_monthly_rent)) : "") +
+    "<br>" + (o.lease_prelazione_waived ?
+      "Il conduttore ha rinunciato per iscritto al diritto di prelazione (art. 38 L. 392/1978)." :
+      "Diritto di prelazione del conduttore ai sensi dell'art. 38 L. 392/1978 non risulta rinunciato: da verificare prima del rogito.") +
+    "<br>Vendita soggetta al contratto di locazione in corso fino a naturale scadenza (art. 1599 c.c.).</p>";
+}
+
+function paymentsHTML(o){
+  var rows = [];
+  if(o.payment_a_amount) rows.push("Caparra (a): " + escapeHTML(fmtPrice(o.payment_a_amount)) + (o.payment_a_method ? " — " + escapeHTML(o.payment_a_method) : "") + (o.payment_a_notes ? " — " + escapeHTML(o.payment_a_notes) : ""));
+  if(o.payment_b_amount) rows.push("Rata (b): " + escapeHTML(fmtPrice(o.payment_b_amount)) + (o.payment_b_method ? " — " + escapeHTML(o.payment_b_method) : "") + (o.payment_b_due_date ? " — scadenza " + escapeHTML(fmtDate(o.payment_b_due_date)) : ""));
+  if(o.payment_c_amount) rows.push("Rata (c): " + escapeHTML(fmtPrice(o.payment_c_amount)) + (o.payment_c_method ? " — " + escapeHTML(o.payment_c_method) : "") + (o.payment_c_due_date ? " — scadenza " + escapeHTML(fmtDate(o.payment_c_due_date)) : ""));
+  if(o.payment_d_amount) rows.push("Saldo al rogito (d): " + escapeHTML(fmtPrice(o.payment_d_amount)) + (o.payment_d_method ? " — " + escapeHTML(o.payment_d_method) : ""));
+  var html = rows.length ? "<ul>" + rows.map(function(r){ return "<li>" + r + "</li>"; }).join("") + "</ul>" : "<p>Non specificate.</p>";
+  if(o.deposit_amount) html += "<p>Caparra confirmatoria totale (art. 1385 c.c.): " + escapeHTML(fmtPrice(o.deposit_amount)) + (o.deposit_type ? " — " + escapeHTML(o.deposit_type) : "") + "</p>";
+  if(o.payment_balance_notes) html += "<p>Note: " + escapeHTML(o.payment_balance_notes) + "</p>";
+  return html;
+}
+
+async function loadOffer(){
+  var params = new URLSearchParams(window.location.search);
+  var offerId = params.get("offer_id");
+  var stateBox = document.getElementById("stateBox");
+
+  if(!offerId){
+    stateBox.className = "empty-state";
+    stateBox.textContent = "Nessuna proposta indicata (manca il parametro offer_id nell'URL).";
+    return;
+  }
+
+  document.getElementById("editBtn").href = "offerta-form.html?offer_id=" + encodeURIComponent(offerId);
+
+  var result = await client.from("opportunity_offers").select("*").eq("id", offerId).single();
+  if(result.error || !result.data){
+    stateBox.className = "empty-state";
+    stateBox.textContent = "Proposta non trovata: " + (result.error ? result.error.message : "");
+    return;
+  }
+  var o = result.data;
+
+  var opp = null;
+  if(o.opportunity_id){
+    var oppResult = await client.from("opportunities").select("id,title,municipality,formatted_address,address").eq("id", o.opportunity_id).single();
+    opp = oppResult.data || null;
+  }
+
+  stateBox.style.display = "none";
+  document.getElementById("topActions").style.display = "flex";
+  document.getElementById("docPanel").style.display = "block";
+
+  var badge = document.getElementById("statusBadge");
+  badge.className = "badge badge-" + (o.status || "bozza");
+  badge.textContent = STATUS_LABELS[o.status] || o.status || "";
+
+  var isCounter = o.offer_kind === "controfferta";
+  document.getElementById("docTitle").textContent = isCounter ? "Proposta di Controfferta" : "Proposta Irrevocabile d'Acquisto";
+  document.getElementById("docMeta").textContent = "Creata il " + fmtDate(o.created_at) + (o.offer_expires_at ? " — valida fino al " + fmtDate(o.offer_expires_at) : "");
+
+  var propertyTitle = opp ? opp.title : ("Immobile #" + o.opportunity_id);
+  var propertyAddress = opp ? (opp.formatted_address || opp.address || opp.municipality || "") : "";
+
+  var html = "";
+  html += "<h4>Immobile</h4><p>" + escapeHTML(propertyTitle) + (propertyAddress ? " — " + escapeHTML(propertyAddress) : "") + "</p>";
+  html += "<h4>Dati catastali</h4>" + cadastralUnitsHTML(o.cadastral_units, o.cad_comune);
+  html += "<h4>Locazione</h4>" + leaseHTML(o);
+
+  html += "<h4>Venditore/Proprietario</h4><p>" + escapeHTML(fullName(o.seller_first_name, o.seller_last_name)) +
+    (o.seller_fiscal_code ? " — C.F. " + escapeHTML(o.seller_fiscal_code) : "") +
+    (o.seller_residence_address ? "<br>Residente in " + escapeHTML(o.seller_residence_address) : "") +
+    (o.seller_id_document_type ? "<br>Documento: " + escapeHTML(o.seller_id_document_type) + (o.seller_id_document_number ? " n. " + escapeHTML(o.seller_id_document_number) : "") + (o.seller_id_document_issued_by ? ", rilasciato da " + escapeHTML(o.seller_id_document_issued_by) : "") + (o.seller_id_document_issued_at ? " il " + escapeHTML(fmtDate(o.seller_id_document_issued_at)) : "") : "") + "</p>";
+
+  var buyer2Name = fullName(o.buyer2_first_name, o.buyer2_last_name);
+  html += "<h4>Proponente/Acquirente</h4><p>" + escapeHTML(fullName(o.buyer_first_name, o.buyer_last_name)) +
+    (o.buyer_fiscal_code ? " — C.F. " + escapeHTML(o.buyer_fiscal_code) : "") +
+    (o.buyer_residence_address ? "<br>Residente in " + escapeHTML(o.buyer_residence_address) : "") +
+    (o.buyer_id_document_type ? "<br>Documento: " + escapeHTML(o.buyer_id_document_type) + (o.buyer_id_document_number ? " n. " + escapeHTML(o.buyer_id_document_number) : "") : "") +
+    (buyer2Name !== "—" ? "<br><br>Secondo proponente: " + escapeHTML(buyer2Name) + (o.buyer2_fiscal_code ? " — C.F. " + escapeHTML(o.buyer2_fiscal_code) : "") : "") + "</p>";
+
+  html += "<h4>Dichiarazioni del venditore</h4>" + declarationsHTML(o.seller_declarations);
+
+  html += "<h4>Condizioni economiche</h4><p>Prezzo offerto: <strong>" + escapeHTML(fmtPrice(o.offered_price)) + "</strong>" +
+    (o.property_asking_price ? " (prezzo richiesto: " + escapeHTML(o.property_asking_price) + ")" : "") + "</p>" +
+    paymentsHTML(o);
+
+  if(o.notary_name || o.notary_address || o.deed_deadline_date){
+    html += "<h4>Rogito</h4><p>" +
+      (o.notary_name ? "Notaio: " + escapeHTML(o.notary_name) : "") +
+      (o.notary_address ? "<br>" + escapeHTML(o.notary_address) : "") +
+      (o.deed_deadline_date ? "<br>Termine per il rogito: " + escapeHTML(fmtDate(o.deed_deadline_date)) : "") + "</p>";
+  }
+
+  html += "<h4>Clausole sospensive</h4>" + clauseListHTML(o.suspensive_clauses, "Nessuna clausola sospensiva.") +
+    (o.suspensive_notes ? "<p>Note: " + escapeHTML(o.suspensive_notes) + "</p>" : "");
+  html += "<h4>Clausole risolutive</h4>" + clauseListHTML(o.resolutive_clauses, "Nessuna clausola risolutiva.") +
+    (o.resolutive_notes ? "<p>Note: " + escapeHTML(o.resolutive_notes) + "</p>" : "");
+
+  if(o.additional_clauses) html += "<h4>Clausole aggiuntive</h4><p>" + escapeHTML(o.additional_clauses).replace(/\n/g,"<br>") + "</p>";
+  if(isCounter && o.counter_modifications) html += "<h4>Modifiche proposte in controfferta</h4><p>" + escapeHTML(o.counter_modifications).replace(/\n/g,"<br>") + "</p>";
+  if(o.agency_mediation_note) html += "<h4>Mediazione</h4><p>" + escapeHTML(o.agency_mediation_note) + "</p>";
+  if(o.notes) html += "<h4>Note interne</h4><p>" + escapeHTML(o.notes) + "</p>";
+
+  document.getElementById("docBody").innerHTML = html;
+
+  var buyerSigHTML = o.buyer_signature_data_url ? '<img src="' + o.buyer_signature_data_url + '">' : "";
+  var sellerSigHTML = o.seller_signature_data_url ? '<img src="' + o.seller_signature_data_url + '">' : "";
+  document.getElementById("signRow").innerHTML =
+    '<div class="sign-col">' + buyerSigHTML + '<div class="sign-line">Firma del Proponente/Acquirente' + (o.buyer_signed_at ? " — " + escapeHTML(fmtDate(o.buyer_signed_at)) : "") + '</div></div>' +
+    '<div class="sign-col">' + sellerSigHTML + '<div class="sign-line">Firma del Venditore/Proprietario (per accettazione)' + (o.seller_signed_at ? " — " + escapeHTML(fmtDate(o.seller_signed_at)) : "") + '</div></div>';
+
+  document.title = (isCounter ? "Controfferta" : "Proposta") + " — " + propertyTitle + " | IMMONOVA Admin";
+
+  currentOfferId = o.id;
+  currentDocTitle = (isCounter ? "Controfferta" : "Proposta") + " — " + propertyTitle;
+  currentOfferData = o;
+  currentPropertyTitle = propertyTitle;
+  currentPropertyAddress = propertyAddress;
+  currentIsCounter = isCounter;
+}
+
+document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
+
+/* ================================ Generazione PDF reale ================================
+   PRIMA versione usava jsPDF + html2canvas (screenshot del DOM): produceva testo con
+   spaziature rotte (difetto noto di quella tecnica coi web font) e l'header si sovrapponeva
+   al contenuto dalla pagina 2 in poi. Sostituita: qui il PDF è scritto direttamente con le
+   API testo di jsPDF (nessuno screenshot del DOM) — testo nitido, selezionabile, e paginazione
+   con logo IMMONOVA e piè di pagina ridisegnati in modo pulito su ogni pagina. */
+var currentOfferId = null;
+var currentDocTitle = "";
+var currentOfferData = null;
+var currentPropertyTitle = "";
+var currentPropertyAddress = "";
+var currentIsCounter = false;
+
+var PDF_MARGIN_LEFT = 48;
+var PDF_MARGIN_RIGHT = 48;
+var PDF_MARGIN_TOP = 84;
+var PDF_MARGIN_BOTTOM = 50;
+var PDF_GOLD = [166, 127, 52];
+var PDF_GOLD_SOFT = [143, 118, 67];
+var PDF_TEXT = [63, 50, 28];
+
+function drawPdfHeaderOnPage(doc, pageWidth){
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(16);
+  doc.setTextColor.apply(doc, PDF_GOLD);
+  doc.text("IMMONOVA", pageWidth / 2, 36, { align: "center" });
+  doc.setFontSize(8);
+  doc.setTextColor.apply(doc, PDF_GOLD_SOFT);
+  doc.text("OFF MARKET  ·  CONSULTING", pageWidth / 2, 50, { align: "center" });
+  doc.setDrawColor.apply(doc, PDF_GOLD);
+  doc.setLineWidth(0.6);
+  doc.line(PDF_MARGIN_LEFT, 62, pageWidth - PDF_MARGIN_RIGHT, 62);
+}
+
+function drawPdfFooterOnPage(doc, pageWidth, pageHeight, pageNum, pageCount){
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor.apply(doc, PDF_GOLD_SOFT);
+  doc.text("Pagina " + pageNum + " di " + pageCount, pageWidth / 2, pageHeight - 24, { align: "center" });
+}
+
+/* Costruisce l'intero documento scrivendo riga per riga, con interruzione di pagina
+   automatica (e header ridisegnato) ogni volta che il contenuto sta per uscire dal margine
+   inferiore. È la stessa logica di composizione già usata per il riepilogo a schermo
+   (loadOffer/buildPrintableOffer), qui riscritta come testo puro per jsPDF. */
+function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ unit: "pt", format: "a4" });
+  var pageWidth = doc.internal.pageSize.getWidth();
+  var pageHeight = doc.internal.pageSize.getHeight();
+  var contentWidth = pageWidth - PDF_MARGIN_LEFT - PDF_MARGIN_RIGHT;
+  var y = PDF_MARGIN_TOP;
+
+  function ensureSpace(h){
+    if(y + h > pageHeight - PDF_MARGIN_BOTTOM){
+      doc.addPage();
+      y = PDF_MARGIN_TOP;
+    }
+  }
+  function sectionTitle(text){
+    ensureSpace(20);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor.apply(doc, PDF_GOLD);
+    doc.text(text.toUpperCase(), PDF_MARGIN_LEFT, y);
+    y += 15;
+  }
+  function paragraph(text, opts){
+    opts = opts || {};
+    doc.setFont("helvetica", opts.bold ? "bold" : "normal");
+    doc.setFontSize(opts.size || 10.5);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    var lines = doc.splitTextToSize(String(text), contentWidth - (opts.indent || 0));
+    lines.forEach(function(line){
+      ensureSpace(14);
+      doc.text(line, PDF_MARGIN_LEFT + (opts.indent || 0), y);
+      y += 14;
+    });
+    y += opts.noGap ? 0 : 5;
+  }
+  function bullet(text){
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    var lines = doc.splitTextToSize(String(text), contentWidth - 14);
+    lines.forEach(function(line, i){
+      ensureSpace(14);
+      doc.text((i === 0 ? "•  " : "    ") + line, PDF_MARGIN_LEFT, y);
+      y += 14;
+    });
+  }
+  function spacer(h){ y += (h || 6); }
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(17);
+  doc.setTextColor.apply(doc, PDF_TEXT);
+  doc.text(isCounter ? "Proposta di Controfferta" : "Proposta Irrevocabile d'Acquisto", PDF_MARGIN_LEFT, y);
+  y += 18;
+  doc.setFontSize(9.5);
+  doc.setTextColor.apply(doc, PDF_GOLD_SOFT);
+  doc.text("Creata il " + fmtDate(o.created_at) + (o.offer_expires_at ? " — valida fino al " + fmtDate(o.offer_expires_at) : ""), PDF_MARGIN_LEFT, y);
+  y += 22;
+
+  sectionTitle("Immobile");
+  paragraph(propertyTitle + (propertyAddress ? " — " + propertyAddress : ""));
+
+  sectionTitle("Dati catastali");
+  if(o.cad_comune) paragraph("Comune catastale: " + o.cad_comune);
+  if(o.cadastral_units && o.cadastral_units.length){
+    o.cadastral_units.forEach(function(u){
+      var parts = [];
+      if(u.sezione) parts.push("Sez. " + u.sezione);
+      if(u.foglio) parts.push("Foglio " + u.foglio);
+      if(u.particella) parts.push("Particella " + u.particella);
+      if(u.subalterno) parts.push("Sub. " + u.subalterno);
+      if(u.categoria) parts.push("Categoria " + u.categoria);
+      if(u.classe) parts.push("Classe " + u.classe);
+      if(u.rendita) parts.push("Rendita € " + u.rendita);
+      if(u.vani) parts.push("Vani " + u.vani);
+      if(u.mq) parts.push(u.mq + " mq");
+      bullet(parts.join(" · "));
+    });
+    spacer();
+  }else{
+    paragraph("Non inserite.");
+  }
+
+  sectionTitle("Locazione");
+  if(o.is_leased){
+    paragraph("Immobile locato" + (o.lease_tenant_name ? " a " + o.lease_tenant_name : "") +
+      (o.lease_expiry_date ? " — scadenza contratto: " + fmtDate(o.lease_expiry_date) : "") +
+      (o.lease_monthly_rent ? " — canone mensile: " + fmtPrice(o.lease_monthly_rent) : ""));
+    paragraph(o.lease_prelazione_waived ?
+      "Il conduttore ha rinunciato per iscritto al diritto di prelazione (art. 38 L. 392/1978)." :
+      "Diritto di prelazione del conduttore ai sensi dell'art. 38 L. 392/1978 non risulta rinunciato: da verificare prima del rogito.");
+    paragraph("Vendita soggetta al contratto di locazione in corso fino a naturale scadenza (art. 1599 c.c.).");
+  }else{
+    paragraph("Immobile libero da locazioni in corso, per quanto dichiarato dal venditore.");
+  }
+
+  sectionTitle("Venditore/Proprietario");
+  paragraph(fullName(o.seller_first_name, o.seller_last_name) + (o.seller_fiscal_code ? " — C.F. " + o.seller_fiscal_code : ""));
+  if(o.seller_residence_address) paragraph("Residente in " + o.seller_residence_address);
+  if(o.seller_id_document_type){
+    paragraph("Documento: " + o.seller_id_document_type + (o.seller_id_document_number ? " n. " + o.seller_id_document_number : "") +
+      (o.seller_id_document_issued_by ? ", rilasciato da " + o.seller_id_document_issued_by : "") +
+      (o.seller_id_document_issued_at ? " il " + fmtDate(o.seller_id_document_issued_at) : ""));
+  }
+
+  sectionTitle("Proponente/Acquirente");
+  paragraph(fullName(o.buyer_first_name, o.buyer_last_name) + (o.buyer_fiscal_code ? " — C.F. " + o.buyer_fiscal_code : ""));
+  if(o.buyer_residence_address) paragraph("Residente in " + o.buyer_residence_address);
+  if(o.buyer_id_document_type){
+    paragraph("Documento: " + o.buyer_id_document_type + (o.buyer_id_document_number ? " n. " + o.buyer_id_document_number : ""));
+  }
+  var buyer2Name = fullName(o.buyer2_first_name, o.buyer2_last_name);
+  if(buyer2Name !== "—"){
+    paragraph("Secondo proponente: " + buyer2Name + (o.buyer2_fiscal_code ? " — C.F. " + o.buyer2_fiscal_code : ""));
+  }
+
+  sectionTitle("Dichiarazioni del venditore");
+  if(o.seller_declarations && o.seller_declarations.length){
+    o.seller_declarations.forEach(function(d){
+      var valueLabel = DECL_VALUE_LABELS[d.value] || d.value || "";
+      bullet((d.label || d.key || "") + (valueLabel ? ": " + valueLabel : "") + (d.notes ? " — " + d.notes : ""));
+    });
+    spacer();
+  }else{
+    paragraph("Nessuna dichiarazione compilata.");
+  }
+
+  sectionTitle("Condizioni economiche");
+  paragraph("Prezzo offerto: " + fmtPrice(o.offered_price) + (o.property_asking_price ? " (prezzo richiesto: " + o.property_asking_price + ")" : ""), { bold: true });
+  if(o.payment_a_amount) paragraph("Caparra (a): " + fmtPrice(o.payment_a_amount) + (o.payment_a_method ? " — " + o.payment_a_method : "") + (o.payment_a_notes ? " — " + o.payment_a_notes : ""));
+  if(o.payment_b_amount) paragraph("Rata (b): " + fmtPrice(o.payment_b_amount) + (o.payment_b_method ? " — " + o.payment_b_method : "") + (o.payment_b_due_date ? " — scadenza " + fmtDate(o.payment_b_due_date) : ""));
+  if(o.payment_c_amount) paragraph("Rata (c): " + fmtPrice(o.payment_c_amount) + (o.payment_c_method ? " — " + o.payment_c_method : "") + (o.payment_c_due_date ? " — scadenza " + fmtDate(o.payment_c_due_date) : ""));
+  if(o.payment_d_amount) paragraph("Saldo al rogito (d): " + fmtPrice(o.payment_d_amount) + (o.payment_d_method ? " — " + o.payment_d_method : ""));
+  if(o.deposit_amount) paragraph("Caparra confirmatoria totale (art. 1385 c.c.): " + fmtPrice(o.deposit_amount) + (o.deposit_type ? " — " + o.deposit_type : ""));
+  if(o.payment_balance_notes) paragraph("Note: " + o.payment_balance_notes);
+
+  if(o.notary_name || o.notary_address || o.deed_deadline_date){
+    sectionTitle("Rogito");
+    if(o.notary_name) paragraph("Notaio: " + o.notary_name);
+    if(o.notary_address) paragraph(o.notary_address);
+    if(o.deed_deadline_date) paragraph("Termine per il rogito: " + fmtDate(o.deed_deadline_date));
+  }
+
+  sectionTitle("Clausole sospensive");
+  if(o.suspensive_clauses && o.suspensive_clauses.length){
+    o.suspensive_clauses.forEach(function(c){ bullet((c.label || c.key || "") + (c.notes ? " — " + c.notes : "")); });
+    spacer();
+  }else{
+    paragraph("Nessuna clausola sospensiva.");
+  }
+  if(o.suspensive_notes) paragraph("Note: " + o.suspensive_notes);
+
+  sectionTitle("Clausole risolutive");
+  if(o.resolutive_clauses && o.resolutive_clauses.length){
+    o.resolutive_clauses.forEach(function(c){ bullet((c.label || c.key || "") + (c.notes ? " — " + c.notes : "")); });
+    spacer();
+  }else{
+    paragraph("Nessuna clausola risolutiva.");
+  }
+  if(o.resolutive_notes) paragraph("Note: " + o.resolutive_notes);
+
+  if(o.additional_clauses){ sectionTitle("Clausole aggiuntive"); paragraph(o.additional_clauses); }
+  if(isCounter && o.counter_modifications){ sectionTitle("Modifiche proposte in controfferta"); paragraph(o.counter_modifications); }
+  if(o.agency_mediation_note){ sectionTitle("Mediazione"); paragraph(o.agency_mediation_note); }
+  if(o.notes){ sectionTitle("Note interne"); paragraph(o.notes); }
+
+  /* Blocco firme: tenuto insieme sulla stessa pagina, con le immagini delle firme già
+     raccolte (se presenti) incollate come immagine reale nel PDF, non come screenshot. */
+  var signBlockHeight = 110;
+  ensureSpace(signBlockHeight);
+  y += 20;
+  var colWidth = (contentWidth - 30) / 2;
+  var col1X = PDF_MARGIN_LEFT;
+  var col2X = PDF_MARGIN_LEFT + colWidth + 30;
+  var sigImgH = 46;
+  var lineY = y + sigImgH + 6;
+
+  function drawSignature(dataUrl, x, label, signedAt){
+    if(dataUrl){
+      try{
+        var imgProps = doc.getImageProperties(dataUrl);
+        var ratio = imgProps.width / imgProps.height;
+        var w = Math.min(colWidth, sigImgH * ratio);
+        doc.addImage(dataUrl, "PNG", x, y, w, sigImgH);
+      }catch(e){ console.error("Firma non incollabile nel PDF:", e); }
+    }
+    doc.setDrawColor.apply(doc, PDF_TEXT);
+    doc.setLineWidth(0.6);
+    doc.line(x, lineY, x + colWidth, lineY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    doc.text(label + (signedAt ? " — " + fmtDate(signedAt) : ""), x, lineY + 12);
+  }
+
+  drawSignature(o.buyer_signature_data_url, col1X, "Firma del Proponente/Acquirente", o.buyer_signed_at);
+  drawSignature(o.seller_signature_data_url, col2X, "Firma del Venditore/Proprietario (per accettazione)", o.seller_signed_at);
+
+  var pageCount = doc.internal.getNumberOfPages();
+  for(var i = 1; i <= pageCount; i++){
+    doc.setPage(i);
+    drawPdfHeaderOnPage(doc, pageWidth);
+    drawPdfFooterOnPage(doc, pageWidth, pageHeight, i, pageCount);
+  }
+
+  return doc;
+}
+
+document.getElementById("generatePdfBtn").addEventListener("click", async function(){
+  var btn = document.getElementById("generatePdfBtn");
+  var linkBox = document.getElementById("pdfLinkBox");
+
+  if(!currentOfferId || !currentOfferData){
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#9c2f2f";
+    linkBox.textContent = "Nessuna proposta caricata da esportare.";
+    return;
+  }
+  if(typeof window.jspdf === "undefined"){
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#9c2f2f";
+    linkBox.textContent = "Libreria di generazione PDF non caricata (controlla la connessione) — riprova.";
+    return;
+  }
+
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.textContent = "Generazione PDF in corso...";
+  linkBox.className = "pdf-link-box";
+  linkBox.textContent = "";
+
+  try{
+    var doc = buildOfferPdf(currentOfferData, null, currentPropertyTitle, currentPropertyAddress, currentIsCounter);
+
+    var blob = doc.output("blob");
+    /* Path SEMPRE nuovo (con timestamp): la versione precedente sovrascriveva sempre lo
+       stesso file, e la CDN di Supabase Storage poteva continuare a servire il PDF vecchio
+       in cache anche dopo la sovrascrittura. Con un nome diverso ad ogni generazione non
+       esiste più un URL "vecchio" che la CDN possa servire per sbaglio. */
+    var path = "pdf/" + currentOfferId + "/proposta-" + Date.now() + ".pdf";
+
+    var uploadResult = await client.storage.from("offer-documents").upload(path, blob, {
+      contentType: "application/pdf",
+      upsert: true
+    });
+    if(uploadResult.error) throw uploadResult.error;
+
+    var publicUrlResult = client.storage.from("offer-documents").getPublicUrl(path);
+    var publicUrl = publicUrlResult.data ? publicUrlResult.data.publicUrl : null;
+    if(!publicUrl) throw new Error("URL pubblico del PDF non disponibile.");
+
+    /* Salva il path dell'ultimo PDF generato sulla riga della proposta, cosi' offer-share.html
+       trova sempre la versione più recente invece di un path fisso — best effort, un
+       fallimento qui non deve far sembrare fallita la generazione, già riuscita sopra. */
+    try{
+      await client.from("opportunity_offers").update({ pdf_storage_path: path }).eq("id", currentOfferId);
+    }catch(pdfPathErr){
+      console.error("Salvataggio pdf_storage_path non riuscito:", pdfPathErr);
+    }
+
+    var shareUrl = window.location.origin + window.location.pathname.replace(/offer-detail\.html$/, "offer-share.html") + "?offer_id=" + encodeURIComponent(currentOfferId);
+
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#4f7f45";
+    linkBox.innerHTML = "PDF generato correttamente — logo IMMONOVA su ogni pagina.<br>" +
+      '<a href="' + publicUrl + '" target="_blank" rel="noopener">Apri il PDF direttamente</a>' +
+      ' &nbsp;·&nbsp; ' +
+      '<a href="' + shareUrl + '" target="_blank" rel="noopener">Link da condividere (con anteprima)</a>' +
+      ' &nbsp;·&nbsp; ' +
+      '<button type="button" class="btn secondary" id="copyShareLinkBtn" style="padding:6px 12px;font-size:10px">Copia link</button>';
+
+    document.getElementById("copyShareLinkBtn").addEventListener("click", async function(){
+      var copyBtn = this;
+      try{
+        await navigator.clipboard.writeText(shareUrl);
+        copyBtn.textContent = "Copiato ✓";
+      }catch(copyErr){
+        /* Clipboard API può essere bloccata (contesto non sicuro, permessi) — fallback con
+           un box di testo selezionabile invece di lasciare l'utente senza alternativa. */
+        window.prompt("Copia manualmente il link:", shareUrl);
+      }
+      setTimeout(function(){ copyBtn.textContent = "Copia link"; }, 2000);
+    });
+  }catch(err){
+    console.error(err);
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#9c2f2f";
+    linkBox.textContent = "Errore nella generazione del PDF: " + (err && err.message ? err.message : String(err));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+});
+
+(async function init(){
+  var ok = await checkAuth();
+  if(!ok) return;
+  await loadOffer();
+})();
+</script>
+
+</body>
+</html>
