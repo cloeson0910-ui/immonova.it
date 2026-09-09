@@ -883,6 +883,8 @@ function addCadastralUnitRow(prefill){
       '<div class="field"><label>Categoria catastale</label><input type="text" data-cad="categoria" placeholder="es. A/2"></div>' +
       '<div class="field"><label>Classe</label><input type="text" data-cad="classe"></div>' +
       '<div class="field"><label>Rendita catastale (€)</label><input type="number" step="0.01" min="0" data-cad="rendita"></div>' +
+      '<div class="field"><label>Vani</label><input type="number" step="0.5" min="0" data-cad="vani"></div>' +
+      '<div class="field"><label>Superficie (mq)</label><input type="number" step="0.01" min="0" data-cad="mq"></div>' +
     '</div>' +
     '<button type="button" class="btn secondary-btn" data-remove-cad-unit="1">Rimuovi questa unità</button>';
   box.appendChild(row);
@@ -890,7 +892,7 @@ function addCadastralUnitRow(prefill){
     row.remove();
   });
   if(prefill){
-    ["sezione","foglio","particella","subalterno","categoria","classe","rendita"].forEach(function(k){
+    ["sezione","foglio","particella","subalterno","categoria","classe","rendita","vani","mq"].forEach(function(k){
       var el = row.querySelector('[data-cad="' + k + '"]');
       if(el && prefill[k] != null) el.value = prefill[k];
     });
@@ -904,7 +906,7 @@ function collectCadastralUnits(){
   rows.forEach(function(row){
     function v(k){ var el = row.querySelector('[data-cad="' + k + '"]'); return el ? el.value.trim() : ""; }
     var foglio = v("foglio"), particella = v("particella");
-    if(!foglio && !particella && !v("subalterno") && !v("categoria") && !v("classe") && !v("rendita") && !v("sezione")) return;
+    if(!foglio && !particella && !v("subalterno") && !v("categoria") && !v("classe") && !v("rendita") && !v("sezione") && !v("vani") && !v("mq")) return;
     units.push({
       sezione: v("sezione") || null,
       foglio: foglio || null,
@@ -912,7 +914,9 @@ function collectCadastralUnits(){
       subalterno: v("subalterno") || null,
       categoria: v("categoria") || null,
       classe: v("classe") || null,
-      rendita: v("rendita") ? parseFloat(v("rendita")) : null
+      rendita: v("rendita") ? parseFloat(v("rendita")) : null,
+      vani: v("vani") ? parseFloat(v("vani")) : null,
+      mq: v("mq") ? parseFloat(v("mq")) : null
     });
   });
   return units;
@@ -1154,6 +1158,8 @@ function buildPrintableOffer(){
     if(u.categoria) parts.push("Categoria " + escapeHTML(u.categoria));
     if(u.classe) parts.push("Classe " + escapeHTML(u.classe));
     if(u.rendita) parts.push("Rendita € " + escapeHTML(u.rendita));
+    if(u.vani) parts.push("Vani " + escapeHTML(u.vani));
+    if(u.mq) parts.push(escapeHTML(u.mq) + " mq");
     return "<li>" + parts.join(" · ") + "</li>";
   }).join("") + "</ul>" : "<p>Non inserite</p>";
 
