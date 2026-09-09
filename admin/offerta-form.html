@@ -312,6 +312,40 @@ input[readonly]{
   font-size:12.5px;
   color:#8f7643;
 }
+
+/* Overlay stampabile della proposta, per la raccolta firme — stesso pattern già in
+   uso in documenti.html per NDA/Incarico: pannello sovrapposto, isolato in stampa via
+   @media print che nasconde tutto il resto della pagina. */
+.print-overlay{display:none;position:fixed;inset:0;background:rgba(74,60,31,.55);z-index:50;padding:30px;overflow-y:auto}
+.print-overlay.visible{display:block}
+.print-sheet{max-width:780px;margin:0 auto;background:#fffdf7;padding:52px 56px;box-shadow:0 30px 90px rgba(0,0,0,.35);position:relative}
+.print-close{position:absolute;top:18px;right:18px;background:none;border:none;font-size:20px;color:#a67f34;cursor:pointer}
+.print-letterhead{font-size:20px;letter-spacing:.3em;color:#a67f34;font-weight:300;margin-bottom:6px}
+.print-sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:32px;border-bottom:1px solid rgba(166,127,52,.25);padding-bottom:18px}
+.print-doc-title{font-size:22px;color:#4a3c1f;font-weight:400;margin-bottom:22px}
+.print-doc-body h4{font-size:12.5px;color:#a67f34;margin:20px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+.print-doc-body p{font-size:13px;line-height:1.8;color:#3f321c;margin-bottom:8px}
+.print-doc-body ul{margin:6px 0 6px 20px;color:#3f321c;font-size:13px;line-height:1.8}
+.print-sign-row{display:flex;justify-content:space-between;gap:40px;margin-top:70px}
+.print-sign-col{flex:1;font-size:12.5px;color:#4a3c1f}
+.print-sign-line{border-top:1px solid #4a3c1f;margin-top:46px;padding-top:6px}
+.print-actions{margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
+@media print{
+  body *{visibility:hidden}
+  .print-sheet, .print-sheet *{visibility:visible}
+  .print-sheet{position:absolute;left:0;top:0;box-shadow:none;padding:0;max-width:100%}
+  .print-close, .print-actions{display:none!important}
+}
+
+.new-client-toggle{font-size:12px;color:#a58139;text-decoration:underline;cursor:pointer;display:inline-block}
+
+.btn{padding:11px 18px;border:1px solid rgba(165,129,57,.42);background:rgba(255,252,244,.35);color:#a58139;font-size:11px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;font-family:inherit}
+.btn.secondary-btn{background:transparent}
+
+.sig-pad-box{border:1px solid rgba(165,129,57,.35);background:#fffdf8;touch-action:none}
+.sig-canvas{width:100%;height:180px;display:block;cursor:crosshair}
+.sig-pad-actions{display:flex;align-items:center;gap:14px;margin-top:8px}
+.sig-pad-status{font-size:11.5px;color:#4f7f45}
 </style>
 </head>
 
@@ -362,6 +396,47 @@ input[readonly]{
     </div>
 
     <div class="property-summary" id="propertySummary"></div>
+
+    <div class="section-title">Venditore / Proprietario</div>
+    <div class="section-hint" id="sellerSectionHint">
+      Se il proprietario è registrato come venditore collegato a questo immobile, i dati
+      vengono precompilati in automatico qui sotto. Restano sempre modificabili a mano.
+    </div>
+
+    <div class="client-summary" id="sellerSummary"></div>
+
+    <div class="field">
+      <label for="seller_first_name">Nome *</label>
+      <input type="text" id="seller_first_name" required>
+    </div>
+    <div class="field">
+      <label for="seller_last_name">Cognome *</label>
+      <input type="text" id="seller_last_name" required>
+    </div>
+    <div class="field">
+      <label for="seller_fiscal_code">Codice fiscale</label>
+      <input type="text" id="seller_fiscal_code" maxlength="16" style="text-transform:uppercase">
+    </div>
+    <div class="field">
+      <label for="seller_birth_date">Data di nascita</label>
+      <input type="date" id="seller_birth_date">
+    </div>
+    <div class="field">
+      <label for="seller_birth_place">Luogo di nascita</label>
+      <input type="text" id="seller_birth_place">
+    </div>
+    <div class="field">
+      <label for="seller_residence_address">Indirizzo di residenza</label>
+      <input type="text" id="seller_residence_address">
+    </div>
+    <div class="field">
+      <label for="seller_email">Email</label>
+      <input type="email" id="seller_email">
+    </div>
+    <div class="field">
+      <label for="seller_phone">Telefono</label>
+      <input type="tel" id="seller_phone">
+    </div>
 
     <div class="section-title">Proponente / Acquirente</div>
     <div class="section-hint" id="clientSectionHint">
@@ -433,6 +508,21 @@ input[readonly]{
       <input type="date" id="buyer_id_document_issued_at">
     </div>
 
+    <div class="field full">
+      <span class="new-client-toggle" id="buyer2Toggle">+ Aggiungi secondo proponente (es. coniuge/comproprietario)</span>
+    </div>
+
+    <div class="field full second-buyer-box" id="buyer2Box" style="display:none">
+      <div class="form-grid" style="gap:22px">
+        <div class="field"><label for="buyer2_first_name">Nome secondo proponente</label><input type="text" id="buyer2_first_name"></div>
+        <div class="field"><label for="buyer2_last_name">Cognome secondo proponente</label><input type="text" id="buyer2_last_name"></div>
+        <div class="field"><label for="buyer2_fiscal_code">Codice fiscale</label><input type="text" id="buyer2_fiscal_code" maxlength="16" style="text-transform:uppercase"></div>
+        <div class="field"><label for="buyer2_birth_date">Data di nascita</label><input type="date" id="buyer2_birth_date"></div>
+        <div class="field"><label for="buyer2_birth_place">Luogo di nascita</label><input type="text" id="buyer2_birth_place"></div>
+        <div class="field"><label for="buyer2_residence_address">Indirizzo di residenza</label><input type="text" id="buyer2_residence_address"></div>
+      </div>
+    </div>
+
     <div class="section-title">Documenti d'identità del proponente</div>
     <div class="section-hint">
       Carica una copia leggibile dei documenti. Formati accettati: JPG, PNG, PDF, HEIC.
@@ -456,6 +546,13 @@ input[readonly]{
       </div>
     </div>
 
+    <div class="section-title">Dichiarazioni del venditore sull'immobile</div>
+    <div class="section-hint">
+      Struttura standard delle dichiarazioni raccolte dal venditore in fase di incarico —
+      utile richiamarle qui per verificarle col cliente prima di formalizzare l'offerta.
+    </div>
+    <div class="clause-list" id="sellerDeclarationsList"></div>
+
     <div class="section-title">Condizioni economiche</div>
 
     <div class="field">
@@ -466,23 +563,73 @@ input[readonly]{
       <label for="offered_price">Prezzo offerto (€) *</label>
       <input type="number" id="offered_price" min="0" step="0.01" required>
     </div>
-    <div class="field">
-      <label for="deposit_amount">Caparra confirmatoria (€)</label>
-      <input type="number" id="deposit_amount" min="0" step="0.01">
+
+    <div class="section-hint" style="grid-column:1/-1;margin-top:6px">
+      Pagamento a scaglioni (compila solo quelli effettivamente pattuiti). La caparra
+      confirmatoria totale si calcola in automatico dagli importi a) e b).
     </div>
     <div class="field">
-      <label for="deposit_type">Modalità versamento caparra</label>
-      <select id="deposit_type">
+      <label for="payment_a_amount">a) Caparra alla firma proposta (€)</label>
+      <input type="number" id="payment_a_amount" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label for="payment_a_method">Modalità a)</label>
+      <select id="payment_a_method">
         <option value="">— Seleziona —</option>
-        <option value="assegno_circolare">Assegno circolare</option>
+        <option value="assegno_non_trasferibile">Assegno non trasferibile</option>
         <option value="bonifico">Bonifico bancario</option>
         <option value="contanti">Contanti (nei limiti di legge)</option>
       </select>
     </div>
-    <div class="field full">
-      <label for="payment_balance_notes">Modalità di pagamento del saldo</label>
-      <textarea id="payment_balance_notes" placeholder="Es. saldo tramite mutuo ipotecario da erogare entro il rogito, previsto entro 90 giorni dall'accettazione..."></textarea>
+    <div class="field">
+      <label for="payment_b_amount">b) Integrazione caparra (€)</label>
+      <input type="number" id="payment_b_amount" min="0" step="0.01">
     </div>
+    <div class="field">
+      <label for="payment_b_due_date">Entro il (b)</label>
+      <input type="date" id="payment_b_due_date">
+    </div>
+    <div class="field">
+      <label for="payment_c_amount">c) Al preliminare (€)</label>
+      <input type="number" id="payment_c_amount" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label for="payment_c_due_date">Entro il (c)</label>
+      <input type="date" id="payment_c_due_date">
+    </div>
+    <div class="field">
+      <label for="payment_d_amount">d) Saldo al rogito (€)</label>
+      <input type="number" id="payment_d_amount" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label for="payment_d_method">Modalità saldo (d)</label>
+      <select id="payment_d_method">
+        <option value="">— Seleziona —</option>
+        <option value="assegno_circolare">Assegno circolare</option>
+        <option value="bonifico">Bonifico bancario</option>
+        <option value="mutuo">Mutuo/finanziamento</option>
+      </select>
+    </div>
+    <div class="field full">
+      <label for="payment_balance_notes">Note aggiuntive sul pagamento</label>
+      <textarea id="payment_balance_notes" placeholder="Es. saldo tramite mutuo ipotecario da erogare entro il rogito..."></textarea>
+    </div>
+
+    <div class="section-title">Rogito notarile</div>
+    <div class="field">
+      <label for="notary_name">Notaio</label>
+      <input type="text" id="notary_name" placeholder="Nome dello studio notarile, se già scelto">
+    </div>
+    <div class="field">
+      <label for="notary_address">Indirizzo studio notarile</label>
+      <input type="text" id="notary_address">
+    </div>
+    <div class="field">
+      <label for="deed_deadline_date">Entro il (data rogito)</label>
+      <input type="date" id="deed_deadline_date">
+    </div>
+
+    <div class="section-title">Validità della proposta</div>
     <div class="field">
       <label for="offer_validity_days">Validità dell'offerta (giorni) *</label>
       <input type="number" id="offer_validity_days" min="1" value="15" required>
@@ -490,6 +637,13 @@ input[readonly]{
     <div class="field">
       <label for="offer_expires_at">Scadenza proposta</label>
       <input type="date" id="offer_expires_at" readonly>
+    </div>
+    <div class="checkbox-field">
+      <input type="checkbox" id="irrevocability_clause_approved" required>
+      <label for="irrevocability_clause_approved">
+        Il Proponente dichiara di approvare specificamente, ai sensi degli artt. 1341-1342
+        c.c., la clausola relativa al termine di irrevocabilità della presente proposta. *
+      </label>
     </div>
 
     <div class="section-title">Clausole sospensive</div>
@@ -515,6 +669,12 @@ input[readonly]{
       <textarea id="resolutive_notes"></textarea>
     </div>
 
+    <div class="section-title">Clausole aggiuntive</div>
+    <div class="field full">
+      <label for="additional_clauses">Clausole aggiuntive libere</label>
+      <textarea id="additional_clauses" placeholder="Eventuali pattuizioni ulteriori non coperte dalle sezioni precedenti..."></textarea>
+    </div>
+
     <div class="section-title">Mediazione e note</div>
     <div class="field full">
       <label for="agency_mediation_note">Nota mediazione immobiliare (provvigione, L. 39/1989)</label>
@@ -534,14 +694,66 @@ input[readonly]{
       </label>
     </div>
 
+    <div class="section-title">Firme a schermo</div>
+    <div class="section-hint">
+      Firma qui direttamente sul dispositivo (dito o penna su tablet/telefono, mouse su
+      PC) — la firma viene salvata insieme alla proposta. In alternativa puoi sempre usare
+      "Stampa proposta per firme" per la firma su carta.
+    </div>
+
+    <div class="field full">
+      <label>Firma del Proponente/Acquirente</label>
+      <div class="sig-pad-box">
+        <canvas class="sig-canvas" id="buyerSigCanvas"></canvas>
+      </div>
+      <div class="sig-pad-actions">
+        <button type="button" class="btn secondary-btn" id="buyerSigClearBtn">Cancella firma</button>
+        <span class="sig-pad-status" id="buyerSigStatus"></span>
+      </div>
+    </div>
+
+    <div class="field full">
+      <label>Firma del Venditore/Proprietario (per accettazione)</label>
+      <div class="sig-pad-box">
+        <canvas class="sig-canvas" id="sellerSigCanvas"></canvas>
+      </div>
+      <div class="sig-pad-actions">
+        <button type="button" class="btn secondary-btn" id="sellerSigClearBtn">Cancella firma</button>
+        <span class="sig-pad-status" id="sellerSigStatus"></span>
+      </div>
+    </div>
+
     <div class="actions">
       <button type="submit" class="save-button" id="saveBtn">Salva proposta</button>
+      <button type="button" class="save-button" id="printBtn" style="background:transparent;color:#a58139">Stampa proposta per firme</button>
       <span id="saveStatus"></span>
     </div>
 
   </form>
 </section>
 
+</div>
+
+<!-- Overlay stampabile della proposta (documento per le firme) -->
+<div class="print-overlay" id="printOverlay">
+  <div class="print-sheet" id="printSheet">
+    <button type="button" class="print-close" id="printCloseBtn">✕</button>
+    <div class="print-letterhead">IMMONOVA</div>
+    <div class="print-sub">OFF MARKET · CONSULTING</div>
+    <div class="print-doc-title">Proposta Irrevocabile d'Acquisto</div>
+    <div class="print-doc-body" id="printDocBody"></div>
+    <div class="print-sign-row">
+      <div class="print-sign-col">
+        <div class="print-sign-line">Firma del Proponente/Acquirente</div>
+      </div>
+      <div class="print-sign-col">
+        <div class="print-sign-line">Firma del Venditore/Proprietario (per accettazione)</div>
+      </div>
+    </div>
+    <div class="print-actions">
+      <button type="button" class="save-button" id="printNowBtn">Stampa / Salva PDF</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -556,6 +768,7 @@ var opportunities = [];
 var investorRequests = [];
 var selectedOpportunity = null;
 var preselectedInvestor = null; // cliente passato via ?investor_id= dalla pagina Documenti (tabella investors)
+var selectedSeller = null; // venditore/proprietario trovato via investor_seller_properties per l'immobile scelto
 
 /* Elenco clausole standard: l'utente può selezionarle e, quando serve, aggiungere un
    dettaglio libero (es. importo mutuo, banca, tempistiche). "Altro" apre sempre un campo
@@ -576,6 +789,124 @@ var RESOLUTIVE_CLAUSE_OPTIONS = [
   { key:"immobile_non_libero", label:"Mancata liberazione dell'immobile da persone o cose nei tempi concordati" },
   { key:"altro_risolutiva", label:"Altra condizione risolutiva (specificare)", withDetail:true, detailPlaceholder:"Descrivi la condizione..." }
 ];
+
+/* Dichiarazioni standard del venditore sull'immobile — struttura comune ai moduli di
+   mediazione immobiliare (provenienza, conformità, impianti, APE, iscrizioni
+   pregiudizievoli). Ogni voce ha una risposta (Sì/No/Da verificare) + note libere. */
+var SELLER_DECLARATION_OPTIONS = [
+  { key:"provenienza", label:"L'immobile è pervenuto al Venditore per compravendita, successione o donazione (specificare in nota)" },
+  { key:"piena_proprieta", label:"Il Venditore ne ha la piena proprietà" },
+  { key:"conformita_edilizia_urbanistica", label:"L'immobile è conforme alle norme edilizie e urbanistiche" },
+  { key:"planimetria_conforme", label:"La planimetria depositata in catasto corrisponde allo stato di fatto" },
+  { key:"impianti_conformi", label:"Gli impianti sono conformi alle normative vigenti" },
+  { key:"dotato_ape", label:"L'immobile è dotato di Attestato di Prestazione Energetica (APE)" },
+  { key:"libero_da_vincoli", label:"L'immobile è libero da iscrizioni, trascrizioni pregiudizievoli, pesi, oneri o servitù attive e passive" }
+];
+
+function renderDeclarationList(containerId, options){
+  var container = document.getElementById(containerId);
+  var html = "";
+  options.forEach(function(opt){
+    html += '<div class="clause-row">';
+    html += '<label class="clause-check" style="cursor:default">' + escapeHTML(opt.label) + '</label>';
+    html += '<div class="clause-detail active" style="display:flex;gap:10px;align-items:center;margin-top:8px">';
+    html += '<select data-decl-key="' + opt.key + '" data-container="' + containerId + '" style="max-width:220px">' +
+      '<option value="">— Non specificato —</option>' +
+      '<option value="si">Sì</option>' +
+      '<option value="no">No</option>' +
+      '<option value="da_verificare">Da verificare</option>' +
+      '</select>';
+    html += '<input type="text" data-decl-notes="' + opt.key + '" data-container="' + containerId + '" placeholder="Note (facoltativo)" style="flex:1">';
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+}
+
+function collectDeclarations(containerId, options){
+  var container = document.getElementById(containerId);
+  return options.map(function(opt){
+    var sel = container.querySelector('select[data-decl-key="' + opt.key + '"]');
+    var notesEl = container.querySelector('input[data-decl-notes="' + opt.key + '"]');
+    return {
+      key: opt.key,
+      label: opt.label,
+      value: sel ? sel.value : "",
+      notes: notesEl ? notesEl.value.trim() : ""
+    };
+  }).filter(function(d){ return d.value || d.notes; });
+}
+
+/* Pannello firma touch/mouse: disegna su canvas ad alta densità (devicePixelRatio) e
+   usa Pointer Events, che unificano mouse/touch/penna in un solo set di eventi — così
+   funziona identico su PC, tablet e telefono senza codice separato per ciascuno. */
+function createSignaturePad(canvasId, statusId){
+  var canvas = document.getElementById(canvasId);
+  var statusEl = document.getElementById(statusId);
+  var ctx = canvas.getContext("2d");
+  var drawing = false;
+  var hasStroke = false;
+  var last = null;
+
+  function resizeCanvas(){
+    var ratio = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    var prevData = hasStroke ? canvas.toDataURL() : null;
+    canvas.width = Math.max(1, Math.round(rect.width * ratio));
+    canvas.height = Math.max(1, Math.round(rect.height * ratio));
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#3f321c";
+    if(prevData){
+      var img = new Image();
+      img.onload = function(){ ctx.drawImage(img, 0, 0, rect.width, rect.height); };
+      img.src = prevData;
+    }
+  }
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
+
+  function pointerPos(e){
+    var rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  canvas.addEventListener("pointerdown", function(e){
+    drawing = true;
+    hasStroke = true;
+    last = pointerPos(e);
+    canvas.setPointerCapture(e.pointerId);
+    if(statusEl) statusEl.textContent = "";
+  });
+  canvas.addEventListener("pointermove", function(e){
+    if(!drawing) return;
+    var p = pointerPos(e);
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    last = p;
+  });
+  function endStroke(){
+    drawing = false;
+    if(hasStroke && statusEl) statusEl.textContent = "Firma catturata ✓";
+  }
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointerleave", endStroke);
+  canvas.addEventListener("pointercancel", endStroke);
+
+  return {
+    clear: function(){
+      var rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      hasStroke = false;
+      if(statusEl) statusEl.textContent = "";
+    },
+    isEmpty: function(){ return !hasStroke; },
+    toDataURL: function(){ return hasStroke ? canvas.toDataURL("image/png") : ""; }
+  };
+}
 
 var uploadedDocs = {
   doc_id_front: { label:"Documento d'identità (fronte)", file:null },
@@ -655,6 +986,105 @@ function collectClauses(containerId, options){
   }).filter(function(c){ return c.checked; });
 }
 
+function fieldVal(id){
+  var el = document.getElementById(id);
+  return el ? el.value.trim() : "";
+}
+
+/* Costruisce il documento stampabile della proposta con tutti i dati inseriti nel
+   form (immobile, venditore, proponente, condizioni economiche, clausole) e le righe
+   firma — usato solo per la stampa/PDF, non salva nulla. */
+function buildPrintableOffer(){
+  var propertyTitle = selectedOpportunity ? selectedOpportunity.title : "(immobile non selezionato)";
+  var propertyAddress = selectedOpportunity ? (selectedOpportunity.formatted_address || selectedOpportunity.address || selectedOpportunity.municipality || "") : "";
+
+  var buyerName = (fieldVal("buyer_first_name") + " " + fieldVal("buyer_last_name")).trim() || "—";
+  var buyer2Name = (fieldVal("buyer2_first_name") + " " + fieldVal("buyer2_last_name")).trim();
+  var sellerName = (fieldVal("seller_first_name") + " " + fieldVal("seller_last_name")).trim() || "—";
+
+  var offeredPrice = fieldVal("offered_price");
+  var validityDays = fieldVal("offer_validity_days");
+  var expiresAt = fieldVal("offer_expires_at");
+
+  var suspensive = collectClauses("suspensiveClauseList", SUSPENSIVE_CLAUSE_OPTIONS);
+  var resolutive = collectClauses("resolutiveClauseList", RESOLUTIVE_CLAUSE_OPTIONS);
+  var declarations = collectDeclarations("sellerDeclarationsList", SELLER_DECLARATION_OPTIONS);
+
+  function clauseListHTML(list, emptyText){
+    if(!list.length) return "<p>" + escapeHTML(emptyText) + "</p>";
+    return "<ul>" + list.map(function(c){
+      return "<li>" + escapeHTML(c.label) + (c.notes ? " — " + escapeHTML(c.notes) : "") + "</li>";
+    }).join("") + "</ul>";
+  }
+
+  var html = "";
+  html += "<h4>Immobile</h4><p>" + escapeHTML(propertyTitle) + (propertyAddress ? " — " + escapeHTML(propertyAddress) : "") + "</p>";
+
+  html += "<h4>Venditore/Proprietario</h4><p>" + escapeHTML(sellerName) +
+    (fieldVal("seller_fiscal_code") ? " — C.F. " + escapeHTML(fieldVal("seller_fiscal_code")) : "") +
+    (fieldVal("seller_residence_address") ? "<br>Residente in " + escapeHTML(fieldVal("seller_residence_address")) : "") + "</p>";
+
+  html += "<h4>Proponente/Acquirente</h4><p>" + escapeHTML(buyerName) +
+    (fieldVal("buyer_fiscal_code") ? " — C.F. " + escapeHTML(fieldVal("buyer_fiscal_code")) : "") +
+    (fieldVal("buyer_residence_address") ? "<br>Residente in " + escapeHTML(fieldVal("buyer_residence_address")) : "") +
+    (fieldVal("buyer_id_document_type") ? "<br>Documento: " + escapeHTML(fieldVal("buyer_id_document_type")) + (fieldVal("buyer_id_document_number") ? " n. " + escapeHTML(fieldVal("buyer_id_document_number")) : "") : "") +
+    (buyer2Name ? "<br><br>Secondo proponente: " + escapeHTML(buyer2Name) + (fieldVal("buyer2_fiscal_code") ? " — C.F. " + escapeHTML(fieldVal("buyer2_fiscal_code")) : "") : "") + "</p>";
+
+  if(declarations.length){
+    html += "<h4>Dichiarazioni del venditore</h4><ul>" + declarations.map(function(d){
+      var valueLabel = d.value === "si" ? "Sì" : (d.value === "no" ? "No" : (d.value === "da_verificare" ? "Da verificare" : ""));
+      return "<li>" + escapeHTML(d.label) + (valueLabel ? ": " + valueLabel : "") + (d.notes ? " — " + escapeHTML(d.notes) : "") + "</li>";
+    }).join("") + "</ul>";
+  }
+
+  var paymentRows = [];
+  if(fieldVal("payment_a_amount")) paymentRows.push("a) Caparra alla firma: € " + fieldVal("payment_a_amount") + (fieldVal("payment_a_method") ? " (" + fieldVal("payment_a_method") + ")" : ""));
+  if(fieldVal("payment_b_amount")) paymentRows.push("b) Integrazione caparra: € " + fieldVal("payment_b_amount") + (fieldVal("payment_b_due_date") ? " entro il " + new Date(fieldVal("payment_b_due_date")).toLocaleDateString("it-IT") : ""));
+  if(fieldVal("payment_c_amount")) paymentRows.push("c) Al preliminare: € " + fieldVal("payment_c_amount") + (fieldVal("payment_c_due_date") ? " entro il " + new Date(fieldVal("payment_c_due_date")).toLocaleDateString("it-IT") : ""));
+  if(fieldVal("payment_d_amount")) paymentRows.push("d) Saldo al rogito: € " + fieldVal("payment_d_amount") + (fieldVal("payment_d_method") ? " (" + fieldVal("payment_d_method") + ")" : ""));
+
+  html += "<h4>Condizioni economiche</h4><p>Prezzo offerto: € " + escapeHTML(offeredPrice || "—") + "</p>" +
+    (paymentRows.length ? "<ul>" + paymentRows.map(function(r){ return "<li>" + escapeHTML(r) + "</li>"; }).join("") + "</ul>" : "") +
+    (fieldVal("payment_balance_notes") ? "<p>" + escapeHTML(fieldVal("payment_balance_notes")) + "</p>" : "");
+
+  if(fieldVal("notary_name") || fieldVal("notary_address") || fieldVal("deed_deadline_date")){
+    html += "<h4>Rogito notarile</h4><p>" + escapeHTML(fieldVal("notary_name") || "Notaio da definirsi") +
+      (fieldVal("notary_address") ? " — " + escapeHTML(fieldVal("notary_address")) : "") +
+      (fieldVal("deed_deadline_date") ? "<br>Entro il " + new Date(fieldVal("deed_deadline_date")).toLocaleDateString("it-IT") : "") + "</p>";
+  }
+
+  html += "<h4>Validità della proposta</h4><p>Proposta irrevocabile ai sensi dell'art. 1329 c.c., valida " + escapeHTML(validityDays || "—") + " giorni" +
+    (expiresAt ? " — scadenza " + escapeHTML(new Date(expiresAt).toLocaleDateString("it-IT")) : "") +
+    ". Il Proponente approva specificamente, ai sensi degli artt. 1341-1342 c.c., la presente clausola di irrevocabilità.</p>";
+
+  html += "<h4>Clausole sospensive</h4>" + clauseListHTML(suspensive, "Nessuna clausola sospensiva selezionata.") +
+    (fieldVal("suspensive_notes") ? "<p>" + escapeHTML(fieldVal("suspensive_notes")) + "</p>" : "");
+
+  html += "<h4>Clausole risolutive</h4>" + clauseListHTML(resolutive, "Nessuna clausola risolutiva selezionata.") +
+    (fieldVal("resolutive_notes") ? "<p>" + escapeHTML(fieldVal("resolutive_notes")) + "</p>" : "");
+
+  if(fieldVal("additional_clauses")){
+    html += "<h4>Clausole aggiuntive</h4><p>" + escapeHTML(fieldVal("additional_clauses")) + "</p>";
+  }
+
+  if(fieldVal("agency_mediation_note")){
+    html += "<h4>Mediazione</h4><p>" + escapeHTML(fieldVal("agency_mediation_note")) + "</p>";
+  }
+
+  html += "<h4>Data</h4><p>" + new Date().toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }) + "</p>";
+
+  document.getElementById("printDocBody").innerHTML = html;
+
+  /* Se le firme sono già state raccolte a schermo, le usa al posto delle righe vuote */
+  var buyerSigImgHTML = (buyerSigPad && !buyerSigPad.isEmpty()) ? '<img src="' + buyerSigPad.toDataURL() + '" style="max-height:60px;display:block;margin-bottom:6px">' : "";
+  var sellerSigImgHTML = (sellerSigPad && !sellerSigPad.isEmpty()) ? '<img src="' + sellerSigPad.toDataURL() + '" style="max-height:60px;display:block;margin-bottom:6px">' : "";
+  document.querySelector(".print-sign-row").innerHTML =
+    '<div class="print-sign-col">' + buyerSigImgHTML + '<div class="print-sign-line">Firma del Proponente/Acquirente</div></div>' +
+    '<div class="print-sign-col">' + sellerSigImgHTML + '<div class="print-sign-line">Firma del Venditore/Proprietario (per accettazione)</div></div>';
+
+  document.getElementById("printOverlay").classList.add("visible");
+}
+
 function parsePriceToNumber(priceText){
   if(!priceText) return null;
   var cleaned = String(priceText).replace(/[^\d.,]/g, "");
@@ -688,6 +1118,56 @@ async function loadOpportunities(){
     opt.textContent = o.title + (o.municipality ? " — " + o.municipality : "");
     select.appendChild(opt);
   });
+}
+
+function clearSellerFields(){
+  ["seller_first_name","seller_last_name","seller_fiscal_code","seller_birth_date","seller_birth_place","seller_residence_address","seller_email","seller_phone"].forEach(function(id){
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("sellerSummary").classList.remove("active");
+  document.getElementById("sellerSummary").innerHTML = "";
+  selectedSeller = null;
+}
+
+/* Precompila i dati del venditore/proprietario a partire da investor_seller_properties
+   (collegamento immobile -> cliente venditore) + investors. Se ci sono più proprietari
+   collegati allo stesso immobile, precompila il primo e segnala gli altri: i dati restano
+   comunque sempre modificabili a mano. */
+async function loadSellerForOpportunity(opportunityId){
+  clearSellerFields();
+  if(!opportunityId) return;
+
+  var linkResult = await client
+    .from("investor_seller_properties")
+    .select("investor_id")
+    .eq("opportunity_id", opportunityId);
+
+  if(linkResult.error || !linkResult.data || !linkResult.data.length) return;
+
+  var investorIds = linkResult.data.map(function(r){ return r.investor_id; });
+
+  var investorsResult = await client
+    .from("investors")
+    .select("id,first_name,last_name,email,phone,company")
+    .in("id", investorIds);
+
+  if(investorsResult.error || !investorsResult.data || !investorsResult.data.length) return;
+
+  var sellers = investorsResult.data;
+  selectedSeller = sellers[0];
+
+  document.getElementById("seller_first_name").value = selectedSeller.first_name || "";
+  document.getElementById("seller_last_name").value = selectedSeller.last_name || "";
+  document.getElementById("seller_email").value = selectedSeller.email || "";
+  document.getElementById("seller_phone").value = selectedSeller.phone || "";
+
+  var box = document.getElementById("sellerSummary");
+  box.classList.add("active");
+  box.innerHTML =
+    "<strong>Venditore collegato:</strong> " + escapeHTML((selectedSeller.first_name || "") + " " + (selectedSeller.last_name || "")) +
+    (selectedSeller.company ? " (" + escapeHTML(selectedSeller.company) + ")" : "") + "<br>" +
+    escapeHTML(selectedSeller.email || "") + (selectedSeller.phone ? " — " + escapeHTML(selectedSeller.phone) : "") +
+    (sellers.length > 1 ? "<br><em>Attenzione: risultano " + sellers.length + " proprietari collegati a questo immobile — precompilato il primo, verifica e correggi manualmente se serve indicarne un altro o aggiungerlo nelle note.</em>" : "");
 }
 
 function renderPropertySummary(o){
@@ -819,10 +1299,24 @@ function wireDocInputs(){
   });
 }
 
+var buyerSigPad = null;
+var sellerSigPad = null;
+
 (function wireUI(){
   renderClauseList("suspensiveClauseList", SUSPENSIVE_CLAUSE_OPTIONS);
   renderClauseList("resolutiveClauseList", RESOLUTIVE_CLAUSE_OPTIONS);
+  renderDeclarationList("sellerDeclarationsList", SELLER_DECLARATION_OPTIONS);
   wireDocInputs();
+
+  buyerSigPad = createSignaturePad("buyerSigCanvas", "buyerSigStatus");
+  sellerSigPad = createSignaturePad("sellerSigCanvas", "sellerSigStatus");
+  document.getElementById("buyerSigClearBtn").addEventListener("click", function(){ buyerSigPad.clear(); });
+  document.getElementById("sellerSigClearBtn").addEventListener("click", function(){ sellerSigPad.clear(); });
+
+  document.getElementById("buyer2Toggle").addEventListener("click", function(){
+    var box = document.getElementById("buyer2Box");
+    box.style.display = box.style.display === "none" ? "block" : "none";
+  });
 
   document.getElementById("opportunitySelect").addEventListener("change", function(e){
     var id = e.target.value;
@@ -834,6 +1328,7 @@ function wireDocInputs(){
       if(numericPrice != null) document.getElementById("offered_price").value = numericPrice;
     }
     loadInvestorRequestsForOpportunity(id);
+    loadSellerForOpportunity(id);
   });
 
   document.getElementById("clientSelect").addEventListener("change", function(e){
@@ -844,6 +1339,12 @@ function wireDocInputs(){
 
   document.getElementById("offer_validity_days").addEventListener("change", recalcExpiry);
   document.getElementById("offer_validity_days").addEventListener("input", recalcExpiry);
+
+  document.getElementById("printBtn").addEventListener("click", buildPrintableOffer);
+  document.getElementById("printCloseBtn").addEventListener("click", function(){
+    document.getElementById("printOverlay").classList.remove("visible");
+  });
+  document.getElementById("printNowBtn").addEventListener("click", function(){ window.print(); });
 
   document.getElementById("offerForm").addEventListener("submit", async function(e){
     e.preventDefault();
@@ -858,6 +1359,9 @@ function wireDocInputs(){
       }
       if(!document.getElementById("privacy_accepted").checked){
         throw new Error("È necessario il consenso privacy del proponente per procedere.");
+      }
+      if(!document.getElementById("irrevocability_clause_approved").checked){
+        throw new Error("È necessaria l'approvazione specifica della clausola di irrevocabilità (artt. 1341-1342 c.c.).");
       }
 
       var offerId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
@@ -881,6 +1385,24 @@ function wireDocInputs(){
         opportunity_id: selectedOpportunity.id,
         investor_id: preselectedInvestor ? preselectedInvestor.id : null,
         investor_request_id: document.getElementById("clientSelect").value || null,
+        seller_investor_id: selectedSeller ? selectedSeller.id : null,
+
+        seller_first_name: document.getElementById("seller_first_name").value.trim(),
+        seller_last_name: document.getElementById("seller_last_name").value.trim(),
+        seller_fiscal_code: document.getElementById("seller_fiscal_code").value.trim().toUpperCase() || null,
+        seller_birth_place: document.getElementById("seller_birth_place").value.trim() || null,
+        seller_birth_date: document.getElementById("seller_birth_date").value || null,
+        seller_residence_address: document.getElementById("seller_residence_address").value.trim() || null,
+        seller_email: document.getElementById("seller_email").value.trim() || null,
+        seller_phone: document.getElementById("seller_phone").value.trim() || null,
+        seller_declarations: collectDeclarations("sellerDeclarationsList", SELLER_DECLARATION_OPTIONS),
+
+        buyer2_first_name: document.getElementById("buyer2_first_name").value.trim() || null,
+        buyer2_last_name: document.getElementById("buyer2_last_name").value.trim() || null,
+        buyer2_fiscal_code: document.getElementById("buyer2_fiscal_code").value.trim().toUpperCase() || null,
+        buyer2_birth_place: document.getElementById("buyer2_birth_place").value.trim() || null,
+        buyer2_birth_date: document.getElementById("buyer2_birth_date").value || null,
+        buyer2_residence_address: document.getElementById("buyer2_residence_address").value.trim() || null,
 
         buyer_first_name: document.getElementById("buyer_first_name").value.trim(),
         buyer_last_name: document.getElementById("buyer_last_name").value.trim(),
@@ -899,17 +1421,42 @@ function wireDocInputs(){
 
         property_asking_price: selectedOpportunity.price || null,
         offered_price: parseFloat(document.getElementById("offered_price").value),
-        deposit_amount: document.getElementById("deposit_amount").value ? parseFloat(document.getElementById("deposit_amount").value) : null,
-        deposit_type: document.getElementById("deposit_type").value || null,
+
+        payment_a_amount: document.getElementById("payment_a_amount").value ? parseFloat(document.getElementById("payment_a_amount").value) : null,
+        payment_a_method: document.getElementById("payment_a_method").value || null,
+        payment_b_amount: document.getElementById("payment_b_amount").value ? parseFloat(document.getElementById("payment_b_amount").value) : null,
+        payment_b_due_date: document.getElementById("payment_b_due_date").value || null,
+        payment_c_amount: document.getElementById("payment_c_amount").value ? parseFloat(document.getElementById("payment_c_amount").value) : null,
+        payment_c_due_date: document.getElementById("payment_c_due_date").value || null,
+        payment_d_amount: document.getElementById("payment_d_amount").value ? parseFloat(document.getElementById("payment_d_amount").value) : null,
+        payment_d_method: document.getElementById("payment_d_method").value || null,
+        deposit_amount: (function(){
+          var a = parseFloat(document.getElementById("payment_a_amount").value) || 0;
+          var b = parseFloat(document.getElementById("payment_b_amount").value) || 0;
+          var total = a + b;
+          return total > 0 ? total : null;
+        })(),
+        deposit_type: document.getElementById("payment_a_method").value || null,
         payment_balance_notes: document.getElementById("payment_balance_notes").value.trim() || null,
+
+        notary_name: document.getElementById("notary_name").value.trim() || null,
+        notary_address: document.getElementById("notary_address").value.trim() || null,
+        deed_deadline_date: document.getElementById("deed_deadline_date").value || null,
 
         offer_validity_days: parseInt(document.getElementById("offer_validity_days").value, 10) || 15,
         offer_expires_at: document.getElementById("offer_expires_at").value || null,
+        irrevocability_clause_approved: true,
 
         suspensive_clauses: collectClauses("suspensiveClauseList", SUSPENSIVE_CLAUSE_OPTIONS),
         suspensive_notes: document.getElementById("suspensive_notes").value.trim() || null,
         resolutive_clauses: collectClauses("resolutiveClauseList", RESOLUTIVE_CLAUSE_OPTIONS),
         resolutive_notes: document.getElementById("resolutive_notes").value.trim() || null,
+        additional_clauses: document.getElementById("additional_clauses").value.trim() || null,
+
+        buyer_signature_data_url: (buyerSigPad && !buyerSigPad.isEmpty()) ? buyerSigPad.toDataURL() : null,
+        buyer_signed_at: (buyerSigPad && !buyerSigPad.isEmpty()) ? new Date().toISOString() : null,
+        seller_signature_data_url: (sellerSigPad && !sellerSigPad.isEmpty()) ? sellerSigPad.toDataURL() : null,
+        seller_signed_at: (sellerSigPad && !sellerSigPad.isEmpty()) ? new Date().toISOString() : null,
 
         agency_mediation_note: document.getElementById("agency_mediation_note").value.trim() || null,
         privacy_accepted: true,
@@ -930,6 +1477,11 @@ function wireDocInputs(){
       renderPropertySummary(null);
       document.getElementById("clientSelect").innerHTML = '<option value="">— Inserimento manuale —</option>';
       document.getElementById("clientSummary").classList.remove("active");
+      clearSellerFields();
+      document.getElementById("buyer2Box").style.display = "none";
+      renderDeclarationList("sellerDeclarationsList", SELLER_DECLARATION_OPTIONS);
+      if(buyerSigPad) buyerSigPad.clear();
+      if(sellerSigPad) sellerSigPad.clear();
       Object.keys(uploadedDocs).forEach(function(key){
         uploadedDocs[key].file = null;
         document.getElementById(key + "_name").textContent = "";
