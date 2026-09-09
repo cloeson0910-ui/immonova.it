@@ -363,7 +363,7 @@ input[readonly]{
 </header>
 
 <section class="panel">
-  <h1>Nuova Proposta d'Acquisto</h1>
+  <h1 id="pageTitle">Nuova Proposta d'Acquisto</h1>
   <p class="intro">
     Compila la proposta d'acquisto irrevocabile per un immobile pubblicato, con i dati del
     proponente, le clausole sospensive/risolutive e i documenti d'identità richiesti.
@@ -492,6 +492,27 @@ input[readonly]{
       <label for="seller_phone">Telefono</label>
       <input type="tel" id="seller_phone">
     </div>
+    <div class="field">
+      <label for="seller_id_document_type">Tipo documento d'identità</label>
+      <select id="seller_id_document_type">
+        <option value="">— Seleziona —</option>
+        <option value="carta_identita">Carta d'identità</option>
+        <option value="passaporto">Passaporto</option>
+        <option value="patente">Patente di guida</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="seller_id_document_number">Numero documento</label>
+      <input type="text" id="seller_id_document_number">
+    </div>
+    <div class="field">
+      <label for="seller_id_document_issued_by">Comune/ente di rilascio</label>
+      <input type="text" id="seller_id_document_issued_by" placeholder="Es. Comune di..., Questura di...">
+    </div>
+    <div class="field">
+      <label for="seller_id_document_issued_at">Data di rilascio</label>
+      <input type="date" id="seller_id_document_issued_at">
+    </div>
 
     <div class="section-title">Proponente / Acquirente</div>
     <div class="section-hint" id="clientSectionHint">
@@ -605,6 +626,7 @@ input[readonly]{
         <div class="doc-file-name" id="doc_fiscal_code_name"></div>
       </div>
     </div>
+    <div class="section-hint" id="existingDocsHint" style="display:none"></div>
 
     <div class="section-title">Dichiarazioni del venditore sull'immobile</div>
     <div class="section-hint">
@@ -830,6 +852,13 @@ var selectedOpportunity = null;
 var preselectedInvestor = null; // cliente passato via ?investor_id= dalla pagina Documenti (tabella investors)
 var selectedSeller = null; // venditore/proprietario trovato via investor_seller_properties per l'immobile scelto
 
+/* ================================ Modifica proposta esistente ================================
+   Se il form viene aperto con ?offer_id=..., non è una nuova proposta: si carica la riga già
+   salvata in opportunity_offers e il salvataggio finale fa un UPDATE invece di un INSERT —
+   così un errore non costringe a rifare tutto da capo. */
+var editingOfferId = null;
+var editingOfferOriginal = null; // riga originale caricata, per preservare status/documenti/firme non toccati
+
 /* Elenco clausole standard: l'utente può selezionarle e, quando serve, aggiungere un
    dettaglio libero (es. importo mutuo, banca, tempistiche). "Altro" apre sempre un campo
    di testo libero aggiuntivo. */
@@ -965,6 +994,17 @@ function collectDeclarations(containerId, options){
       notes: notesEl ? notesEl.value.trim() : ""
     };
   }).filter(function(d){ return d.value || d.notes; });
+}
+
+/* Rimette a schermo le dichiarazioni del venditore già salvate — usata in modifica. */
+function setDeclarationListValues(containerId, storedList){
+  var container = document.getElementById(containerId);
+  (storedList || []).forEach(function(stored){
+    var sel = container.querySelector('select[data-decl-key="' + stored.key + '"]');
+    if(sel && stored.value) sel.value = stored.value;
+    var notesEl = container.querySelector('input[data-decl-notes="' + stored.key + '"]');
+    if(notesEl && stored.notes) notesEl.value = stored.notes;
+  });
 }
 
 /* Pannello firma touch/mouse: disegna su canvas ad alta densità (devicePixelRatio) e
@@ -1103,6 +1143,22 @@ function escapeAttr(value){
   return escapeHTML(value).replaceAll("\n", " ");
 }
 
+/* Rimette a schermo una lista di clausole già salvata (es. in modifica di una proposta
+   esistente) — spunta i checkbox corrispondenti e ripopola il testo libero collegato. */
+function setClauseListValues(containerId, storedList){
+  var container = document.getElementById(containerId);
+  (storedList || []).forEach(function(stored){
+    var cb = container.querySelector('input[type="checkbox"][data-clause-key="' + stored.key + '"]');
+    if(!cb) return;
+    cb.checked = true;
+    cb.dispatchEvent(new Event("change"));
+    if(stored.notes){
+      var textarea = container.querySelector('textarea[data-clause-detail="' + stored.key + '"]');
+      if(textarea) textarea.value = stored.notes;
+    }
+  });
+}
+
 function collectClauses(containerId, options){
   var container = document.getElementById(containerId);
   return options.map(function(opt){
@@ -1183,7 +1239,8 @@ function buildPrintableOffer(){
 
   html += "<h4>Venditore/Proprietario</h4><p>" + escapeHTML(sellerName) +
     (fieldVal("seller_fiscal_code") ? " — C.F. " + escapeHTML(fieldVal("seller_fiscal_code")) : "") +
-    (fieldVal("seller_residence_address") ? "<br>Residente in " + escapeHTML(fieldVal("seller_residence_address")) : "") + "</p>";
+    (fieldVal("seller_residence_address") ? "<br>Residente in " + escapeHTML(fieldVal("seller_residence_address")) : "") +
+    (fieldVal("seller_id_document_type") ? "<br>Documento: " + escapeHTML(fieldVal("seller_id_document_type")) + (fieldVal("seller_id_document_number") ? " n. " + escapeHTML(fieldVal("seller_id_document_number")) : "") + (fieldVal("seller_id_document_issued_by") ? ", rilasciato da " + escapeHTML(fieldVal("seller_id_document_issued_by")) : "") + (fieldVal("seller_id_document_issued_at") ? " il " + escapeHTML(fieldVal("seller_id_document_issued_at")) : "") : "") + "</p>";
 
   html += "<h4>Proponente/Acquirente</h4><p>" + escapeHTML(buyerName) +
     (fieldVal("buyer_fiscal_code") ? " — C.F. " + escapeHTML(fieldVal("buyer_fiscal_code")) : "") +
@@ -1282,7 +1339,7 @@ async function loadOpportunities(){
 }
 
 function clearSellerFields(){
-  ["seller_first_name","seller_last_name","seller_fiscal_code","seller_birth_date","seller_birth_place","seller_residence_address","seller_email","seller_pec","seller_phone"].forEach(function(id){
+  ["seller_first_name","seller_last_name","seller_fiscal_code","seller_birth_date","seller_birth_place","seller_residence_address","seller_email","seller_pec","seller_phone","seller_id_document_type","seller_id_document_number","seller_id_document_issued_by","seller_id_document_issued_at"].forEach(function(id){
     document.getElementById(id).value = "";
   });
   document.getElementById("sellerSummary").classList.remove("active");
@@ -1380,6 +1437,146 @@ async function loadPreselectedInvestor(){
     "<strong>Cliente:</strong> " + escapeHTML((preselectedInvestor.first_name || "") + " " + (preselectedInvestor.last_name || "")) +
     (preselectedInvestor.company ? " (" + escapeHTML(preselectedInvestor.company) + ")" : "") + "<br>" +
     escapeHTML(preselectedInvestor.email || "") + (preselectedInvestor.phone ? " — " + escapeHTML(preselectedInvestor.phone) : "");
+}
+
+function setFieldValue(id, value){
+  var el = document.getElementById(id);
+  if(el) el.value = (value === null || value === undefined) ? "" : value;
+}
+
+/* Carica una proposta già salvata (arrivata da ?offer_id=... nell'URL, tipicamente cliccando
+   una card in opportunities-pipeline.html) e ripopola l'intero form per la modifica — così
+   correggere un errore non significa rifare tutta la proposta da capo. I campi vengono
+   valorizzati direttamente dalla riga salvata, SENZA passare dagli auto-popolamenti pensati
+   per una proposta nuova (che sovrascriverebbero dati magari corretti a mano in precedenza). */
+async function loadExistingOfferForEdit(offerId){
+  var result = await client.from("opportunity_offers").select("*").eq("id", offerId).single();
+  if(result.error || !result.data){
+    setStatus("Proposta non trovata (offer_id " + offerId + "): " + (result.error ? result.error.message : ""), "error");
+    return;
+  }
+  var o = result.data;
+  editingOfferId = o.id;
+  editingOfferOriginal = o;
+
+  document.getElementById("pageTitle").textContent = "Modifica Proposta d'Acquisto";
+  document.getElementById("saveBtn").textContent = "Salva modifiche";
+  document.getElementById("opportunitySelect").disabled = true;
+
+  selectedOpportunity = opportunities.find(function(op){ return String(op.id) === String(o.opportunity_id); }) ||
+    { id: o.opportunity_id, title: "Immobile #" + o.opportunity_id, price: o.property_asking_price };
+  document.getElementById("opportunitySelect").value = String(o.opportunity_id);
+  renderPropertySummary(selectedOpportunity);
+  setFieldValue("property_asking_price", o.property_asking_price);
+  setFieldValue("offered_price", o.offered_price);
+
+  setFieldValue("cad_comune", o.cad_comune);
+  document.getElementById("cadastralUnitsBox").innerHTML = "";
+  if(o.cadastral_units && o.cadastral_units.length){
+    o.cadastral_units.forEach(function(u){ addCadastralUnitRow(u); });
+  }else{
+    addCadastralUnitRow();
+  }
+
+  document.getElementById("is_leased").value = o.is_leased ? "si" : "no";
+  document.getElementById("is_leased").dispatchEvent(new Event("change"));
+  setFieldValue("lease_tenant_name", o.lease_tenant_name);
+  setFieldValue("lease_expiry_date", o.lease_expiry_date);
+  setFieldValue("lease_monthly_rent", o.lease_monthly_rent);
+  document.getElementById("lease_prelazione_waived").checked = !!o.lease_prelazione_waived;
+
+  selectedSeller = o.seller_investor_id ? { id: o.seller_investor_id } : null;
+  setFieldValue("seller_first_name", o.seller_first_name);
+  setFieldValue("seller_last_name", o.seller_last_name);
+  setFieldValue("seller_fiscal_code", o.seller_fiscal_code);
+  setFieldValue("seller_birth_place", o.seller_birth_place);
+  setFieldValue("seller_birth_date", o.seller_birth_date);
+  setFieldValue("seller_residence_address", o.seller_residence_address);
+  setFieldValue("seller_email", o.seller_email);
+  setFieldValue("seller_pec", o.seller_pec);
+  setFieldValue("seller_phone", o.seller_phone);
+  setFieldValue("seller_id_document_type", o.seller_id_document_type);
+  setFieldValue("seller_id_document_number", o.seller_id_document_number);
+  setFieldValue("seller_id_document_issued_by", o.seller_id_document_issued_by);
+  setFieldValue("seller_id_document_issued_at", o.seller_id_document_issued_at);
+
+  preselectedInvestor = o.investor_id ? { id: o.investor_id } : null;
+  if(o.investor_request_id){
+    document.getElementById("clientSelectField").style.display = "none";
+  }
+  setFieldValue("buyer_first_name", o.buyer_first_name);
+  setFieldValue("buyer_last_name", o.buyer_last_name);
+  setFieldValue("buyer_fiscal_code", o.buyer_fiscal_code);
+  setFieldValue("buyer_birth_place", o.buyer_birth_place);
+  setFieldValue("buyer_birth_date", o.buyer_birth_date);
+  setFieldValue("buyer_residence_address", o.buyer_residence_address);
+  setFieldValue("buyer_email", o.buyer_email);
+  setFieldValue("buyer_pec", o.buyer_pec);
+  setFieldValue("buyer_phone", o.buyer_phone);
+  setFieldValue("buyer_id_document_type", o.buyer_id_document_type);
+  setFieldValue("buyer_id_document_number", o.buyer_id_document_number);
+  setFieldValue("buyer_id_document_issued_by", o.buyer_id_document_issued_by);
+  setFieldValue("buyer_id_document_issued_at", o.buyer_id_document_issued_at);
+
+  var hasBuyer2 = o.buyer2_first_name || o.buyer2_last_name;
+  document.getElementById("buyer2Box").style.display = hasBuyer2 ? "" : "none";
+  setFieldValue("buyer2_first_name", o.buyer2_first_name);
+  setFieldValue("buyer2_last_name", o.buyer2_last_name);
+  setFieldValue("buyer2_fiscal_code", o.buyer2_fiscal_code);
+  setFieldValue("buyer2_birth_place", o.buyer2_birth_place);
+  setFieldValue("buyer2_birth_date", o.buyer2_birth_date);
+  setFieldValue("buyer2_residence_address", o.buyer2_residence_address);
+  setFieldValue("buyer2_pec", o.buyer2_pec);
+
+  setDeclarationListValues("sellerDeclarationsList", o.seller_declarations);
+
+  setFieldValue("payment_a_amount", o.payment_a_amount);
+  setFieldValue("payment_a_method", o.payment_a_method);
+  setFieldValue("payment_a_notes", o.payment_a_notes);
+  setFieldValue("payment_b_amount", o.payment_b_amount);
+  setFieldValue("payment_b_method", o.payment_b_method);
+  setFieldValue("payment_b_due_date", o.payment_b_due_date);
+  setFieldValue("payment_c_amount", o.payment_c_amount);
+  setFieldValue("payment_c_method", o.payment_c_method);
+  setFieldValue("payment_c_due_date", o.payment_c_due_date);
+  setFieldValue("payment_d_amount", o.payment_d_amount);
+  setFieldValue("payment_d_method", o.payment_d_method);
+  setFieldValue("payment_balance_notes", o.payment_balance_notes);
+
+  setFieldValue("notary_name", o.notary_name);
+  setFieldValue("notary_address", o.notary_address);
+  setFieldValue("deed_deadline_date", o.deed_deadline_date);
+
+  setFieldValue("offer_validity_days", o.offer_validity_days);
+  setFieldValue("offer_expires_at", o.offer_expires_at);
+  document.getElementById("irrevocability_clause_approved").checked = true;
+
+  setClauseListValues("suspensiveClauseList", o.suspensive_clauses);
+  setFieldValue("suspensive_notes", o.suspensive_notes);
+  setClauseListValues("resolutiveClauseList", o.resolutive_clauses);
+  setFieldValue("resolutive_notes", o.resolutive_notes);
+  setFieldValue("additional_clauses", o.additional_clauses);
+
+  setFieldValue("agency_mediation_note", o.agency_mediation_note);
+  document.getElementById("privacy_accepted").checked = true;
+  setFieldValue("notes", o.notes);
+
+  if(o.buyer_documents && o.buyer_documents.length){
+    var hint = document.getElementById("existingDocsHint");
+    hint.style.display = "block";
+    hint.innerHTML = "Documenti già caricati in precedenza (restano collegati alla proposta anche senza ricaricarli): " +
+      o.buyer_documents.map(function(d){ return escapeHTML(d.label || d.file_name || "documento"); }).join(", ") +
+      ". Carica un file solo per sostituire/aggiungere.";
+  }
+
+  if(o.buyer_signature_data_url){
+    document.getElementById("buyerSigStatus").textContent = "Firma già registrata — ridisegna solo se vuoi sostituirla.";
+  }
+  if(o.seller_signature_data_url){
+    document.getElementById("sellerSigStatus").textContent = "Firma già registrata — ridisegna solo se vuoi sostituirla.";
+  }
+
+  setStatus("Modifica proposta esistente — " + (selectedOpportunity ? selectedOpportunity.title : ""), "");
 }
 
 async function loadInvestorRequestsForOpportunity(opportunityId){
@@ -1535,14 +1732,17 @@ var sellerSigPad = null;
         throw new Error("L'immobile risulta locato: indica la scadenza del contratto di locazione.");
       }
 
-      var offerId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+      var offerId = editingOfferId || ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()));
       var folder = "offer-" + selectedOpportunity.id + "-" + offerId;
 
-      var buyerDocuments = [];
+      /* In modifica, i documenti già caricati in precedenza restano collegati anche se non
+         ricarichi nulla — solo un nuovo file per lo stesso slot lo sostituisce nell'elenco. */
+      var buyerDocuments = (editingOfferOriginal && editingOfferOriginal.buyer_documents) ? editingOfferOriginal.buyer_documents.slice() : [];
       for(var key in uploadedDocs){
         if(uploadedDocs[key].file){
           setSaveStatus("Caricamento " + uploadedDocs[key].label + "...", "");
           var url = await uploadOfferDocument(uploadedDocs[key].file, folder, key);
+          buyerDocuments = buyerDocuments.filter(function(d){ return d.label !== uploadedDocs[key].label; });
           buyerDocuments.push({
             label: uploadedDocs[key].label,
             file_name: uploadedDocs[key].file.name,
@@ -1577,6 +1777,10 @@ var sellerSigPad = null;
         seller_email: document.getElementById("seller_email").value.trim() || null,
         seller_pec: document.getElementById("seller_pec").value.trim() || null,
         seller_phone: document.getElementById("seller_phone").value.trim() || null,
+        seller_id_document_type: document.getElementById("seller_id_document_type").value || null,
+        seller_id_document_number: document.getElementById("seller_id_document_number").value.trim() || null,
+        seller_id_document_issued_by: document.getElementById("seller_id_document_issued_by").value.trim() || null,
+        seller_id_document_issued_at: document.getElementById("seller_id_document_issued_at").value || null,
         seller_declarations: collectDeclarations("sellerDeclarationsList", SELLER_DECLARATION_OPTIONS),
 
         buyer2_first_name: document.getElementById("buyer2_first_name").value.trim() || null,
@@ -1637,21 +1841,36 @@ var sellerSigPad = null;
         resolutive_notes: document.getElementById("resolutive_notes").value.trim() || null,
         additional_clauses: document.getElementById("additional_clauses").value.trim() || null,
 
-        buyer_signature_data_url: (buyerSigPad && !buyerSigPad.isEmpty()) ? buyerSigPad.toDataURL() : null,
-        buyer_signed_at: (buyerSigPad && !buyerSigPad.isEmpty()) ? new Date().toISOString() : null,
-        seller_signature_data_url: (sellerSigPad && !sellerSigPad.isEmpty()) ? sellerSigPad.toDataURL() : null,
-        seller_signed_at: (sellerSigPad && !sellerSigPad.isEmpty()) ? new Date().toISOString() : null,
+        /* Se in modifica il pad è vuoto ma una firma era già stata raccolta in precedenza,
+           la preservo invece di cancellarla — ridisegnare è necessario solo per sostituirla. */
+        buyer_signature_data_url: (buyerSigPad && !buyerSigPad.isEmpty()) ? buyerSigPad.toDataURL() :
+          (editingOfferOriginal ? editingOfferOriginal.buyer_signature_data_url : null),
+        buyer_signed_at: (buyerSigPad && !buyerSigPad.isEmpty()) ? new Date().toISOString() :
+          (editingOfferOriginal ? editingOfferOriginal.buyer_signed_at : null),
+        seller_signature_data_url: (sellerSigPad && !sellerSigPad.isEmpty()) ? sellerSigPad.toDataURL() :
+          (editingOfferOriginal ? editingOfferOriginal.seller_signature_data_url : null),
+        seller_signed_at: (sellerSigPad && !sellerSigPad.isEmpty()) ? new Date().toISOString() :
+          (editingOfferOriginal ? editingOfferOriginal.seller_signed_at : null),
 
         agency_mediation_note: document.getElementById("agency_mediation_note").value.trim() || null,
         privacy_accepted: true,
-        privacy_accepted_at: new Date().toISOString(),
+        privacy_accepted_at: editingOfferOriginal ? editingOfferOriginal.privacy_accepted_at : new Date().toISOString(),
 
-        status: "bozza",
+        /* In modifica conservo lo stato in cui si trovava (bozza/inviata/accettata/...): non
+           deve tornare a "bozza" solo perché ho corretto un errore. Una nuova proposta parte
+           sempre da bozza. */
+        status: editingOfferOriginal ? editingOfferOriginal.status : "bozza",
         notes: document.getElementById("notes").value.trim() || null,
-        created_by: currentUser ? currentUser.id : null
+        created_by: editingOfferOriginal ? editingOfferOriginal.created_by : (currentUser ? currentUser.id : null),
+        updated_at: new Date().toISOString()
       };
 
-      var insertResult = await client.from("opportunity_offers").insert(payload).select().single();
+      var insertResult;
+      if(editingOfferId){
+        insertResult = await client.from("opportunity_offers").update(payload).eq("id", editingOfferId).select().single();
+      }else{
+        insertResult = await client.from("opportunity_offers").insert(payload).select().single();
+      }
       if(insertResult.error) throw insertResult.error;
 
       /* Riporta la PEC appena inserita nell'offerta sull'anagrafica cliente (investors),
@@ -1668,30 +1887,40 @@ var sellerSigPad = null;
         console.error("Sincronizzazione PEC su investors non riuscita:", pecSyncErr);
       }
 
-      /* Follow-up email al professionista che ha creato la proposta — best effort: un
-         fallimento qui non deve mai far sembrare fallito il salvataggio, che è già andato
-         a buon fine sopra. */
-      try{
-        await fetch(String(SUPABASE_URL).replace(/\/+$/, "") + "/functions/v1/notify-offer-status", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": SUPABASE_ANON_KEY,
-            "Authorization": "Bearer " + SUPABASE_ANON_KEY
-          },
-          body: JSON.stringify({
-            offer_id: insertResult.data.id,
-            offer_kind: "proposta",
-            opportunity_id: selectedOpportunity.id,
-            opportunity_title: selectedOpportunity.title,
-            offered_price: payload.offered_price,
-            buyer_name: (payload.buyer_first_name + " " + payload.buyer_last_name).trim(),
-            seller_name: (payload.seller_first_name + " " + payload.seller_last_name).trim(),
-            created_by: currentUser ? currentUser.id : null
-          })
-        });
-      }catch(notifyErr){
-        console.error("Notifica follow-up non riuscita:", notifyErr);
+      /* Follow-up email al professionista che ha creato la proposta — solo per una proposta
+         NUOVA: in modifica di una già esistente non ha senso reinviare lo stesso avviso ogni
+         volta che si corregge un errore. Best effort: un fallimento qui non deve mai far
+         sembrare fallito il salvataggio, che è già andato a buon fine sopra. */
+      if(!editingOfferId){
+        try{
+          await fetch(String(SUPABASE_URL).replace(/\/+$/, "") + "/functions/v1/notify-offer-status", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_ANON_KEY,
+              "Authorization": "Bearer " + SUPABASE_ANON_KEY
+            },
+            body: JSON.stringify({
+              offer_id: insertResult.data.id,
+              offer_kind: "proposta",
+              opportunity_id: selectedOpportunity.id,
+              opportunity_title: selectedOpportunity.title,
+              offered_price: payload.offered_price,
+              buyer_name: (payload.buyer_first_name + " " + payload.buyer_last_name).trim(),
+              seller_name: (payload.seller_first_name + " " + payload.seller_last_name).trim(),
+              created_by: currentUser ? currentUser.id : null
+            })
+          });
+        }catch(notifyErr){
+          console.error("Notifica follow-up non riuscita:", notifyErr);
+        }
+      }
+
+      if(editingOfferId){
+        setSaveStatus("Modifiche salvate correttamente.", "success");
+        setStatus("Proposta aggiornata.", "success");
+        window.location.href = "offer-detail.html?offer_id=" + encodeURIComponent(editingOfferId);
+        return;
       }
 
       setSaveStatus("Proposta salvata correttamente.", "success");
@@ -1737,10 +1966,18 @@ document.getElementById("logoutBtn").addEventListener("click", async function(){
   if(!isLogged) return;
 
   await loadOpportunities();
-  await loadPreselectedInvestor();
-  recalcExpiry();
 
-  setStatus("");
+  var params = new URLSearchParams(window.location.search);
+  var offerIdParam = params.get("offer_id");
+
+  if(offerIdParam){
+    await loadExistingOfferForEdit(offerIdParam);
+  }else{
+    await loadPreselectedInvestor();
+    recalcExpiry();
+    setStatus("");
+  }
+
   document.getElementById("offerForm").style.display = "grid";
 })();
 </script>
