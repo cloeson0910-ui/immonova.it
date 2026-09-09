@@ -1,0 +1,928 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nuova Proposta d'Acquisto | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+
+.page{
+  max-width:1100px;
+  margin:0 auto;
+  padding:42px 24px 80px;
+}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:50px;
+}
+
+.logo{
+  font-size:24px;
+  font-weight:300;
+  letter-spacing:.35em;
+  color:#a58139;
+}
+
+.nav{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap;
+}
+
+.nav a,
+.nav button{
+  padding:11px 20px;
+  border:1px solid rgba(165,129,57,.42);
+  background:rgba(255,252,244,.22);
+  backdrop-filter:blur(8px);
+  color:#a58139;
+  text-decoration:none;
+  text-transform:uppercase;
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:.18em;
+  cursor:pointer;
+}
+
+.panel{
+  border:1px solid rgba(165,129,57,.18);
+  background:rgba(255,255,255,.08);
+  padding:44px;
+}
+
+h1{
+  font-size:36px;
+  font-weight:200;
+  letter-spacing:.08em;
+  color:#a58139;
+  margin-bottom:10px;
+  text-transform:uppercase;
+}
+
+.intro{
+  font-size:14px;
+  line-height:1.8;
+  color:#8f7643;
+  margin-bottom:28px;
+}
+
+.legal-box{
+  margin-bottom:28px;
+  padding:22px;
+  border:1px solid rgba(165,129,57,.28);
+  background:rgba(255,255,255,.15);
+  font-size:12.5px;
+  line-height:1.8;
+  color:#8f7643;
+}
+
+.legal-box strong{ color:#a58139; }
+
+.section-title{
+  grid-column:1 / -1;
+  margin-top:18px;
+  padding-top:24px;
+  border-top:1px solid rgba(165,129,57,.16);
+  font-size:12px;
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  color:#a58139;
+}
+
+.section-hint{
+  grid-column:1 / -1;
+  font-size:12.5px;
+  line-height:1.7;
+  color:#8f7643;
+  margin-top:-8px;
+}
+
+.form-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:22px;
+}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.field.full{
+  grid-column:1 / -1;
+}
+
+label{
+  font-size:10px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:#a58139;
+}
+
+.field-note{
+  font-size:11.5px;
+  color:#9c8a5c;
+  line-height:1.5;
+}
+
+input,
+select,
+textarea{
+  width:100%;
+  padding:15px 16px;
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,252,244,.35);
+  color:#7f6430;
+  font-size:14px;
+  outline:none;
+  font-family:inherit;
+}
+
+textarea{
+  min-height:90px;
+  resize:vertical;
+}
+
+input[readonly]{
+  background:rgba(165,129,57,.08);
+  color:#8f7643;
+}
+
+.property-summary,
+.client-summary{
+  grid-column:1 / -1;
+  border:1px solid rgba(165,129,57,.22);
+  background:rgba(255,255,255,.18);
+  padding:18px 20px;
+  font-size:13px;
+  line-height:1.7;
+  color:#7f6430;
+  display:none;
+}
+.property-summary.active,
+.client-summary.active{ display:block; }
+.property-summary strong,
+.client-summary strong{ color:#a58139; }
+
+.clause-list{
+  grid-column:1 / -1;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.clause-row{
+  border:1px solid rgba(165,129,57,.20);
+  background:rgba(255,255,255,.12);
+  padding:14px 16px;
+}
+
+.clause-row label.clause-check{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  font-size:13px;
+  letter-spacing:0;
+  text-transform:none;
+  color:#7f6430;
+  cursor:pointer;
+}
+
+.clause-row input[type="checkbox"]{
+  width:auto;
+  margin-top:3px;
+  accent-color:#a58139;
+}
+
+.clause-detail{
+  margin-top:10px;
+  display:none;
+}
+.clause-detail.active{ display:block; }
+
+.doc-upload-grid{
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:16px;
+}
+
+.doc-upload-box{
+  border:1px solid rgba(165,129,57,.22);
+  background:rgba(255,255,255,.12);
+  padding:16px;
+}
+
+.doc-upload-box .doc-label{
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:#a58139;
+  margin-bottom:8px;
+  display:block;
+}
+
+.doc-upload-box .doc-file-name{
+  font-size:11.5px;
+  color:#8f7643;
+  margin-top:6px;
+  word-break:break-all;
+}
+
+.checkbox-field{
+  grid-column:1 / -1;
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:16px;
+  border:1px solid rgba(165,129,57,.28);
+  background:rgba(255,255,255,.18);
+}
+.checkbox-field input[type="checkbox"]{
+  width:auto;
+  margin-top:3px;
+  accent-color:#a58139;
+}
+.checkbox-field label{
+  font-size:12.5px;
+  letter-spacing:0;
+  text-transform:none;
+  color:#7f6430;
+  line-height:1.6;
+}
+
+.actions{
+  grid-column:1 / -1;
+  display:flex;
+  align-items:center;
+  gap:18px;
+  margin-top:8px;
+}
+
+.save-button{
+  padding:16px 34px;
+  border:1px solid rgba(165,129,57,.42);
+  background:#a58139;
+  color:white;
+  text-transform:uppercase;
+  font-size:11px;
+  letter-spacing:.22em;
+  cursor:pointer;
+}
+.save-button:disabled{ opacity:.5; cursor:not-allowed; }
+
+#status{
+  font-size:12.5px;
+  color:#8f7643;
+}
+</style>
+</head>
+
+<body>
+
+<div class="page">
+
+<header class="header">
+  <div class="logo">IMMONOVA</div>
+  <nav class="nav">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="opportunities-pipeline.html">Proposte</a>
+    <button id="logoutBtn">Logout</button>
+  </nav>
+</header>
+
+<section class="panel">
+  <h1>Nuova Proposta d'Acquisto</h1>
+  <p class="intro">
+    Compila la proposta d'acquisto irrevocabile per un immobile pubblicato, con i dati del
+    proponente, le clausole sospensive/risolutive e i documenti d'identità richiesti.
+  </p>
+
+  <div class="legal-box">
+    <strong>Nota legale.</strong> Il presente modulo genera una <strong>proposta irrevocabile
+    d'acquisto</strong> ai sensi dell'art. 1329 c.c., valida per il numero di giorni indicato
+    al punto "Validità dell'offerta". La somma versata a titolo di caparra costituisce
+    <strong>caparra confirmatoria</strong> ai sensi dell'art. 1385 c.c.: in caso di
+    inadempimento del proponente, il venditore potrà trattenerla; in caso di inadempimento
+    del venditore, il proponente potrà richiederne il doppio. Se la proposta è raccolta
+    nell'ambito di un'attività di mediazione immobiliare, si applica la disciplina della
+    L. 39/1989 e dell'art. 1755 c.c. in materia di provvigione. Questo modulo non sostituisce
+    la consulenza di un notaio o di un legale per gli aspetti che il caso concreto dovesse
+    richiedere.
+  </div>
+
+  <div id="status">Caricamento...</div>
+
+  <form id="offerForm" class="form-grid" style="display:none;margin-top:20px">
+
+    <div class="section-title">Immobile</div>
+
+    <div class="field full">
+      <label for="opportunitySelect">Seleziona l'immobile</label>
+      <select id="opportunitySelect" required>
+        <option value="">— Seleziona un immobile pubblicato —</option>
+      </select>
+    </div>
+
+    <div class="property-summary" id="propertySummary"></div>
+
+    <div class="section-title">Proponente / Acquirente</div>
+    <div class="section-hint">
+      Se il cliente ha già una richiesta collegata a questo immobile puoi selezionarlo dalla
+      lista per compilare automaticamente i suoi dati, oppure inserirlo manualmente.
+    </div>
+
+    <div class="field full">
+      <label for="clientSelect">Cliente collegato a questo immobile (facoltativo)</label>
+      <select id="clientSelect">
+        <option value="">— Inserimento manuale —</option>
+      </select>
+    </div>
+
+    <div class="client-summary" id="clientSummary"></div>
+
+    <div class="field">
+      <label for="buyer_first_name">Nome *</label>
+      <input type="text" id="buyer_first_name" required>
+    </div>
+    <div class="field">
+      <label for="buyer_last_name">Cognome *</label>
+      <input type="text" id="buyer_last_name" required>
+    </div>
+    <div class="field">
+      <label for="buyer_fiscal_code">Codice fiscale</label>
+      <input type="text" id="buyer_fiscal_code" maxlength="16" style="text-transform:uppercase">
+    </div>
+    <div class="field">
+      <label for="buyer_birth_date">Data di nascita</label>
+      <input type="date" id="buyer_birth_date">
+    </div>
+    <div class="field">
+      <label for="buyer_birth_place">Luogo di nascita</label>
+      <input type="text" id="buyer_birth_place">
+    </div>
+    <div class="field">
+      <label for="buyer_residence_address">Indirizzo di residenza</label>
+      <input type="text" id="buyer_residence_address">
+    </div>
+    <div class="field">
+      <label for="buyer_email">Email *</label>
+      <input type="email" id="buyer_email" required>
+    </div>
+    <div class="field">
+      <label for="buyer_phone">Telefono</label>
+      <input type="tel" id="buyer_phone">
+    </div>
+    <div class="field">
+      <label for="buyer_id_document_type">Tipo documento d'identità</label>
+      <select id="buyer_id_document_type">
+        <option value="">— Seleziona —</option>
+        <option value="carta_identita">Carta d'identità</option>
+        <option value="passaporto">Passaporto</option>
+        <option value="patente">Patente di guida</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="buyer_id_document_number">Numero documento</label>
+      <input type="text" id="buyer_id_document_number">
+    </div>
+    <div class="field">
+      <label for="buyer_id_document_issued_by">Rilasciato da</label>
+      <input type="text" id="buyer_id_document_issued_by" placeholder="Es. Comune di..., Questura di...">
+    </div>
+    <div class="field">
+      <label for="buyer_id_document_issued_at">Data rilascio</label>
+      <input type="date" id="buyer_id_document_issued_at">
+    </div>
+
+    <div class="section-title">Documenti d'identità del proponente</div>
+    <div class="section-hint">
+      Carica una copia leggibile dei documenti. Formati accettati: JPG, PNG, PDF, HEIC.
+    </div>
+
+    <div class="doc-upload-grid">
+      <div class="doc-upload-box">
+        <label class="doc-label" for="doc_id_front">Documento d'identità (fronte)</label>
+        <input type="file" id="doc_id_front" accept="image/*,.pdf,.heic,.heif,application/pdf">
+        <div class="doc-file-name" id="doc_id_front_name"></div>
+      </div>
+      <div class="doc-upload-box">
+        <label class="doc-label" for="doc_id_back">Documento d'identità (retro)</label>
+        <input type="file" id="doc_id_back" accept="image/*,.pdf,.heic,.heif,application/pdf">
+        <div class="doc-file-name" id="doc_id_back_name"></div>
+      </div>
+      <div class="doc-upload-box">
+        <label class="doc-label" for="doc_fiscal_code">Codice fiscale / Tessera sanitaria</label>
+        <input type="file" id="doc_fiscal_code" accept="image/*,.pdf,.heic,.heif,application/pdf">
+        <div class="doc-file-name" id="doc_fiscal_code_name"></div>
+      </div>
+    </div>
+
+    <div class="section-title">Condizioni economiche</div>
+
+    <div class="field">
+      <label for="property_asking_price">Prezzo richiesto (immobile)</label>
+      <input type="text" id="property_asking_price" readonly>
+    </div>
+    <div class="field">
+      <label for="offered_price">Prezzo offerto (€) *</label>
+      <input type="number" id="offered_price" min="0" step="0.01" required>
+    </div>
+    <div class="field">
+      <label for="deposit_amount">Caparra confirmatoria (€)</label>
+      <input type="number" id="deposit_amount" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label for="deposit_type">Modalità versamento caparra</label>
+      <select id="deposit_type">
+        <option value="">— Seleziona —</option>
+        <option value="assegno_circolare">Assegno circolare</option>
+        <option value="bonifico">Bonifico bancario</option>
+        <option value="contanti">Contanti (nei limiti di legge)</option>
+      </select>
+    </div>
+    <div class="field full">
+      <label for="payment_balance_notes">Modalità di pagamento del saldo</label>
+      <textarea id="payment_balance_notes" placeholder="Es. saldo tramite mutuo ipotecario da erogare entro il rogito, previsto entro 90 giorni dall'accettazione..."></textarea>
+    </div>
+    <div class="field">
+      <label for="offer_validity_days">Validità dell'offerta (giorni) *</label>
+      <input type="number" id="offer_validity_days" min="1" value="15" required>
+    </div>
+    <div class="field">
+      <label for="offer_expires_at">Scadenza proposta</label>
+      <input type="date" id="offer_expires_at" readonly>
+    </div>
+
+    <div class="section-title">Clausole sospensive</div>
+    <div class="section-hint">
+      La proposta è condizionata al verificarsi di quanto selezionato qui sotto entro la data
+      di scadenza indicata, salvo diverso accordo scritto tra le parti.
+    </div>
+    <div class="clause-list" id="suspensiveClauseList"></div>
+    <div class="field full">
+      <label for="suspensive_notes">Note aggiuntive clausole sospensive</label>
+      <textarea id="suspensive_notes"></textarea>
+    </div>
+
+    <div class="section-title">Clausole risolutive</div>
+    <div class="section-hint">
+      In presenza di quanto selezionato qui sotto, la parte interessata potrà dichiarare
+      risolto il presente contratto/proposta, con conseguente restituzione della caparra
+      ricevuta, salvo quanto altrimenti concordato per iscritto.
+    </div>
+    <div class="clause-list" id="resolutiveClauseList"></div>
+    <div class="field full">
+      <label for="resolutive_notes">Note aggiuntive clausole risolutive</label>
+      <textarea id="resolutive_notes"></textarea>
+    </div>
+
+    <div class="section-title">Mediazione e note</div>
+    <div class="field full">
+      <label for="agency_mediation_note">Nota mediazione immobiliare (provvigione, L. 39/1989)</label>
+      <textarea id="agency_mediation_note" placeholder="Es. La presente proposta è raccolta nell'ambito dell'attività di mediazione svolta da IMMONOVA S.R.L.; la provvigione è dovuta secondo quanto pattuito nell'incarico sottoscritto..."></textarea>
+    </div>
+    <div class="field full">
+      <label for="notes">Note interne (non visibili nella proposta)</label>
+      <textarea id="notes"></textarea>
+    </div>
+
+    <div class="checkbox-field">
+      <input type="checkbox" id="privacy_accepted" required>
+      <label for="privacy_accepted">
+        Il proponente ha preso visione dell'informativa privacy (Regolamento UE 2016/679) e
+        acconsente al trattamento dei propri dati personali, inclusi i documenti d'identità
+        caricati, per le finalità connesse alla presente proposta d'acquisto. *
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="save-button" id="saveBtn">Salva proposta</button>
+      <span id="saveStatus"></span>
+    </div>
+
+  </form>
+</section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+var currentUser = null;
+var opportunities = [];
+var investorRequests = [];
+var selectedOpportunity = null;
+
+/* Elenco clausole standard: l'utente può selezionarle e, quando serve, aggiungere un
+   dettaglio libero (es. importo mutuo, banca, tempistiche). "Altro" apre sempre un campo
+   di testo libero aggiuntivo. */
+var SUSPENSIVE_CLAUSE_OPTIONS = [
+  { key:"mutuo", label:"Ottenimento di mutuo/finanziamento da parte del proponente", withDetail:true, detailPlaceholder:"Es. importo richiesto, istituto di credito, termine per la delibera..." },
+  { key:"verifica_urbanistica_catastale", label:"Esito positivo della verifica di conformità urbanistica e catastale" },
+  { key:"verifica_vincoli", label:"Esito positivo della verifica di assenza di vincoli, ipoteche o pignoramenti sull'immobile" },
+  { key:"vendita_altro_immobile", label:"Vendita di altro immobile di proprietà del proponente", withDetail:true, detailPlaceholder:"Es. riferimenti dell'immobile da vendere e termine massimo..." },
+  { key:"sopralluogo_tecnico", label:"Sopralluogo tecnico/perizia con esito favorevole" },
+  { key:"altro_sospensiva", label:"Altra condizione sospensiva (specificare)", withDetail:true, detailPlaceholder:"Descrivi la condizione..." }
+];
+
+var RESOLUTIVE_CLAUSE_OPTIONS = [
+  { key:"mancato_mutuo", label:"Mancato ottenimento del mutuo/finanziamento entro i termini pattuiti" },
+  { key:"difformita_non_sanabili", label:"Difformità catastali/urbanistiche non sanabili prima del rogito" },
+  { key:"vincoli_non_cancellabili", label:"Presenza di vincoli, ipoteche o pignoramenti non cancellabili prima del rogito" },
+  { key:"immobile_non_libero", label:"Mancata liberazione dell'immobile da persone o cose nei tempi concordati" },
+  { key:"altro_risolutiva", label:"Altra condizione risolutiva (specificare)", withDetail:true, detailPlaceholder:"Descrivi la condizione..." }
+];
+
+var uploadedDocs = {
+  doc_id_front: { label:"Documento d'identità (fronte)", file:null },
+  doc_id_back: { label:"Documento d'identità (retro)", file:null },
+  doc_fiscal_code: { label:"Codice fiscale / Tessera sanitaria", file:null }
+};
+
+function escapeHTML(value){
+  return String(value == null ? "" : value)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setStatus(msg, type){
+  var el = document.getElementById("status");
+  el.textContent = msg || "";
+  el.style.color = type === "error" ? "#9c2f2f" : (type === "success" ? "#4f7f45" : "#8f7643");
+}
+
+function setSaveStatus(msg, type){
+  var el = document.getElementById("saveStatus");
+  el.textContent = msg || "";
+  el.style.color = type === "error" ? "#9c2f2f" : (type === "success" ? "#4f7f45" : "#8f7643");
+}
+
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  if(result.error || !result.data.session){
+    window.location.href = "login.html";
+    return false;
+  }
+  currentUser = result.data.session.user;
+  return true;
+}
+
+function renderClauseList(containerId, options){
+  var container = document.getElementById(containerId);
+  var html = "";
+  options.forEach(function(opt){
+    html += '<div class="clause-row">';
+    html += '<label class="clause-check"><input type="checkbox" data-clause-key="' + opt.key + '" data-container="' + containerId + '"> ' + escapeHTML(opt.label) + '</label>';
+    if(opt.withDetail){
+      html += '<div class="clause-detail" id="' + containerId + '_' + opt.key + '_detail">';
+      html += '<textarea data-clause-detail="' + opt.key + '" data-container="' + containerId + '" placeholder="' + escapeAttr(opt.detailPlaceholder || "") + '"></textarea>';
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  container.innerHTML = html;
+
+  container.querySelectorAll('input[type="checkbox"][data-clause-key]').forEach(function(cb){
+    cb.addEventListener("change", function(){
+      var detail = document.getElementById(containerId + "_" + cb.dataset.clauseKey + "_detail");
+      if(detail) detail.classList.toggle("active", cb.checked);
+    });
+  });
+}
+
+function escapeAttr(value){
+  return escapeHTML(value).replaceAll("\n", " ");
+}
+
+function collectClauses(containerId, options){
+  var container = document.getElementById(containerId);
+  return options.map(function(opt){
+    var cb = container.querySelector('input[data-clause-key="' + opt.key + '"]');
+    var detailEl = container.querySelector('textarea[data-clause-detail="' + opt.key + '"]');
+    return {
+      key: opt.key,
+      label: opt.label,
+      checked: !!(cb && cb.checked),
+      notes: detailEl ? detailEl.value.trim() : ""
+    };
+  }).filter(function(c){ return c.checked; });
+}
+
+function parsePriceToNumber(priceText){
+  if(!priceText) return null;
+  var cleaned = String(priceText).replace(/[^\d.,]/g, "");
+  if(!cleaned) return null;
+  // Gestisce sia formato italiano (1.234.567,89) sia semplice (1234567)
+  if(cleaned.indexOf(",") > -1 && cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")){
+    cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+  } else {
+    cleaned = cleaned.replace(/,/g, "");
+  }
+  var n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
+}
+
+async function loadOpportunities(){
+  var result = await client
+    .from("opportunities")
+    .select("id,title,price,address,formatted_address,municipality,province,cover_image")
+    .order("title", { ascending: true });
+
+  if(result.error){
+    setStatus("Errore nel caricamento degli immobili: " + result.error.message, "error");
+    return;
+  }
+
+  opportunities = result.data || [];
+  var select = document.getElementById("opportunitySelect");
+  opportunities.forEach(function(o){
+    var opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.title + (o.municipality ? " — " + o.municipality : "");
+    select.appendChild(opt);
+  });
+}
+
+function renderPropertySummary(o){
+  var box = document.getElementById("propertySummary");
+  if(!o){
+    box.classList.remove("active");
+    box.innerHTML = "";
+    return;
+  }
+  box.classList.add("active");
+  box.innerHTML =
+    "<strong>" + escapeHTML(o.title) + "</strong><br>" +
+    escapeHTML(o.formatted_address || o.address || o.municipality || "") + "<br>" +
+    "Prezzo richiesto: " + escapeHTML(o.price || "n/d");
+}
+
+async function loadInvestorRequestsForOpportunity(opportunityId){
+  var select = document.getElementById("clientSelect");
+  select.innerHTML = '<option value="">— Inserimento manuale —</option>';
+  document.getElementById("clientSummary").classList.remove("active");
+  investorRequests = [];
+
+  if(!opportunityId) return;
+
+  var result = await client
+    .from("investor_requests")
+    .select("id,first_name,last_name,email,phone,company,approved")
+    .eq("opportunity_id", opportunityId)
+    .order("created_at", { ascending: false });
+
+  if(result.error || !result.data) return;
+
+  investorRequests = result.data;
+  investorRequests.forEach(function(r){
+    var opt = document.createElement("option");
+    opt.value = r.id;
+    var name = (r.first_name || "") + " " + (r.last_name || "");
+    opt.textContent = name.trim() + (r.email ? " — " + r.email : "");
+    select.appendChild(opt);
+  });
+}
+
+function applyClientToForm(req){
+  if(!req){
+    document.getElementById("clientSummary").classList.remove("active");
+    return;
+  }
+  document.getElementById("buyer_first_name").value = req.first_name || "";
+  document.getElementById("buyer_last_name").value = req.last_name || "";
+  document.getElementById("buyer_email").value = req.email || "";
+  document.getElementById("buyer_phone").value = req.phone || "";
+
+  var box = document.getElementById("clientSummary");
+  box.classList.add("active");
+  box.innerHTML =
+    "<strong>Cliente collegato:</strong> " + escapeHTML((req.first_name || "") + " " + (req.last_name || "")) +
+    (req.company ? " (" + escapeHTML(req.company) + ")" : "") + "<br>" +
+    escapeHTML(req.email || "") + (req.phone ? " — " + escapeHTML(req.phone) : "");
+}
+
+function recalcExpiry(){
+  var days = parseInt(document.getElementById("offer_validity_days").value, 10);
+  var expiryField = document.getElementById("offer_expires_at");
+  if(!days || days <= 0){ expiryField.value = ""; return; }
+  var d = new Date();
+  d.setDate(d.getDate() + days);
+  expiryField.value = d.toISOString().slice(0, 10);
+}
+
+async function uploadOfferDocument(file, folder, fieldKey){
+  var cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  var path = folder + "/" + fieldKey + "-" + Date.now() + "-" + cleanName;
+
+  var result = await client.storage.from("offer-documents").upload(path, file, {
+    cacheControl: "3600",
+    upsert: false
+  });
+
+  if(result.error) throw result.error;
+
+  var publicUrl = client.storage.from("offer-documents").getPublicUrl(path);
+  return publicUrl.data.publicUrl;
+}
+
+function wireDocInputs(){
+  Object.keys(uploadedDocs).forEach(function(key){
+    var input = document.getElementById(key);
+    var nameEl = document.getElementById(key + "_name");
+    input.addEventListener("change", function(){
+      var file = input.files && input.files[0] ? input.files[0] : null;
+      uploadedDocs[key].file = file;
+      nameEl.textContent = file ? file.name : "";
+    });
+  });
+}
+
+(function wireUI(){
+  renderClauseList("suspensiveClauseList", SUSPENSIVE_CLAUSE_OPTIONS);
+  renderClauseList("resolutiveClauseList", RESOLUTIVE_CLAUSE_OPTIONS);
+  wireDocInputs();
+
+  document.getElementById("opportunitySelect").addEventListener("change", function(e){
+    var id = e.target.value;
+    selectedOpportunity = opportunities.find(function(o){ return String(o.id) === String(id); }) || null;
+    renderPropertySummary(selectedOpportunity);
+    document.getElementById("property_asking_price").value = selectedOpportunity ? (selectedOpportunity.price || "") : "";
+    if(selectedOpportunity){
+      var numericPrice = parsePriceToNumber(selectedOpportunity.price);
+      if(numericPrice != null) document.getElementById("offered_price").value = numericPrice;
+    }
+    loadInvestorRequestsForOpportunity(id);
+  });
+
+  document.getElementById("clientSelect").addEventListener("change", function(e){
+    var reqId = e.target.value;
+    var req = investorRequests.find(function(r){ return String(r.id) === String(reqId); }) || null;
+    applyClientToForm(req);
+  });
+
+  document.getElementById("offer_validity_days").addEventListener("change", recalcExpiry);
+  document.getElementById("offer_validity_days").addEventListener("input", recalcExpiry);
+
+  document.getElementById("offerForm").addEventListener("submit", async function(e){
+    e.preventDefault();
+
+    var saveBtn = document.getElementById("saveBtn");
+    saveBtn.disabled = true;
+    setSaveStatus("Salvataggio in corso...", "");
+
+    try{
+      if(!selectedOpportunity){
+        throw new Error("Seleziona un immobile prima di salvare la proposta.");
+      }
+      if(!document.getElementById("privacy_accepted").checked){
+        throw new Error("È necessario il consenso privacy del proponente per procedere.");
+      }
+
+      var offerId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+      var folder = "offer-" + selectedOpportunity.id + "-" + offerId;
+
+      var buyerDocuments = [];
+      for(var key in uploadedDocs){
+        if(uploadedDocs[key].file){
+          setSaveStatus("Caricamento " + uploadedDocs[key].label + "...", "");
+          var url = await uploadOfferDocument(uploadedDocs[key].file, folder, key);
+          buyerDocuments.push({
+            label: uploadedDocs[key].label,
+            file_name: uploadedDocs[key].file.name,
+            file_url: url,
+            mime_type: uploadedDocs[key].file.type || ""
+          });
+        }
+      }
+
+      var payload = {
+        opportunity_id: selectedOpportunity.id,
+        investor_request_id: document.getElementById("clientSelect").value || null,
+
+        buyer_first_name: document.getElementById("buyer_first_name").value.trim(),
+        buyer_last_name: document.getElementById("buyer_last_name").value.trim(),
+        buyer_fiscal_code: document.getElementById("buyer_fiscal_code").value.trim().toUpperCase() || null,
+        buyer_birth_place: document.getElementById("buyer_birth_place").value.trim() || null,
+        buyer_birth_date: document.getElementById("buyer_birth_date").value || null,
+        buyer_residence_address: document.getElementById("buyer_residence_address").value.trim() || null,
+        buyer_email: document.getElementById("buyer_email").value.trim(),
+        buyer_phone: document.getElementById("buyer_phone").value.trim() || null,
+        buyer_id_document_type: document.getElementById("buyer_id_document_type").value || null,
+        buyer_id_document_number: document.getElementById("buyer_id_document_number").value.trim() || null,
+        buyer_id_document_issued_by: document.getElementById("buyer_id_document_issued_by").value.trim() || null,
+        buyer_id_document_issued_at: document.getElementById("buyer_id_document_issued_at").value || null,
+
+        buyer_documents: buyerDocuments,
+
+        property_asking_price: selectedOpportunity.price || null,
+        offered_price: parseFloat(document.getElementById("offered_price").value),
+        deposit_amount: document.getElementById("deposit_amount").value ? parseFloat(document.getElementById("deposit_amount").value) : null,
+        deposit_type: document.getElementById("deposit_type").value || null,
+        payment_balance_notes: document.getElementById("payment_balance_notes").value.trim() || null,
+
+        offer_validity_days: parseInt(document.getElementById("offer_validity_days").value, 10) || 15,
+        offer_expires_at: document.getElementById("offer_expires_at").value || null,
+
+        suspensive_clauses: collectClauses("suspensiveClauseList", SUSPENSIVE_CLAUSE_OPTIONS),
+        suspensive_notes: document.getElementById("suspensive_notes").value.trim() || null,
+        resolutive_clauses: collectClauses("resolutiveClauseList", RESOLUTIVE_CLAUSE_OPTIONS),
+        resolutive_notes: document.getElementById("resolutive_notes").value.trim() || null,
+
+        agency_mediation_note: document.getElementById("agency_mediation_note").value.trim() || null,
+        privacy_accepted: true,
+        privacy_accepted_at: new Date().toISOString(),
+
+        status: "bozza",
+        notes: document.getElementById("notes").value.trim() || null,
+        created_by: currentUser ? currentUser.id : null
+      };
+
+      var insertResult = await client.from("opportunity_offers").insert(payload).select().single();
+      if(insertResult.error) throw insertResult.error;
+
+      setSaveStatus("Proposta salvata correttamente.", "success");
+      setStatus("Proposta creata. Puoi ora compilarne una nuova o tornare alle Proposte.", "success");
+      document.getElementById("offerForm").reset();
+      selectedOpportunity = null;
+      renderPropertySummary(null);
+      document.getElementById("clientSelect").innerHTML = '<option value="">— Inserimento manuale —</option>';
+      document.getElementById("clientSummary").classList.remove("active");
+      Object.keys(uploadedDocs).forEach(function(key){
+        uploadedDocs[key].file = null;
+        document.getElementById(key + "_name").textContent = "";
+      });
+      recalcExpiry();
+
+    }catch(err){
+      console.error(err);
+      setSaveStatus("Errore: " + (err && err.message ? err.message : "salvataggio non riuscito."), "error");
+    }finally{
+      saveBtn.disabled = false;
+    }
+  });
+})();
+
+document.getElementById("logoutBtn").addEventListener("click", async function(){
+  await client.auth.signOut();
+  window.location.href = "login.html";
+});
+
+(async function init(){
+  var isLogged = await checkAuth();
+  if(!isLogged) return;
+
+  await loadOpportunities();
+  recalcExpiry();
+
+  setStatus("");
+  document.getElementById("offerForm").style.display = "grid";
+})();
+</script>
+
+</body>
+</html>
