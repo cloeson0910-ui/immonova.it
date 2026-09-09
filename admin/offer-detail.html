@@ -89,7 +89,6 @@ button,.btn{cursor:pointer;font-family:inherit}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
@@ -272,50 +271,277 @@ async function loadOffer(){
 
   currentOfferId = o.id;
   currentDocTitle = (isCounter ? "Controfferta" : "Proposta") + " — " + propertyTitle;
+  currentOfferData = o;
+  currentPropertyTitle = propertyTitle;
+  currentPropertyAddress = propertyAddress;
+  currentIsCounter = isCounter;
 }
 
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
 
 /* ================================ Generazione PDF reale ================================
-   window.print() dipende dal salvataggio manuale del browser e non ripete il logo su ogni
-   pagina (è un blocco fisso in cima al documento, non un'intestazione di stampa). Qui invece
-   si genera un vero file PDF via jsPDF+html2canvas, con logo IMMONOVA ridisegnato su OGNI
-   pagina del PDF (non dipende dal DOM), poi lo si carica su Storage e si mostra il link
-   diretto per scaricarlo — nessun salvataggio manuale richiesto. */
+   PRIMA versione usava jsPDF + html2canvas (screenshot del DOM): produceva testo con
+   spaziature rotte (difetto noto di quella tecnica coi web font) e l'header si sovrapponeva
+   al contenuto dalla pagina 2 in poi. Sostituita: qui il PDF è scritto direttamente con le
+   API testo di jsPDF (nessuno screenshot del DOM) — testo nitido, selezionabile, e paginazione
+   con logo IMMONOVA e piè di pagina ridisegnati in modo pulito su ogni pagina. */
 var currentOfferId = null;
 var currentDocTitle = "";
+var currentOfferData = null;
+var currentPropertyTitle = "";
+var currentPropertyAddress = "";
+var currentIsCounter = false;
+
+var PDF_MARGIN_LEFT = 48;
+var PDF_MARGIN_RIGHT = 48;
+var PDF_MARGIN_TOP = 84;
+var PDF_MARGIN_BOTTOM = 50;
+var PDF_GOLD = [166, 127, 52];
+var PDF_GOLD_SOFT = [143, 118, 67];
+var PDF_TEXT = [63, 50, 28];
 
 function drawPdfHeaderOnPage(doc, pageWidth){
   doc.setFont("helvetica", "normal");
   doc.setFontSize(16);
-  doc.setTextColor(166, 127, 52);
+  doc.setTextColor.apply(doc, PDF_GOLD);
   doc.text("IMMONOVA", pageWidth / 2, 36, { align: "center" });
   doc.setFontSize(8);
-  doc.setTextColor(143, 118, 67);
+  doc.setTextColor.apply(doc, PDF_GOLD_SOFT);
   doc.text("OFF MARKET  ·  CONSULTING", pageWidth / 2, 50, { align: "center" });
-  doc.setDrawColor(166, 127, 52);
+  doc.setDrawColor.apply(doc, PDF_GOLD);
   doc.setLineWidth(0.6);
-  doc.line(48, 62, pageWidth - 48, 62);
+  doc.line(PDF_MARGIN_LEFT, 62, pageWidth - PDF_MARGIN_RIGHT, 62);
 }
 
 function drawPdfFooterOnPage(doc, pageWidth, pageHeight, pageNum, pageCount){
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.setTextColor(143, 118, 67);
+  doc.setTextColor.apply(doc, PDF_GOLD_SOFT);
   doc.text("Pagina " + pageNum + " di " + pageCount, pageWidth / 2, pageHeight - 24, { align: "center" });
+}
+
+/* Costruisce l'intero documento scrivendo riga per riga, con interruzione di pagina
+   automatica (e header ridisegnato) ogni volta che il contenuto sta per uscire dal margine
+   inferiore. È la stessa logica di composizione già usata per il riepilogo a schermo
+   (loadOffer/buildPrintableOffer), qui riscritta come testo puro per jsPDF. */
+function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
+  var jsPDF = window.jspdf.jsPDF;
+  var doc = new jsPDF({ unit: "pt", format: "a4" });
+  var pageWidth = doc.internal.pageSize.getWidth();
+  var pageHeight = doc.internal.pageSize.getHeight();
+  var contentWidth = pageWidth - PDF_MARGIN_LEFT - PDF_MARGIN_RIGHT;
+  var y = PDF_MARGIN_TOP;
+
+  function ensureSpace(h){
+    if(y + h > pageHeight - PDF_MARGIN_BOTTOM){
+      doc.addPage();
+      y = PDF_MARGIN_TOP;
+    }
+  }
+  function sectionTitle(text){
+    ensureSpace(20);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor.apply(doc, PDF_GOLD);
+    doc.text(text.toUpperCase(), PDF_MARGIN_LEFT, y);
+    y += 15;
+  }
+  function paragraph(text, opts){
+    opts = opts || {};
+    doc.setFont("helvetica", opts.bold ? "bold" : "normal");
+    doc.setFontSize(opts.size || 10.5);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    var lines = doc.splitTextToSize(String(text), contentWidth - (opts.indent || 0));
+    lines.forEach(function(line){
+      ensureSpace(14);
+      doc.text(line, PDF_MARGIN_LEFT + (opts.indent || 0), y);
+      y += 14;
+    });
+    y += opts.noGap ? 0 : 5;
+  }
+  function bullet(text){
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    var lines = doc.splitTextToSize(String(text), contentWidth - 14);
+    lines.forEach(function(line, i){
+      ensureSpace(14);
+      doc.text((i === 0 ? "•  " : "    ") + line, PDF_MARGIN_LEFT, y);
+      y += 14;
+    });
+  }
+  function spacer(h){ y += (h || 6); }
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(17);
+  doc.setTextColor.apply(doc, PDF_TEXT);
+  doc.text(isCounter ? "Proposta di Controfferta" : "Proposta Irrevocabile d'Acquisto", PDF_MARGIN_LEFT, y);
+  y += 18;
+  doc.setFontSize(9.5);
+  doc.setTextColor.apply(doc, PDF_GOLD_SOFT);
+  doc.text("Creata il " + fmtDate(o.created_at) + (o.offer_expires_at ? " — valida fino al " + fmtDate(o.offer_expires_at) : ""), PDF_MARGIN_LEFT, y);
+  y += 22;
+
+  sectionTitle("Immobile");
+  paragraph(propertyTitle + (propertyAddress ? " — " + propertyAddress : ""));
+
+  sectionTitle("Dati catastali");
+  if(o.cad_comune) paragraph("Comune catastale: " + o.cad_comune);
+  if(o.cadastral_units && o.cadastral_units.length){
+    o.cadastral_units.forEach(function(u){
+      var parts = [];
+      if(u.sezione) parts.push("Sez. " + u.sezione);
+      if(u.foglio) parts.push("Foglio " + u.foglio);
+      if(u.particella) parts.push("Particella " + u.particella);
+      if(u.subalterno) parts.push("Sub. " + u.subalterno);
+      if(u.categoria) parts.push("Categoria " + u.categoria);
+      if(u.classe) parts.push("Classe " + u.classe);
+      if(u.rendita) parts.push("Rendita € " + u.rendita);
+      if(u.vani) parts.push("Vani " + u.vani);
+      if(u.mq) parts.push(u.mq + " mq");
+      bullet(parts.join(" · "));
+    });
+    spacer();
+  }else{
+    paragraph("Non inserite.");
+  }
+
+  sectionTitle("Locazione");
+  if(o.is_leased){
+    paragraph("Immobile locato" + (o.lease_tenant_name ? " a " + o.lease_tenant_name : "") +
+      (o.lease_expiry_date ? " — scadenza contratto: " + fmtDate(o.lease_expiry_date) : "") +
+      (o.lease_monthly_rent ? " — canone mensile: " + fmtPrice(o.lease_monthly_rent) : ""));
+    paragraph(o.lease_prelazione_waived ?
+      "Il conduttore ha rinunciato per iscritto al diritto di prelazione (art. 38 L. 392/1978)." :
+      "Diritto di prelazione del conduttore ai sensi dell'art. 38 L. 392/1978 non risulta rinunciato: da verificare prima del rogito.");
+    paragraph("Vendita soggetta al contratto di locazione in corso fino a naturale scadenza (art. 1599 c.c.).");
+  }else{
+    paragraph("Immobile libero da locazioni in corso, per quanto dichiarato dal venditore.");
+  }
+
+  sectionTitle("Venditore/Proprietario");
+  paragraph(fullName(o.seller_first_name, o.seller_last_name) + (o.seller_fiscal_code ? " — C.F. " + o.seller_fiscal_code : ""));
+  if(o.seller_residence_address) paragraph("Residente in " + o.seller_residence_address);
+  if(o.seller_id_document_type){
+    paragraph("Documento: " + o.seller_id_document_type + (o.seller_id_document_number ? " n. " + o.seller_id_document_number : "") +
+      (o.seller_id_document_issued_by ? ", rilasciato da " + o.seller_id_document_issued_by : "") +
+      (o.seller_id_document_issued_at ? " il " + fmtDate(o.seller_id_document_issued_at) : ""));
+  }
+
+  sectionTitle("Proponente/Acquirente");
+  paragraph(fullName(o.buyer_first_name, o.buyer_last_name) + (o.buyer_fiscal_code ? " — C.F. " + o.buyer_fiscal_code : ""));
+  if(o.buyer_residence_address) paragraph("Residente in " + o.buyer_residence_address);
+  if(o.buyer_id_document_type){
+    paragraph("Documento: " + o.buyer_id_document_type + (o.buyer_id_document_number ? " n. " + o.buyer_id_document_number : ""));
+  }
+  var buyer2Name = fullName(o.buyer2_first_name, o.buyer2_last_name);
+  if(buyer2Name !== "—"){
+    paragraph("Secondo proponente: " + buyer2Name + (o.buyer2_fiscal_code ? " — C.F. " + o.buyer2_fiscal_code : ""));
+  }
+
+  sectionTitle("Dichiarazioni del venditore");
+  if(o.seller_declarations && o.seller_declarations.length){
+    o.seller_declarations.forEach(function(d){
+      var valueLabel = DECL_VALUE_LABELS[d.value] || d.value || "";
+      bullet((d.label || d.key || "") + (valueLabel ? ": " + valueLabel : "") + (d.notes ? " — " + d.notes : ""));
+    });
+    spacer();
+  }else{
+    paragraph("Nessuna dichiarazione compilata.");
+  }
+
+  sectionTitle("Condizioni economiche");
+  paragraph("Prezzo offerto: " + fmtPrice(o.offered_price) + (o.property_asking_price ? " (prezzo richiesto: " + o.property_asking_price + ")" : ""), { bold: true });
+  if(o.payment_a_amount) paragraph("Caparra (a): " + fmtPrice(o.payment_a_amount) + (o.payment_a_method ? " — " + o.payment_a_method : "") + (o.payment_a_notes ? " — " + o.payment_a_notes : ""));
+  if(o.payment_b_amount) paragraph("Rata (b): " + fmtPrice(o.payment_b_amount) + (o.payment_b_method ? " — " + o.payment_b_method : "") + (o.payment_b_due_date ? " — scadenza " + fmtDate(o.payment_b_due_date) : ""));
+  if(o.payment_c_amount) paragraph("Rata (c): " + fmtPrice(o.payment_c_amount) + (o.payment_c_method ? " — " + o.payment_c_method : "") + (o.payment_c_due_date ? " — scadenza " + fmtDate(o.payment_c_due_date) : ""));
+  if(o.payment_d_amount) paragraph("Saldo al rogito (d): " + fmtPrice(o.payment_d_amount) + (o.payment_d_method ? " — " + o.payment_d_method : ""));
+  if(o.deposit_amount) paragraph("Caparra confirmatoria totale (art. 1385 c.c.): " + fmtPrice(o.deposit_amount) + (o.deposit_type ? " — " + o.deposit_type : ""));
+  if(o.payment_balance_notes) paragraph("Note: " + o.payment_balance_notes);
+
+  if(o.notary_name || o.notary_address || o.deed_deadline_date){
+    sectionTitle("Rogito");
+    if(o.notary_name) paragraph("Notaio: " + o.notary_name);
+    if(o.notary_address) paragraph(o.notary_address);
+    if(o.deed_deadline_date) paragraph("Termine per il rogito: " + fmtDate(o.deed_deadline_date));
+  }
+
+  sectionTitle("Clausole sospensive");
+  if(o.suspensive_clauses && o.suspensive_clauses.length){
+    o.suspensive_clauses.forEach(function(c){ bullet((c.label || c.key || "") + (c.notes ? " — " + c.notes : "")); });
+    spacer();
+  }else{
+    paragraph("Nessuna clausola sospensiva.");
+  }
+  if(o.suspensive_notes) paragraph("Note: " + o.suspensive_notes);
+
+  sectionTitle("Clausole risolutive");
+  if(o.resolutive_clauses && o.resolutive_clauses.length){
+    o.resolutive_clauses.forEach(function(c){ bullet((c.label || c.key || "") + (c.notes ? " — " + c.notes : "")); });
+    spacer();
+  }else{
+    paragraph("Nessuna clausola risolutiva.");
+  }
+  if(o.resolutive_notes) paragraph("Note: " + o.resolutive_notes);
+
+  if(o.additional_clauses){ sectionTitle("Clausole aggiuntive"); paragraph(o.additional_clauses); }
+  if(isCounter && o.counter_modifications){ sectionTitle("Modifiche proposte in controfferta"); paragraph(o.counter_modifications); }
+  if(o.agency_mediation_note){ sectionTitle("Mediazione"); paragraph(o.agency_mediation_note); }
+  if(o.notes){ sectionTitle("Note interne"); paragraph(o.notes); }
+
+  /* Blocco firme: tenuto insieme sulla stessa pagina, con le immagini delle firme già
+     raccolte (se presenti) incollate come immagine reale nel PDF, non come screenshot. */
+  var signBlockHeight = 110;
+  ensureSpace(signBlockHeight);
+  y += 20;
+  var colWidth = (contentWidth - 30) / 2;
+  var col1X = PDF_MARGIN_LEFT;
+  var col2X = PDF_MARGIN_LEFT + colWidth + 30;
+  var sigImgH = 46;
+  var lineY = y + sigImgH + 6;
+
+  function drawSignature(dataUrl, x, label, signedAt){
+    if(dataUrl){
+      try{
+        var imgProps = doc.getImageProperties(dataUrl);
+        var ratio = imgProps.width / imgProps.height;
+        var w = Math.min(colWidth, sigImgH * ratio);
+        doc.addImage(dataUrl, "PNG", x, y, w, sigImgH);
+      }catch(e){ console.error("Firma non incollabile nel PDF:", e); }
+    }
+    doc.setDrawColor.apply(doc, PDF_TEXT);
+    doc.setLineWidth(0.6);
+    doc.line(x, lineY, x + colWidth, lineY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    doc.text(label + (signedAt ? " — " + fmtDate(signedAt) : ""), x, lineY + 12);
+  }
+
+  drawSignature(o.buyer_signature_data_url, col1X, "Firma del Proponente/Acquirente", o.buyer_signed_at);
+  drawSignature(o.seller_signature_data_url, col2X, "Firma del Venditore/Proprietario (per accettazione)", o.seller_signed_at);
+
+  var pageCount = doc.internal.getNumberOfPages();
+  for(var i = 1; i <= pageCount; i++){
+    doc.setPage(i);
+    drawPdfHeaderOnPage(doc, pageWidth);
+    drawPdfFooterOnPage(doc, pageWidth, pageHeight, i, pageCount);
+  }
+
+  return doc;
 }
 
 document.getElementById("generatePdfBtn").addEventListener("click", async function(){
   var btn = document.getElementById("generatePdfBtn");
   var linkBox = document.getElementById("pdfLinkBox");
 
-  if(!currentOfferId){
+  if(!currentOfferId || !currentOfferData){
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Nessuna proposta caricata da esportare.";
     return;
   }
-  if(typeof window.jspdf === "undefined" || typeof window.html2canvas === "undefined"){
+  if(typeof window.jspdf === "undefined"){
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Libreria di generazione PDF non caricata (controlla la connessione) — riprova.";
@@ -329,35 +555,7 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
   linkBox.textContent = "";
 
   try{
-    var jsPDF = window.jspdf.jsPDF;
-    var doc = new jsPDF({ unit: "pt", format: "a4" });
-    var pageWidth = doc.internal.pageSize.getWidth();
-    var marginTop = 84;
-    var marginSide = 48;
-
-    await new Promise(function(resolve, reject){
-      doc.html(document.getElementById("docPanel"), {
-        x: marginSide,
-        y: marginTop,
-        width: pageWidth - marginSide * 2,
-        windowWidth: 900,
-        autoPaging: "text",
-        html2canvas: { scale: 0.72, useCORS: true },
-        callback: function(finishedDoc){
-          try{
-            var pageWidthInner = finishedDoc.internal.pageSize.getWidth();
-            var pageHeightInner = finishedDoc.internal.pageSize.getHeight();
-            var pageCount = finishedDoc.internal.getNumberOfPages();
-            for(var i = 1; i <= pageCount; i++){
-              finishedDoc.setPage(i);
-              drawPdfHeaderOnPage(finishedDoc, pageWidthInner);
-              drawPdfFooterOnPage(finishedDoc, pageWidthInner, pageHeightInner, i, pageCount);
-            }
-            resolve(finishedDoc);
-          }catch(e){ reject(e); }
-        }
-      });
-    });
+    var doc = buildOfferPdf(currentOfferData, null, currentPropertyTitle, currentPropertyAddress, currentIsCounter);
 
     var blob = doc.output("blob");
     var path = "pdf/" + currentOfferId + "/proposta.pdf";
@@ -379,7 +577,22 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
     linkBox.innerHTML = "PDF generato correttamente — logo IMMONOVA su ogni pagina.<br>" +
       '<a href="' + publicUrl + '" target="_blank" rel="noopener">Apri il PDF direttamente</a>' +
       ' &nbsp;·&nbsp; ' +
-      '<a href="' + shareUrl + '" target="_blank" rel="noopener">Link da condividere (con anteprima)</a>';
+      '<a href="' + shareUrl + '" target="_blank" rel="noopener">Link da condividere (con anteprima)</a>' +
+      ' &nbsp;·&nbsp; ' +
+      '<button type="button" class="btn secondary" id="copyShareLinkBtn" style="padding:6px 12px;font-size:10px">Copia link</button>';
+
+    document.getElementById("copyShareLinkBtn").addEventListener("click", async function(){
+      var copyBtn = this;
+      try{
+        await navigator.clipboard.writeText(shareUrl);
+        copyBtn.textContent = "Copiato ✓";
+      }catch(copyErr){
+        /* Clipboard API può essere bloccata (contesto non sicuro, permessi) — fallback con
+           un box di testo selezionabile invece di lasciare l'utente senza alternativa. */
+        window.prompt("Copia manualmente il link:", shareUrl);
+      }
+      setTimeout(function(){ copyBtn.textContent = "Copia link"; }, 2000);
+    });
   }catch(err){
     console.error(err);
     linkBox.className = "pdf-link-box visible";
