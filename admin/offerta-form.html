@@ -364,18 +364,19 @@ input[readonly]{
     <div class="property-summary" id="propertySummary"></div>
 
     <div class="section-title">Proponente / Acquirente</div>
-    <div class="section-hint">
+    <div class="section-hint" id="clientSectionHint">
       Se il cliente ha già una richiesta collegata a questo immobile puoi selezionarlo dalla
       lista per compilare automaticamente i suoi dati, oppure inserirlo manualmente.
     </div>
 
-    <div class="field full">
+    <div class="field full" id="clientSelectField">
       <label for="clientSelect">Cliente collegato a questo immobile (facoltativo)</label>
       <select id="clientSelect">
         <option value="">— Inserimento manuale —</option>
       </select>
     </div>
 
+    <div class="client-summary" id="preselectedClientSummary"></div>
     <div class="client-summary" id="clientSummary"></div>
 
     <div class="field">
@@ -554,6 +555,7 @@ var currentUser = null;
 var opportunities = [];
 var investorRequests = [];
 var selectedOpportunity = null;
+var preselectedInvestor = null; // cliente passato via ?investor_id= dalla pagina Documenti (tabella investors)
 
 /* Elenco clausole standard: l'utente può selezionarle e, quando serve, aggiungere un
    dettaglio libero (es. importo mutuo, banca, tempistiche). "Altro" apre sempre un campo
@@ -702,6 +704,41 @@ function renderPropertySummary(o){
     "Prezzo richiesto: " + escapeHTML(o.price || "n/d");
 }
 
+/* Cliente arrivato via ?investor_id=... dalla pagina Documenti (tabella "investors",
+   la stessa di Valutazione/Acquisizione) — se presente, precompila i dati e nasconde
+   il selettore "cliente collegato a questo immobile" (che resta per investor_requests). */
+async function loadPreselectedInvestor(){
+  var params = new URLSearchParams(window.location.search);
+  var investorId = params.get("investor_id");
+  if(!investorId) return;
+
+  var result = await client
+    .from("investors")
+    .select("id,first_name,last_name,email,phone,company")
+    .eq("id", investorId)
+    .single();
+
+  if(result.error || !result.data) return;
+
+  preselectedInvestor = result.data;
+
+  document.getElementById("buyer_first_name").value = preselectedInvestor.first_name || "";
+  document.getElementById("buyer_last_name").value = preselectedInvestor.last_name || "";
+  document.getElementById("buyer_email").value = preselectedInvestor.email || "";
+  document.getElementById("buyer_phone").value = preselectedInvestor.phone || "";
+
+  document.getElementById("clientSelectField").style.display = "none";
+  document.getElementById("clientSectionHint").textContent =
+    "Cliente aperto dalla pagina Documenti: i dati anagrafici sono già precompilati, puoi comunque correggerli qui sotto.";
+
+  var box = document.getElementById("preselectedClientSummary");
+  box.classList.add("active");
+  box.innerHTML =
+    "<strong>Cliente:</strong> " + escapeHTML((preselectedInvestor.first_name || "") + " " + (preselectedInvestor.last_name || "")) +
+    (preselectedInvestor.company ? " (" + escapeHTML(preselectedInvestor.company) + ")" : "") + "<br>" +
+    escapeHTML(preselectedInvestor.email || "") + (preselectedInvestor.phone ? " — " + escapeHTML(preselectedInvestor.phone) : "");
+}
+
 async function loadInvestorRequestsForOpportunity(opportunityId){
   var select = document.getElementById("clientSelect");
   select.innerHTML = '<option value="">— Inserimento manuale —</option>';
@@ -842,6 +879,7 @@ function wireDocInputs(){
 
       var payload = {
         opportunity_id: selectedOpportunity.id,
+        investor_id: preselectedInvestor ? preselectedInvestor.id : null,
         investor_request_id: document.getElementById("clientSelect").value || null,
 
         buyer_first_name: document.getElementById("buyer_first_name").value.trim(),
@@ -917,6 +955,7 @@ document.getElementById("logoutBtn").addEventListener("click", async function(){
   if(!isLogged) return;
 
   await loadOpportunities();
+  await loadPreselectedInvestor();
   recalcExpiry();
 
   setStatus("");
