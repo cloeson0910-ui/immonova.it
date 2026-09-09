@@ -397,6 +397,57 @@ input[readonly]{
 
     <div class="property-summary" id="propertySummary"></div>
 
+    <div class="section-title">Dati catastali</div>
+    <div class="section-hint">
+      Non presenti nella scheda immobile: vanno inseriti qui a mano, verificandoli sulla
+      visura catastale aggiornata. Struttura standard riconosciuta dai moduli di mediazione
+      immobiliare (identificativi catastali dell'unità). Se la proprietà è composta da più
+      particelle o subalterni (es. abitazione + box + cantina), aggiungi una riga per ciascuno.
+    </div>
+
+    <div class="field">
+      <label for="cad_comune">Comune catastale</label>
+      <input type="text" id="cad_comune">
+    </div>
+
+    <div class="field full" id="cadastralUnitsBox"></div>
+    <div class="field full">
+      <button type="button" class="btn secondary-btn" id="addCadastralUnitBtn">+ Aggiungi unità catastale</button>
+    </div>
+
+    <div class="section-title">Locazione in corso</div>
+    <div class="section-hint">
+      Se l'immobile è locato, il conduttore ha diritto di prelazione ai sensi dell'art. 38
+      L. 392/1978 (salvo rinuncia formale) e la vendita è comunque soggetta al contratto di
+      locazione in corso (art. 1599 c.c., "emptio non tollit locatum") fino alla sua naturale
+      scadenza o alla disdetta nei termini di legge.
+    </div>
+    <div class="field">
+      <label for="is_leased">L'immobile è locato?</label>
+      <select id="is_leased">
+        <option value="no">No, libero</option>
+        <option value="si">Sì, locato</option>
+      </select>
+    </div>
+    <div class="field" id="leaseTenantField" style="display:none">
+      <label for="lease_tenant_name">Conduttore (nome/ragione sociale)</label>
+      <input type="text" id="lease_tenant_name">
+    </div>
+    <div class="field" id="leaseExpiryField" style="display:none">
+      <label for="lease_expiry_date">Scadenza contratto di locazione</label>
+      <input type="date" id="lease_expiry_date">
+    </div>
+    <div class="field" id="leaseRentField" style="display:none">
+      <label for="lease_monthly_rent">Canone mensile percepito (€)</label>
+      <input type="number" id="lease_monthly_rent" step="0.01" min="0">
+    </div>
+    <div class="field full" id="leasePrelazioneField" style="display:none">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="lease_prelazione_waived" style="width:auto">
+        Il conduttore ha rinunciato per iscritto al diritto di prelazione (art. 38 L. 392/1978)
+      </label>
+    </div>
+
     <div class="section-title">Venditore / Proprietario</div>
     <div class="section-hint" id="sellerSectionHint">
       Se il proprietario è registrato come venditore collegato a questo immobile, i dati
@@ -812,6 +863,73 @@ var SELLER_DECLARATION_OPTIONS = [
   { key:"libero_da_vincoli", label:"L'immobile è libero da iscrizioni, trascrizioni pregiudizievoli, pesi, oneri o servitù attive e passive" }
 ];
 
+/* Elenco dinamico delle unità catastali (foglio/particella/sub/categoria/classe/rendita) —
+   una proprietà può essere composta da più particelle o subalterni (es. abitazione + box +
+   cantina), quindi l'utente può aggiungerne quante servono. */
+var cadastralUnitSeq = 0;
+function addCadastralUnitRow(prefill){
+  cadastralUnitSeq++;
+  var id = "cadUnit" + cadastralUnitSeq;
+  var box = document.getElementById("cadastralUnitsBox");
+  var row = document.createElement("div");
+  row.className = "clause-row";
+  row.id = id;
+  row.innerHTML =
+    '<div class="form-grid" style="gap:14px;margin-bottom:6px">' +
+      '<div class="field"><label>Sezione (se presente)</label><input type="text" data-cad="sezione"></div>' +
+      '<div class="field"><label>Foglio *</label><input type="text" data-cad="foglio"></div>' +
+      '<div class="field"><label>Particella / Mappale *</label><input type="text" data-cad="particella"></div>' +
+      '<div class="field"><label>Subalterno</label><input type="text" data-cad="subalterno"></div>' +
+      '<div class="field"><label>Categoria catastale</label><input type="text" data-cad="categoria" placeholder="es. A/2"></div>' +
+      '<div class="field"><label>Classe</label><input type="text" data-cad="classe"></div>' +
+      '<div class="field"><label>Rendita catastale (€)</label><input type="number" step="0.01" min="0" data-cad="rendita"></div>' +
+    '</div>' +
+    '<button type="button" class="btn secondary-btn" data-remove-cad-unit="1">Rimuovi questa unità</button>';
+  box.appendChild(row);
+  row.querySelector('[data-remove-cad-unit]').addEventListener("click", function(){
+    row.remove();
+  });
+  if(prefill){
+    ["sezione","foglio","particella","subalterno","categoria","classe","rendita"].forEach(function(k){
+      var el = row.querySelector('[data-cad="' + k + '"]');
+      if(el && prefill[k] != null) el.value = prefill[k];
+    });
+  }
+}
+
+function collectCadastralUnits(){
+  var box = document.getElementById("cadastralUnitsBox");
+  var rows = box.querySelectorAll(".clause-row");
+  var units = [];
+  rows.forEach(function(row){
+    function v(k){ var el = row.querySelector('[data-cad="' + k + '"]'); return el ? el.value.trim() : ""; }
+    var foglio = v("foglio"), particella = v("particella");
+    if(!foglio && !particella && !v("subalterno") && !v("categoria") && !v("classe") && !v("rendita") && !v("sezione")) return;
+    units.push({
+      sezione: v("sezione") || null,
+      foglio: foglio || null,
+      particella: particella || null,
+      subalterno: v("subalterno") || null,
+      categoria: v("categoria") || null,
+      classe: v("classe") || null,
+      rendita: v("rendita") ? parseFloat(v("rendita")) : null
+    });
+  });
+  return units;
+}
+
+document.getElementById("addCadastralUnitBtn").addEventListener("click", function(){
+  addCadastralUnitRow();
+});
+
+document.getElementById("is_leased").addEventListener("change", function(){
+  var leased = this.value === "si";
+  document.getElementById("leaseTenantField").style.display = leased ? "" : "none";
+  document.getElementById("leaseExpiryField").style.display = leased ? "" : "none";
+  document.getElementById("leaseRentField").style.display = leased ? "" : "none";
+  document.getElementById("leasePrelazioneField").style.display = leased ? "" : "none";
+});
+
 function renderDeclarationList(containerId, options){
   var container = document.getElementById(containerId);
   var html = "";
@@ -1026,8 +1144,36 @@ function buildPrintableOffer(){
     }).join("") + "</ul>";
   }
 
+  var cadastralUnitsForPrint = collectCadastralUnits();
+  var cadastralUnitsHTML = cadastralUnitsForPrint.length ? "<ul>" + cadastralUnitsForPrint.map(function(u){
+    var parts = [];
+    if(u.sezione) parts.push("Sez. " + escapeHTML(u.sezione));
+    if(u.foglio) parts.push("Foglio " + escapeHTML(u.foglio));
+    if(u.particella) parts.push("Particella " + escapeHTML(u.particella));
+    if(u.subalterno) parts.push("Sub. " + escapeHTML(u.subalterno));
+    if(u.categoria) parts.push("Categoria " + escapeHTML(u.categoria));
+    if(u.classe) parts.push("Classe " + escapeHTML(u.classe));
+    if(u.rendita) parts.push("Rendita € " + escapeHTML(u.rendita));
+    return "<li>" + parts.join(" · ") + "</li>";
+  }).join("") + "</ul>" : "<p>Non inserite</p>";
+
+  var leased = document.getElementById("is_leased").value === "si";
+  var leaseHTML = leased ?
+    "<p>Immobile locato" + (fieldVal("lease_tenant_name") ? " a " + escapeHTML(fieldVal("lease_tenant_name")) : "") +
+      (fieldVal("lease_expiry_date") ? " — scadenza contratto: " + escapeHTML(fieldVal("lease_expiry_date")) : "") +
+      (fieldVal("lease_monthly_rent") ? " — canone mensile: € " + escapeHTML(fieldVal("lease_monthly_rent")) : "") +
+      "<br>" + (document.getElementById("lease_prelazione_waived").checked ?
+        "Il conduttore ha rinunciato per iscritto al diritto di prelazione (art. 38 L. 392/1978)." :
+        "Diritto di prelazione del conduttore ai sensi dell'art. 38 L. 392/1978 non risulta rinunciato: da verificare prima del rogito.") +
+      "<br>Vendita soggetta al contratto di locazione in corso fino a naturale scadenza (art. 1599 c.c.).</p>" :
+    "<p>Immobile libero da locazioni in corso, per quanto dichiarato dal venditore.</p>";
+
   var html = "";
   html += "<h4>Immobile</h4><p>" + escapeHTML(propertyTitle) + (propertyAddress ? " — " + escapeHTML(propertyAddress) : "") + "</p>";
+  html += "<h4>Dati catastali</h4>" +
+    (fieldVal("cad_comune") ? "<p>Comune catastale: " + escapeHTML(fieldVal("cad_comune")) + "</p>" : "") +
+    cadastralUnitsHTML;
+  html += "<h4>Locazione</h4>" + leaseHTML;
 
   html += "<h4>Venditore/Proprietario</h4><p>" + escapeHTML(sellerName) +
     (fieldVal("seller_fiscal_code") ? " — C.F. " + escapeHTML(fieldVal("seller_fiscal_code")) : "") +
@@ -1314,6 +1460,7 @@ var buyerSigPad = null;
 var sellerSigPad = null;
 
 (function wireUI(){
+  addCadastralUnitRow();
   renderClauseList("suspensiveClauseList", SUSPENSIVE_CLAUSE_OPTIONS);
   renderClauseList("resolutiveClauseList", RESOLUTIVE_CLAUSE_OPTIONS);
   renderDeclarationList("sellerDeclarationsList", SELLER_DECLARATION_OPTIONS);
@@ -1374,6 +1521,13 @@ var sellerSigPad = null;
       if(!document.getElementById("irrevocability_clause_approved").checked){
         throw new Error("È necessaria l'approvazione specifica della clausola di irrevocabilità (artt. 1341-1342 c.c.).");
       }
+      var cadastralUnits = collectCadastralUnits();
+      if(!cadastralUnits.length || !cadastralUnits.every(function(u){ return u.foglio && u.particella; })){
+        throw new Error("Inserisci almeno un'unità catastale con Foglio e Particella compilati.");
+      }
+      if(document.getElementById("is_leased").value === "si" && !document.getElementById("lease_expiry_date").value){
+        throw new Error("L'immobile risulta locato: indica la scadenza del contratto di locazione.");
+      }
 
       var offerId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
       var folder = "offer-" + selectedOpportunity.id + "-" + offerId;
@@ -1394,6 +1548,16 @@ var sellerSigPad = null;
 
       var payload = {
         opportunity_id: selectedOpportunity.id,
+
+        cad_comune: document.getElementById("cad_comune").value.trim() || null,
+        cadastral_units: cadastralUnits,
+
+        is_leased: document.getElementById("is_leased").value === "si",
+        lease_tenant_name: document.getElementById("lease_tenant_name").value.trim() || null,
+        lease_expiry_date: document.getElementById("lease_expiry_date").value || null,
+        lease_monthly_rent: document.getElementById("lease_monthly_rent").value ? parseFloat(document.getElementById("lease_monthly_rent").value) : null,
+        lease_prelazione_waived: document.getElementById("is_leased").value === "si" ? document.getElementById("lease_prelazione_waived").checked : null,
+
         investor_id: preselectedInvestor ? preselectedInvestor.id : null,
         investor_request_id: document.getElementById("clientSelect").value || null,
         seller_investor_id: selectedSeller ? selectedSeller.id : null,
@@ -1527,6 +1691,12 @@ var sellerSigPad = null;
       setSaveStatus("Proposta salvata correttamente.", "success");
       setStatus("Proposta creata. Puoi ora compilarne una nuova o tornare alle Proposte.", "success");
       document.getElementById("offerForm").reset();
+      document.getElementById("cadastralUnitsBox").innerHTML = "";
+      addCadastralUnitRow();
+      document.getElementById("leaseTenantField").style.display = "none";
+      document.getElementById("leaseExpiryField").style.display = "none";
+      document.getElementById("leaseRentField").style.display = "none";
+      document.getElementById("leasePrelazioneField").style.display = "none";
       selectedOpportunity = null;
       renderPropertySummary(null);
       document.getElementById("clientSelect").innerHTML = '<option value="">— Inserimento manuale —</option>';
