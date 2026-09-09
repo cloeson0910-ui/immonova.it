@@ -320,6 +320,52 @@ function drawPdfFooterOnPage(doc, pageWidth, pageHeight, pageNum, pageCount){
   doc.text("Pagina " + pageNum + " di " + pageCount, pageWidth / 2, pageHeight - 24, { align: "center" });
 }
 
+/* Pagina statica di condivisione (anteprima WhatsApp/Telegram/Facebook con titolo e nome
+   immobile). Stesso principio già usato per i dossier statici (opportunity-*.html) che
+   funzionano correttamente: un file HTML vero e proprio, con i tag già scritti dentro,
+   caricato su uno storage che rispetta il Content-Type impostato — non una funzione
+   generata al volo (le Supabase Edge Function sul dominio *.supabase.co riscrivono sempre
+   il Content-Type a text/plain, verificato: la pagina veniva mostrata come codice invece
+   che renderizzata). Qui il file è completo e autosufficiente: contiene già il link diretto
+   al PDF, non serve nessun redirect o chiamata successiva al database. */
+function escapeHtmlShare(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function buildOfferShareHtml(propertyTitle, isCounter, pdfUrl){
+  var docLabel = isCounter ? "Controfferta" : "Proposta d'Acquisto";
+  var title = propertyTitle ? (docLabel + " - " + propertyTitle + " | IMMONOVA") : (docLabel + " - IMMONOVA");
+  var description = propertyTitle
+    ? ("Documento immobiliare IMMONOVA per: " + propertyTitle + ". Apri per visualizzare e scaricare il PDF.")
+    : "Documento immobiliare IMMONOVA - Off Market Consulting. Apri per visualizzare e scaricare il PDF.";
+  var image = "https://immonova-consulting.it/immonova-logo-share-1200x630.png";
+  var t = escapeHtmlShare(title), d = escapeHtmlShare(description), img = escapeHtmlShare(image), pdf = escapeHtmlShare(pdfUrl);
+
+  return "<!DOCTYPE html>\n<html lang=\"it\">\n<head>\n<meta charset=\"UTF-8\">\n" +
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
+    "<title>" + t + "</title>\n" +
+    "<meta property=\"og:type\" content=\"website\">\n" +
+    "<meta property=\"og:site_name\" content=\"IMMONOVA\">\n" +
+    "<meta property=\"og:title\" content=\"" + t + "\">\n" +
+    "<meta property=\"og:description\" content=\"" + d + "\">\n" +
+    "<meta property=\"og:image\" content=\"" + img + "\">\n" +
+    "<meta name=\"twitter:card\" content=\"summary_large_image\">\n" +
+    "<meta name=\"twitter:title\" content=\"" + t + "\">\n" +
+    "<meta name=\"twitter:description\" content=\"" + d + "\">\n" +
+    "<meta name=\"twitter:image\" content=\"" + img + "\">\n" +
+    "<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#f4ecdf;font-family:\"Avenir Next\",\"Helvetica Neue\",Arial,sans-serif;color:#7f6430;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}" +
+    ".card{background:#fffdf7;border:1px solid rgba(166,127,52,.2);box-shadow:0 24px 70px rgba(127,100,48,.1);padding:48px 40px;max-width:440px;width:100%;text-align:center}" +
+    ".letterhead{font-size:20px;letter-spacing:.3em;color:#a67f34;font-weight:300;margin-bottom:6px}" +
+    ".sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:28px;border-bottom:1px solid rgba(166,127,52,.2);padding-bottom:18px}" +
+    "h1{font-size:18px;color:#4a3c1f;font-weight:400;margin-bottom:10px}p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin-bottom:24px}" +
+    ".btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}</style>\n" +
+    "</head>\n<body>\n<div class=\"card\">\n<div class=\"letterhead\">IMMONOVA</div>\n<div class=\"sub\">OFF MARKET - CONSULTING</div>\n" +
+    "<h1>" + t + "</h1>\n<p>Documento IMMONOVA pronto per la consultazione.</p>\n" +
+    "<a class=\"btn\" href=\"" + pdf + "\" target=\"_blank\" rel=\"noopener\">Apri / Scarica il PDF</a>\n" +
+    "</div>\n</body>\n</html>\n";
+}
+
 /* Costruisce l'intero documento scrivendo riga per riga, con interruzione di pagina
    automatica (e header ridisegnato) ogni volta che il contenuto sta per uscire dal margine
    inferiore. È la stessa logica di composizione già usata per il riepilogo a schermo
@@ -583,16 +629,22 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
       console.error("Salvataggio pdf_storage_path non riuscito:", pdfPathErr);
     }
 
-    // Il link condiviso passa dalla Edge Function "share-offer": genera un'anteprima
-    // WhatsApp/Telegram/Facebook con titolo dinamico (proposta + nome immobile), cosa che
-    // il file statico offer-share.html da solo non puo' fare (vedi commento nella funzione).
-    // La funzione poi reindirizza subito l'utente sulla pagina offer-share.html vera e propria.
-    // Le Edge Function di Supabase richiedono sempre una apikey (anche con --no-verify-jwt):
-    // senza header non risponde ("Missing authorization header"). WhatsApp/Telegram, quando
-    // legge l'anteprima del link, non manda alcun header custom -> la chiave va passata come
-    // parametro nell'URL. E' la chiave anonima pubblica, gia' visibile lato client in tutto
-    // il sito, quindi non e' un problema di sicurezza.
-    var shareUrl = SUPABASE_URL + "/functions/v1/share-offer?offer_id=" + encodeURIComponent(currentOfferId) + "&apikey=" + encodeURIComponent(SUPABASE_ANON_KEY);
+    // Pagina di condivisione: file HTML statico autosufficiente (titolo con nome immobile,
+    // link diretto al PDF già pronto qui sopra), caricato su Supabase Storage con
+    // Content-Type impostato esplicitamente — stesso meccanismo già in uso per i dossier
+    // statici, che funziona. Path sempre nuovo per lo stesso motivo del PDF (evitare che la
+    // CDN serva una versione vecchia in cache).
+    var shareHtml = buildOfferShareHtml(currentPropertyTitle, currentIsCounter, publicUrl);
+    var shareBlob = new Blob([shareHtml], { type: "text/html;charset=utf-8" });
+    var sharePath = "share/" + currentOfferId + "/index-" + Date.now() + ".html";
+    var shareUploadResult = await client.storage.from("offer-documents").upload(sharePath, shareBlob, {
+      contentType: "text/html; charset=utf-8",
+      upsert: true
+    });
+    if(shareUploadResult.error) throw shareUploadResult.error;
+    var shareUrlResult = client.storage.from("offer-documents").getPublicUrl(sharePath);
+    var shareUrl = shareUrlResult.data ? shareUrlResult.data.publicUrl : null;
+    if(!shareUrl) throw new Error("URL pubblico della pagina di condivisione non disponibile.");
 
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#4f7f45";
