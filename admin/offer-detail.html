@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposta | IMMONOVA Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430;padding-bottom:60px}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+header{position:sticky;top:0;z-index:20;background:rgba(244,236,223,.9);backdrop-filter:blur(14px);border-bottom:1px solid rgba(166,127,52,.18);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+header a.back{color:#a67f34;text-decoration:none;font-size:11px;letter-spacing:.16em;text-transform:uppercase;border:1px solid rgba(166,127,52,.28);padding:10px 16px}
+header h1{font-size:18px;font-weight:300;letter-spacing:.1em;color:#a67f34;margin:0}
+.container{max-width:900px;margin:0 auto;padding:36px 32px 60px}
+.panel{background:#fffdf7;border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.07);padding:44px 48px}
+.top-actions{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+button,.btn{cursor:pointer;font-family:inherit}
+.btn{padding:11px 18px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.btn.secondary{background:transparent;color:#a67f34}
+.badge{padding:6px 14px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid transparent}
+.badge-bozza{background:rgba(143,118,67,.15);color:#8f7643;border-color:rgba(143,118,67,.3)}
+.badge-inviata{background:rgba(166,127,52,.15);color:#a67f34;border-color:rgba(166,127,52,.35)}
+.badge-accettata{background:rgba(81,122,79,.15);color:#4f7f45;border-color:rgba(81,122,79,.35)}
+.badge-rifiutata{background:rgba(156,47,47,.12);color:#9c2f2f;border-color:rgba(156,47,47,.3)}
+.badge-controfferta_ricevuta{background:rgba(166,100,52,.15);color:#a66434;border-color:rgba(166,100,52,.35)}
+.badge-ritirata{background:rgba(143,118,67,.1);color:#8f7643;border-color:rgba(143,118,67,.25)}
+.badge-scaduta{background:rgba(120,120,120,.15);color:#666;border-color:rgba(120,120,120,.3)}
+
+.letterhead{font-size:20px;letter-spacing:.3em;color:#a67f34;font-weight:300;margin-bottom:6px;text-align:center}
+.sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:32px;border-bottom:1px solid rgba(166,127,52,.25);padding-bottom:18px;text-align:center}
+.doc-title{font-size:22px;color:#4a3c1f;font-weight:400;margin-bottom:6px}
+.doc-meta{font-size:12px;color:#8f7643;margin-bottom:26px}
+.doc-body h4{font-size:13px;color:#a67f34;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+.doc-body p,.doc-body li{font-size:13.5px;line-height:1.85;color:#3f321c}
+.doc-body ul{margin-left:20px;margin-bottom:6px}
+.sign-row{display:flex;justify-content:space-between;gap:30px;margin-top:60px;flex-wrap:wrap}
+.sign-col{flex:1;min-width:220px;text-align:center}
+.sign-col img{max-width:220px;max-height:90px;border-bottom:1px solid #4a3c1f;margin-bottom:6px}
+.sign-line{border-top:1px solid #4a3c1f;padding-top:8px;font-size:12px;color:#4a3c1f;margin-top:60px}
+.sign-col img + .sign-line{margin-top:0;border-top:none}
+.loading-state,.empty-state{text-align:center;padding:60px 20px;color:#8f7643;font-size:13.5px}
+.msg-box{margin-top:14px;font-size:12.5px}
+.msg-box.error{color:#9c2f2f}
+
+@media print{
+  body *{visibility:hidden}
+  .panel, .panel *{visibility:visible}
+  .panel{position:absolute;left:0;top:0;box-shadow:none;border:none;padding:0;max-width:100%}
+  header, .top-actions{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="opportunities-pipeline.html" class="back">← Proposte</a>
+  <h1>🖋️ Dettaglio proposta</h1>
+  <span></span>
+</header>
+
+<div class="container">
+  <div class="top-actions" id="topActions" style="display:none">
+    <span class="badge" id="statusBadge"></span>
+    <div style="display:flex;gap:10px">
+      <button type="button" class="btn secondary" id="printBtn">Stampa / Salva PDF</button>
+    </div>
+  </div>
+
+  <div id="stateBox" class="loading-state">Caricamento proposta…</div>
+
+  <div class="panel" id="docPanel" style="display:none">
+    <div class="letterhead">IMMONOVA</div>
+    <div class="sub">OFF MARKET · CONSULTING</div>
+    <div class="doc-title" id="docTitle"></div>
+    <div class="doc-meta" id="docMeta"></div>
+    <div class="doc-body" id="docBody"></div>
+    <div class="sign-row" id="signRow"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+var STATUS_LABELS = {
+  bozza:"Bozza", inviata:"Inviata", accettata:"Accettata", rifiutata:"Rifiutata",
+  controfferta_ricevuta:"Controfferta ricevuta", ritirata:"Ritirata", scaduta:"Scaduta"
+};
+var DECL_VALUE_LABELS = { si:"Sì", no:"No", da_verificare:"Da verificare" };
+
+function escapeHTML(v){ return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
+function fmtDate(d){ if(!d) return ""; try{ return new Date(d).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}); }catch(e){ return d; } }
+function fmtPrice(p){ if(p == null || p === "") return ""; return "€ " + Number(p).toLocaleString("it-IT"); }
+function fullName(first, last){ return [first, last].filter(Boolean).join(" ") || "—"; }
+
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  if(result.error || !result.data.session){
+    window.location.href = "login.html";
+    return false;
+  }
+  return true;
+}
+
+function clauseListHTML(list, emptyText){
+  if(!list || !list.length) return "<p>" + escapeHTML(emptyText) + "</p>";
+  return "<ul>" + list.map(function(c){
+    return "<li>" + escapeHTML(c.label || c.key || "") + (c.notes ? " — " + escapeHTML(c.notes) : "") + "</li>";
+  }).join("") + "</ul>";
+}
+
+function declarationsHTML(list){
+  if(!list || !list.length) return "<p>Nessuna dichiarazione compilata.</p>";
+  return "<ul>" + list.map(function(d){
+    var valueLabel = DECL_VALUE_LABELS[d.value] || d.value || "";
+    return "<li>" + escapeHTML(d.label || d.key || "") + (valueLabel ? ": " + escapeHTML(valueLabel) : "") + (d.notes ? " — " + escapeHTML(d.notes) : "") + "</li>";
+  }).join("") + "</ul>";
+}
+
+function cadastralUnitsHTML(units, comune){
+  var html = "";
+  if(comune) html += "<p>Comune catastale: " + escapeHTML(comune) + "</p>";
+  if(!units || !units.length){
+    html += "<p>Non inserite.</p>";
+    return html;
+  }
+  html += "<ul>" + units.map(function(u){
+    var parts = [];
+    if(u.sezione) parts.push("Sez. " + escapeHTML(u.sezione));
+    if(u.foglio) parts.push("Foglio " + escapeHTML(u.foglio));
+    if(u.particella) parts.push("Particella " + escapeHTML(u.particella));
+    if(u.subalterno) parts.push("Sub. " + escapeHTML(u.subalterno));
+    if(u.categoria) parts.push("Categoria " + escapeHTML(u.categoria));
+    if(u.classe) parts.push("Classe " + escapeHTML(u.classe));
+    if(u.rendita) parts.push("Rendita € " + escapeHTML(u.rendita));
+    if(u.vani) parts.push("Vani " + escapeHTML(u.vani));
+    if(u.mq) parts.push(escapeHTML(u.mq) + " mq");
+    return "<li>" + parts.join(" · ") + "</li>";
+  }).join("") + "</ul>";
+  return html;
+}
+
+function leaseHTML(o){
+  if(!o.is_leased){
+    return "<p>Immobile libero da locazioni in corso, per quanto dichiarato dal venditore.</p>";
+  }
+  return "<p>Immobile locato" + (o.lease_tenant_name ? " a " + escapeHTML(o.lease_tenant_name) : "") +
+    (o.lease_expiry_date ? " — scadenza contratto: " + escapeHTML(fmtDate(o.lease_expiry_date)) : "") +
+    (o.lease_monthly_rent ? " — canone mensile: " + escapeHTML(fmtPrice(o.lease_monthly_rent)) : "") +
+    "<br>" + (o.lease_prelazione_waived ?
+      "Il conduttore ha rinunciato per iscritto al diritto di prelazione (art. 38 L. 392/1978)." :
+      "Diritto di prelazione del conduttore ai sensi dell'art. 38 L. 392/1978 non risulta rinunciato: da verificare prima del rogito.") +
+    "<br>Vendita soggetta al contratto di locazione in corso fino a naturale scadenza (art. 1599 c.c.).</p>";
+}
+
+function paymentsHTML(o){
+  var rows = [];
+  if(o.payment_a_amount) rows.push("Caparra (a): " + escapeHTML(fmtPrice(o.payment_a_amount)) + (o.payment_a_method ? " — " + escapeHTML(o.payment_a_method) : "") + (o.payment_a_notes ? " — " + escapeHTML(o.payment_a_notes) : ""));
+  if(o.payment_b_amount) rows.push("Rata (b): " + escapeHTML(fmtPrice(o.payment_b_amount)) + (o.payment_b_method ? " — " + escapeHTML(o.payment_b_method) : "") + (o.payment_b_due_date ? " — scadenza " + escapeHTML(fmtDate(o.payment_b_due_date)) : ""));
+  if(o.payment_c_amount) rows.push("Rata (c): " + escapeHTML(fmtPrice(o.payment_c_amount)) + (o.payment_c_method ? " — " + escapeHTML(o.payment_c_method) : "") + (o.payment_c_due_date ? " — scadenza " + escapeHTML(fmtDate(o.payment_c_due_date)) : ""));
+  if(o.payment_d_amount) rows.push("Saldo al rogito (d): " + escapeHTML(fmtPrice(o.payment_d_amount)) + (o.payment_d_method ? " — " + escapeHTML(o.payment_d_method) : ""));
+  var html = rows.length ? "<ul>" + rows.map(function(r){ return "<li>" + r + "</li>"; }).join("") + "</ul>" : "<p>Non specificate.</p>";
+  if(o.deposit_amount) html += "<p>Caparra confirmatoria totale (art. 1385 c.c.): " + escapeHTML(fmtPrice(o.deposit_amount)) + (o.deposit_type ? " — " + escapeHTML(o.deposit_type) : "") + "</p>";
+  if(o.payment_balance_notes) html += "<p>Note: " + escapeHTML(o.payment_balance_notes) + "</p>";
+  return html;
+}
+
+async function loadOffer(){
+  var params = new URLSearchParams(window.location.search);
+  var offerId = params.get("offer_id");
+  var stateBox = document.getElementById("stateBox");
+
+  if(!offerId){
+    stateBox.className = "empty-state";
+    stateBox.textContent = "Nessuna proposta indicata (manca il parametro offer_id nell'URL).";
+    return;
+  }
+
+  var result = await client.from("opportunity_offers").select("*").eq("id", offerId).single();
+  if(result.error || !result.data){
+    stateBox.className = "empty-state";
+    stateBox.textContent = "Proposta non trovata: " + (result.error ? result.error.message : "");
+    return;
+  }
+  var o = result.data;
+
+  var opp = null;
+  if(o.opportunity_id){
+    var oppResult = await client.from("opportunities").select("id,title,municipality,formatted_address,address").eq("id", o.opportunity_id).single();
+    opp = oppResult.data || null;
+  }
+
+  stateBox.style.display = "none";
+  document.getElementById("topActions").style.display = "flex";
+  document.getElementById("docPanel").style.display = "block";
+
+  var badge = document.getElementById("statusBadge");
+  badge.className = "badge badge-" + (o.status || "bozza");
+  badge.textContent = STATUS_LABELS[o.status] || o.status || "";
+
+  var isCounter = o.offer_kind === "controfferta";
+  document.getElementById("docTitle").textContent = isCounter ? "Proposta di Controfferta" : "Proposta Irrevocabile d'Acquisto";
+  document.getElementById("docMeta").textContent = "Creata il " + fmtDate(o.created_at) + (o.offer_expires_at ? " — valida fino al " + fmtDate(o.offer_expires_at) : "");
+
+  var propertyTitle = opp ? opp.title : ("Immobile #" + o.opportunity_id);
+  var propertyAddress = opp ? (opp.formatted_address || opp.address || opp.municipality || "") : "";
+
+  var html = "";
+  html += "<h4>Immobile</h4><p>" + escapeHTML(propertyTitle) + (propertyAddress ? " — " + escapeHTML(propertyAddress) : "") + "</p>";
+  html += "<h4>Dati catastali</h4>" + cadastralUnitsHTML(o.cadastral_units, o.cad_comune);
+  html += "<h4>Locazione</h4>" + leaseHTML(o);
+
+  html += "<h4>Venditore/Proprietario</h4><p>" + escapeHTML(fullName(o.seller_first_name, o.seller_last_name)) +
+    (o.seller_fiscal_code ? " — C.F. " + escapeHTML(o.seller_fiscal_code) : "") +
+    (o.seller_residence_address ? "<br>Residente in " + escapeHTML(o.seller_residence_address) : "") +
+    (o.seller_id_document_type ? "<br>Documento: " + escapeHTML(o.seller_id_document_type) + (o.seller_id_document_number ? " n. " + escapeHTML(o.seller_id_document_number) : "") + (o.seller_id_document_issued_by ? ", rilasciato da " + escapeHTML(o.seller_id_document_issued_by) : "") + (o.seller_id_document_issued_at ? " il " + escapeHTML(fmtDate(o.seller_id_document_issued_at)) : "") : "") + "</p>";
+
+  var buyer2Name = fullName(o.buyer2_first_name, o.buyer2_last_name);
+  html += "<h4>Proponente/Acquirente</h4><p>" + escapeHTML(fullName(o.buyer_first_name, o.buyer_last_name)) +
+    (o.buyer_fiscal_code ? " — C.F. " + escapeHTML(o.buyer_fiscal_code) : "") +
+    (o.buyer_residence_address ? "<br>Residente in " + escapeHTML(o.buyer_residence_address) : "") +
+    (o.buyer_id_document_type ? "<br>Documento: " + escapeHTML(o.buyer_id_document_type) + (o.buyer_id_document_number ? " n. " + escapeHTML(o.buyer_id_document_number) : "") : "") +
+    (buyer2Name !== "—" ? "<br><br>Secondo proponente: " + escapeHTML(buyer2Name) + (o.buyer2_fiscal_code ? " — C.F. " + escapeHTML(o.buyer2_fiscal_code) : "") : "") + "</p>";
+
+  html += "<h4>Dichiarazioni del venditore</h4>" + declarationsHTML(o.seller_declarations);
+
+  html += "<h4>Condizioni economiche</h4><p>Prezzo offerto: <strong>" + escapeHTML(fmtPrice(o.offered_price)) + "</strong>" +
+    (o.property_asking_price ? " (prezzo richiesto: " + escapeHTML(o.property_asking_price) + ")" : "") + "</p>" +
+    paymentsHTML(o);
+
+  if(o.notary_name || o.notary_address || o.deed_deadline_date){
+    html += "<h4>Rogito</h4><p>" +
+      (o.notary_name ? "Notaio: " + escapeHTML(o.notary_name) : "") +
+      (o.notary_address ? "<br>" + escapeHTML(o.notary_address) : "") +
+      (o.deed_deadline_date ? "<br>Termine per il rogito: " + escapeHTML(fmtDate(o.deed_deadline_date)) : "") + "</p>";
+  }
+
+  html += "<h4>Clausole sospensive</h4>" + clauseListHTML(o.suspensive_clauses, "Nessuna clausola sospensiva.") +
+    (o.suspensive_notes ? "<p>Note: " + escapeHTML(o.suspensive_notes) + "</p>" : "");
+  html += "<h4>Clausole risolutive</h4>" + clauseListHTML(o.resolutive_clauses, "Nessuna clausola risolutiva.") +
+    (o.resolutive_notes ? "<p>Note: " + escapeHTML(o.resolutive_notes) + "</p>" : "");
+
+  if(o.additional_clauses) html += "<h4>Clausole aggiuntive</h4><p>" + escapeHTML(o.additional_clauses).replace(/\n/g,"<br>") + "</p>";
+  if(isCounter && o.counter_modifications) html += "<h4>Modifiche proposte in controfferta</h4><p>" + escapeHTML(o.counter_modifications).replace(/\n/g,"<br>") + "</p>";
+  if(o.agency_mediation_note) html += "<h4>Mediazione</h4><p>" + escapeHTML(o.agency_mediation_note) + "</p>";
+  if(o.notes) html += "<h4>Note interne</h4><p>" + escapeHTML(o.notes) + "</p>";
+
+  document.getElementById("docBody").innerHTML = html;
+
+  var buyerSigHTML = o.buyer_signature_data_url ? '<img src="' + o.buyer_signature_data_url + '">' : "";
+  var sellerSigHTML = o.seller_signature_data_url ? '<img src="' + o.seller_signature_data_url + '">' : "";
+  document.getElementById("signRow").innerHTML =
+    '<div class="sign-col">' + buyerSigHTML + '<div class="sign-line">Firma del Proponente/Acquirente' + (o.buyer_signed_at ? " — " + escapeHTML(fmtDate(o.buyer_signed_at)) : "") + '</div></div>' +
+    '<div class="sign-col">' + sellerSigHTML + '<div class="sign-line">Firma del Venditore/Proprietario (per accettazione)' + (o.seller_signed_at ? " — " + escapeHTML(fmtDate(o.seller_signed_at)) : "") + '</div></div>';
+
+  document.title = (isCounter ? "Controfferta" : "Proposta") + " — " + propertyTitle + " | IMMONOVA Admin";
+}
+
+document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
+
+(async function init(){
+  var ok = await checkAuth();
+  if(!ok) return;
+  await loadOffer();
+})();
+</script>
+
+</body>
+</html>
