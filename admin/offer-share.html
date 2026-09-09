@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposta d'Acquisto — IMMONOVA</title>
+
+<!-- Meta Open Graph: letti da WhatsApp/Telegram/Facebook per generare l'anteprima del link
+     (titolo, descrizione, immagine). NOTA IMPORTANTE: questo è un sito statico (GitHub Pages),
+     senza generazione lato server — quindi questi tag sono FISSI, uguali per ogni proposta
+     condivisa. WhatsApp non esegue JavaScript per leggere l'anteprima, quindi non è possibile
+     mostrare qui il titolo/immobile specifico di ogni singola proposta: mostra sempre lo stesso
+     titolo/descrizione "generici IMMONOVA", cambia solo il link (con l'offer_id) che il
+     destinatario apre. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="IMMONOVA">
+<meta property="og:title" content="Proposta d'Acquisto — IMMONOVA">
+<meta property="og:description" content="Documento immobiliare IMMONOVA — Off Market Consulting. Apri per visualizzare e scaricare il PDF.">
+<!-- TODO: sostituire con l'URL pubblico reale del logo IMMONOVA in PNG/JPG (consigliata dimensione 1200x630px) -->
+<meta property="og:image" content="https://immonova-consulting.it/assets/immonova-logo-share.png">
+<meta property="og:url" content="https://immonova-consulting.it/admin/offer-share.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Proposta d'Acquisto — IMMONOVA">
+<meta name="twitter:description" content="Documento immobiliare IMMONOVA — Off Market Consulting.">
+<meta name="twitter:image" content="https://immonova-consulting.it/assets/immonova-logo-share.png">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.card{background:#fffdf7;border:1px solid rgba(166,127,52,.2);box-shadow:0 24px 70px rgba(127,100,48,.1);padding:48px 40px;max-width:440px;width:100%;text-align:center}
+.letterhead{font-size:20px;letter-spacing:.3em;color:#a67f34;font-weight:300;margin-bottom:6px}
+.sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:28px;border-bottom:1px solid rgba(166,127,52,.2);padding-bottom:18px}
+h1{font-size:18px;color:#4a3c1f;font-weight:400;margin-bottom:10px}
+p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin-bottom:24px}
+.btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}
+.state{font-size:12.5px;color:#8f7643}
+.state.error{color:#9c2f2f}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="letterhead">IMMONOVA</div>
+  <div class="sub">OFF MARKET · CONSULTING</div>
+  <h1 id="title">Documento immobiliare</h1>
+  <p id="desc">Caricamento…</p>
+  <div id="actionBox"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+(async function(){
+  var params = new URLSearchParams(window.location.search);
+  var offerId = params.get("offer_id");
+  var titleEl = document.getElementById("title");
+  var descEl = document.getElementById("desc");
+  var actionBox = document.getElementById("actionBox");
+
+  if(!offerId){
+    titleEl.textContent = "Link non valido";
+    descEl.textContent = "Manca il riferimento alla proposta.";
+    return;
+  }
+
+  var path = "pdf/" + offerId + "/proposta.pdf";
+  var pub = client.storage.from("offer-documents").getPublicUrl(path);
+  var pdfUrl = pub.data ? pub.data.publicUrl : null;
+
+  var result = await client.from("opportunity_offers").select("offer_kind,offered_price,opportunity_id").eq("id", offerId).single();
+  var propertyTitle = "";
+  if(!result.error && result.data && result.data.opportunity_id){
+    var oppResult = await client.from("opportunities").select("title").eq("id", result.data.opportunity_id).single();
+    if(oppResult.data) propertyTitle = oppResult.data.title || "";
+  }
+
+  var isCounter = result.data && result.data.offer_kind === "controfferta";
+  titleEl.textContent = (isCounter ? "Controfferta" : "Proposta d'Acquisto") + (propertyTitle ? " — " + propertyTitle : "");
+  descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
+
+  if(pdfUrl){
+    actionBox.innerHTML = '<a class="btn" href="' + pdfUrl + '" target="_blank" rel="noopener">Apri / Scarica il PDF</a>';
+  }else{
+    actionBox.innerHTML = '<span class="state error">PDF non ancora generato per questa proposta.</span>';
+  }
+})();
+</script>
+
+</body>
+</html>

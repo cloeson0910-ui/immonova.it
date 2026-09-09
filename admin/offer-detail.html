@@ -42,6 +42,9 @@ button,.btn{cursor:pointer;font-family:inherit}
 .loading-state,.empty-state{text-align:center;padding:60px 20px;color:#8f7643;font-size:13.5px}
 .msg-box{margin-top:14px;font-size:12.5px}
 .msg-box.error{color:#9c2f2f}
+.pdf-link-box{display:none;margin-bottom:18px;padding:14px 16px;background:rgba(81,122,79,.1);border:1px solid rgba(81,122,79,.3);font-size:13px;color:#4f7f45;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.pdf-link-box.visible{display:flex}
+.pdf-link-box a{color:#4f7f45;font-weight:600}
 
 @media print{
   body *{visibility:hidden}
@@ -64,9 +67,12 @@ button,.btn{cursor:pointer;font-family:inherit}
     <span class="badge" id="statusBadge"></span>
     <div style="display:flex;gap:10px">
       <a href="#" class="btn secondary" id="editBtn">Modifica proposta</a>
-      <button type="button" class="btn secondary" id="printBtn">Stampa / Salva PDF</button>
+      <button type="button" class="btn" id="generatePdfBtn">Genera PDF (con link)</button>
+      <button type="button" class="btn secondary" id="printBtn">Stampa dal browser</button>
     </div>
   </div>
+
+  <div class="pdf-link-box" id="pdfLinkBox"></div>
 
   <div id="stateBox" class="loading-state">Caricamento proposta…</div>
 
@@ -83,6 +89,8 @@ button,.btn{cursor:pointer;font-family:inherit}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
 var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -261,9 +269,127 @@ async function loadOffer(){
     '<div class="sign-col">' + sellerSigHTML + '<div class="sign-line">Firma del Venditore/Proprietario (per accettazione)' + (o.seller_signed_at ? " — " + escapeHTML(fmtDate(o.seller_signed_at)) : "") + '</div></div>';
 
   document.title = (isCounter ? "Controfferta" : "Proposta") + " — " + propertyTitle + " | IMMONOVA Admin";
+
+  currentOfferId = o.id;
+  currentDocTitle = (isCounter ? "Controfferta" : "Proposta") + " — " + propertyTitle;
 }
 
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
+
+/* ================================ Generazione PDF reale ================================
+   window.print() dipende dal salvataggio manuale del browser e non ripete il logo su ogni
+   pagina (è un blocco fisso in cima al documento, non un'intestazione di stampa). Qui invece
+   si genera un vero file PDF via jsPDF+html2canvas, con logo IMMONOVA ridisegnato su OGNI
+   pagina del PDF (non dipende dal DOM), poi lo si carica su Storage e si mostra il link
+   diretto per scaricarlo — nessun salvataggio manuale richiesto. */
+var currentOfferId = null;
+var currentDocTitle = "";
+
+function drawPdfHeaderOnPage(doc, pageWidth){
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(16);
+  doc.setTextColor(166, 127, 52);
+  doc.text("IMMONOVA", pageWidth / 2, 36, { align: "center" });
+  doc.setFontSize(8);
+  doc.setTextColor(143, 118, 67);
+  doc.text("OFF MARKET  ·  CONSULTING", pageWidth / 2, 50, { align: "center" });
+  doc.setDrawColor(166, 127, 52);
+  doc.setLineWidth(0.6);
+  doc.line(48, 62, pageWidth - 48, 62);
+}
+
+function drawPdfFooterOnPage(doc, pageWidth, pageHeight, pageNum, pageCount){
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(143, 118, 67);
+  doc.text("Pagina " + pageNum + " di " + pageCount, pageWidth / 2, pageHeight - 24, { align: "center" });
+}
+
+document.getElementById("generatePdfBtn").addEventListener("click", async function(){
+  var btn = document.getElementById("generatePdfBtn");
+  var linkBox = document.getElementById("pdfLinkBox");
+
+  if(!currentOfferId){
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#9c2f2f";
+    linkBox.textContent = "Nessuna proposta caricata da esportare.";
+    return;
+  }
+  if(typeof window.jspdf === "undefined" || typeof window.html2canvas === "undefined"){
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#9c2f2f";
+    linkBox.textContent = "Libreria di generazione PDF non caricata (controlla la connessione) — riprova.";
+    return;
+  }
+
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.textContent = "Generazione PDF in corso...";
+  linkBox.className = "pdf-link-box";
+  linkBox.textContent = "";
+
+  try{
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: "pt", format: "a4" });
+    var pageWidth = doc.internal.pageSize.getWidth();
+    var marginTop = 84;
+    var marginSide = 48;
+
+    await new Promise(function(resolve, reject){
+      doc.html(document.getElementById("docPanel"), {
+        x: marginSide,
+        y: marginTop,
+        width: pageWidth - marginSide * 2,
+        windowWidth: 900,
+        autoPaging: "text",
+        html2canvas: { scale: 0.72, useCORS: true },
+        callback: function(finishedDoc){
+          try{
+            var pageWidthInner = finishedDoc.internal.pageSize.getWidth();
+            var pageHeightInner = finishedDoc.internal.pageSize.getHeight();
+            var pageCount = finishedDoc.internal.getNumberOfPages();
+            for(var i = 1; i <= pageCount; i++){
+              finishedDoc.setPage(i);
+              drawPdfHeaderOnPage(finishedDoc, pageWidthInner);
+              drawPdfFooterOnPage(finishedDoc, pageWidthInner, pageHeightInner, i, pageCount);
+            }
+            resolve(finishedDoc);
+          }catch(e){ reject(e); }
+        }
+      });
+    });
+
+    var blob = doc.output("blob");
+    var path = "pdf/" + currentOfferId + "/proposta.pdf";
+
+    var uploadResult = await client.storage.from("offer-documents").upload(path, blob, {
+      contentType: "application/pdf",
+      upsert: true
+    });
+    if(uploadResult.error) throw uploadResult.error;
+
+    var publicUrlResult = client.storage.from("offer-documents").getPublicUrl(path);
+    var publicUrl = publicUrlResult.data ? publicUrlResult.data.publicUrl : null;
+    if(!publicUrl) throw new Error("URL pubblico del PDF non disponibile.");
+
+    var shareUrl = window.location.origin + window.location.pathname.replace(/offer-detail\.html$/, "offer-share.html") + "?offer_id=" + encodeURIComponent(currentOfferId);
+
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#4f7f45";
+    linkBox.innerHTML = "PDF generato correttamente — logo IMMONOVA su ogni pagina.<br>" +
+      '<a href="' + publicUrl + '" target="_blank" rel="noopener">Apri il PDF direttamente</a>' +
+      ' &nbsp;·&nbsp; ' +
+      '<a href="' + shareUrl + '" target="_blank" rel="noopener">Link da condividere (con anteprima)</a>';
+  }catch(err){
+    console.error(err);
+    linkBox.className = "pdf-link-box visible";
+    linkBox.style.color = "#9c2f2f";
+    linkBox.textContent = "Errore nella generazione del PDF: " + (err && err.message ? err.message : String(err));
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+});
 
 (async function init(){
   var ok = await checkAuth();
