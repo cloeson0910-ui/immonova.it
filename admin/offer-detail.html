@@ -587,7 +587,12 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
     // WhatsApp/Telegram/Facebook con titolo dinamico (proposta + nome immobile), cosa che
     // il file statico offer-share.html da solo non puo' fare (vedi commento nella funzione).
     // La funzione poi reindirizza subito l'utente sulla pagina offer-share.html vera e propria.
-    var shareUrl = SUPABASE_URL + "/functions/v1/share-offer?offer_id=" + encodeURIComponent(currentOfferId);
+    // Le Edge Function di Supabase richiedono sempre una apikey (anche con --no-verify-jwt):
+    // senza header non risponde ("Missing authorization header"). WhatsApp/Telegram, quando
+    // legge l'anteprima del link, non manda alcun header custom -> la chiave va passata come
+    // parametro nell'URL. E' la chiave anonima pubblica, gia' visibile lato client in tutto
+    // il sito, quindi non e' un problema di sicurezza.
+    var shareUrl = SUPABASE_URL + "/functions/v1/share-offer?offer_id=" + encodeURIComponent(currentOfferId) + "&apikey=" + encodeURIComponent(SUPABASE_ANON_KEY);
 
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#4f7f45";
