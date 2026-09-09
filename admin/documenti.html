@@ -112,7 +112,25 @@ button, .btn{cursor:pointer;font-family:inherit}
         <div class="sc-name" id="scName"></div>
         <div class="sc-meta" id="scMeta"></div>
       </div>
-      <button type="button" class="btn secondary" id="changeClientBtn">Cambia cliente</button>
+      <div style="display:flex;gap:10px">
+        <button type="button" class="btn secondary" id="editClientBtn">Modifica dati</button>
+        <button type="button" class="btn secondary" id="changeClientBtn">Cambia cliente</button>
+      </div>
+    </div>
+
+    <div class="new-client-form" id="editClientForm" style="display:none">
+      <div class="grid2">
+        <div class="field"><label>Nome *</label><input type="text" id="editFirstName"></div>
+        <div class="field"><label>Cognome *</label><input type="text" id="editLastName"></div>
+        <div class="field"><label>Email</label><input type="email" id="editEmail"></div>
+        <div class="field"><label>PEC</label><input type="email" id="editPec"></div>
+        <div class="field"><label>Telefono</label><input type="tel" id="editPhone"></div>
+        <div class="field"><label>Azienda</label><input type="text" id="editCompany"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="button" class="btn" id="saveClientEditBtn">Salva modifiche</button>
+        <button type="button" class="btn secondary" id="cancelClientEditBtn">Annulla</button>
+      </div>
     </div>
 
     <div class="msg-box" id="clientMsg"></div>
@@ -228,7 +246,7 @@ searchInput.addEventListener("input", function(){
 async function runClientSearch(q){
   var like = "%" + q.replace(/[%_]/g, "") + "%";
   var res = await client.from("investors")
-    .select("id,first_name,last_name,email,phone,company")
+    .select("id,first_name,last_name,email,phone,company,pec")
     .or("first_name.ilike." + like + ",last_name.ilike." + like + ",email.ilike." + like + ",company.ilike." + like)
     .order("created_at", { ascending:false })
     .limit(15);
@@ -286,12 +304,56 @@ function selectClient(inv){
   document.getElementById("clientSearchBlock").style.display = "none";
   document.getElementById("selectedClientBox").style.display = "flex";
   document.getElementById("scName").textContent = fullName(inv) + (inv.company ? " — " + inv.company : "");
-  document.getElementById("scMeta").textContent = [inv.email, inv.phone].filter(Boolean).join(" · ") || "Nessun contatto registrato";
+  document.getElementById("scMeta").textContent = [inv.email, inv.pec, inv.phone].filter(Boolean).join(" · ") || "Nessun contatto registrato";
   document.getElementById("docsPanel").style.display = "block";
   document.getElementById("historyPanel").style.display = "block";
+  document.getElementById("editClientForm").style.display = "none";
   document.getElementById("clientMsg").textContent = "";
   loadClientHistory(inv.id);
 }
+
+/* ================================ Modifica anagrafica cliente ================================ */
+document.getElementById("editClientBtn").addEventListener("click", function(){
+  if(!selectedClient) return;
+  document.getElementById("editFirstName").value = selectedClient.first_name || "";
+  document.getElementById("editLastName").value = selectedClient.last_name || "";
+  document.getElementById("editEmail").value = selectedClient.email || "";
+  document.getElementById("editPec").value = selectedClient.pec || "";
+  document.getElementById("editPhone").value = selectedClient.phone || "";
+  document.getElementById("editCompany").value = selectedClient.company || "";
+  document.getElementById("editClientForm").style.display = "block";
+});
+
+document.getElementById("cancelClientEditBtn").addEventListener("click", function(){
+  document.getElementById("editClientForm").style.display = "none";
+});
+
+document.getElementById("saveClientEditBtn").addEventListener("click", async function(){
+  if(!selectedClient) return;
+  var msg = document.getElementById("clientMsg");
+  var firstName = document.getElementById("editFirstName").value.trim();
+  var lastName = document.getElementById("editLastName").value.trim();
+  if(!firstName || !lastName){
+    msg.className = "msg-box error"; msg.textContent = "Nome e cognome sono obbligatori.";
+    return;
+  }
+  var payload = {
+    first_name: firstName,
+    last_name: lastName,
+    email: document.getElementById("editEmail").value.trim() || null,
+    pec: document.getElementById("editPec").value.trim() || null,
+    phone: document.getElementById("editPhone").value.trim() || null,
+    company: document.getElementById("editCompany").value.trim() || null
+  };
+  var upd = await client.from("investors").update(payload).eq("id", selectedClient.id).select().single();
+  if(upd.error){
+    msg.className = "msg-box error"; msg.textContent = "Errore nel salvataggio: " + upd.error.message;
+    return;
+  }
+  msg.className = "msg-box success"; msg.textContent = "Dati cliente aggiornati.";
+  document.getElementById("editClientForm").style.display = "none";
+  selectClient(upd.data);
+});
 
 document.getElementById("changeClientBtn").addEventListener("click", function(){
   selectedClient = null;

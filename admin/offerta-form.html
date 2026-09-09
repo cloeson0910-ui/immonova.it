@@ -434,6 +434,10 @@ input[readonly]{
       <input type="email" id="seller_email">
     </div>
     <div class="field">
+      <label for="seller_pec">PEC (facoltativa)</label>
+      <input type="email" id="seller_pec">
+    </div>
+    <div class="field">
       <label for="seller_phone">Telefono</label>
       <input type="tel" id="seller_phone">
     </div>
@@ -483,6 +487,10 @@ input[readonly]{
       <input type="email" id="buyer_email" required>
     </div>
     <div class="field">
+      <label for="buyer_pec">PEC (facoltativa)</label>
+      <input type="email" id="buyer_pec">
+    </div>
+    <div class="field">
       <label for="buyer_phone">Telefono</label>
       <input type="tel" id="buyer_phone">
     </div>
@@ -520,6 +528,7 @@ input[readonly]{
         <div class="field"><label for="buyer2_birth_date">Data di nascita</label><input type="date" id="buyer2_birth_date"></div>
         <div class="field"><label for="buyer2_birth_place">Luogo di nascita</label><input type="text" id="buyer2_birth_place"></div>
         <div class="field"><label for="buyer2_residence_address">Indirizzo di residenza</label><input type="text" id="buyer2_residence_address"></div>
+        <div class="field"><label for="buyer2_pec">PEC (facoltativa)</label><input type="email" id="buyer2_pec"></div>
       </div>
     </div>
 
@@ -1121,7 +1130,7 @@ async function loadOpportunities(){
 }
 
 function clearSellerFields(){
-  ["seller_first_name","seller_last_name","seller_fiscal_code","seller_birth_date","seller_birth_place","seller_residence_address","seller_email","seller_phone"].forEach(function(id){
+  ["seller_first_name","seller_last_name","seller_fiscal_code","seller_birth_date","seller_birth_place","seller_residence_address","seller_email","seller_pec","seller_phone"].forEach(function(id){
     document.getElementById(id).value = "";
   });
   document.getElementById("sellerSummary").classList.remove("active");
@@ -1148,7 +1157,7 @@ async function loadSellerForOpportunity(opportunityId){
 
   var investorsResult = await client
     .from("investors")
-    .select("id,first_name,last_name,email,phone,company")
+    .select("id,first_name,last_name,email,phone,company,pec")
     .in("id", investorIds);
 
   if(investorsResult.error || !investorsResult.data || !investorsResult.data.length) return;
@@ -1159,6 +1168,7 @@ async function loadSellerForOpportunity(opportunityId){
   document.getElementById("seller_first_name").value = selectedSeller.first_name || "";
   document.getElementById("seller_last_name").value = selectedSeller.last_name || "";
   document.getElementById("seller_email").value = selectedSeller.email || "";
+  document.getElementById("seller_pec").value = selectedSeller.pec || "";
   document.getElementById("seller_phone").value = selectedSeller.phone || "";
 
   var box = document.getElementById("sellerSummary");
@@ -1194,7 +1204,7 @@ async function loadPreselectedInvestor(){
 
   var result = await client
     .from("investors")
-    .select("id,first_name,last_name,email,phone,company")
+    .select("id,first_name,last_name,email,phone,company,pec")
     .eq("id", investorId)
     .single();
 
@@ -1205,6 +1215,7 @@ async function loadPreselectedInvestor(){
   document.getElementById("buyer_first_name").value = preselectedInvestor.first_name || "";
   document.getElementById("buyer_last_name").value = preselectedInvestor.last_name || "";
   document.getElementById("buyer_email").value = preselectedInvestor.email || "";
+  document.getElementById("buyer_pec").value = preselectedInvestor.pec || "";
   document.getElementById("buyer_phone").value = preselectedInvestor.phone || "";
 
   document.getElementById("clientSelectField").style.display = "none";
@@ -1394,6 +1405,7 @@ var sellerSigPad = null;
         seller_birth_date: document.getElementById("seller_birth_date").value || null,
         seller_residence_address: document.getElementById("seller_residence_address").value.trim() || null,
         seller_email: document.getElementById("seller_email").value.trim() || null,
+        seller_pec: document.getElementById("seller_pec").value.trim() || null,
         seller_phone: document.getElementById("seller_phone").value.trim() || null,
         seller_declarations: collectDeclarations("sellerDeclarationsList", SELLER_DECLARATION_OPTIONS),
 
@@ -1403,6 +1415,7 @@ var sellerSigPad = null;
         buyer2_birth_place: document.getElementById("buyer2_birth_place").value.trim() || null,
         buyer2_birth_date: document.getElementById("buyer2_birth_date").value || null,
         buyer2_residence_address: document.getElementById("buyer2_residence_address").value.trim() || null,
+        buyer2_pec: document.getElementById("buyer2_pec").value.trim() || null,
 
         buyer_first_name: document.getElementById("buyer_first_name").value.trim(),
         buyer_last_name: document.getElementById("buyer_last_name").value.trim(),
@@ -1411,6 +1424,7 @@ var sellerSigPad = null;
         buyer_birth_date: document.getElementById("buyer_birth_date").value || null,
         buyer_residence_address: document.getElementById("buyer_residence_address").value.trim() || null,
         buyer_email: document.getElementById("buyer_email").value.trim(),
+        buyer_pec: document.getElementById("buyer_pec").value.trim() || null,
         buyer_phone: document.getElementById("buyer_phone").value.trim() || null,
         buyer_id_document_type: document.getElementById("buyer_id_document_type").value || null,
         buyer_id_document_number: document.getElementById("buyer_id_document_number").value.trim() || null,
@@ -1469,6 +1483,20 @@ var sellerSigPad = null;
 
       var insertResult = await client.from("opportunity_offers").insert(payload).select().single();
       if(insertResult.error) throw insertResult.error;
+
+      /* Riporta la PEC appena inserita nell'offerta sull'anagrafica cliente (investors),
+         cosi' dalla prossima volta parte già precompilata — best effort, un fallimento qui
+         non deve far sembrare fallito il salvataggio della proposta, già andato a buon fine. */
+      try{
+        if(selectedSeller && selectedSeller.id && payload.seller_pec){
+          await client.from("investors").update({ pec: payload.seller_pec }).eq("id", selectedSeller.id);
+        }
+        if(preselectedInvestor && preselectedInvestor.id && payload.buyer_pec){
+          await client.from("investors").update({ pec: payload.buyer_pec }).eq("id", preselectedInvestor.id);
+        }
+      }catch(pecSyncErr){
+        console.error("Sincronizzazione PEC su investors non riuscita:", pecSyncErr);
+      }
 
       /* Follow-up email al professionista che ha creato la proposta — best effort: un
          fallimento qui non deve mai far sembrare fallito il salvataggio, che è già andato
