@@ -52,7 +52,12 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .feat-item{display:flex;align-items:center;gap:9px;font-size:12px;color:#5c4a20}
 .feat-item .ic{width:20px;height:20px;flex:none;color:#a67f34}
 .feat-item .ic svg{width:100%;height:100%}
-.map-frame{width:100%;height:260px;border:1px solid rgba(166,127,52,.2);display:block;object-fit:cover;background:#e5d9bf}
+.map-row{display:flex;gap:0;height:260px;border:1px solid rgba(166,127,52,.2)}
+.map-frame{width:50%;height:100%;display:block;object-fit:cover;background:#e5d9bf;flex:none}
+.map-address-panel{width:50%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:24px 26px;background:#fbf5e8}
+.map-address-panel.standalone{width:100%;border:1px solid rgba(166,127,52,.2)}
+.map-address-label{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:#a58139;margin-bottom:10px}
+.map-address-text{font-size:15px;line-height:1.6;color:#5c4a20;font-weight:300}
 .sheet-footer{padding:16px 32px;border-top:1px solid rgba(166,127,52,.14);display:flex;justify-content:space-between;align-items:center;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(166,127,52,.6)}
 @media print{
   @page{size:A4;margin:0}
@@ -61,7 +66,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
   .container{width:210mm;max-width:none;margin:0;padding:0}
   .sheet{border:0;box-shadow:none}
 }
-@media(max-width:700px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 16px}.topbar{display:block}.actions{margin-top:18px}.sheet-body{padding:22px}.feat-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 16px}.topbar{display:block}.actions{margin-top:18px}.sheet-body{padding:22px}.feat-grid{grid-template-columns:repeat(2,1fr)}.map-row{flex-direction:column;height:auto}.map-frame{width:100%;height:200px}.map-address-panel{width:100%}}
 </style>
 </head>
 <body>
@@ -181,6 +186,11 @@ var UI_IT = {
 };
 
 var T = Object.assign({}, UI_IT);
+var TRANSLATED_TITLE = "";
+var TRANSLATED_DESC = "";
+var ADDRESS_LABELS = {
+  it:"Indirizzo", en:"Address", fr:"Adresse", de:"Adresse", es:"Dirección", ar:"العنوان"
+};
 
 /* ---- Traduzione: stessa logica sicura già in uso nel dossier completo (una chiamata per
    singolo testo, cosi' un eventuale disallineamento della traduzione non contamina le altre
@@ -204,7 +214,14 @@ async function translateOneText(lang, text, context){
 }
 async function applyLanguage(lang){
   CURRENT_LANG = lang || "it";
-  if(CURRENT_LANG === "it"){ T = Object.assign({}, UI_IT); return; }
+  var titleIt = clean(opportunity && opportunity.title) || "Immobile IMMONOVA";
+  var descIt = clean(opportunity && opportunity.short_description);
+  if(CURRENT_LANG === "it"){
+    T = Object.assign({}, UI_IT);
+    TRANSLATED_TITLE = titleIt;
+    TRANSLATED_DESC = descIt;
+    return;
+  }
   var keys = Object.keys(UI_IT);
   var CONCURRENCY = 6;
   var out = Object.assign({}, UI_IT);
@@ -216,15 +233,20 @@ async function applyLanguage(lang){
       out[k] = await translateOneText(CURRENT_LANG, UI_IT[k], "scheda immobile one-sheet");
     }
   }
-  await Promise.all(Array.from({length:CONCURRENCY}, worker));
+  var titlePromise = translateOneText(CURRENT_LANG, titleIt, "titolo scheda immobile one-sheet");
+  var descPromise = descIt ? translateOneText(CURRENT_LANG, descIt, "descrizione breve scheda immobile one-sheet") : Promise.resolve("");
+  await Promise.all(Array.from({length:CONCURRENCY}, worker).concat([titlePromise, descPromise]));
   T = out;
+  TRANSLATED_TITLE = await titlePromise;
+  TRANSLATED_DESC = await descPromise;
 }
 
 function escapeHTML(v){
   return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 function clean(v){ v = (v==null?"":String(v)).trim(); return v || ""; }
-function getTitle(){ return clean(opportunity && opportunity.title) || "Immobile IMMONOVA"; }
+function getTitle(){ return TRANSLATED_TITLE || clean(opportunity && opportunity.title) || "Immobile IMMONOVA"; }
+function getDescription(){ return TRANSLATED_DESC || clean(opportunity && opportunity.short_description); }
 function getAddress(){
   var o = opportunity||{};
   return clean(o.formatted_address) || [o.address,o.locality,o.province].filter(Boolean).join(", ");
@@ -247,7 +269,7 @@ function renderSheet(){
   if(!o){ sheetBox.innerHTML = '<div style="padding:42px;color:#9c2f2f">Opportunità non trovata.</div>'; return; }
   var cover = getCoverImage();
   var addr = getAddress();
-  var desc = clean(o.short_description);
+  var desc = getDescription();
   var lat = Number(o.latitude), lng = Number(o.longitude);
   var hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
 
@@ -255,9 +277,16 @@ function renderSheet(){
     return '<div class="feat-item"><span class="ic">'+ICONS[f.icon]+'</span><span>'+escapeHTML(T[f.key])+'</span></div>';
   }).join("");
 
+  var addrLabel = ADDRESS_LABELS[CURRENT_LANG] || ADDRESS_LABELS.it;
   var mapHTML = hasCoords
-    ? '<img class="map-frame" id="mapImg" data-lat="'+escapeHTML(String(lat))+'" data-lng="'+escapeHTML(String(lng))+'" alt="Mappa posizione immobile">'
-    : "";
+    ? '<div class="map-row">' +
+        '<img class="map-frame" id="mapImg" data-lat="'+escapeHTML(String(lat))+'" data-lng="'+escapeHTML(String(lng))+'" alt="Mappa posizione immobile">' +
+        '<div class="map-address-panel">' +
+          '<div class="map-address-label">'+escapeHTML(addrLabel)+'</div>' +
+          '<div class="map-address-text">'+escapeHTML(addr || "—")+'</div>' +
+        '</div>' +
+      '</div>'
+    : (addr ? '<div class="map-address-panel standalone"><div class="map-address-label">'+escapeHTML(addrLabel)+'</div><div class="map-address-text">'+escapeHTML(addr)+'</div></div>' : "");
 
   sheetBox.innerHTML =
     '<div class="sheet" id="sheetPrintable">' +
