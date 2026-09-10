@@ -30,6 +30,15 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .link-row input{flex:1;min-width:220px;padding:9px 10px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:12px;font-family:inherit}
 .link-row .copy-btn{padding:9px 14px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:10px;cursor:pointer}
 .link-row .copy-feedback{color:#4f7f45;font-weight:600}
+.lang-links-panel{padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.2);background:rgba(255,255,255,.28)}
+.lang-links-title{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:#a58139;margin-bottom:10px}
+.lang-links-list{display:flex;flex-direction:column;gap:8px}
+.lang-links-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:#7f6430}
+.lang-links-row .lang-tag{font-weight:700;letter-spacing:.08em;color:#a67f34;min-width:28px}
+.lang-links-row .lang-date{color:#9a8a5f;font-size:11px}
+.lang-links-row .copy-btn{padding:6px 12px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;cursor:pointer}
+.lang-links-row .open-link{color:#a67f34;text-decoration:underline;font-size:11.5px}
+.lang-links-row .copy-feedback{color:#4f7f45;font-weight:600;font-size:11px}
 .sheet{position:relative;background:#ffffff;border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08);overflow:hidden}
 .sheet-header-block{position:relative;padding:34px 32px 26px;border-bottom:1px solid rgba(166,127,52,.18)}
 .photo-strip{display:flex;gap:10px;padding:0 32px;margin:26px 0}
@@ -100,6 +109,10 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
     </div>
   </div>
   <div id="linkRow" class="link-row"></div>
+  <div id="langLinksPanel" class="lang-links-panel" hidden>
+    <div class="lang-links-title">Link già generati per lingua</div>
+    <div id="langLinksList" class="lang-links-list"></div>
+  </div>
   <div id="status" class="status"></div>
   <section id="sheetBox"><div style="padding:42px;color:#8f7643">Caricamento...</div></section>
 </main>
@@ -118,6 +131,9 @@ var editLink = document.getElementById("editLink");
 var logoutBtn = document.getElementById("logoutBtn");
 var langSelect = document.getElementById("langSelect");
 var generateLinkBtn = document.getElementById("generateLinkBtn");
+var langLinksPanel = document.getElementById("langLinksPanel");
+var langLinksList = document.getElementById("langLinksList");
+var LANG_LABELS = {it:"IT · Italiano", en:"EN · English", fr:"FR · Français", de:"DE · Deutsch", es:"ES · Español", ar:"AR · العربية"};
 var opportunity = null;
 var CURRENT_LANG = "it";
 var GENERATION_STAMP = "";
@@ -472,6 +488,40 @@ function renderLinkRow(url){
   });
 }
 
+/* Elenco dei link già generati per lingua (salvati in opportunity.onesheet_links), cosi' non
+   serve rigenerare ogni volta: se per una lingua esiste già un link, basta copiarlo. */
+function renderLangLinksPanel(){
+  var links = (opportunity && opportunity.onesheet_links) || {};
+  var langs = Object.keys(links).filter(function(l){ return links[l] && (links[l].share_url || links[l].pdf_url); });
+  if(!langs.length){ langLinksPanel.hidden = true; langLinksList.innerHTML=""; return; }
+  langs.sort();
+  langLinksList.innerHTML = langs.map(function(lang){
+    var entry = links[lang];
+    var url = entry.share_url || entry.pdf_url;
+    var dateLabel = "";
+    if(entry.generated_at){
+      try{ dateLabel = new Date(entry.generated_at).toLocaleString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }catch(e){}
+    }
+    return '<div class="lang-links-row" data-lang="'+escapeHTML(lang)+'">'+
+      '<span class="lang-tag">'+escapeHTML(lang.toUpperCase())+'</span>'+
+      (dateLabel ? '<span class="lang-date">'+escapeHTML(dateLabel)+'</span>' : '')+
+      '<a class="open-link" href="'+escapeHTML(url)+'" target="_blank" rel="noopener">Apri</a>'+
+      '<button type="button" class="copy-btn" data-url="'+escapeHTML(url)+'">Copia link</button>'+
+      '<span class="copy-feedback"></span>'+
+    '</div>';
+  }).join("");
+  langLinksPanel.hidden = false;
+  Array.prototype.forEach.call(langLinksList.querySelectorAll(".copy-btn"), function(btn){
+    btn.addEventListener("click", async function(){
+      var url = btn.getAttribute("data-url");
+      var fb = btn.nextElementSibling;
+      try{ await navigator.clipboard.writeText(url); if(fb) fb.textContent = "Copiato ✓"; }
+      catch(e){ window.prompt("Copia manualmente il link:", url); }
+      setTimeout(function(){ if(fb) fb.textContent=""; }, 2500);
+    });
+  });
+}
+
 async function generateOneSheetLink(){
   generateLinkBtn.disabled = true;
   var originalLabel = generateLinkBtn.textContent;
@@ -534,8 +584,11 @@ async function generateOneSheetLink(){
 
     var finalUrl = shareUrl || pdfUrl;
     try{
-      await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl}).eq("id",opportunityId);
-      if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; }
+      var updatedLinks = Object.assign({}, (opportunity && opportunity.onesheet_links) || {});
+      updatedLinks[CURRENT_LANG||"it"] = { pdf_url: pdfUrl, share_url: shareUrl || null, generated_at: new Date().toISOString() };
+      await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl, onesheet_links:updatedLinks}).eq("id",opportunityId);
+      if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; opportunity.onesheet_links = updatedLinks; }
+      renderLangLinksPanel();
     }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
 
     // Il PDF è già aperto nella nuova scheda: da qui in poi il pulsante torna subito
@@ -622,6 +675,7 @@ async function init(){
   if(opportunity.onesheet_share_url || opportunity.onesheet_pdf_url){
     renderLinkRow(opportunity.onesheet_share_url || opportunity.onesheet_pdf_url);
   }
+  renderLangLinksPanel();
 }
 function pageTitleUpdate(){
   document.getElementById("pageTitle").textContent = getTitle();
