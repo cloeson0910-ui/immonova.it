@@ -1259,6 +1259,17 @@ button.danger{
       <div class="tab-panel active" data-tab-panel="info">
       <div class="section-title" data-i18n="section_main_info">Informazioni principali</div>
 
+      <div class="field full import-source-box">
+        <label for="importSourceSelect" data-i18n="label_import_source">Importa dati da Valutazione o Acquisizione Immobile</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <select id="importSourceSelect" style="flex:1;min-width:240px">
+            <option value="" data-i18n="opt_import_source_default">Nessuna importazione — compila a mano</option>
+          </select>
+          <button type="button" class="soft" id="importSourceBtn" data-i18n="btn_import_source">Importa dati</button>
+        </div>
+        <div id="importSourceStatus" class="file-note"></div>
+      </div>
+
       <div class="field full">
         <label for="title" data-i18n="label_title">Titolo</label>
         <input type="text" id="title" required>
@@ -2551,6 +2562,10 @@ document.addEventListener("DOMContentLoaded", function(){
   bindRoomInventoryEvents();
   addBuilding();
 });
+document.addEventListener("DOMContentLoaded", function(){
+  var importBtn = document.getElementById("importSourceBtn");
+  if(importBtn) importBtn.addEventListener("click", importFromSelectedSource);
+});
 
 
 function setStatus(message, type){
@@ -3159,6 +3174,162 @@ async function loadCategories(selectedCategory){
   }
 
   select.innerHTML = html;
+}
+
+/* ---- Importazione dati da una Valutazione o da un'Acquisizione Immobile già registrata:
+   riempie i campi della nuova opportunità senza dover ricopiare tutto a mano. Non tocca MAI i
+   campi che non hanno un corrispondente nella fonte, e chiede conferma prima di sovrascrivere
+   dati già inseriti a mano nel form. ---- */
+var IMPORT_SOURCES_CACHE = {};
+
+async function loadImportSources(){
+  var select = document.getElementById("importSourceSelect");
+  if(!select) return;
+
+  var valRes = await client
+    .from("immonova_property_valuations")
+    .select("id,property_title,address,municipality,province,created_at")
+    .order("created_at", { ascending:false })
+    .limit(50);
+
+  var acqRes = await client
+    .from("immonova_acquisitions")
+    .select("id,property_address,owner_first_name,owner_last_name,municipality,province,created_at")
+    .order("created_at", { ascending:false })
+    .limit(50);
+
+  var html = '<option value="" data-i18n="opt_import_source_default">Nessuna importazione — compila a mano</option>';
+
+  var valuations = (valRes && valRes.data) || [];
+  if(valuations.length){
+    html += '<optgroup label="Valutazioni">';
+    valuations.forEach(function(v){
+      var label = (v.property_title || v.address || ("Valutazione #"+v.id));
+      var place = [v.municipality, v.province].filter(Boolean).join(" (") + (v.province ? ")" : "");
+      var dateLabel = v.created_at ? new Date(v.created_at).toLocaleDateString("it-IT") : "";
+      var full = [label, place, dateLabel].filter(Boolean).join(" — ");
+      html += '<option value="valuation:'+v.id+'">'+escapeHtmlAttr(full)+'</option>';
+    });
+    html += '</optgroup>';
+  }
+
+  var acquisitions = (acqRes && acqRes.data) || [];
+  if(acquisitions.length){
+    html += '<optgroup label="Acquisizioni Immobile">';
+    acquisitions.forEach(function(a){
+      var owner = [a.owner_first_name, a.owner_last_name].filter(Boolean).join(" ");
+      var label = (a.property_address || owner || ("Acquisizione #"+a.id));
+      var place = [a.municipality, a.province].filter(Boolean).join(" (") + (a.province ? ")" : "");
+      var dateLabel = a.created_at ? new Date(a.created_at).toLocaleDateString("it-IT") : "";
+      var full = [label, owner, place, dateLabel].filter(Boolean).join(" — ");
+      html += '<option value="acquisition:'+a.id+'">'+escapeHtmlAttr(full)+'</option>';
+    });
+    html += '</optgroup>';
+  }
+
+  select.innerHTML = html;
+}
+
+function escapeHtmlAttr(v){
+  return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function setCheckboxIfPresent(id, val){
+  var el = document.getElementById(id);
+  if(el) el.checked = !!val;
+}
+
+function setSelectIfValid(id, value){
+  if(value === null || value === undefined || value === "") return;
+  var el = document.getElementById(id);
+  if(!el) return;
+  var match = null;
+  Array.prototype.forEach.call(el.options, function(o){
+    if(!match && o.value && o.value.toLowerCase() === String(value).toLowerCase()) match = o.value;
+  });
+  if(match) el.value = match;
+}
+
+var VALUATION_FEATURE_COLUMNS = [
+  "has_pool","has_garden","has_garage","has_parking_spot","has_terrace","has_balcony",
+  "has_sea_view","has_historic_center","has_air_conditioning","has_elevator","has_fireplace",
+  "has_beachfront","has_photovoltaic","has_car_charger","has_solar_thermal","has_storage_battery",
+  "has_artesian_well","has_heating_system","has_habitability"
+];
+
+var ACQUISITION_FEATURE_COLUMNS = [
+  "has_garden","has_terrace","has_balcony","has_garage","has_parking_spot","has_pool","has_sea_view","has_elevator"
+];
+
+function applyValuationToForm(row){
+  setValue("title", row.property_title || row.address || "");
+  setSelectIfValid("category", row.category);
+  setValue("address", row.address || "");
+  setValue("municipality", row.municipality || "");
+  setValue("province", row.province || "");
+  setValue("region", row.region || "");
+  var price = row.suggested_listing_price || row.valuation_immonova_max || row.estimated_value_max || row.valuation_comparativo_max;
+  if(price) setValue("price", "€ " + Math.round(price).toLocaleString("it-IT"));
+  if(row.bedrooms != null) setValue("bedrooms", row.bedrooms);
+  if(row.bathrooms != null) setValue("bathrooms", row.bathrooms);
+  if(row.internal_size != null) setValue("internal_size", row.internal_size);
+  if(row.land_size != null) setValue("land_size", row.land_size);
+  if(row.construction_year != null) setValue("construction_year", row.construction_year);
+  setSelectIfValid("energy_class", row.energy_class);
+  setSelectIfValid("property_condition", row.property_condition);
+  if(row.photovoltaic_kw != null) setValue("photovoltaic_kw", row.photovoltaic_kw);
+  VALUATION_FEATURE_COLUMNS.forEach(function(col){ setCheckboxIfPresent(col, row[col]); });
+}
+
+function applyAcquisitionToForm(row){
+  var owner = [row.owner_first_name, row.owner_last_name].filter(Boolean).join(" ");
+  setValue("title", (row.property_type ? row.property_type+" " : "") + (row.municipality ? "— "+row.municipality : "") || row.property_address || "");
+  setSelectIfValid("category", row.property_type);
+  setValue("address", row.property_address || "");
+  setValue("municipality", row.municipality || "");
+  setValue("province", row.province || "");
+  if(row.requested_price) setValue("price", "€ " + Math.round(row.requested_price).toLocaleString("it-IT"));
+  if(row.bedrooms != null) setValue("bedrooms", row.bedrooms);
+  if(row.bathrooms != null) setValue("bathrooms", row.bathrooms);
+  if(row.commercial_sqm != null) setValue("internal_size", row.commercial_sqm);
+  if(row.construction_year != null) setValue("construction_year", row.construction_year);
+  setSelectIfValid("energy_class", row.energy_class);
+  setSelectIfValid("property_condition", row.property_condition);
+  ACQUISITION_FEATURE_COLUMNS.forEach(function(col){ setCheckboxIfPresent(col, row[col]); });
+  return owner;
+}
+
+async function importFromSelectedSource(){
+  var select = document.getElementById("importSourceSelect");
+  var statusEl = document.getElementById("importSourceStatus");
+  if(!select || !select.value){ if(statusEl) statusEl.textContent = "Seleziona prima una valutazione o un'acquisizione da importare."; return; }
+
+  var hasExistingData = textOrNull("title") || textOrNull("address") || textOrNull("municipality");
+  if(hasExistingData){
+    var ok = confirm("Il form contiene già dei dati: importando verranno sovrascritti i campi corrispondenti. Continuare?");
+    if(!ok) return;
+  }
+
+  var parts = select.value.split(":");
+  var kind = parts[0];
+  var id = parts[1];
+  if(statusEl) statusEl.textContent = "Importazione in corso...";
+
+  try{
+    if(kind === "valuation"){
+      var res = await client.from("immonova_property_valuations").select("*").eq("id", id).single();
+      if(res.error || !res.data) throw new Error((res.error && res.error.message) || "Valutazione non trovata.");
+      applyValuationToForm(res.data);
+      if(statusEl) statusEl.textContent = "Dati importati dalla valutazione. Verifica categoria, prezzo e caratteristiche prima di salvare.";
+    }else if(kind === "acquisition"){
+      var res2 = await client.from("immonova_acquisitions").select("*").eq("id", id).single();
+      if(res2.error || !res2.data) throw new Error((res2.error && res2.error.message) || "Acquisizione non trovata.");
+      var owner = applyAcquisitionToForm(res2.data);
+      if(statusEl) statusEl.textContent = "Dati importati dall'acquisizione" + (owner ? " (proprietario: "+owner+")" : "") + ". Verifica categoria, prezzo e caratteristiche prima di salvare — i dati del proprietario non sono stati copiati (non fanno parte della scheda opportunità pubblica).";
+    }
+  }catch(e){
+    if(statusEl) statusEl.textContent = "Errore nell'importazione: " + (e.message || e);
+  }
 }
 
 async function loadCollaborators(){
@@ -3854,7 +4025,11 @@ var UI_STRINGS = {
   ai_text:"Usa l\u2019IA per precompilare descrizioni, dati territoriali, aeroporto, distanze, analisi turistica, mercato e affitto breve prima dell\u2019invio.",
   btn_analyze_ai:"Analizza con IA", ai_analysis_title:"Analisi IA", progress_preparing:"Preparazione...",
   loading:"Caricamento...",
-  section_main_info:"Informazioni principali", label_title:"Titolo", label_category:"Categoria",
+  section_main_info:"Informazioni principali",
+  label_import_source:"Importa dati da Valutazione o Acquisizione Immobile",
+  opt_import_source_default:"Nessuna importazione — compila a mano",
+  btn_import_source:"Importa dati",
+  label_title:"Titolo", label_category:"Categoria",
   opt_loading_categories:"Caricamento categorie...", label_investment_type:"Tipo Investimento",
   label_location:"Location", label_municipality:"Comune", label_province:"Provincia", label_region:"Regione",
   label_price:"Prezzo / Valore investimento",
@@ -4098,6 +4273,7 @@ async function checkAuth(){
 
 async function loadOpportunity(){
   await loadCategories("");
+  await loadImportSources();
   await loadCollaborators();
 
   loadedOpportunity = null;
