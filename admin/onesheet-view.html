@@ -38,8 +38,6 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .sheet-title{font-size:28px;font-weight:300;letter-spacing:.04em;line-height:1.2;color:#5c4a20}
 .sheet-address{font-size:12.5px;letter-spacing:.03em;color:#8f7643;margin-top:10px}
 .sheet-body{position:relative;z-index:2;padding:32px}
-.cover-frame{position:relative;width:100%;height:280px;border:1px solid rgba(166,127,52,.22);background:#f4ecdf;overflow:hidden;margin-bottom:26px}
-.cover-frame-img{position:absolute;inset:0;background-repeat:no-repeat;background-position:center center;background-size:contain}
 .sheet-desc{font-size:14px;line-height:1.7;color:#6f603f;margin-bottom:26px}
 .sheet-rule{height:1px;background:linear-gradient(to right,rgba(166,127,52,.55),transparent);margin:0 0 22px}
 .sheet-section-label{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:#a58139;margin-bottom:14px}
@@ -67,7 +65,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
   .container{width:210mm;max-width:none;margin:0;padding:0}
   .sheet{border:0;box-shadow:none}
 }
-@media(max-width:700px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 16px}.topbar{display:block}.actions{margin-top:18px}.sheet-body{padding:22px}.feat-grid{grid-template-columns:repeat(2,1fr)}.map-row{flex-direction:column;height:auto}.map-frame{width:100%;height:200px}.map-address-panel{width:100%}.cover-frame{height:200px}}
+@media(max-width:700px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 16px}.topbar{display:block}.actions{margin-top:18px}.sheet-body{padding:22px}.feat-grid{grid-template-columns:repeat(2,1fr)}.map-row{flex-direction:column;height:auto}.map-frame{width:100%;height:200px}.map-address-panel{width:100%}}
 </style>
 </head>
 <body>
@@ -120,6 +118,7 @@ var langSelect = document.getElementById("langSelect");
 var generateLinkBtn = document.getElementById("generateLinkBtn");
 var opportunity = null;
 var CURRENT_LANG = "it";
+var GENERATION_STAMP = "";
 
 /* ---- Pittogrammi: icone lineari minimali, stroke corrente (colore ereditato dal CSS via
    currentColor), stesso stile per tutte cosi' la scheda resta coerente. ---- */
@@ -299,7 +298,6 @@ function renderSheet(){
         (addr ? '<div class="sheet-address">'+escapeHTML(addr)+'</div>' : '') +
       '</div>' +
       '<div class="sheet-body">' +
-        (cover ? '<div class="cover-frame"><div class="cover-frame-img" style="background-image:url(&quot;'+escapeHTML(cover)+'&quot;)"></div></div>' : '') +
         (desc ? '<div class="sheet-desc">'+escapeHTML(desc)+'</div><div class="sheet-rule"></div>' : '') +
         '<div class="core-row">' +
           (Number.isFinite(Number(o.bedrooms)) && o.bedrooms>0 ? '<div class="core-chip"><span class="ic">'+ICONS.bed+'</span><div><div class="cv">'+escapeHTML(String(o.bedrooms))+'</div><div class="cl">'+escapeHTML(T.label_bedrooms)+'</div></div></div>' : '') +
@@ -308,7 +306,7 @@ function renderSheet(){
         (featItems ? '<div class="feat-grid">'+featItems+'</div>' : '') +
         mapHTML +
       '</div>' +
-      '<div class="sheet-footer"><span>IMMONOVA</span><span>'+escapeHTML(T.footer_confidential)+'</span></div>' +
+      '<div class="sheet-footer"><span>IMMONOVA'+(GENERATION_STAMP?' &middot; '+escapeHTML(GENERATION_STAMP):'')+'</span><span>'+escapeHTML(T.footer_confidential)+'</span></div>' +
     '</div>';
 
   if(hasCoords) loadMapImage();
@@ -354,7 +352,7 @@ function slugify(s){
    producendo una filigrana mancante/vuota. */
 function waitForBackgroundImagesToLoad(root, timeoutMs){
   timeoutMs = timeoutMs || 8000;
-  var els = Array.prototype.slice.call((root||document).querySelectorAll(".sheet-watermark, .cover-frame-img"));
+  var els = Array.prototype.slice.call((root||document).querySelectorAll(".sheet-watermark"));
   return Promise.all(els.map(function(el){
     var bg = el.style.backgroundImage || "";
     var m = bg.match(/url\((['"]?)(.*?)\1\)/);
@@ -427,17 +425,39 @@ function renderLinkRow(url){
 }
 
 async function generateOneSheetLink(){
+  // Apro subito una scheda vuota (nello stesso click, sincrona: i browser bloccano i popup
+  // aperti dopo un await) e ci carico il PDF appena finisce di essere generato — sono i byte
+  // creati in quell'istante, mai passati da rete/Storage/CDN, quindi non possono MAI essere
+  // una versione vecchia in cache. Questa e' la scheda su cui guardare il risultato, non i
+  // link salvati o riaperti da prima.
+  var freshTab = window.open("", "_blank");
+  if(freshTab && freshTab.document){
+    freshTab.document.write("<title>Generazione in corso...</title><body style=\"font-family:sans-serif;padding:40px;color:#8f7643\">Generazione della scheda in corso, attendere...</body>");
+  }
   generateLinkBtn.disabled = true;
   var originalLabel = generateLinkBtn.textContent;
   generateLinkBtn.classList.add("btn-busy");
   generateLinkBtn.classList.remove("btn-success");
   generateLinkBtn.textContent = T.generating || "Generazione in corso...";
   try{
+    // Timbro visibile con data/ora esatta di questa generazione, stampato nel footer della
+    // scheda e quindi anche nel PDF: cosi' si vede subito, a occhio, se un PDF che si sta
+    // guardando e' quello appena generato o uno vecchio (basta confrontare l'orario).
+    GENERATION_STAMP = "Generata il " + new Date().toLocaleString("it-IT", {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
     await applyLanguage(CURRENT_LANG);
     renderSheet();
     await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
     setStatus("Generazione PDF in corso...","");
     var pdfBlob = await generateOneSheetPdfBlob();
+    var localBlobUrl = URL.createObjectURL(pdfBlob);
+    if(freshTab && !freshTab.closed){
+      freshTab.location.href = localBlobUrl;
+    }else{
+      // Popup bloccato dal browser: si apre comunque, ma ora e' un secondo click esplicito
+      // dell'utente (non piu' dentro l'async), quindi i popup blocker generalmente lo
+      // permettono.
+      window.open(localBlobUrl, "_blank");
+    }
     var filename = "onesheet_IMMONOVA_"+slugify(getTitle())+"_"+CURRENT_LANG+".pdf";
     var path = "onesheet/opportunity-"+(opportunityId||"na")+"/"+Date.now()+"_"+filename;
     var upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
