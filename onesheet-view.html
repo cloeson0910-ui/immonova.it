@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Scheda Immobile | IMMONOVA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#735f36}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px);background-size:230px 199px;opacity:.30}
+.header{padding:22px 42px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.14);background:rgba(244,236,223,.76);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}
+.logo{font-size:25px;letter-spacing:.18em;color:#a67f34;text-decoration:none;font-weight:300}.logo small{display:block;margin-top:6px;font-size:8px;font-weight:700;letter-spacing:.16em;color:#a58139}
+.header-actions{display:flex;gap:12px;flex-wrap:wrap}.header-actions a,.header-actions button{padding:10px 15px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.26);color:#a67f34;text-decoration:none;cursor:pointer;font-size:10px;letter-spacing:.16em;text-transform:uppercase}
+.container{max-width:900px;margin:auto;padding:38px 24px 80px}
+.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px;flex-wrap:wrap}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}
+.title{font-size:32px;font-weight:200;letter-spacing:.06em;color:#a67f34}
+.actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}
+.btn.secondary{background:transparent;color:#a67f34}
+.btn.btn-busy{background:#e0a83a!important;border-color:#e0a83a!important;color:#3a2c0d!important;cursor:wait!important}
+.btn.btn-success{background:#4f7f45!important;border-color:#4f7f45!important;color:#fff!important}
+.lang-switch{padding:8px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#a67f34;font-size:11px;font-family:inherit;cursor:pointer;border-radius:3px}
+.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}
+.link-row{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;letter-spacing:.04em;color:#7f6430}
+.link-row.visible{display:flex}
+.link-row .link-label{color:#a67f34;font-weight:600;white-space:nowrap}
+.link-row input{flex:1;min-width:220px;padding:9px 10px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:12px;font-family:inherit}
+.link-row .copy-btn{padding:9px 14px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:10px;cursor:pointer}
+.link-row .copy-feedback{color:#4f7f45;font-weight:600}
+.sheet{position:relative;background:#fffdf8;border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08);overflow:hidden}
+.sheet-watermark{position:absolute;inset:0;width:100%;height:100%;background-repeat:no-repeat;background-position:center center;background-size:cover;opacity:.34;z-index:0}
+.sheet-watermark-overlay{position:absolute;inset:0;background:rgba(255,253,248,.58);z-index:1}
+.sheet-header-block{position:relative;z-index:2;padding:34px 32px 26px;border-bottom:1px solid rgba(166,127,52,.18)}
+.sheet-brand{font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:#a67f34;margin-bottom:12px}
+.sheet-title{font-size:28px;font-weight:300;letter-spacing:.04em;line-height:1.2;color:#5c4a20}
+.sheet-address{font-size:12.5px;letter-spacing:.03em;color:#8f7643;margin-top:10px}
+.sheet-body{position:relative;z-index:2;padding:32px}
+.sheet-desc{font-size:14px;line-height:1.7;color:#6f603f;margin-bottom:26px}
+.sheet-rule{height:1px;background:linear-gradient(to right,rgba(166,127,52,.55),transparent);margin:0 0 22px}
+.sheet-section-label{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:#a58139;margin-bottom:14px}
+.core-row{display:flex;gap:28px;margin-bottom:28px;flex-wrap:wrap}
+.core-chip{display:flex;align-items:center;gap:12px}
+.core-chip .ic{width:30px;height:30px;flex:none;color:#a67f34}
+.core-chip .ic svg{width:100%;height:100%}
+.core-chip .cv{font-size:22px;font-weight:300;color:#a67f34;line-height:1}
+.core-chip .cl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;margin-top:2px}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 18px;margin-bottom:28px}
+.feat-item{display:flex;align-items:center;gap:9px;font-size:12px;color:#5c4a20}
+.feat-item .ic{width:20px;height:20px;flex:none;color:#a67f34}
+.feat-item .ic svg{width:100%;height:100%}
+.map-row{display:flex;gap:0;height:260px;border:1px solid rgba(166,127,52,.2)}
+.map-frame{width:50%;height:100%;display:block;object-fit:cover;background:#e5d9bf;flex:none}
+.map-address-panel{width:50%;height:100%;display:flex;flex-direction:column;justify-content:center;padding:24px 26px;background:#fbf5e8}
+.map-address-panel.standalone{width:100%;border:1px solid rgba(166,127,52,.2)}
+.map-address-label{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:#a58139;margin-bottom:10px}
+.map-address-text{font-size:15px;line-height:1.6;color:#5c4a20;font-weight:300}
+.sheet-footer{padding:16px 32px;border-top:1px solid rgba(166,127,52,.14);display:flex;justify-content:space-between;align-items:center;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(166,127,52,.6)}
+@media print{
+  @page{size:A4;margin:0}
+  html,body{width:210mm;min-height:297mm;background:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body::before,body::after,.header,.topbar,.actions,.status,.link-row{display:none!important}
+  .container{width:210mm;max-width:none;margin:0;padding:0}
+  .sheet{border:0;box-shadow:none}
+}
+@media(max-width:700px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 16px}.topbar{display:block}.actions{margin-top:18px}.sheet-body{padding:22px}.feat-grid{grid-template-columns:repeat(2,1fr)}.map-row{flex-direction:column;height:auto}.map-frame{width:100%;height:200px}.map-address-panel{width:100%}}
+</style>
+</head>
+<body>
+<header class="header">
+  <a class="logo" href="../index.html">IMMONOVA<small>OFF MARKET • CONSULTING</small></a>
+  <div class="header-actions">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="opportunities.html">Opportunità</a>
+    <button id="logoutBtn" type="button">Logout</button>
+  </div>
+</header>
+<main class="container">
+  <div class="topbar">
+    <div>
+      <div class="kicker">Scheda Immobile · One-Sheet</div>
+      <h1 class="title" id="pageTitle">Scheda Immobile</h1>
+    </div>
+    <div class="actions">
+      <select id="langSelect" class="lang-switch">
+        <option value="it">IT · Italiano</option>
+        <option value="en">EN · English</option>
+        <option value="fr">FR · Français</option>
+        <option value="de">DE · Deutsch</option>
+        <option value="es">ES · Español</option>
+        <option value="ar">AR · العربية</option>
+      </select>
+      <button class="btn secondary" onclick="window.print()" type="button">Stampa / PDF</button>
+      <button class="btn" id="generateLinkBtn" type="button">Genera link</button>
+      <a class="btn secondary" id="editLink" href="#">Torna alla proposta</a>
+    </div>
+  </div>
+  <div id="linkRow" class="link-row"></div>
+  <div id="status" class="status"></div>
+  <section id="sheetBox"><div style="padding:42px;color:#8f7643">Caricamento...</div></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="../js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var params = new URLSearchParams(window.location.search);
+var opportunityId = params.get("id");
+var statusBox = document.getElementById("status");
+var sheetBox = document.getElementById("sheetBox");
+var linkRow = document.getElementById("linkRow");
+var editLink = document.getElementById("editLink");
+var logoutBtn = document.getElementById("logoutBtn");
+var langSelect = document.getElementById("langSelect");
+var generateLinkBtn = document.getElementById("generateLinkBtn");
+var opportunity = null;
+var CURRENT_LANG = "it";
+var GENERATION_STAMP = "";
+
+/* ---- Pittogrammi: icone lineari minimali, stroke corrente (colore ereditato dal CSS via
+   currentColor), stesso stile per tutte cosi' la scheda resta coerente. ---- */
+var ICONS = {
+  bed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 18v-7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7"/><path d="M3 18v2M21 18v2"/><path d="M3 13h18"/><rect x="5" y="7" width="6" height="4" rx="1"/></svg>',
+  bath:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12V6a2 2 0 0 1 2-2 2 2 0 0 1 2 2"/><path d="M3 12h18v2a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5v-2Z"/><path d="M7 19v2M17 19v2"/></svg>',
+  pool:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 17c1.5 1.3 3 1.3 4.5 0s3-1.3 4.5 0 3 1.3 4.5 0 3-1.3 4.5 0"/><path d="M2 12c1.5 1.3 3 1.3 4.5 0s3-1.3 4.5 0 3 1.3 4.5 0 3-1.3 4.5 0"/><path d="M5 8l3-4 3 4"/></svg>',
+  garden:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21V9"/><path d="M12 9C7 9 5 6 5 3c5 0 7 2 7 6Z"/><path d="M12 13c5 0 7-3 7-6-5 0-7 2-7 6Z"/></svg>',
+  garage:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 21V9l9-6 9 6v12"/><path d="M3 21h18"/><path d="M7 21v-7h10v7"/></svg>',
+  parking:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 16V8h3.2a2.4 2.4 0 0 1 0 4.8H9"/></svg>',
+  terrace:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 21h18"/><path d="M5 21V10M19 21V10"/><path d="M5 10h14l-2-6H7l-2 6Z"/><path d="M9 21v-6M15 21v-6"/></svg>',
+  balcony:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 10h16"/><path d="M4 10v11M20 10v11"/><path d="M7 21v-5M11 21v-5M15 21v-5M17 21v-5"/><path d="M4 3v7"/></svg>',
+  sea:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 18c1.5 1.3 3 1.3 4.5 0s3-1.3 4.5 0 3 1.3 4.5 0 3-1.3 4.5 0"/><circle cx="17" cy="6" r="3"/><path d="M3 13l9-8 9 8"/></svg>',
+  historic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 21h18"/><path d="M4 21V10M8 21V10M12 21V10M16 21V10M20 21V10"/><path d="M2 10l10-6 10 6"/></svg>',
+  ac:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v20M4.2 6.2l15.6 11.6M19.8 6.2 4.2 17.8"/><path d="M12 2l-2 2 2-.5 2 .5-2-2ZM12 22l-2-2 2 .5 2-.5-2 2Z"/></svg>',
+  elevator:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="2" width="16" height="20" rx="1.4"/><path d="M10 8l2-2 2 2M10 16l2 2 2-2"/></svg>',
+  fireplace:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22c4-.6 6-3.2 6-6.4 0-2-1-3.4-2-4.6.2 1.4-.6 2.4-1.4 2.6.6-2.6-.6-5-3-6.6-.4 2-1.4 3-2.6 4-1.6 1.5-3 3.2-3 5.6C6 18.8 8 21.4 12 22Z"/></svg>',
+  beach:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 12s7-2 9 4c-5 2-9-1-9-4Z"/><path d="M12 12S5 10 3 16c5 2 9-1 9-4Z"/><path d="M12 12v10M9 22h6"/></svg>',
+  solar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M3 8h18M3 12h18M9 4v12M15 4v12"/><path d="M9 20h6"/></svg>',
+  charger:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>',
+  solarthermal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3.4"/><path d="M8 2v1.4M8 12.6V14M2 8h1.4M12.6 8H14M4 4l1 1M12 4l-1 1"/><path d="M13 14c1.8 2 1.8 4 0 6-1.8-2-1.8-4 0-6Z"/></svg>',
+  battery:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="7" width="18" height="10" rx="1.4"/><path d="M22 10v4"/><path d="M6 10v4M10 10v4"/></svg>',
+  well:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3c3 4 6 7.4 6 11a6 6 0 1 1-12 0c0-3.6 3-7 6-11Z"/></svg>',
+  heating:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M8 4v16M12 4v16M16 4v16"/></svg>',
+  habitability:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z"/><path d="M9 12l2 2 4-4"/></svg>'
+};
+
+/* ---- Caratteristiche opzionali: chiave colonna -> {icon, labelKey}. L'ordine qui è
+   l'ordine di visualizzazione nella scheda. Solo quelle con valore true vengono mostrate. ---- */
+var FEATURES = [
+  {col:"has_pool", icon:"pool", key:"feat_pool"},
+  {col:"has_sea_view", icon:"sea", key:"feat_sea_view"},
+  {col:"has_beachfront", icon:"beach", key:"feat_beachfront"},
+  {col:"has_garden", icon:"garden", key:"feat_garden"},
+  {col:"has_terrace", icon:"terrace", key:"feat_terrace"},
+  {col:"has_balcony", icon:"balcony", key:"feat_balcony"},
+  {col:"has_garage", icon:"garage", key:"feat_garage"},
+  {col:"has_parking_spot", icon:"parking", key:"feat_parking"},
+  {col:"has_elevator", icon:"elevator", key:"feat_elevator"},
+  {col:"has_air_conditioning", icon:"ac", key:"feat_ac"},
+  {col:"has_heating_system", icon:"heating", key:"feat_heating"},
+  {col:"has_fireplace", icon:"fireplace", key:"feat_fireplace"},
+  {col:"has_historic_center", icon:"historic", key:"feat_historic"},
+  {col:"has_photovoltaic", icon:"solar", key:"feat_photovoltaic"},
+  {col:"has_solar_thermal", icon:"solarthermal", key:"feat_solar_thermal"},
+  {col:"has_storage_battery", icon:"battery", key:"feat_battery"},
+  {col:"has_car_charger", icon:"charger", key:"feat_charger"},
+  {col:"has_artesian_well", icon:"well", key:"feat_well"},
+  {col:"has_habitability", icon:"habitability", key:"feat_habitability"}
+];
+
+var UI_IT = {
+  brand_kicker:"IMMONOVA — Off Market Consulting",
+  label_bedrooms:"Camere", label_bathrooms:"Bagni",
+  feat_pool:"Piscina", feat_sea_view:"Vista mare", feat_beachfront:"Fronte spiaggia",
+  feat_garden:"Giardino", feat_terrace:"Terrazza", feat_balcony:"Balcone",
+  feat_garage:"Garage", feat_parking:"Posto auto", feat_elevator:"Ascensore",
+  feat_ac:"Aria condizionata", feat_heating:"Impianto di riscaldamento", feat_fireplace:"Camino",
+  feat_historic:"Centro storico", feat_photovoltaic:"Fotovoltaico", feat_solar_thermal:"Solare termico",
+  feat_battery:"Accumulo batteria", feat_charger:"Colonnina di ricarica", feat_well:"Pozzo artesiano",
+  feat_habitability:"Abitabilità",
+  footer_confidential:"Documento riservato IMMONOVA",
+  loading:"Caricamento...", generating:"Generazione in corso...",
+  no_description:""
+};
+
+var T = Object.assign({}, UI_IT);
+var TRANSLATED_TITLE = "";
+var TRANSLATED_DESC = "";
+var ADDRESS_LABELS = {
+  it:"Indirizzo", en:"Address", fr:"Adresse", de:"Adresse", es:"Dirección", ar:"العنوان"
+};
+
+/* ---- Traduzione: stessa logica sicura già in uso nel dossier completo (una chiamata per
+   singolo testo, cosi' un eventuale disallineamento della traduzione non contamina le altre
+   chiavi) — qui semplificata perché le stringhe fisse sono poche. ---- */
+async function translateOneText(lang, text, context){
+  if(!text) return text;
+  try{
+    var url = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/translate-public-content";
+    var res = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify({
+      language: lang, source_language: "it", context: context||"", texts: [text]
+    })});
+    if(!res.ok) return text;
+    var result = await res.json();
+    if(!result || !result.success || !Array.isArray(result.translations) || result.translations.length!==1) return text;
+    var raw = result.translations[0];
+    return raw==null ? text : raw;
+  }catch(e){
+    console.warn("[i18n] traduzione fallita per:",text.slice(0,50),e);
+    return text;
+  }
+}
+async function applyLanguage(lang){
+  CURRENT_LANG = lang || "it";
+  var titleIt = clean(opportunity && opportunity.title) || "Immobile IMMONOVA";
+  var descIt = clean(opportunity && opportunity.short_description);
+  if(CURRENT_LANG === "it"){
+    T = Object.assign({}, UI_IT);
+    TRANSLATED_TITLE = titleIt;
+    TRANSLATED_DESC = descIt;
+    return;
+  }
+  var keys = Object.keys(UI_IT);
+  var CONCURRENCY = 6;
+  var out = Object.assign({}, UI_IT);
+  var idx = 0;
+  async function worker(){
+    while(idx < keys.length){
+      var i = idx++; var k = keys[i];
+      if(!UI_IT[k]){ continue; }
+      out[k] = await translateOneText(CURRENT_LANG, UI_IT[k], "scheda immobile one-sheet");
+    }
+  }
+  var titlePromise = translateOneText(CURRENT_LANG, titleIt, "titolo scheda immobile one-sheet");
+  var descPromise = descIt ? translateOneText(CURRENT_LANG, descIt, "descrizione breve scheda immobile one-sheet") : Promise.resolve("");
+  await Promise.all(Array.from({length:CONCURRENCY}, worker).concat([titlePromise, descPromise]));
+  T = out;
+  TRANSLATED_TITLE = await titlePromise;
+  TRANSLATED_DESC = await descPromise;
+}
+
+function escapeHTML(v){
+  return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function clean(v){ v = (v==null?"":String(v)).trim(); return v || ""; }
+function getTitle(){ return TRANSLATED_TITLE || clean(opportunity && opportunity.title) || "Immobile IMMONOVA"; }
+function getDescription(){ return TRANSLATED_DESC || clean(opportunity && opportunity.short_description); }
+function getAddress(){
+  var o = opportunity||{};
+  return clean(o.formatted_address) || [o.address,o.locality,o.province].filter(Boolean).join(", ");
+}
+function normalizeGallery(raw){
+  if(!raw) return [];
+  if(Array.isArray(raw)) return raw.filter(Boolean);
+  if(typeof raw==="string"){ try{ var p=JSON.parse(raw); return Array.isArray(p)?p.filter(Boolean):[]; }catch(e){ return []; } }
+  return [];
+}
+function getCoverImage(){
+  var o = opportunity||{};
+  if(clean(o.cover_image)) return clean(o.cover_image);
+  var gal = normalizeGallery(o.gallery_images);
+  return gal[0] || "";
+}
+
+function renderSheet(){
+  var o = opportunity;
+  if(!o){ sheetBox.innerHTML = '<div style="padding:42px;color:#9c2f2f">Opportunità non trovata.</div>'; return; }
+  var cover = getCoverImage();
+  var addr = getAddress();
+  var desc = getDescription();
+  var lat = Number(o.latitude), lng = Number(o.longitude);
+  var hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+
+  var featItems = FEATURES.filter(function(f){ return o[f.col] === true; }).map(function(f){
+    return '<div class="feat-item"><span class="ic">'+ICONS[f.icon]+'</span><span>'+escapeHTML(T[f.key])+'</span></div>';
+  }).join("");
+
+  var addrLabel = ADDRESS_LABELS[CURRENT_LANG] || ADDRESS_LABELS.it;
+  var mapHTML = hasCoords
+    ? '<div class="map-row">' +
+        '<img class="map-frame" id="mapImg" data-lat="'+escapeHTML(String(lat))+'" data-lng="'+escapeHTML(String(lng))+'" alt="Mappa posizione immobile">' +
+        '<div class="map-address-panel">' +
+          '<div class="map-address-label">'+escapeHTML(addrLabel)+'</div>' +
+          '<div class="map-address-text">'+escapeHTML(addr || "—")+'</div>' +
+        '</div>' +
+      '</div>'
+    : (addr ? '<div class="map-address-panel standalone"><div class="map-address-label">'+escapeHTML(addrLabel)+'</div><div class="map-address-text">'+escapeHTML(addr)+'</div></div>' : "");
+
+  sheetBox.innerHTML =
+    '<div class="sheet" id="sheetPrintable">' +
+      (cover ? '<div class="sheet-watermark" style="background-image:url(&quot;'+escapeHTML(cover)+'&quot;)"></div>' : '') +
+      (cover ? '<div class="sheet-watermark-overlay"></div>' : '') +
+      '<div class="sheet-header-block">' +
+        '<div class="sheet-brand">'+escapeHTML(T.brand_kicker)+'</div>' +
+        '<div class="sheet-title">'+escapeHTML(getTitle())+'</div>' +
+        (addr ? '<div class="sheet-address">'+escapeHTML(addr)+'</div>' : '') +
+      '</div>' +
+      '<div class="sheet-body">' +
+        (desc ? '<div class="sheet-desc">'+escapeHTML(desc)+'</div><div class="sheet-rule"></div>' : '') +
+        '<div class="core-row">' +
+          (Number.isFinite(Number(o.bedrooms)) && o.bedrooms>0 ? '<div class="core-chip"><span class="ic">'+ICONS.bed+'</span><div><div class="cv">'+escapeHTML(String(o.bedrooms))+'</div><div class="cl">'+escapeHTML(T.label_bedrooms)+'</div></div></div>' : '') +
+          (Number.isFinite(Number(o.bathrooms)) && o.bathrooms>0 ? '<div class="core-chip"><span class="ic">'+ICONS.bath+'</span><div><div class="cv">'+escapeHTML(String(o.bathrooms))+'</div><div class="cl">'+escapeHTML(T.label_bathrooms)+'</div></div></div>' : '') +
+        '</div>' +
+        (featItems ? '<div class="feat-grid">'+featItems+'</div>' : '') +
+        mapHTML +
+      '</div>' +
+      '<div class="sheet-footer"><span>IMMONOVA'+(GENERATION_STAMP?' &middot; '+escapeHTML(GENERATION_STAMP):'')+'</span><span>'+escapeHTML(T.footer_confidential)+'</span></div>' +
+    '</div>';
+
+  if(hasCoords) loadMapImage();
+}
+
+async function loadMapImage(){
+  var img = document.getElementById("mapImg");
+  if(!img) return;
+  var lat = img.getAttribute("data-lat"), lng = img.getAttribute("data-lng");
+  try{
+    var url = SUPABASE_URL+"/functions/v1/static-map-proxy?lat="+encodeURIComponent(lat)+"&lng="+encodeURIComponent(lng)+"&zoom=15&size=1200x600&scale=2";
+    var res = await fetch(url,{headers:{"Authorization":"Bearer "+SUPABASE_ANON_KEY,"apikey":SUPABASE_ANON_KEY}});
+    if(!res.ok){ console.warn("Mappa non caricata:",res.status); return; }
+    var blob = await res.blob();
+    img.src = URL.createObjectURL(blob);
+  }catch(e){ console.warn("Mappa: errore fetch",e); }
+}
+
+function setStatus(msg, cls){ statusBox.textContent = msg||""; statusBox.className = "status"+(cls?" "+cls:""); }
+
+function waitForImagesToLoad(root, timeoutMs){
+  timeoutMs = timeoutMs || 8000;
+  var imgs = Array.prototype.slice.call((root||document).querySelectorAll("img"));
+  return Promise.all(imgs.map(function(img){
+    if(img.complete && img.naturalWidth>0) return Promise.resolve();
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){ if(!done){ done=true; resolve(); } }
+      img.addEventListener("load",finish,{once:true});
+      img.addEventListener("error",finish,{once:true});
+      setTimeout(finish,timeoutMs);
+    });
+  }));
+}
+
+function slugify(s){
+  return String(s||"immobile").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,60) || "immobile";
+}
+
+/* Le immagini di sfondo (CSS background-image, usate per la filigrana copertina) non sono
+   <img> e quindi waitForImagesToLoad non le aspetta — senza questo preload esplicito
+   html2canvas può catturare la pagina prima che il browser abbia scaricato la foto,
+   producendo una filigrana mancante/vuota. */
+function waitForBackgroundImagesToLoad(root, timeoutMs){
+  timeoutMs = timeoutMs || 8000;
+  var els = Array.prototype.slice.call((root||document).querySelectorAll(".sheet-watermark"));
+  return Promise.all(els.map(function(el){
+    var bg = el.style.backgroundImage || "";
+    var m = bg.match(/url\((['"]?)(.*?)\1\)/);
+    if(!m || !m[2]) return Promise.resolve();
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){ if(!done){ done=true; resolve(); } }
+      var img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = finish;
+      img.onerror = finish;
+      img.src = m[2];
+      setTimeout(finish, timeoutMs);
+    });
+  }));
+}
+
+async function generateOneSheetPdfBlob(){
+  var mapImg = document.getElementById("mapImg");
+  if(mapImg){
+    var waited=0;
+    while(waited<5000 && String(mapImg.src||"").indexOf("blob:")!==0 && mapImg.hasAttribute("data-lat")){
+      await new Promise(function(r){ setTimeout(r,100); });
+      waited+=100;
+    }
+  }
+  var el = document.getElementById("sheetPrintable");
+  if(!el) throw new Error("Scheda non trovata da esportare.");
+  await waitForImagesToLoad(el, 8000);
+  await waitForBackgroundImagesToLoad(el, 8000);
+  var canvas = await html2canvas(el, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+  var imgData = canvas.toDataURL("image/jpeg", 0.94);
+  // La pagina PDF viene dimensionata esattamente sulla proporzione del contenuto reale
+  // (una sola scheda, non un modulo A4 standard) cosi' non resta mai mezza vuota in basso
+  // quando il contenuto e' piu' corto di una A4 intera, ne' viene tagliato quando e' piu' lungo.
+  var pageWidthMM = 210;
+  var ratio = canvas.height / canvas.width;
+  var pageHeightMM = pageWidthMM * ratio;
+  var MAX_HEIGHT_MM = 420; // doppia A4: oltre questo limite si passa a piu' pagine standard
+  var pdf, w = pageWidthMM, h = pageHeightMM;
+  if(pageHeightMM <= MAX_HEIGHT_MM){
+    pdf = new window.jspdf.jsPDF({orientation:"portrait", unit:"mm", format:[pageWidthMM, pageHeightMM]});
+    pdf.addImage(imgData, "JPEG", 0, 0, w, h);
+  }else{
+    pdf = new window.jspdf.jsPDF({orientation:"portrait", unit:"mm", format:"a4"});
+    var pageH = 297;
+    var pages = Math.ceil(h / pageH);
+    for(var i=0;i<pages;i++){
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, -(i*pageH), w, h);
+    }
+  }
+  return pdf.output("blob");
+}
+
+function renderLinkRow(url){
+  if(!url){ linkRow.className="link-row"; linkRow.innerHTML=""; return; }
+  linkRow.className = "link-row visible";
+  linkRow.innerHTML =
+    '<span class="link-label">Link scheda:</span>'+
+    '<input type="text" id="shareLinkInput" readonly value="'+escapeHTML(url)+'" onclick="this.select()">'+
+    '<button type="button" class="copy-btn" id="copyLinkBtn">Copia link</button>'+
+    '<span class="copy-feedback" id="copyFeedback"></span>';
+  document.getElementById("copyLinkBtn").addEventListener("click", async function(){
+    var fb = document.getElementById("copyFeedback");
+    try{ await navigator.clipboard.writeText(url); fb.textContent = "Copiato ✓"; }
+    catch(e){ window.prompt("Copia manualmente il link:", url); }
+    setTimeout(function(){ if(fb) fb.textContent=""; }, 2500);
+  });
+}
+
+async function generateOneSheetLink(){
+  // Apro subito una scheda vuota (nello stesso click, sincrona: i browser bloccano i popup
+  // aperti dopo un await) e ci carico il PDF appena finisce di essere generato — sono i byte
+  // creati in quell'istante, mai passati da rete/Storage/CDN, quindi non possono MAI essere
+  // una versione vecchia in cache. Questa e' la scheda su cui guardare il risultato, non i
+  // link salvati o riaperti da prima.
+  var freshTab = window.open("", "_blank");
+  if(freshTab && freshTab.document){
+    freshTab.document.write("<title>Generazione in corso...</title><body style=\"font-family:sans-serif;padding:40px;color:#8f7643\">Generazione della scheda in corso, attendere...</body>");
+  }
+  generateLinkBtn.disabled = true;
+  var originalLabel = generateLinkBtn.textContent;
+  generateLinkBtn.classList.add("btn-busy");
+  generateLinkBtn.classList.remove("btn-success");
+  generateLinkBtn.textContent = T.generating || "Generazione in corso...";
+  try{
+    // Timbro visibile con data/ora esatta di questa generazione, stampato nel footer della
+    // scheda e quindi anche nel PDF: cosi' si vede subito, a occhio, se un PDF che si sta
+    // guardando e' quello appena generato o uno vecchio (basta confrontare l'orario).
+    GENERATION_STAMP = "Generata il " + new Date().toLocaleString("it-IT", {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+    await applyLanguage(CURRENT_LANG);
+    renderSheet();
+    await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
+    setStatus("Generazione PDF in corso...","");
+    var pdfBlob = await generateOneSheetPdfBlob();
+    var localBlobUrl = URL.createObjectURL(pdfBlob);
+    if(freshTab && !freshTab.closed){
+      freshTab.location.href = localBlobUrl;
+    }else{
+      // Popup bloccato dal browser: si apre comunque, ma ora e' un secondo click esplicito
+      // dell'utente (non piu' dentro l'async), quindi i popup blocker generalmente lo
+      // permettono.
+      window.open(localBlobUrl, "_blank");
+    }
+    var filename = "onesheet_IMMONOVA_"+slugify(getTitle())+"_"+CURRENT_LANG+".pdf";
+    var path = "onesheet/opportunity-"+(opportunityId||"na")+"/"+Date.now()+"_"+filename;
+    var upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
+    if(upload.error) throw upload.error;
+    var pub = client.storage.from("dossier-pdfs").getPublicUrl(path);
+    var pdfUrl = pub.data.publicUrl;
+
+    // Stessa pubblicazione GitHub già in uso per dossier e proposte: nessuna Edge Function
+    // Supabase può servire HTML col Content-Type giusto (bug del gateway + policy di
+    // sicurezza intenzionale su Storage), quindi si commette il file vero sul repo GitHub
+    // che serve il sito, tramite la Edge Function "publish-onesheet-page".
+    var shareUrl = null;
+    try{
+      var publishResp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/publish-onesheet-page",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
+        body:JSON.stringify({
+          opportunityId: opportunityId,
+          title: getTitle(),
+          coverUrl: getCoverImage(),
+          pdfUrl: pdfUrl,
+          lang: CURRENT_LANG||"it"
+        })
+      });
+      var publishData = await publishResp.json();
+      if(publishResp.ok && publishData && publishData.url){ shareUrl = publishData.url; }
+      else console.warn("Pubblicazione scheda su GitHub fallita:",publishData);
+    }catch(publishErr){
+      console.warn("Pubblicazione scheda su GitHub fallita:",publishErr);
+    }
+
+    var finalUrl = shareUrl || pdfUrl;
+    try{
+      await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl}).eq("id",opportunityId);
+    }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
+
+    if(!shareUrl){
+      renderLinkRow(finalUrl);
+      setStatus("Link generato (senza anteprima WhatsApp: la pubblicazione su GitHub non è riuscita, controlla la console).","error");
+    }else{
+      // Nessun avviso testuale: il link resta nascosto finché la pagina non è davvero
+      // raggiungibile su GitHub Pages CON IL CONTENUTO NUOVO. Un semplice check.ok non basta
+      // quando si rigenera una scheda già pubblicata in precedenza: il file esiste già a
+      // quell'URL, quindi risponde 200 SUBITO — ma il CDN di GitHub Pages può ancora servire
+      // per alcuni minuti la versione precedente in cache. Per questo si controlla che il
+      // corpo della risposta contenga davvero l'URL del PDF appena generato (unico ad ogni
+      // generazione), non solo che la richiesta sia andata a buon fine.
+      setStatus("Pubblicazione in corso...","");
+      var attempts = 0, maxAttempts = 60;
+      var cacheBustUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "_cb=" + Date.now();
+      while(attempts < maxAttempts){
+        attempts++;
+        try{
+          var check = await fetch(cacheBustUrl, {method:"GET", cache:"no-store"});
+          if(check.ok){
+            var checkText = await check.text();
+            if(checkText.indexOf(pdfUrl) !== -1) break;
+          }
+        }catch(e){}
+        await new Promise(function(r){ setTimeout(r,3000); });
+      }
+      renderLinkRow(finalUrl);
+      setStatus("Link generato, con anteprima.","success");
+    }
+    generateLinkBtn.classList.remove("btn-busy");
+    generateLinkBtn.classList.add("btn-success");
+    setTimeout(function(){ generateLinkBtn.classList.remove("btn-success"); }, 3000);
+  }catch(e){
+    console.error(e);
+    setStatus("Errore nella generazione: "+(e.message||e),"error");
+    generateLinkBtn.classList.remove("btn-busy");
+  }
+  generateLinkBtn.disabled = false;
+  generateLinkBtn.textContent = originalLabel;
+}
+
+langSelect.addEventListener("change", async function(){
+  await applyLanguage(langSelect.value);
+  renderSheet();
+});
+generateLinkBtn.addEventListener("click", generateOneSheetLink);
+if(logoutBtn) logoutBtn.addEventListener("click", async function(){ await client.auth.signOut(); window.location.href="login.html"; });
+
+async function checkAuth(){
+  var { data:{ session } } = await client.auth.getSession();
+  if(!session){ window.location.href = "login.html"; return false; }
+  return true;
+}
+
+async function init(){
+  var ok = await checkAuth();
+  if(!ok) return;
+  if(!opportunityId){ sheetBox.innerHTML = '<div style="padding:42px;color:#9c2f2f">ID opportunità mancante nell\'URL.</div>'; return; }
+  editLink.href = "opportunityedit.html?id="+encodeURIComponent(opportunityId);
+  setStatus(T.loading,"");
+  var res = await client.from("opportunities").select("*").eq("id", opportunityId).single();
+  if(res.error || !res.data){
+    setStatus("Errore nel caricamento dell'opportunità: "+(res.error?res.error.message:"non trovata"),"error");
+    sheetBox.innerHTML = '<div style="padding:42px;color:#9c2f2f">Opportunità non trovata.</div>';
+    return;
+  }
+  opportunity = res.data;
+  pageTitleUpdate();
+  setStatus("","");
+  renderSheet();
+  if(opportunity.onesheet_share_url || opportunity.onesheet_pdf_url){
+    renderLinkRow(opportunity.onesheet_share_url || opportunity.onesheet_pdf_url);
+  }
+}
+function pageTitleUpdate(){
+  document.getElementById("pageTitle").textContent = getTitle();
+  document.title = getTitle()+" — Scheda IMMONOVA";
+}
+
+init();
+</script>
+</body>
+</html>
