@@ -62,6 +62,11 @@ select.lang-switch.btn-success{background:#4f7f45!important;border-color:#4f7f45
 .metric-label{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;margin-bottom:8px}
 .metric-value{font-size:22px;color:#a67f34;font-weight:400}
 .desc-text{font-size:13.5px;line-height:1.75;color:#5a4a2a;margin-bottom:30px;max-width:820px}
+.cadastral-units-section{margin-bottom:20px}
+.cadastral-units-heading{font-size:15px;font-weight:400;letter-spacing:.06em;color:#a67f34;margin:0 0 14px}
+.cadastral-unit-block{margin-bottom:18px}
+.cadastral-unit-title{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;margin-bottom:8px}
+.cadastral-unit-block .metric-grid{margin-bottom:10px}
 .picto-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .picto-cell{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,255,255,.4);border:1px solid rgba(166,127,52,.14)}
 .picto-icon{font-size:22px;line-height:1;flex:none}
@@ -218,6 +223,18 @@ var UI_STRINGS = {
   label_condition:"Stato",
   label_occupancy:"Stato occupazione",
   label_monthly_rent:"Canone mensile",
+  label_garden_sqm:"Superficie giardino",
+  label_garage_sqm:"Superficie box auto / garage",
+  label_accessory_size:"Superficie altri accessori",
+  title_cadastral_data:"Dati catastali",
+  cad_unit_label:"Unità",
+  label_cad_municipality:"Comune catastale",
+  label_cad_category:"Categoria",
+  label_cad_income:"Rendita catastale",
+  label_cad_surface:"Superficie catastale",
+  label_cad_sheet:"Foglio",
+  label_cad_parcel:"Particella",
+  label_cad_subalterno:"Subalterno",
   unit_sqm:" mq",
   unit_month_rent:" €/mese",
   empty_note:"Nessun dato immobile disponibile.",
@@ -512,6 +529,12 @@ function renderDataAndPictogramsPage(){
     rows.push([T.label_occupancy||UI_STRINGS.label_occupancy, occupancyLabel]);
     if(o.occupancy_status === "locato" && firstFiniteOpp(o.monthly_rent)) rows.push([T.label_monthly_rent||UI_STRINGS.label_monthly_rent, number(o.monthly_rent) + (T.unit_month_rent||UI_STRINGS.unit_month_rent)]);
   }
+  var gardenSqm = firstFiniteOpp(o.garden_sqm);
+  if(gardenSqm) rows.push([T.label_garden_sqm||UI_STRINGS.label_garden_sqm, number(gardenSqm)+(T.unit_sqm||UI_STRINGS.unit_sqm)]);
+  var garageSqm = firstFiniteOpp(o.garage_sqm);
+  if(garageSqm) rows.push([T.label_garage_sqm||UI_STRINGS.label_garage_sqm, number(garageSqm)+(T.unit_sqm||UI_STRINGS.unit_sqm)]);
+  var accessorySqm = firstFiniteOpp(o.accessory_size);
+  if(accessorySqm) rows.push([T.label_accessory_size||UI_STRINGS.label_accessory_size, number(accessorySqm)+(T.unit_sqm||UI_STRINGS.unit_sqm)]);
 
   var metricsHTML = rows.length
     ? '<div class="metric-grid">' + rows.map(function(r){ return '<div class="metric-card"><div class="metric-label">'+escapeHTML(r[0])+'</div><div class="metric-value">'+escapeHTML(r[1])+'</div></div>'; }).join("") + '</div>'
@@ -520,10 +543,45 @@ function renderDataAndPictogramsPage(){
   var descText = narrativeField("short_description");
   var descHTML = descText ? '<p class="desc-text">'+escapeHTML(descText)+'</p>' : '';
 
+  var cadastralHTML = renderCadastralUnitsTable();
+
   return '<article class="report-page"><div class="page-inner">'
     + '<div class="section-kicker">'+escapeHTML(T.section_kicker||UI_STRINGS.section_kicker)+'</div><h2 class="section-title">'+escapeHTML(T.title_data_page||UI_STRINGS.title_data_page)+'</h2><div class="lux-rule"></div>'
-    + descHTML + metricsHTML
+    + descHTML + metricsHTML + cadastralHTML
     + '</div></article>';
+}
+
+/* ---- Ogni immobile può avere più unità catastali (abitazione, garage, cantina...): una
+   scheda/riga per ciascuna, non un unico set di campi fissi. ---- */
+function renderCadastralUnitsTable(){
+  var o = opportunity || {};
+  var units = Array.isArray(o.cadastral_units) ? o.cadastral_units.filter(function(u){
+    return u && (u.municipality || u.category || u.income != null || u.surface != null || u.sheet || u.parcel || u.subalterno);
+  }) : [];
+  if(!units.length) return "";
+
+  var rowsHTML = units.map(function(u, idx){
+    var fields = [
+      [T.label_cad_municipality||UI_STRINGS.label_cad_municipality, u.municipality],
+      [T.label_cad_category||UI_STRINGS.label_cad_category, u.category],
+      [T.label_cad_income||UI_STRINGS.label_cad_income, (u.income!=null && u.income!=="") ? number(u.income)+" €" : ""],
+      [T.label_cad_surface||UI_STRINGS.label_cad_surface, (u.surface!=null && u.surface!=="") ? number(u.surface)+(T.unit_sqm||UI_STRINGS.unit_sqm) : ""],
+      [T.label_cad_sheet||UI_STRINGS.label_cad_sheet, u.sheet],
+      [T.label_cad_parcel||UI_STRINGS.label_cad_parcel, u.parcel],
+      [T.label_cad_subalterno||UI_STRINGS.label_cad_subalterno, u.subalterno]
+    ].filter(function(f){ return f[1]; });
+    if(!fields.length) return "";
+    return '<div class="cadastral-unit-block">'
+      + '<div class="cadastral-unit-title">'+escapeHTML((T.cad_unit_label||UI_STRINGS.cad_unit_label)+" "+(idx+1))+'</div>'
+      + '<div class="metric-grid">' + fields.map(function(f){ return '<div class="metric-card"><div class="metric-label">'+escapeHTML(f[0])+'</div><div class="metric-value">'+escapeHTML(f[1])+'</div></div>'; }).join("") + '</div>'
+      + '</div>';
+  }).join("");
+  if(!rowsHTML) return "";
+
+  return '<div class="cadastral-units-section">'
+    + '<h3 class="cadastral-units-heading">'+escapeHTML(T.title_cadastral_data||UI_STRINGS.title_cadastral_data)+'</h3>'
+    + rowsHTML
+    + '</div>';
 }
 
 /* ---- Pittogrammi su pagina/e dedicata/e: la pagina del dossier ha altezza fissa
