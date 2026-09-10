@@ -590,7 +590,41 @@ async function submitVisit(){
     if(insertRes.error) throw insertRes.error;
 
     renderLinkRow(pdfUrl);
-    setStatus("Scheda visita salvata correttamente.","success");
+
+    // Invio automatico della scheda visita firmata al cliente, se ha lasciato un'email —
+    // stesso meccanismo già in uso per i dossier (link di download, non allegato: i PDF
+    // firmati possono superare il limite accettato dai server di posta dei clienti).
+    var emailStatusSuffix = "";
+    if(email){
+      try{
+        var emailResp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/send-visit-email",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
+          body:JSON.stringify({
+            to: email,
+            client_name: [firstName,lastName].filter(Boolean).join(" "),
+            opportunity_title: getTitle(),
+            pdf_url: pdfUrl,
+            visit_date: visitDate,
+            language: (opportunity && opportunity.preferred_language) || "it"
+          })
+        });
+        var emailData = await emailResp.json();
+        if(!emailResp.ok || !emailData || !emailData.success){
+          console.warn("Invio email cliente fallito:", emailData);
+          emailStatusSuffix = " (email al cliente non inviata: "+((emailData&&emailData.error)||"errore sconosciuto")+")";
+        }else{
+          emailStatusSuffix = " Email inviata a "+email+".";
+        }
+      }catch(emailErr){
+        console.warn("Invio email cliente fallito:", emailErr);
+        emailStatusSuffix = " (email al cliente non inviata: "+(emailErr.message||emailErr)+")";
+      }
+    }else{
+      emailStatusSuffix = " Nessuna email cliente inserita: nessun invio automatico effettuato.";
+    }
+
+    setStatus("Scheda visita salvata correttamente."+emailStatusSuffix, emailStatusSuffix.indexOf("non inviata")>-1 ? "error" : "success");
     submitBtn.classList.remove("btn-busy");
     submitBtn.classList.add("btn-success");
     setTimeout(function(){ submitBtn.classList.remove("btn-success"); }, 3000);
