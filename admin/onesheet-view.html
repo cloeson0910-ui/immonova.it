@@ -31,13 +31,15 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .link-row .copy-btn{padding:9px 14px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:10px;cursor:pointer}
 .link-row .copy-feedback{color:#4f7f45;font-weight:600}
 .sheet{position:relative;background:#fffdf8;border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08);overflow:hidden}
-.sheet-watermark{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.15;z-index:0;display:block}
-.sheet-watermark-overlay{position:absolute;inset:0;background:rgba(255,253,248,.86);z-index:1}
+.sheet-watermark{position:absolute;inset:0;width:100%;height:100%;background-repeat:no-repeat;background-position:center center;background-size:cover;opacity:.34;z-index:0}
+.sheet-watermark-overlay{position:absolute;inset:0;background:rgba(255,253,248,.58);z-index:1}
 .sheet-header-block{position:relative;z-index:2;padding:34px 32px 26px;border-bottom:1px solid rgba(166,127,52,.18)}
 .sheet-brand{font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:#a67f34;margin-bottom:12px}
 .sheet-title{font-size:28px;font-weight:300;letter-spacing:.04em;line-height:1.2;color:#5c4a20}
 .sheet-address{font-size:12.5px;letter-spacing:.03em;color:#8f7643;margin-top:10px}
 .sheet-body{position:relative;z-index:2;padding:32px}
+.cover-frame{position:relative;width:100%;height:280px;border:1px solid rgba(166,127,52,.22);background:#f4ecdf;overflow:hidden;margin-bottom:26px}
+.cover-frame-img{position:absolute;inset:0;background-repeat:no-repeat;background-position:center center;background-size:contain}
 .sheet-desc{font-size:14px;line-height:1.7;color:#6f603f;margin-bottom:26px}
 .sheet-rule{height:1px;background:linear-gradient(to right,rgba(166,127,52,.55),transparent);margin:0 0 22px}
 .sheet-section-label{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:#a58139;margin-bottom:14px}
@@ -65,7 +67,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
   .container{width:210mm;max-width:none;margin:0;padding:0}
   .sheet{border:0;box-shadow:none}
 }
-@media(max-width:700px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 16px}.topbar{display:block}.actions{margin-top:18px}.sheet-body{padding:22px}.feat-grid{grid-template-columns:repeat(2,1fr)}.map-row{flex-direction:column;height:auto}.map-frame{width:100%;height:200px}.map-address-panel{width:100%}}
+@media(max-width:700px){.header{flex-direction:column;gap:16px;padding:22px}.container{padding:28px 16px}.topbar{display:block}.actions{margin-top:18px}.sheet-body{padding:22px}.feat-grid{grid-template-columns:repeat(2,1fr)}.map-row{flex-direction:column;height:auto}.map-frame{width:100%;height:200px}.map-address-panel{width:100%}.cover-frame{height:200px}}
 </style>
 </head>
 <body>
@@ -289,7 +291,7 @@ function renderSheet(){
 
   sheetBox.innerHTML =
     '<div class="sheet" id="sheetPrintable">' +
-      (cover ? '<img class="sheet-watermark" src="'+escapeHTML(cover)+'" alt="" crossorigin="anonymous">' : '') +
+      (cover ? '<div class="sheet-watermark" style="background-image:url(&quot;'+escapeHTML(cover)+'&quot;)"></div>' : '') +
       (cover ? '<div class="sheet-watermark-overlay"></div>' : '') +
       '<div class="sheet-header-block">' +
         '<div class="sheet-brand">'+escapeHTML(T.brand_kicker)+'</div>' +
@@ -297,6 +299,7 @@ function renderSheet(){
         (addr ? '<div class="sheet-address">'+escapeHTML(addr)+'</div>' : '') +
       '</div>' +
       '<div class="sheet-body">' +
+        (cover ? '<div class="cover-frame"><div class="cover-frame-img" style="background-image:url(&quot;'+escapeHTML(cover)+'&quot;)"></div></div>' : '') +
         (desc ? '<div class="sheet-desc">'+escapeHTML(desc)+'</div><div class="sheet-rule"></div>' : '') +
         '<div class="core-row">' +
           (Number.isFinite(Number(o.bedrooms)) && o.bedrooms>0 ? '<div class="core-chip"><span class="ic">'+ICONS.bed+'</span><div><div class="cv">'+escapeHTML(String(o.bedrooms))+'</div><div class="cl">'+escapeHTML(T.label_bedrooms)+'</div></div></div>' : '') +
@@ -345,6 +348,30 @@ function slugify(s){
   return String(s||"immobile").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,60) || "immobile";
 }
 
+/* Le immagini di sfondo (CSS background-image, usate per la filigrana copertina) non sono
+   <img> e quindi waitForImagesToLoad non le aspetta — senza questo preload esplicito
+   html2canvas può catturare la pagina prima che il browser abbia scaricato la foto,
+   producendo una filigrana mancante/vuota. */
+function waitForBackgroundImagesToLoad(root, timeoutMs){
+  timeoutMs = timeoutMs || 8000;
+  var els = Array.prototype.slice.call((root||document).querySelectorAll(".sheet-watermark, .cover-frame-img"));
+  return Promise.all(els.map(function(el){
+    var bg = el.style.backgroundImage || "";
+    var m = bg.match(/url\((['"]?)(.*?)\1\)/);
+    if(!m || !m[2]) return Promise.resolve();
+    return new Promise(function(resolve){
+      var done=false;
+      function finish(){ if(!done){ done=true; resolve(); } }
+      var img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = finish;
+      img.onerror = finish;
+      img.src = m[2];
+      setTimeout(finish, timeoutMs);
+    });
+  }));
+}
+
 async function generateOneSheetPdfBlob(){
   var mapImg = document.getElementById("mapImg");
   if(mapImg){
@@ -357,15 +384,29 @@ async function generateOneSheetPdfBlob(){
   var el = document.getElementById("sheetPrintable");
   if(!el) throw new Error("Scheda non trovata da esportare.");
   await waitForImagesToLoad(el, 8000);
+  await waitForBackgroundImagesToLoad(el, 8000);
   var canvas = await html2canvas(el, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
-  var imgData = canvas.toDataURL("image/jpeg", 0.92);
-  var pdf = new window.jspdf.jsPDF({orientation:"portrait", unit:"mm", format:"a4"});
-  var pageW = 210, pageH = 297;
+  var imgData = canvas.toDataURL("image/jpeg", 0.94);
+  // La pagina PDF viene dimensionata esattamente sulla proporzione del contenuto reale
+  // (una sola scheda, non un modulo A4 standard) cosi' non resta mai mezza vuota in basso
+  // quando il contenuto e' piu' corto di una A4 intera, ne' viene tagliato quando e' piu' lungo.
+  var pageWidthMM = 210;
   var ratio = canvas.height / canvas.width;
-  var w = pageW, h = pageW * ratio;
-  if(h > pageH){ h = pageH; w = pageH / ratio; }
-  var x = (pageW - w) / 2, y = 0;
-  pdf.addImage(imgData, "JPEG", x, y, w, h);
+  var pageHeightMM = pageWidthMM * ratio;
+  var MAX_HEIGHT_MM = 420; // doppia A4: oltre questo limite si passa a piu' pagine standard
+  var pdf, w = pageWidthMM, h = pageHeightMM;
+  if(pageHeightMM <= MAX_HEIGHT_MM){
+    pdf = new window.jspdf.jsPDF({orientation:"portrait", unit:"mm", format:[pageWidthMM, pageHeightMM]});
+    pdf.addImage(imgData, "JPEG", 0, 0, w, h);
+  }else{
+    pdf = new window.jspdf.jsPDF({orientation:"portrait", unit:"mm", format:"a4"});
+    var pageH = 297;
+    var pages = Math.ceil(h / pageH);
+    for(var i=0;i<pages;i++){
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, -(i*pageH), w, h);
+    }
+  }
   return pdf.output("blob");
 }
 
