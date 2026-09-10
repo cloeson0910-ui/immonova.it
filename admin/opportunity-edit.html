@@ -755,6 +755,49 @@ button.danger{
   font-size:10px;
 }
 
+.cadastral-unit-card{
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,252,244,.25);
+  padding:18px;
+  margin-bottom:14px;
+}
+
+.cadastral-unit-head{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:14px;
+}
+
+.cadastral-unit-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+  gap:12px;
+}
+
+.cadastral-unit-grid label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  font-size:11px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#8f7643;
+}
+
+.cadastral-unit-grid input{
+  margin:0;
+  padding:11px 12px;
+  font-size:13px;
+}
+
+.cadastral-units-note{
+  font-size:12px;
+  color:#8f7643;
+  margin:4px 0 12px;
+}
+
 .room-inventory-total{
   font-size:12px;
   letter-spacing:.12em;
@@ -1748,6 +1791,30 @@ button.danger{
           <option value="In costruzione" data-i18n="cond_under_construction">In costruzione</option>
           <option value="Progetto da sviluppare" data-i18n="cond_project">Progetto da sviluppare</option>
         </select>
+      </div>
+
+      <div class="field">
+        <label for="garden_sqm" data-i18n="label_garden_sqm">Mq giardino</label>
+        <input type="number" id="garden_sqm" min="0" step="1">
+      </div>
+
+      <div class="field">
+        <label for="garage_sqm" data-i18n="label_garage_sqm">Mq box auto / garage</label>
+        <input type="number" id="garage_sqm" min="0" step="1">
+      </div>
+
+      <div class="field">
+        <label for="accessory_size" data-i18n="label_accessory_size">Mq altri accessori (cantina, soffitta, ecc.)</label>
+        <input type="number" id="accessory_size" min="0" step="1">
+      </div>
+
+      <div class="section-title" data-i18n="section_cadastral_data">Dati catastali</div>
+
+      <div class="field full cadastral-units">
+        <label data-i18n="label_cadastral_units">Unità catastali (una per ogni particella/subalterno collegato all'immobile)</label>
+        <div class="cadastral-units-note" data-i18n="note_cadastral_units">Aggiungi una sezione per ogni unità catastale distinta (es. abitazione principale, garage, cantina...): non c'è limite al numero.</div>
+        <div id="cadastralUnitsContainer"></div>
+        <button type="button" class="soft" id="addCadastralUnitBtn" data-i18n="btn_add_cadastral_unit">+ Aggiungi unità catastale</button>
       </div>
 
       <div class="field full">
@@ -2982,6 +3049,7 @@ function bindGeoTools(){
 
 document.addEventListener("DOMContentLoaded", bindGeoTools);
 document.addEventListener("DOMContentLoaded", bindRoomInventoryEvents);
+document.addEventListener("DOMContentLoaded", bindCadastralUnitEvents);
 
 /* ---- Timeline / Milestone (tabella opportunity_timeline) ----
    Alimenta la timeline mostrata su opportunity.html e success-story.html. Le milestone con
@@ -3462,6 +3530,103 @@ function getRoomInventoryPayload(){
       };
     })
     .filter(function(b){ return b.name || b.roomTypes.length; });
+}
+
+/* ---- Dati catastali: sezione ripetibile, nessun limite al numero di unità (un immobile
+   può avere più particelle/subalterni: abitazione, garage, cantina...). Stesso pattern già
+   in uso per la composizione camere/corpi di fabbrica. ---- */
+var cadastralUnitsState = [];
+
+function addCadastralUnit(initial){
+  cadastralUnitsState.push(Object.assign({
+    id: genLocalId(), municipality:"", category:"", income:"", surface:"", sheet:"", parcel:"", subalterno:""
+  }, initial || {}));
+  renderCadastralUnits();
+}
+
+function removeCadastralUnit(unitId){
+  cadastralUnitsState = cadastralUnitsState.filter(function(u){ return u.id !== unitId; });
+  renderCadastralUnits();
+}
+
+function findCadastralUnit(unitId){
+  return cadastralUnitsState.find(function(u){ return u.id === unitId; });
+}
+
+function renderCadastralUnits(){
+  var container = document.getElementById("cadastralUnitsContainer");
+  if(!container) return;
+
+  container.innerHTML = cadastralUnitsState.map(function(u, idx){
+    return '' +
+      '<div class="cadastral-unit-card" data-unit-id="' + u.id + '">' +
+        '<div class="cadastral-unit-head">' +
+          '<strong>Unità catastale ' + (idx+1) + '</strong>' +
+          '<button type="button" class="danger remove-cadastral-unit-btn" data-unit="' + u.id + '">Rimuovi</button>' +
+        '</div>' +
+        '<div class="cadastral-unit-grid">' +
+          '<label>Comune catastale<input type="text" class="cad-municipality" data-unit="' + u.id + '" value="' + escapeHTML(u.municipality || "") + '"></label>' +
+          '<label>Categoria (es. A/2)<input type="text" class="cad-category" data-unit="' + u.id + '" value="' + escapeHTML(u.category || "") + '"></label>' +
+          '<label>Rendita catastale (€)<input type="number" step="0.01" min="0" class="cad-income" data-unit="' + u.id + '" value="' + escapeHTML(u.income === "" ? "" : String(u.income)) + '"></label>' +
+          '<label>Superficie catastale (mq)<input type="number" step="1" min="0" class="cad-surface" data-unit="' + u.id + '" value="' + escapeHTML(u.surface === "" ? "" : String(u.surface)) + '"></label>' +
+          '<label>Foglio<input type="text" class="cad-sheet" data-unit="' + u.id + '" value="' + escapeHTML(u.sheet || "") + '"></label>' +
+          '<label>Particella / Mappale<input type="text" class="cad-parcel" data-unit="' + u.id + '" value="' + escapeHTML(u.parcel || "") + '"></label>' +
+          '<label>Subalterno<input type="text" class="cad-subalterno" data-unit="' + u.id + '" value="' + escapeHTML(u.subalterno || "") + '"></label>' +
+        '</div>' +
+      '</div>';
+  }).join("") || '<div class="file-note">Nessuna unità catastale aggiunta.</div>';
+}
+
+function bindCadastralUnitEvents(){
+  var container = document.getElementById("cadastralUnitsContainer");
+  var addBtn = document.getElementById("addCadastralUnitBtn");
+  if(!container || !addBtn) return;
+
+  addBtn.addEventListener("click", function(){ addCadastralUnit(); });
+
+  container.addEventListener("click", function(e){
+    var removeBtn = e.target.closest(".remove-cadastral-unit-btn");
+    if(removeBtn){ removeCadastralUnit(removeBtn.dataset.unit); return; }
+  });
+
+  container.addEventListener("input", function(e){
+    var target = e.target;
+    var unitId = target.dataset.unit;
+    if(!unitId) return;
+    var u = findCadastralUnit(unitId);
+    if(!u) return;
+
+    if(target.classList.contains("cad-municipality")) u.municipality = target.value;
+    else if(target.classList.contains("cad-category")) u.category = target.value;
+    else if(target.classList.contains("cad-income")) u.income = target.value === "" ? "" : Number(target.value);
+    else if(target.classList.contains("cad-surface")) u.surface = target.value === "" ? "" : Number(target.value);
+    else if(target.classList.contains("cad-sheet")) u.sheet = target.value;
+    else if(target.classList.contains("cad-parcel")) u.parcel = target.value;
+    else if(target.classList.contains("cad-subalterno")) u.subalterno = target.value;
+  });
+}
+
+function getCadastralUnitsPayload(){
+  return cadastralUnitsState
+    .map(function(u){
+      return {
+        municipality: (u.municipality || "").trim(),
+        category: (u.category || "").trim(),
+        income: (u.income === "" || u.income == null || isNaN(Number(u.income))) ? null : Number(u.income),
+        surface: (u.surface === "" || u.surface == null || isNaN(Number(u.surface))) ? null : Number(u.surface),
+        sheet: (u.sheet || "").trim(),
+        parcel: (u.parcel || "").trim(),
+        subalterno: (u.subalterno || "").trim()
+      };
+    })
+    .filter(function(u){ return u.municipality || u.category || u.income != null || u.surface != null || u.sheet || u.parcel || u.subalterno; });
+}
+
+function loadCadastralUnitsFromOpportunity(data){
+  var stored = Array.isArray(data && data.cadastral_units) ? data.cadastral_units : [];
+  cadastralUnitsState = [];
+  stored.forEach(function(u){ addCadastralUnit(u); });
+  renderCadastralUnits();
 }
 
 function loadRoomInventoryFromOpportunity(data){
@@ -4720,6 +4885,12 @@ var UI_STRINGS = {
   crm_stat_compatible:"Compatibili", crm_stat_selected:"Selezionati", crm_stat_email:"Email Opt-in", crm_stat_whatsapp:"WhatsApp Opt-in",
   crm_loading:"Caricamento analisi investitori...",
   check_featured:"In evidenza", check_published:"Pubblicata",
+  label_garden_sqm:"Mq giardino", label_garage_sqm:"Mq box auto / garage",
+  label_accessory_size:"Mq altri accessori (cantina, soffitta, ecc.)",
+  section_cadastral_data:"Dati catastali",
+  label_cadastral_units:"Unità catastali (una per ogni particella/subalterno collegato all'immobile)",
+  note_cadastral_units:"Aggiungi una sezione per ogni unità catastale distinta (es. abitazione principale, garage, cantina...): non c'è limite al numero.",
+  btn_add_cadastral_unit:"+ Aggiungi unità catastale", btn_remove_cadastral_unit:"Rimuovi",
   label_optional_features:"Caratteristiche opzionali",
   feat_pool:"Piscina", feat_garden:"Giardino", feat_garage:"Box auto", feat_parking_spot:"Posto auto",
   feat_terrace:"Terrazza", feat_balcony:"Balcone", feat_sea_view:"Vista mare", feat_historic_center:"Centro storico",
@@ -4948,6 +5119,11 @@ async function loadOpportunity(){
   setValue("construction_year", data.construction_year);
   setValue("energy_class", data.energy_class || "");
   setValue("property_condition", data.property_condition || "");
+
+  setValue("garden_sqm", data.garden_sqm);
+  setValue("garage_sqm", data.garage_sqm);
+  setValue("accessory_size", data.accessory_size);
+  loadCadastralUnitsFromOpportunity(data);
 
   setValue("renovation_required", data.renovation_required === true ? "true" : "false");
   setValue("renovation_level", data.renovation_level || "");
@@ -5871,6 +6047,11 @@ form.addEventListener("submit", async function(e){
       construction_year:numberOrNull("construction_year"),
       energy_class:textOrNull("energy_class"),
       property_condition:textOrNull("property_condition"),
+
+      garden_sqm:numberOrNull("garden_sqm"),
+      garage_sqm:numberOrNull("garage_sqm"),
+      accessory_size:numberOrNull("accessory_size"),
+      cadastral_units:getCadastralUnitsPayload(),
 
       renovation_required:isRenovationRequired(),
       renovation_level:isRenovationRequired() ? textOrNull("renovation_level") : null,
