@@ -608,7 +608,16 @@ async function publishAndFinalize(pdfUrl, lang){
     console.warn("Pubblicazione scheda su GitHub fallita:",publishErr);
   }
 
-  var finalUrl = shareUrl || pdfUrl;
+  // Il link mostrato/copiato/salvato include un parametro di versione (timestamp di questa
+  // generazione): l'URL della pagina su GitHub Pages resta lo stesso file per opportunità+lingua
+  // (voluto: è un link permanente), ma senza un parametro che cambi ad ogni generazione, un
+  // link copiato in precedenza — o il browser dell'utente che lo apre — può restare agganciato
+  // a una copia in cache (CDN o browser) e continuare a mostrare la versione vecchia anche dopo
+  // una rigenerazione riuscita. Aggiungendo "?v=<timestamp>" ogni "Genera link" produce un URL
+  // realmente diverso dal precedente, cosa che forza sia il browser che la CDN a non riusare
+  // una copia in cache.
+  var versionedShareUrl = shareUrl ? (shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "v=" + Date.now()) : null;
+  var finalUrl = versionedShareUrl || pdfUrl;
 
   if(!shareUrl){
     // Pubblicazione fallita: NESSUN link va mostrato/copiabile, nemmeno quello diretto al PDF —
@@ -645,9 +654,9 @@ async function publishAndFinalize(pdfUrl, lang){
   if(confirmed){
     try{
       var updatedLinks = Object.assign({}, (opportunity && opportunity.onesheet_links) || {});
-      updatedLinks[lang||"it"] = { pdf_url: pdfUrl, share_url: shareUrl, generated_at: new Date().toISOString() };
-      await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl, onesheet_links:updatedLinks}).eq("id",opportunityId);
-      if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; opportunity.onesheet_links = updatedLinks; }
+      updatedLinks[lang||"it"] = { pdf_url: pdfUrl, share_url: versionedShareUrl, generated_at: new Date().toISOString() };
+      await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:versionedShareUrl, onesheet_links:updatedLinks}).eq("id",opportunityId);
+      if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = versionedShareUrl; opportunity.onesheet_links = updatedLinks; }
       if(lang === CURRENT_LANG) renderLangLinksPanel();
     }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
   }

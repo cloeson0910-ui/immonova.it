@@ -828,6 +828,26 @@ function pollCoverReachable(coverUrl, timeoutMs){
     attempt();
   });
 }
+/* ---- Come per la scheda one-sheet: un semplice check.ok non basta quando si rigenera una
+   pagina già pubblicata in precedenza (il file esiste già a quell'URL, quindi risponde 200
+   SUBITO anche se la CDN di GitHub Pages sta ancora servendo la versione precedente in cache
+   per qualche minuto). Si controlla che il corpo della risposta contenga davvero l'URL del PDF
+   appena generato (unico ad ogni generazione). ---- */
+async function waitForDossierSharePageFresh(shareUrl, pdfUrl, timeoutMs){
+  var start = Date.now();
+  while(Date.now() - start < timeoutMs){
+    var cacheBustUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "_cb=" + Date.now();
+    try{
+      var check = await fetch(cacheBustUrl, {method:"GET", cache:"no-store"});
+      if(check.ok){
+        var checkText = await check.text();
+        if(checkText.indexOf(pdfUrl) !== -1) return true;
+      }
+    }catch(e){}
+    await new Promise(function(r){ setTimeout(r,3000); });
+  }
+  return false;
+}
 async function watchLinkPublishStatus(coverUrl){
   var el = document.getElementById("linkPublishStatus");
   if(!el) return;
@@ -983,18 +1003,40 @@ async function generateDossierLink(){
       console.warn("Pubblicazione pagina share su GitHub fallita:",publishErr);
     }
 
-    currentDossierPdfUrl = shareUrl || pub.data.publicUrl;
-    renderDossierLinkRow();
+    /* ---- La pagina di anteprima ha sempre lo stesso URL fisso per opportunità (voluto: link
+       permanente) — quindi senza verificare che la CDN serva davvero il contenuto appena
+       pubblicato, rigenerando il dossier si rischia di mostrare/copiare un link che punta
+       ancora alla versione precedente in cache (sia lato CDN che browser di chi lo apre). Si
+       aspetta la conferma (stesso meccanismo già in uso per la scheda one-sheet: fetch con
+       cache:no-store finché il corpo della pagina non contiene davvero l'URL del PDF appena
+       generato), e solo a conferma avvenuta si aggiunge un parametro di versione (?v=...) al
+       link mostrato: cosi' anche browser/CDN vedono un URL realmente nuovo ad ogni generazione
+       e non possono riusare una copia vecchia. Se la pubblicazione fallisce o non si conferma
+       in tempo, si usa comunque il link diretto al PDF appena caricato su Storage (sempre
+       fresco, path univoco per generazione: nessun rischio di cache stantia). ---- */
+    var confirmedShareUrl = null;
     if(shareUrl){
-      var coverCheckUrl = getCoverImage() ? String(shareUrl).replace(/\.html$/, "-cover.jpg") : "";
-      watchLinkPublishStatus(coverCheckUrl);
+      setStatus("PDF pronto. Verifica pubblicazione anteprima in corso...","");
+      var fresh = await waitForDossierSharePageFresh(shareUrl, pub.data.publicUrl, 75000);
+      if(fresh){
+        confirmedShareUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "v=" + Date.now();
+      }
     }
 
-    if(opportunity){ opportunity.dossier_sintetico_share_url = shareUrl; opportunity.dossier_sintetico_pdf_url = pub.data.publicUrl; }
-    var save = await client.from("opportunities").update({dossier_sintetico_share_url:shareUrl, dossier_sintetico_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
+    currentDossierPdfUrl = confirmedShareUrl || pub.data.publicUrl;
+    renderDossierLinkRow();
+
+    if(opportunity){ opportunity.dossier_sintetico_share_url = confirmedShareUrl; opportunity.dossier_sintetico_pdf_url = pub.data.publicUrl; }
+    var save = await client.from("opportunities").update({dossier_sintetico_share_url:confirmedShareUrl, dossier_sintetico_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
     if(save.error) console.warn("Salvataggio link dossier sintetico su opportunities fallito:", save.error);
 
-    setStatus(shareUrl?(T.status_link_generated_preview||UI_STRINGS.status_link_generated_preview):(T.status_link_generated_no_preview||UI_STRINGS.status_link_generated_no_preview),"success");
+    if(confirmedShareUrl){
+      setStatus(T.status_link_generated_preview||UI_STRINGS.status_link_generated_preview,"success");
+    }else if(shareUrl){
+      setStatus("Pubblicazione avviata ma non ancora confermata sulla CDN: per ora è disponibile il link diretto al PDF (sempre aggiornato). Riprova a generare tra qualche minuto per ottenere anche l'anteprima.","success");
+    }else{
+      setStatus(T.status_link_generated_no_preview||UI_STRINGS.status_link_generated_no_preview,"success");
+    }
     setControlDone(generateDossierLinkBtn, true);
   }catch(e){
     console.error(e);
