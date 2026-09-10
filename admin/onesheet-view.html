@@ -382,6 +382,18 @@ function slugify(s){
   return String(s||"immobile").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,60) || "immobile";
 }
 
+/* Estrae il path interno dello Storage bucket "dossier-pdfs" da un URL pubblico, per poter
+   cancellare il PDF precedente prima di caricare quello nuovo (senza questo, ogni "Genera
+   link" lascerebbe il vecchio file abbandonato nel bucket, occupando spazio inutilmente). */
+function extractDossierPdfsStoragePath(publicUrl){
+  var marker = "/dossier-pdfs/";
+  var idx = String(publicUrl||"").indexOf(marker);
+  if(idx === -1) return null;
+  var path = publicUrl.slice(idx + marker.length).split("?")[0];
+  try{ path = decodeURIComponent(path); }catch(e){}
+  return path || null;
+}
+
 /* Le immagini di sfondo (CSS background-image, usate per le foto della striscia in alto) non
    sono <img> e quindi waitForImagesToLoad non le aspetta — senza questo preload esplicito
    html2canvas può catturare la pagina prima che il browser abbia scaricato le foto,
@@ -475,6 +487,7 @@ async function generateOneSheetLink(){
     renderSheet();
     await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
     setStatus("Generazione PDF in corso...","");
+    var previousPdfUrl = (opportunity && opportunity.onesheet_pdf_url) || null;
     var pdfBlob = await generateOneSheetPdfBlob();
     var filename = "onesheet_IMMONOVA_"+slugify(getTitle())+"_"+CURRENT_LANG+".pdf";
     var path = "onesheet/opportunity-"+(opportunityId||"na")+"/"+Date.now()+"_"+filename;
@@ -482,6 +495,18 @@ async function generateOneSheetLink(){
     if(upload.error) throw upload.error;
     var pub = client.storage.from("dossier-pdfs").getPublicUrl(path);
     var pdfUrl = pub.data.publicUrl;
+
+    // Cancella il PDF della generazione precedente, ora che il nuovo è caricato con successo
+    // (mai prima: se l'upload nuovo fallisse, non deve sparire l'unico PDF ancora valido).
+    if(previousPdfUrl && previousPdfUrl !== pdfUrl){
+      var previousPath = extractDossierPdfsStoragePath(previousPdfUrl);
+      if(previousPath){
+        try{
+          var removeRes = await client.storage.from("dossier-pdfs").remove([previousPath]);
+          if(removeRes.error) console.warn("Cancellazione PDF precedente fallita:", removeRes.error);
+        }catch(removeErr){ console.warn("Cancellazione PDF precedente fallita:", removeErr); }
+      }
+    }
 
     // Stessa pubblicazione GitHub già in uso per dossier e proposte: nessuna Edge Function
     // Supabase può servire HTML col Content-Type giusto (bug del gateway + policy di
@@ -510,6 +535,7 @@ async function generateOneSheetLink(){
     var finalUrl = shareUrl || pdfUrl;
     try{
       await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl}).eq("id",opportunityId);
+      if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; }
     }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
 
     // Il PDF è già aperto nella nuova scheda: da qui in poi il pulsante torna subito
