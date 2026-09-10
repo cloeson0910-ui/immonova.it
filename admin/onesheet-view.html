@@ -163,7 +163,8 @@ var ICONS = {
   battery:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="7" width="18" height="10" rx="1.4"/><path d="M22 10v4"/><path d="M6 10v4M10 10v4"/></svg>',
   well:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3c3 4 6 7.4 6 11a6 6 0 1 1-12 0c0-3.6 3-7 6-11Z"/></svg>',
   heating:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M8 4v16M12 4v16M16 4v16"/></svg>',
-  habitability:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z"/><path d="M9 12l2 2 4-4"/></svg>'
+  habitability:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z"/><path d="M9 12l2 2 4-4"/></svg>',
+  jacuzzi:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12h18v4a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-4Z"/><path d="M3 12V9a2 2 0 0 1 2-2h1"/><circle cx="9" cy="5" r="1"/><circle cx="13" cy="4" r="1"/><circle cx="11" cy="7" r="1"/></svg>'
 };
 
 /* ---- Caratteristiche opzionali: chiave colonna -> {icon, labelKey}. L'ordine qui è
@@ -187,7 +188,8 @@ var FEATURES = [
   {col:"has_storage_battery", icon:"battery", key:"feat_battery"},
   {col:"has_car_charger", icon:"charger", key:"feat_charger"},
   {col:"has_artesian_well", icon:"well", key:"feat_well"},
-  {col:"has_habitability", icon:"habitability", key:"feat_habitability"}
+  {col:"has_habitability", icon:"habitability", key:"feat_habitability"},
+  {col:"has_jacuzzi", icon:"jacuzzi", key:"feat_jacuzzi"}
 ];
 
 var UI_IT = {
@@ -200,7 +202,7 @@ var UI_IT = {
   feat_ac:"Aria condizionata", feat_heating:"Impianto di riscaldamento", feat_fireplace:"Camino",
   feat_historic:"Centro storico", feat_photovoltaic:"Fotovoltaico", feat_solar_thermal:"Solare termico",
   feat_battery:"Accumulo batteria", feat_charger:"Colonnina di ricarica", feat_well:"Pozzo artesiano",
-  feat_habitability:"Abitabilità",
+  feat_habitability:"Abitabilità", feat_jacuzzi:"Jacuzzi",
   footer_confidential:"Documento riservato IMMONOVA",
   loading:"Caricamento...", generating:"Generazione in corso...",
   no_description:""
@@ -607,13 +609,6 @@ async function publishAndFinalize(pdfUrl, lang){
   }
 
   var finalUrl = shareUrl || pdfUrl;
-  try{
-    var updatedLinks = Object.assign({}, (opportunity && opportunity.onesheet_links) || {});
-    updatedLinks[lang||"it"] = { pdf_url: pdfUrl, share_url: shareUrl || null, generated_at: new Date().toISOString() };
-    await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl, onesheet_links:updatedLinks}).eq("id",opportunityId);
-    if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; opportunity.onesheet_links = updatedLinks; }
-    if(lang === CURRENT_LANG) renderLangLinksPanel();
-  }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
 
   if(!shareUrl){
     // Pubblicazione fallita: NESSUN link va mostrato/copiabile, nemmeno quello diretto al PDF —
@@ -630,6 +625,7 @@ async function publishAndFinalize(pdfUrl, lang){
   // (unico ad ogni generazione), non solo che la richiesta sia andata a buon fine. Solo a
   // verifica completata il link diventa visibile/copiabile.
   var attempts = 0, maxAttempts = 60;
+  var confirmed = false;
   var cacheBustUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "_cb=" + Date.now();
   while(attempts < maxAttempts){
     attempts++;
@@ -637,14 +633,33 @@ async function publishAndFinalize(pdfUrl, lang){
       var check = await fetch(cacheBustUrl, {method:"GET", cache:"no-store"});
       if(check.ok){
         var checkText = await check.text();
-        if(checkText.indexOf(pdfUrl) !== -1) break;
+        if(checkText.indexOf(pdfUrl) !== -1){ confirmed = true; break; }
       }
     }catch(e){}
     await new Promise(function(r){ setTimeout(r,3000); });
   }
+  // Il link (sia quello mostrato in pagina che quello salvato/visibile nel pannello per lingua)
+  // diventa visibile/copiabile SOLO ORA, dopo la conferma — mai prima, nemmeno "a scatola
+  // chiusa" solo perché la richiesta di pubblicazione è andata a buon fine: se scade il tempo
+  // massimo senza conferma, non si salva né si mostra nessun link.
+  if(confirmed){
+    try{
+      var updatedLinks = Object.assign({}, (opportunity && opportunity.onesheet_links) || {});
+      updatedLinks[lang||"it"] = { pdf_url: pdfUrl, share_url: shareUrl, generated_at: new Date().toISOString() };
+      await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl, onesheet_links:updatedLinks}).eq("id",opportunityId);
+      if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; opportunity.onesheet_links = updatedLinks; }
+      if(lang === CURRENT_LANG) renderLangLinksPanel();
+    }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
+  }
+
   if(lang === CURRENT_LANG){
-    renderLinkRow(finalUrl);
-    setStatus("Link generato, con anteprima.","success");
+    if(confirmed){
+      renderLinkRow(finalUrl);
+      setStatus("Link generato, con anteprima.","success");
+    }else{
+      renderLinkRow(null);
+      setStatus("PDF pubblicato, ma non è stato possibile confermare che l'anteprima sia già aggiornata sulla CDN: riprova tra qualche minuto prima di copiare il link.","error");
+    }
   }
 }
 
@@ -677,8 +692,12 @@ async function init(){
   pageTitleUpdate();
   setStatus("","");
   renderSheet();
-  if(opportunity.onesheet_share_url || opportunity.onesheet_pdf_url){
-    renderLinkRow(opportunity.onesheet_share_url || opportunity.onesheet_pdf_url);
+  // Solo lo share_url (pagina con anteprima pubblicata e confermata su GitHub) rende il link
+  // copiabile: mai il pdf_url grezzo come "ripiego", nemmeno al caricamento della pagina —
+  // altrimenti una generazione precedente la cui pubblicazione era fallita resterebbe comunque
+  // copiabile riaprendo semplicemente la scheda.
+  if(opportunity.onesheet_share_url){
+    renderLinkRow(opportunity.onesheet_share_url);
   }
   renderLangLinksPanel();
 }
