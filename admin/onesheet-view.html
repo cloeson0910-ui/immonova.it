@@ -425,15 +425,6 @@ function renderLinkRow(url){
 }
 
 async function generateOneSheetLink(){
-  // Apro subito una scheda vuota (nello stesso click, sincrona: i browser bloccano i popup
-  // aperti dopo un await) e ci carico il PDF appena finisce di essere generato — sono i byte
-  // creati in quell'istante, mai passati da rete/Storage/CDN, quindi non possono MAI essere
-  // una versione vecchia in cache. Questa e' la scheda su cui guardare il risultato, non i
-  // link salvati o riaperti da prima.
-  var freshTab = window.open("", "_blank");
-  if(freshTab && freshTab.document){
-    freshTab.document.write("<title>Generazione in corso...</title><body style=\"font-family:sans-serif;padding:40px;color:#8f7643\">Generazione della scheda in corso, attendere...</body>");
-  }
   generateLinkBtn.disabled = true;
   var originalLabel = generateLinkBtn.textContent;
   generateLinkBtn.classList.add("btn-busy");
@@ -449,15 +440,6 @@ async function generateOneSheetLink(){
     await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
     setStatus("Generazione PDF in corso...","");
     var pdfBlob = await generateOneSheetPdfBlob();
-    var localBlobUrl = URL.createObjectURL(pdfBlob);
-    if(freshTab && !freshTab.closed){
-      freshTab.location.href = localBlobUrl;
-    }else{
-      // Popup bloccato dal browser: si apre comunque, ma ora e' un secondo click esplicito
-      // dell'utente (non piu' dentro l'async), quindi i popup blocker generalmente lo
-      // permettono.
-      window.open(localBlobUrl, "_blank");
-    }
     var filename = "onesheet_IMMONOVA_"+slugify(getTitle())+"_"+CURRENT_LANG+".pdf";
     var path = "onesheet/opportunity-"+(opportunityId||"na")+"/"+Date.now()+"_"+filename;
     var upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
@@ -494,44 +476,56 @@ async function generateOneSheetLink(){
       await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl}).eq("id",opportunityId);
     }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
 
+    // Il PDF è già aperto nella nuova scheda: da qui in poi il pulsante torna subito
+    // utilizzabile, la pagina non resta bloccata. L'attesa della pubblicazione su GitHub
+    // (che può richiedere fino a qualche minuto per propagarsi sulla CDN) prosegue in
+    // background e aggiorna da sola lo stato/il link quando è pronta, senza tenere la
+    // pagina "in sospeso".
+    generateLinkBtn.classList.remove("btn-busy");
+    generateLinkBtn.classList.add("btn-success");
+    generateLinkBtn.disabled = false;
+    generateLinkBtn.textContent = originalLabel;
+    setTimeout(function(){ generateLinkBtn.classList.remove("btn-success"); }, 3000);
+
     if(!shareUrl){
       renderLinkRow(finalUrl);
       setStatus("Link generato (senza anteprima WhatsApp: la pubblicazione su GitHub non è riuscita, controlla la console).","error");
     }else{
-      // Nessun avviso testuale: il link resta nascosto finché la pagina non è davvero
-      // raggiungibile su GitHub Pages CON IL CONTENUTO NUOVO. Un semplice check.ok non basta
-      // quando si rigenera una scheda già pubblicata in precedenza: il file esiste già a
-      // quell'URL, quindi risponde 200 SUBITO — ma il CDN di GitHub Pages può ancora servire
-      // per alcuni minuti la versione precedente in cache. Per questo si controlla che il
-      // corpo della risposta contenga davvero l'URL del PDF appena generato (unico ad ogni
-      // generazione), non solo che la richiesta sia andata a buon fine.
-      setStatus("Pubblicazione in corso...","");
-      var attempts = 0, maxAttempts = 60;
-      var cacheBustUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "_cb=" + Date.now();
-      while(attempts < maxAttempts){
-        attempts++;
-        try{
-          var check = await fetch(cacheBustUrl, {method:"GET", cache:"no-store"});
-          if(check.ok){
-            var checkText = await check.text();
-            if(checkText.indexOf(pdfUrl) !== -1) break;
-          }
-        }catch(e){}
-        await new Promise(function(r){ setTimeout(r,3000); });
-      }
-      renderLinkRow(finalUrl);
-      setStatus("Link generato, con anteprima.","success");
+      setStatus("PDF pronto. Pubblicazione del link con anteprima in corso...","");
+      finalizeSharePublication(shareUrl, pdfUrl, finalUrl); // non attesa: gira in background
     }
-    generateLinkBtn.classList.remove("btn-busy");
-    generateLinkBtn.classList.add("btn-success");
-    setTimeout(function(){ generateLinkBtn.classList.remove("btn-success"); }, 3000);
   }catch(e){
     console.error(e);
     setStatus("Errore nella generazione: "+(e.message||e),"error");
     generateLinkBtn.classList.remove("btn-busy");
+    generateLinkBtn.disabled = false;
+    generateLinkBtn.textContent = originalLabel;
   }
-  generateLinkBtn.disabled = false;
-  generateLinkBtn.textContent = originalLabel;
+}
+
+// Nessun avviso testuale: il link resta nascosto finché la pagina non è davvero raggiungibile
+// su GitHub Pages CON IL CONTENUTO NUOVO. Un semplice check.ok non basta quando si rigenera
+// una scheda già pubblicata in precedenza: il file esiste già a quell'URL, quindi risponde 200
+// SUBITO — ma il CDN di GitHub Pages può ancora servire per alcuni minuti la versione
+// precedente in cache. Per questo si controlla che il corpo della risposta contenga davvero
+// l'URL del PDF appena generato (unico ad ogni generazione), non solo che la richiesta sia
+// andata a buon fine. Gira in background: NON blocca il pulsante "Genera link".
+async function finalizeSharePublication(shareUrl, pdfUrl, finalUrl){
+  var attempts = 0, maxAttempts = 60;
+  var cacheBustUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "_cb=" + Date.now();
+  while(attempts < maxAttempts){
+    attempts++;
+    try{
+      var check = await fetch(cacheBustUrl, {method:"GET", cache:"no-store"});
+      if(check.ok){
+        var checkText = await check.text();
+        if(checkText.indexOf(pdfUrl) !== -1) break;
+      }
+    }catch(e){}
+    await new Promise(function(r){ setTimeout(r,3000); });
+  }
+  renderLinkRow(finalUrl);
+  setStatus("Link generato, con anteprima.","success");
 }
 
 langSelect.addEventListener("change", async function(){
@@ -551,7 +545,7 @@ async function init(){
   var ok = await checkAuth();
   if(!ok) return;
   if(!opportunityId){ sheetBox.innerHTML = '<div style="padding:42px;color:#9c2f2f">ID opportunità mancante nell\'URL.</div>'; return; }
-  editLink.href = "opportunityedit.html?id="+encodeURIComponent(opportunityId);
+  editLink.href = "opportunity-edit.html?id="+encodeURIComponent(opportunityId);
   setStatus(T.loading,"");
   var res = await client.from("opportunities").select("*").eq("id", opportunityId).single();
   if(res.error || !res.data){
