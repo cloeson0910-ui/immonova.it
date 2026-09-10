@@ -492,7 +492,7 @@ function renderLinkRow(url){
    serve rigenerare ogni volta: se per una lingua esiste già un link, basta copiarlo. */
 function renderLangLinksPanel(){
   var links = (opportunity && opportunity.onesheet_links) || {};
-  var langs = Object.keys(links).filter(function(l){ return links[l] && (links[l].share_url || links[l].pdf_url); });
+  var langs = Object.keys(links).filter(function(l){ return links[l] && links[l].share_url; });
   if(!langs.length){ langLinksPanel.hidden = true; langLinksList.innerHTML=""; return; }
   langs.sort();
   langLinksList.innerHTML = langs.map(function(lang){
@@ -558,57 +558,19 @@ async function generateOneSheetLink(){
       }
     }
 
-    // Stessa pubblicazione GitHub già in uso per dossier e proposte: nessuna Edge Function
-    // Supabase può servire HTML col Content-Type giusto (bug del gateway + policy di
-    // sicurezza intenzionale su Storage), quindi si commette il file vero sul repo GitHub
-    // che serve il sito, tramite la Edge Function "publish-onesheet-page".
-    var shareUrl = null;
-    try{
-      var publishResp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/publish-onesheet-page",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
-        body:JSON.stringify({
-          opportunityId: opportunityId,
-          title: getTitle(),
-          coverUrl: getCoverImage(),
-          pdfUrl: pdfUrl,
-          lang: CURRENT_LANG||"it"
-        })
-      });
-      var publishData = await publishResp.json();
-      if(publishResp.ok && publishData && publishData.url){ shareUrl = publishData.url; }
-      else console.warn("Pubblicazione scheda su GitHub fallita:",publishData);
-    }catch(publishErr){
-      console.warn("Pubblicazione scheda su GitHub fallita:",publishErr);
-    }
-
-    var finalUrl = shareUrl || pdfUrl;
-    try{
-      var updatedLinks = Object.assign({}, (opportunity && opportunity.onesheet_links) || {});
-      updatedLinks[CURRENT_LANG||"it"] = { pdf_url: pdfUrl, share_url: shareUrl || null, generated_at: new Date().toISOString() };
-      await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl, onesheet_links:updatedLinks}).eq("id",opportunityId);
-      if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; opportunity.onesheet_links = updatedLinks; }
-      renderLangLinksPanel();
-    }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
-
-    // Il PDF è già aperto nella nuova scheda: da qui in poi il pulsante torna subito
-    // utilizzabile, la pagina non resta bloccata. L'attesa della pubblicazione su GitHub
-    // (che può richiedere fino a qualche minuto per propagarsi sulla CDN) prosegue in
-    // background e aggiorna da sola lo stato/il link quando è pronta, senza tenere la
-    // pagina "in sospeso".
+    // Il pulsante torna subito utilizzabile (non deve più aspettare la pubblicazione su
+    // GitHub per sbloccarsi) — ma il link NON è ancora mostrato/copiabile: compare SOLO
+    // quando la pagina con anteprima è davvero pronta e verificata, mai prima. Nessun link
+    // "provvisorio" da copiare per sbaglio prima che sia pubblicato.
+    renderLinkRow(null);
     generateLinkBtn.classList.remove("btn-busy");
     generateLinkBtn.classList.add("btn-success");
     generateLinkBtn.disabled = false;
     generateLinkBtn.textContent = originalLabel;
     setTimeout(function(){ generateLinkBtn.classList.remove("btn-success"); }, 3000);
+    setStatus("PDF pronto. Pubblicazione del link con anteprima in corso...","");
 
-    if(!shareUrl){
-      renderLinkRow(finalUrl);
-      setStatus("Link generato (senza anteprima WhatsApp: la pubblicazione su GitHub non è riuscita, controlla la console).","error");
-    }else{
-      setStatus("PDF pronto. Pubblicazione del link con anteprima in corso...","");
-      finalizeSharePublication(shareUrl, pdfUrl, finalUrl); // non attesa: gira in background
-    }
+    publishAndFinalize(pdfUrl, CURRENT_LANG); // non attesa: gira in background — mostrerà il link solo a pubblicazione confermata
   }catch(e){
     console.error(e);
     setStatus("Errore nella generazione: "+(e.message||e),"error");
@@ -618,14 +580,55 @@ async function generateOneSheetLink(){
   }
 }
 
-// Nessun avviso testuale: il link resta nascosto finché la pagina non è davvero raggiungibile
-// su GitHub Pages CON IL CONTENUTO NUOVO. Un semplice check.ok non basta quando si rigenera
-// una scheda già pubblicata in precedenza: il file esiste già a quell'URL, quindi risponde 200
-// SUBITO — ma il CDN di GitHub Pages può ancora servire per alcuni minuti la versione
-// precedente in cache. Per questo si controlla che il corpo della risposta contenga davvero
-// l'URL del PDF appena generato (unico ad ogni generazione), non solo che la richiesta sia
-// andata a buon fine. Gira in background: NON blocca il pulsante "Genera link".
-async function finalizeSharePublication(shareUrl, pdfUrl, finalUrl){
+// Tutta la pubblicazione su GitHub (compressione copertina + traduzione stringhe fisse +
+// commit sul repo, poi attesa che la CDN di GitHub Pages serva davvero il contenuto nuovo)
+// gira qui in background, SENZA bloccare il pulsante "Genera link": il PDF diretto è già
+// copiabile da subito, questa funzione si limita ad "aggiornare" il link quando l'anteprima
+// WhatsApp è pronta.
+async function publishAndFinalize(pdfUrl, lang){
+  var shareUrl = null;
+  try{
+    var publishResp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/publish-onesheet-page",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
+      body:JSON.stringify({
+        opportunityId: opportunityId,
+        title: getTitle(),
+        coverUrl: getCoverImage(),
+        pdfUrl: pdfUrl,
+        lang: lang||"it"
+      })
+    });
+    var publishData = await publishResp.json();
+    if(publishResp.ok && publishData && publishData.url){ shareUrl = publishData.url; }
+    else console.warn("Pubblicazione scheda su GitHub fallita:",publishData);
+  }catch(publishErr){
+    console.warn("Pubblicazione scheda su GitHub fallita:",publishErr);
+  }
+
+  var finalUrl = shareUrl || pdfUrl;
+  try{
+    var updatedLinks = Object.assign({}, (opportunity && opportunity.onesheet_links) || {});
+    updatedLinks[lang||"it"] = { pdf_url: pdfUrl, share_url: shareUrl || null, generated_at: new Date().toISOString() };
+    await client.from("opportunities").update({onesheet_pdf_url:pdfUrl, onesheet_share_url:shareUrl, onesheet_links:updatedLinks}).eq("id",opportunityId);
+    if(opportunity){ opportunity.onesheet_pdf_url = pdfUrl; opportunity.onesheet_share_url = shareUrl; opportunity.onesheet_links = updatedLinks; }
+    if(lang === CURRENT_LANG) renderLangLinksPanel();
+  }catch(saveErr){ console.warn("Salvataggio link one-sheet fallito:",saveErr); }
+
+  if(!shareUrl){
+    // Pubblicazione fallita: NESSUN link va mostrato/copiabile, nemmeno quello diretto al PDF —
+    // il link compare solo quando la pagina con anteprima è confermata pubblicata, mai prima.
+    if(lang === CURRENT_LANG) setStatus("PDF generato, ma la pubblicazione del link con anteprima non è riuscita: nessun link disponibile. Controlla la console e riprova.","error");
+    return;
+  }
+
+  // Il link resta nascosto finché la pagina non è davvero raggiungibile su GitHub Pages CON IL
+  // CONTENUTO NUOVO. Un semplice check.ok non basta quando si rigenera una scheda già pubblicata
+  // in precedenza: il file esiste già a quell'URL, quindi risponde 200 SUBITO — ma il CDN di
+  // GitHub Pages può ancora servire per alcuni minuti la versione precedente in cache. Per questo
+  // si controlla che il corpo della risposta contenga davvero l'URL del PDF appena generato
+  // (unico ad ogni generazione), non solo che la richiesta sia andata a buon fine. Solo a
+  // verifica completata il link diventa visibile/copiabile.
   var attempts = 0, maxAttempts = 60;
   var cacheBustUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "_cb=" + Date.now();
   while(attempts < maxAttempts){
@@ -639,8 +642,10 @@ async function finalizeSharePublication(shareUrl, pdfUrl, finalUrl){
     }catch(e){}
     await new Promise(function(r){ setTimeout(r,3000); });
   }
-  renderLinkRow(finalUrl);
-  setStatus("Link generato, con anteprima.","success");
+  if(lang === CURRENT_LANG){
+    renderLinkRow(finalUrl);
+    setStatus("Link generato, con anteprima.","success");
+  }
 }
 
 langSelect.addEventListener("change", async function(){
