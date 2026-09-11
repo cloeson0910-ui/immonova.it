@@ -59,6 +59,8 @@
   .sig-field-row input[type="text"], .sig-field-row input[type="date"]{flex:1;min-width:180px;padding:11px 12px;border:1px solid rgba(166,127,52,.35);background:#fff;font-size:13px;color:#4a3c1d;font-family:inherit;border-radius:2px}
   .sig-close-row{display:flex;justify-content:flex-end;margin-bottom:10px}
   .sig-close-row button{background:none;border:none;color:#8f7643;font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
+  .sig-pad-back-row{margin-bottom:10px}
+  .sig-pad-back-row button{background:none;border:none;color:#8f7643;font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0}
 
   .success-overlay{position:fixed;inset:0;height:100dvh;background:#f7f1e6;z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px}
   .success-overlay[hidden]{display:none}
@@ -74,7 +76,7 @@
   <div class="card">
     <p class="kicker">IMMONOVA - Off Market Consulting</p>
     <h1>Proposta d&#039;Acquisto - Appartamento Via Tito Schipa</h1>
-    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789170309850.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
+    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789171000650.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
   </div>
 
   <div class="section">
@@ -104,12 +106,9 @@
   <div class="sig-overlay-inner">
     <div class="sig-close-row"><button type="button" id="sigCancelBtn">Chiudi senza firmare</button></div>
 
-    <div class="rotate-prompt" id="rotatePrompt" hidden>
-      <div class="icon">📱↻</div>
-      <div><strong>Ruota il telefono in orizzontale</strong><br>per firmare serve più spazio in larghezza.</div>
-    </div>
-
-    <div class="sig-form-area" id="sigFormArea">
+    <!-- FASE 1 — dati del firmatario: schermo verticale, si scorre normalmente (nessuna
+         rotazione richiesta qui, serve solo per il riquadro della firma vera e propria). -->
+    <div class="sig-form-area" id="sigDetailsArea">
       <h2>Firma la proposta</h2>
       <div class="signer-toggle" id="signerToggle">
         <button type="button" data-signer="buyer" class="active">Acquirente</button>
@@ -119,12 +118,6 @@
         <input type="text" id="signerNameInput" placeholder="Nome e cognome di chi firma" autocomplete="name">
         <input type="text" id="signerPlaceInput" placeholder="Luogo (es. Milano)" autocomplete="address-level2">
         <input type="date" id="signerDateInput">
-      </div>
-      <div class="sig-pad-box">
-        <canvas class="sig-canvas" id="sigCanvas"></canvas>
-      </div>
-      <div class="sig-actions">
-        <button type="button" class="btn secondary" id="sigClearBtn">Cancella firma</button>
       </div>
       <div class="id-doc-block">
         <div class="id-doc-label">Documento d'identità (fronte) — obbligatorio per verificare la firma</div>
@@ -137,6 +130,25 @@
         <div class="id-doc-preview" id="idDocPreview" hidden></div>
       </div>
       <div class="sig-actions">
+        <button type="button" class="btn" id="goToSigPadBtn">Avanti: disegna la firma →</button>
+      </div>
+      <div class="sig-status" id="sigDetailsStatus"></div>
+    </div>
+
+    <!-- FASE 2 — firma vera e propria: qui serve davvero più spazio in larghezza, quindi
+         SOLO a questo punto si chiede di ruotare il telefono. -->
+    <div class="rotate-prompt" id="rotatePrompt" hidden>
+      <div class="icon">📱↻</div>
+      <div><strong>Ruota il telefono in orizzontale</strong><br>per firmare serve più spazio in larghezza.</div>
+    </div>
+
+    <div class="sig-form-area" id="sigPadArea" hidden>
+      <div class="sig-pad-back-row"><button type="button" id="backToDetailsBtn">← Rivedi i dati inseriti</button></div>
+      <div class="sig-pad-box">
+        <canvas class="sig-canvas" id="sigCanvas"></canvas>
+      </div>
+      <div class="sig-actions">
+        <button type="button" class="btn secondary" id="sigClearBtn">Cancella firma</button>
         <button type="button" class="btn" id="sigConfirmBtn">Conferma firma</button>
       </div>
       <div class="sig-status" id="sigStatus"></div>
@@ -228,10 +240,15 @@
 
   var overlay = document.getElementById("sigOverlay");
   var rotatePrompt = document.getElementById("rotatePrompt");
-  var sigFormArea = document.getElementById("sigFormArea");
+  var sigDetailsArea = document.getElementById("sigDetailsArea");
+  var sigPadArea = document.getElementById("sigPadArea");
   var nameInput = document.getElementById("signerNameInput");
   var placeInput = document.getElementById("signerPlaceInput");
   var dateInput = document.getElementById("signerDateInput");
+  // FASE 1 (dati: nome/luogo/data/documento d'identità) resta in verticale, si scorre
+  // normalmente — nessuna richiesta di ruotare il telefono. Solo alla FASE 2 (il riquadro
+  // della firma vera e propria, dove serve più spazio in larghezza) si chiede la rotazione.
+  var inPadPhase = false;
 
   function isLandscape(){ return window.innerWidth > window.innerHeight; }
 
@@ -258,14 +275,17 @@
   }
 
   function updateOrientationGate(){
-    if(overlay.hidden) return;
+    // Il vincolo di orizzontale si applica SOLO alla fase 2 (pad di firma): la fase 1
+    // (dati) resta sempre visibile in verticale, indipendentemente dall'orientazione reale
+    // del telefono in quel momento.
+    if(overlay.hidden || !inPadPhase) return;
     if(isLandscape()){
       rotatePrompt.hidden = true;
-      sigFormArea.hidden = false;
+      sigPadArea.hidden = false;
       resizeCanvas();
     }else{
       rotatePrompt.hidden = false;
-      sigFormArea.hidden = true;
+      sigPadArea.hidden = true;
     }
   }
   window.addEventListener("resize", updateOrientationGate);
@@ -273,26 +293,49 @@
 
   function openSigOverlay(){
     overlay.hidden = false;
+    inPadPhase = false;
+    sigDetailsArea.hidden = false;
+    sigPadArea.hidden = true;
+    rotatePrompt.hidden = true;
+    document.getElementById("sigDetailsStatus").textContent = "";
+    document.getElementById("sigDetailsStatus").className = "sig-status";
     document.getElementById("sigStatus").textContent = "";
     document.getElementById("sigStatus").className = "sig-status";
     // Fullscreen nativo: best effort, funziona su Android/Chrome, non su iOS Safari (che
     // non lo supporta per elementi generici) — l'overlay a tutto viewport (position:fixed,
     // 100dvh) copre comunque tutto lo schermo su ogni dispositivo, quindi l'aspetto "a
     // tutto schermo" è garantito anche quando la vera Fullscreen API non è disponibile.
+    // NESSUN blocco di orientazione qui: la fase 1 (dati) va bene in verticale, si chiede
+    // di ruotare solo quando si passa davvero al riquadro della firma (goToSigPad sotto).
     if(document.documentElement.requestFullscreen){
       document.documentElement.requestFullscreen().catch(function(){});
     }
-    // Blocco orientazione: idem, best effort (non supportato su iOS Safari). Il vero
-    // obbligo di orizzontale è garantito dal rotatePrompt sotto, che blocca il modulo di
-    // firma finché il telefono non è davvero ruotato, indipendentemente dal supporto.
+  }
+
+  function goToSigPad(){
+    inPadPhase = true;
+    sigDetailsArea.hidden = true;
+    // Solo ORA si chiede di ruotare il telefono: qui serve davvero più spazio in
+    // larghezza per disegnare la firma, non per compilare i campi di testo.
     if(screen.orientation && screen.orientation.lock){
       screen.orientation.lock("landscape").catch(function(){});
     }
     updateOrientationGate();
   }
 
+  function backToDetails(){
+    inPadPhase = false;
+    rotatePrompt.hidden = true;
+    sigPadArea.hidden = true;
+    sigDetailsArea.hidden = false;
+    if(screen.orientation && screen.orientation.unlock){
+      try{ screen.orientation.unlock(); }catch(e){}
+    }
+  }
+
   function closeSigOverlay(){
     overlay.hidden = true;
+    inPadPhase = false;
     if(document.fullscreenElement && document.exitFullscreen){
       document.exitFullscreen().catch(function(){});
     }
@@ -303,6 +346,7 @@
 
   document.getElementById("openSigBtn").addEventListener("click", openSigOverlay);
   document.getElementById("sigCancelBtn").addEventListener("click", closeSigOverlay);
+  document.getElementById("backToDetailsBtn").addEventListener("click", backToDetails);
 
   /* Pagina di ringraziamento a tutto schermo dopo la firma, in stile IMMONOVA — il cliente
      capisce chiaramente che è tutto fatto e può chiudere il telefono/la pagina, invece di
@@ -379,8 +423,11 @@
     });
   });
 
-  document.getElementById("sigConfirmBtn").addEventListener("click", async function(){
-    var statusEl = document.getElementById("sigStatus");
+  // FASE 1 -> FASE 2: qui si validano nome/luogo/data/documento d'identità, tutti raccolti
+  // comodamente in verticale. Solo dopo si passa al riquadro della firma (che richiede di
+  // ruotare il telefono).
+  document.getElementById("goToSigPadBtn").addEventListener("click", function(){
+    var statusEl = document.getElementById("sigDetailsStatus");
     var signerName = nameInput.value.trim();
     var signerPlace = placeInput.value.trim();
     var signerDate = dateInput.value; // input type="date" -> sempre "AAAA-MM-GG" o vuoto, scritta dal firmatario, mai automatica
@@ -403,15 +450,34 @@
       dateInput.focus();
       return;
     }
+    if(!idDocFile){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Carica una foto del documento d'identità (fronte): è obbligatorio per la verifica della firma.";
+      document.getElementById("idDocPreview").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    statusEl.className = "sig-status";
+    statusEl.textContent = "";
+    goToSigPad();
+  });
+
+  document.getElementById("sigConfirmBtn").addEventListener("click", async function(){
+    var statusEl = document.getElementById("sigStatus");
+    var signerName = nameInput.value.trim();
+    var signerPlace = placeInput.value.trim();
+    var signerDate = dateInput.value;
+
+    // Ricontrollo di sicurezza (già validati in fase 1, ma l'utente potrebbe tornare
+    // indietro con "Rivedi i dati" e svuotare un campo): non deve mai arrivare al server
+    // una richiesta incompleta.
+    if(!signerName || !signerPlace || !signerDate || !idDocFile){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Alcuni dati sono mancanti: torna indietro con \"Rivedi i dati inseriti\".";
+      return;
+    }
     if(!hasStroke){
       statusEl.className = "sig-status error";
       statusEl.textContent = "Disegna la firma prima di confermare.";
-      return;
-    }
-    if(!idDocFile){
-      statusEl.className = "sig-status error";
-      statusEl.textContent = "Carica una foto del documento d'identità (fronte) prima di confermare: è obbligatorio per la verifica della firma.";
-      document.getElementById("idDocPreview").scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
