@@ -123,9 +123,11 @@ input[type=file].hidden-input{display:none}
       <input type="file" id="signedPcInput" class="hidden-input" accept="image/*,.pdf" multiple>
       <button type="button" class="btn secondary" id="openSignedScanBtn">📱 Scansiona da smartphone</button>
       <button type="button" class="btn" id="sendToSellerBtn">Invia al venditore</button>
+      <button type="button" class="btn secondary" id="sendToBuyerBtn">Invia al proponente</button>
     </div>
     <div id="signedList" class="signed-list"><div class="signed-empty">Nessun documento caricato.</div></div>
     <div id="sellerStatus" class="seller-status"></div>
+    <div id="buyerStatus" class="seller-status"></div>
   </div>
 
   <div id="scanModalOverlay" class="scan-modal-overlay" hidden>
@@ -806,6 +808,10 @@ var currentOfferData = null;
 var currentPropertyTitle = "";
 var currentPropertyAddress = "";
 var currentIsCounter = false;
+// Ultimo link di condivisione generato (PDF diretto o pagina GitHub con anteprima), cosi'
+// "Invia al proponente" può riusarlo senza rigenerare tutto se è già stato creato.
+var currentPdfPublicUrl = null;
+var currentShareUrl = null;
 
 var PDF_MARGIN_LEFT = 48;
 var PDF_MARGIN_RIGHT = 48;
@@ -1057,26 +1063,28 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
   return doc;
 }
 
-document.getElementById("generatePdfBtn").addEventListener("click", async function(){
-  var btn = document.getElementById("generatePdfBtn");
+// Estratta dal click handler di "Genera PDF (con link)" cosi' anche "Invia al proponente"
+// può generare/riusare lo stesso PDF+link senza duplicare tutta la logica. Ritorna
+// { publicUrl, shareUrl } quando riesce, null se fallisce (l'errore è già mostrato nel box).
+// awaitPublish=true fa aspettare la pubblicazione reale su GitHub Pages prima di risolvere
+// (serve a chi deve mandare subito il link per email/WhatsApp), invece di limitarsi a
+// mostrare "Pubblicazione in corso..." nell'interfaccia come fa il pulsante da solo.
+async function generatePdfAndShareLink(awaitPublish){
   var linkBox = document.getElementById("pdfLinkBox");
 
   if(!currentOfferId || !currentOfferData){
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Nessuna proposta caricata da esportare.";
-    return;
+    return null;
   }
   if(typeof window.jspdf === "undefined"){
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Libreria di generazione PDF non caricata (controlla la connessione) — riprova.";
-    return;
+    return null;
   }
 
-  btn.disabled = true;
-  var originalLabel = btn.textContent;
-  btn.textContent = "Generazione PDF in corso...";
   linkBox.className = "pdf-link-box";
   linkBox.textContent = "";
 
@@ -1162,43 +1170,135 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
       });
     }
 
+    async function waitUntilShareLinkIsLive(){
+      var attempts = 0;
+      var maxAttempts = 40; // ~ fino a 2 minuti (40 tentativi x 3s)
+      while(attempts < maxAttempts){
+        attempts++;
+        try{
+          var checkResp = await fetch(shareUrl, { method: "GET", cache: "no-store" });
+          if(checkResp.ok) return true;
+        }catch(checkErr){
+          // rete/CORS momentanei durante la propagazione: si continua a riprovare
+        }
+        await new Promise(function(resolve){ setTimeout(resolve, 3000); });
+      }
+      return false; // oltre il timeout: si procede comunque, l'utente può riprovare da solo
+    }
+
     if(!shareIsFreshGithubLink){
       // Nessuna pubblicazione da attendere: è già il link diretto al PDF, disponibile subito.
+      renderShareLinkReady();
+    }else if(awaitPublish){
+      // Chi ha chiamato questa funzione deve mandare subito il link (email/WhatsApp al
+      // proponente): si aspetta davvero che GitHub Pages lo pubblichi prima di continuare,
+      // invece di limitarsi a mostrarlo "in corso" nell'interfaccia.
+      shareSlot.textContent = "Pubblicazione in corso...";
+      await waitUntilShareLinkIsLive();
       renderShareLinkReady();
     }else{
       // Il link punta a un file appena scritto su GitHub: GitHub Pages impiega qualche istante
       // a pubblicarlo dopo il commit. Il link resta nascosto (non copiabile/apribile) finché
       // non risulta davvero raggiungibile — nessun avviso, solo un controllo automatico.
       shareSlot.textContent = "Pubblicazione in corso...";
-      (async function waitUntilShareLinkIsLive(){
-        var attempts = 0;
-        var maxAttempts = 40; // ~ fino a 2 minuti (40 tentativi x 3s)
-        while(attempts < maxAttempts){
-          attempts++;
-          try{
-            var checkResp = await fetch(shareUrl, { method: "GET", cache: "no-store" });
-            if(checkResp.ok){
-              renderShareLinkReady();
-              return;
-            }
-          }catch(checkErr){
-            // rete/CORS momentanei durante la propagazione: si continua a riprovare
-          }
-          await new Promise(function(resolve){ setTimeout(resolve, 3000); });
-        }
-        // Oltre il timeout: si mostra comunque il link (l'utente può riprovare da solo),
-        // invece di lasciare la scritta "Pubblicazione in corso..." per sempre.
-        renderShareLinkReady();
-      })();
+      waitUntilShareLinkIsLive().then(renderShareLinkReady);
     }
+
+    currentPdfPublicUrl = publicUrl;
+    currentShareUrl = shareUrl;
+    return { publicUrl: publicUrl, shareUrl: shareUrl };
   }catch(err){
     console.error(err);
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Errore nella generazione del PDF: " + (err && err.message ? err.message : String(err));
+    return null;
+  }
+}
+
+document.getElementById("generatePdfBtn").addEventListener("click", async function(){
+  var btn = document.getElementById("generatePdfBtn");
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.textContent = "Generazione PDF in corso...";
+  try{
+    await generatePdfAndShareLink(false);
   }finally{
     btn.disabled = false;
     btn.textContent = originalLabel;
+  }
+});
+
+function normalizeItalianPhoneForWhatsapp(raw){
+  var digits = String(raw || "").replace(/[^\d]/g, "");
+  if(!digits) return null;
+  if(digits.charAt(0) === "0") digits = digits.substring(1); // eventuale 0 iniziale da fisso/errore
+  if(digits.length <= 10 && digits.indexOf("39") !== 0) digits = "39" + digits;
+  return digits;
+}
+
+document.getElementById("sendToBuyerBtn").addEventListener("click", async function(){
+  var btn = this;
+  var statusEl = document.getElementById("buyerStatus");
+  if(!currentOfferId || !currentOfferData){
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Proposta non ancora caricata.";
+    return;
+  }
+  if(!currentOfferData.buyer_email){
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Nessuna email del proponente compilata su questa proposta: inseriscila nel form prima di inviare.";
+    return;
+  }
+  var ok = confirm("Inviare al proponente il link per firmare/scaricare la proposta (email" + (currentOfferData.buyer_phone ? " + WhatsApp" : ", nessun numero di telefono compilato per WhatsApp") + ")?");
+  if(!ok) return;
+
+  btn.disabled = true;
+  statusEl.className = "seller-status";
+  statusEl.textContent = "Preparazione link in corso...";
+
+  try{
+    var linkResult = currentShareUrl ? { shareUrl: currentShareUrl } : await generatePdfAndShareLink(true);
+    if(!linkResult || !linkResult.shareUrl){
+      statusEl.className = "seller-status error";
+      statusEl.textContent = "Impossibile generare il link della proposta.";
+      return;
+    }
+    var shareUrlToSend = linkResult.shareUrl;
+
+    statusEl.textContent = "Invio email in corso...";
+    var res = await client.functions.invoke("send-offer-to-buyer", { body: { offer_id: currentOfferId, share_url: shareUrlToSend } });
+    var data = res.data;
+    if(res.error || !data || !data.success){
+      var errMsg = (data && data.error) || (res.error && res.error.message) || "operazione non riuscita";
+      statusEl.className = "seller-status error";
+      statusEl.textContent = "Errore invio email: " + errMsg;
+      return;
+    }
+
+    currentOfferData.sent_to_buyer_at = new Date().toISOString();
+    currentOfferData.buyer_notified_count = (currentOfferData.buyer_notified_count || 0) + 1;
+    autoLogTimeline("Link proposta inviato al proponente via email" + (currentOfferData.buyer_phone ? " e WhatsApp" : ""));
+
+    // WhatsApp: nessuna API a pagamento, si apre semplicemente wa.me con il link già scritto
+    // nel testo — l'admin preme solo "Invia" dentro WhatsApp Web/app, stesso numero salvato
+    // sulla proposta (buyer_phone). Se manca il numero, si manda solo l'email.
+    if(currentOfferData.buyer_phone){
+      var waPhone = normalizeItalianPhoneForWhatsapp(currentOfferData.buyer_phone);
+      if(waPhone){
+        var waText = "Gentile Cliente, ecco il link per consultare/firmare la Sua proposta IMMONOVA: " + shareUrlToSend;
+        window.open("https://wa.me/" + waPhone + "?text=" + encodeURIComponent(waText), "_blank");
+      }
+    }
+
+    statusEl.className = "seller-status";
+    statusEl.textContent = "Link inviato al proponente via email" + (currentOfferData.buyer_phone ? " — si apre ora WhatsApp per l'invio del messaggio." : ".");
+  }catch(err){
+    console.error(err);
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Errore invio: " + (err && err.message ? err.message : "operazione non riuscita");
+  }finally{
+    btn.disabled = false;
   }
 });
 
