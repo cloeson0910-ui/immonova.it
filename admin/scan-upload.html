@@ -49,6 +49,18 @@
   .crop-hint{color:#c9b686;font-size:12px;text-align:center;margin-top:12px;line-height:1.6;max-width:480px}
   .crop-warn{color:#ffb4b4;background:rgba(156,47,47,.35);border:1px solid rgba(255,180,180,.5);border-radius:2px;padding:10px 12px;font-size:12.5px;text-align:center;margin-top:10px;line-height:1.6;max-width:480px;font-weight:600}
   .crop-warn[hidden]{display:none}
+
+  /* --- Fotocamera in pagina con guide agli angoli (mostrate PRIMA dello scatto) --- */
+  .camera-overlay{position:fixed;inset:0;background:#000;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 12px calc(14px + env(safe-area-inset-bottom,0px))}
+  .camera-overlay[hidden]{display:none}
+  .camera-stage{position:relative;width:100%;max-width:480px;line-height:0;background:#000;flex:none}
+  .camera-stage video{width:100%;height:100%;display:block;object-fit:fill;background:#000}
+  .camera-stage svg{position:absolute;inset:0;width:100%;height:100%}
+  .camera-hint{color:#f4ecdf;font-size:12.5px;text-align:center;margin-top:14px;line-height:1.6;max-width:480px}
+  .camera-actions{display:flex;align-items:center;justify-content:center;gap:24px;width:100%;max-width:480px;margin-top:16px}
+  .camera-shutter{width:64px;height:64px;flex:none;border-radius:50%;background:#fffaf0;border:4px solid rgba(166,127,52,.6);cursor:pointer;padding:0}
+  .camera-shutter:active{background:#e7d9b8}
+  .camera-cancel{padding:12px 18px;border-radius:2px;border:1px solid rgba(231,217,184,.5);background:transparent;color:#e7d9b8;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-weight:600}
 </style>
 </head>
 <body>
@@ -93,10 +105,26 @@
   <div class="footer-note">Ogni foto scattata viene caricata subito e compare in tempo reale sul computer. Puoi scattarne quante ne servono — anche di tipi diversi — finché questa pagina resta aperta.</div>
 </div>
 
+<!-- Fotocamera in pagina: mostra le guide dei quattro angoli GIÀ SUL VIVO, prima dello scatto,
+     così l'inquadratura è corretta a monte. Se la fotocamera in pagina non è disponibile
+     (permesso negato, browser non supportato), si ripiega automaticamente sulla fotocamera
+     nativa del telefono (l'input file qui sotto) — lo scatto non si blocca mai. -->
+<div id="cameraOverlay" class="camera-overlay" hidden>
+  <div class="camera-stage" id="cameraStage">
+    <video id="cameraVideo" autoplay playsinline muted></video>
+    <svg id="cameraGuideSvg"></svg>
+  </div>
+  <div class="camera-hint">Inquadra il documento dentro le quattro guide agli angoli, poi scatta.</div>
+  <div class="camera-actions">
+    <button type="button" class="camera-cancel" id="cameraCancelBtn">Annulla</button>
+    <button type="button" class="camera-shutter" id="cameraShutterBtn" aria-label="Scatta foto"></button>
+  </div>
+</div>
+
 <!-- Schermata di ritaglio: manuale (nessun rilevamento automatico dei bordi) + pulizia sfondo
-     OPZIONALE (checkbox, spenta di default). Un rettangolo con quattro maniglie agli angoli,
-     trascinato dall'utente stesso; il ritaglio finale è un rettangolo allineato agli assi,
-     preso con un unico canvas.drawImage dalla stessa immagine mostrata a schermo. -->
+     OPZIONALE (checkbox, attiva di default). Un quadrilatero libero con quattro maniglie agli
+     angoli, trascinato dall'utente stesso, raddrizzato con trasformazione prospettica; il
+     ritaglio/raddrizzamento è preso con la stessa immagine mostrata a schermo. -->
 <div id="cropOverlay" class="crop-overlay" hidden>
   <div class="crop-title">Ritaglia il documento</div>
   <div class="crop-stage" id="cropStage">
@@ -147,7 +175,7 @@ function setStatus(message, type){
 if(!TOKEN){
   mainCard.innerHTML = '<div class="expired-box">Link non valido: manca il codice della sessione.<br>Genera un nuovo QR code dal computer.</div>';
 }else{
-  captureBtn.addEventListener("click", function(){ fileInput.click(); });
+  captureBtn.addEventListener("click", function(){ openCamera(); });
 
   fileInput.addEventListener("change", function(){
     var file = fileInput.files && fileInput.files[0];
@@ -156,6 +184,100 @@ if(!TOKEN){
     openCropScreen(file);
   });
 }
+
+/* ====================== FOTOCAMERA IN PAGINA CON GUIDE AGLI ANGOLI ======================
+   Mostra le quattro guide d'angolo GIÀ SUL VIVO (prima dello scatto), così l'inquadratura è
+   corretta a monte invece di doverla correggere dopo. Usa getUserMedia + <video>, tecnica
+   web standard e ben supportata (non un accrocchio) — nessuna libreria esterna. Il riquadro
+   della fotocamera viene ridimensionato per avere ESATTAMENTE le stesse proporzioni del
+   flusso video reale (aspect-ratio impostato dinamicamente da videoWidth/videoHeight), così
+   le guide disegnate in percentuale corrispondono esattamente ai pixel catturati, senza
+   bande nere né disallineamenti.
+
+   Se la fotocamera in pagina non è disponibile (permesso negato, browser non supportato,
+   errore qualsiasi) si ripiega SEMPRE e SUBITO sulla fotocamera nativa del telefono (lo
+   stesso input file di prima): lo scatto non si blocca mai. */
+
+var cameraOverlay = document.getElementById("cameraOverlay");
+var cameraStage = document.getElementById("cameraStage");
+var cameraVideo = document.getElementById("cameraVideo");
+var cameraGuideSvg = document.getElementById("cameraGuideSvg");
+var cameraCancelBtn = document.getElementById("cameraCancelBtn");
+var cameraShutterBtn = document.getElementById("cameraShutterBtn");
+var cameraStream = null;
+
+// Margini guida in percentuale (0-100) del fotogramma: usati sia per disegnare le guide sia
+// come quadrilatero iniziale nella schermata di ritaglio successiva, per coerenza.
+var GUIDE_MARGIN_X_PCT = 8;
+var GUIDE_MARGIN_Y_PCT = 12;
+
+function openCamera(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    fileInput.click();
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+    .then(function(stream){
+      cameraStream = stream;
+      cameraVideo.srcObject = stream;
+      cameraOverlay.hidden = false;
+      cameraVideo.play().catch(function(){});
+    })
+    .catch(function(e){
+      console.error("Fotocamera in pagina non disponibile, uso la fotocamera nativa del telefono:", e);
+      fileInput.click();
+    });
+}
+
+cameraVideo.addEventListener("loadedmetadata", function(){
+  if(cameraVideo.videoWidth && cameraVideo.videoHeight){
+    cameraStage.style.aspectRatio = cameraVideo.videoWidth + " / " + cameraVideo.videoHeight;
+  }
+  drawCameraGuide();
+});
+
+function drawCameraGuide(){
+  cameraGuideSvg.setAttribute("viewBox", "0 0 100 100");
+  cameraGuideSvg.setAttribute("preserveAspectRatio", "none");
+  var x0 = GUIDE_MARGIN_X_PCT, y0 = GUIDE_MARGIN_Y_PCT;
+  var x1 = 100 - GUIDE_MARGIN_X_PCT, y1 = 100 - GUIDE_MARGIN_Y_PCT;
+  var arm = 6;
+  function corner(x, y, dx, dy){
+    return '<path d="M ' + x + ' ' + (y + dy * arm) + ' L ' + x + ' ' + y + ' L ' + (x + dx * arm) + ' ' + y +
+      '" fill="none" stroke="#fffaf0" stroke-width="0.6" vector-effect="non-scaling-stroke"></path>';
+  }
+  cameraGuideSvg.innerHTML = corner(x0, y0, 1, 1) + corner(x1, y0, -1, 1) + corner(x1, y1, -1, -1) + corner(x0, y1, 1, -1);
+}
+
+function closeCamera(){
+  if(cameraStream){
+    cameraStream.getTracks().forEach(function(t){ t.stop(); });
+    cameraStream = null;
+  }
+  cameraVideo.srcObject = null;
+  cameraOverlay.hidden = true;
+}
+
+cameraCancelBtn.addEventListener("click", closeCamera);
+
+cameraShutterBtn.addEventListener("click", function(){
+  if(!cameraVideo.videoWidth || !cameraVideo.videoHeight) return;
+  var canvas = document.createElement("canvas");
+  canvas.width = cameraVideo.videoWidth;
+  canvas.height = cameraVideo.videoHeight;
+  canvas.getContext("2d").drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(function(blob){
+    if(!blob){
+      setStatus("Scatto non riuscito. Riprova.", "error");
+      return;
+    }
+    var file = new File([blob], "scan-" + Date.now() + ".jpg", { type: "image/jpeg" });
+    closeCamera();
+    openCropScreen(file, true);
+  }, "image/jpeg", 0.92);
+});
+
+/* ====================== FINE FOTOCAMERA IN PAGINA ====================== */
 
 /* ====================== RITAGLIO + RADDRIZZAMENTO + PULIZIA SFONDO OPZIONALE ======================
    Ritaglio: quadrilatero libero, quattro maniglie indipendenti (una per angolo). L'utente
@@ -192,12 +314,24 @@ function cvReady(){
   return typeof cv !== "undefined" && cv && typeof cv.Mat === "function" && cv.getBuildInformation;
 }
 
-function openCropScreen(file){
+function openCropScreen(file, fromGuidedCamera){
   var url = URL.createObjectURL(file);
   var probe = new Image();
   probe.onload = function(){
     var w = probe.naturalWidth, h = probe.naturalHeight;
-    var mx = Math.round(w * 0.06), my = Math.round(h * 0.06);
+    // Se la foto viene dalla fotocamera in pagina, il quadrilatero iniziale ricalca ESATTAMENTE
+    // le guide già mostrate sul vivo (stessi margini in percentuale) — l'inquadratura è già
+    // stata corretta al momento dello scatto, quindi non serve altro tocco per default.
+    // Se invece la foto arriva dalla fotocamera nativa del telefono (fallback), si usa il
+    // margine generico del 6% come prima e resta il tocco manuale a definire gli angoli.
+    var mx, my;
+    if(fromGuidedCamera){
+      mx = Math.round(w * (GUIDE_MARGIN_X_PCT / 100));
+      my = Math.round(h * (GUIDE_MARGIN_Y_PCT / 100));
+    }else{
+      mx = Math.round(w * 0.06);
+      my = Math.round(h * 0.06);
+    }
     cropState = {
       file: file,
       naturalW: w,
@@ -211,8 +345,11 @@ function openCropScreen(file){
     };
     cropImg.src = url;
     cleanBgCheckbox.checked = true;
-    quadTouched = false;
-    cropWarn.hidden = false;
+    // Se l'inquadratura è già stata guidata in fotocamera, non serve ripetere l'avviso "sposta
+    // i quattro angoli": l'utente può ancora aggiustarli se vuole, ma parte già da un buon
+    // allineamento e non da un rettangolo generico.
+    quadTouched = !!fromGuidedCamera;
+    cropWarn.hidden = !!fromGuidedCamera;
     cropOverlay.hidden = false;
     drawCropHandles();
 
