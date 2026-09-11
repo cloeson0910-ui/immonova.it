@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Scansiona documento — IMMONOVA</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Avenir Next','Helvetica Neue',Arial,sans-serif;background:#f7f1e6;color:#4a3c1d;min-height:100vh;padding:20px 16px 40px}
+  .wrap{max-width:480px;margin:0 auto}
+  .kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#a67f34;font-weight:600;text-align:center;margin:8px 0 2px}
+  h1{font-size:20px;font-weight:400;text-align:center;margin:0 0 22px;color:#4a3c1d}
+  .card{background:#fffaf0;border:1px solid rgba(166,127,52,.25);border-radius:4px;padding:22px;margin-bottom:16px}
+  label{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;margin-bottom:8px}
+  select{width:100%;padding:13px 12px;font-size:15px;border:1px solid rgba(166,127,52,.35);border-radius:2px;background:#fff;color:#4a3c1d;margin-bottom:18px}
+  .capture-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:18px;background:#a67f34;color:#fffaf0;border:none;border-radius:2px;font-size:15px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer}
+  .capture-btn:active{background:#8f6d2c}
+  .capture-btn:disabled{opacity:.55}
+  input[type=file]{display:none}
+  .status{margin-top:16px;font-size:13px;line-height:1.6;min-height:18px}
+  .status.error{color:#9c2f2f}
+  .status.success{color:#4f7f45}
+  .uploaded-list{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+  .uploaded-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid rgba(166,127,52,.18);border-radius:3px;padding:10px 12px}
+  .uploaded-row img{width:46px;height:46px;object-fit:cover;border-radius:3px;flex:none;background:#efe6d2}
+  .uploaded-row .info{flex:1;min-width:0}
+  .uploaded-row .info .name{font-size:12.5px;color:#4a3c1d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .uploaded-row .info .type{font-size:11px;color:#8f7643;margin-top:2px}
+  .uploaded-row .ok{color:#4f7f45;font-size:18px;flex:none}
+  .expired-box{text-align:center;padding:40px 20px;color:#8f7643;font-size:14px;line-height:1.7}
+  .footer-note{text-align:center;font-size:11px;color:#a58139;margin-top:26px;letter-spacing:.04em}
+</style>
+</head>
+<body>
+<script src="../js/config.js"></script>
+<div class="wrap">
+  <div class="kicker">IMMONOVA</div>
+  <h1>Scansiona documento</h1>
+
+  <div id="mainCard" class="card">
+    <label for="docType">Tipo di documento</label>
+    <select id="docType">
+      <option value="owner_identity">Documento identità proprietario</option>
+      <option value="owner_tax_code">Codice fiscale proprietario</option>
+      <option value="deed_of_origin">Atto di provenienza</option>
+      <option value="cadastral_report">Visure catastali</option>
+      <option value="cadastral_plan">Planimetrie catastali</option>
+      <option value="ape">APE</option>
+      <option value="urban_planning">Permessi edilizi / sanatorie</option>
+      <option value="technical_conformity">Conformità urbanistica e catastale</option>
+      <option value="habitability">Agibilità / abitabilità</option>
+      <option value="systems_certifications">Certificazioni impianti</option>
+      <option value="other">Altro documento</option>
+    </select>
+
+    <button type="button" class="capture-btn" id="captureBtn">📷 Scatta foto documento</button>
+    <input type="file" id="fileInput" accept="image/*" capture="environment">
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <div id="uploadedList" class="uploaded-list"></div>
+
+  <div class="footer-note">Ogni foto scattata viene caricata subito e compare in tempo reale sul computer. Puoi scattarne quante ne servono — anche di tipi diversi — finché questa pagina resta aperta.</div>
+</div>
+
+<script>
+var params = new URLSearchParams(window.location.search);
+var TOKEN = params.get("token") || "";
+var SCAN_UPLOAD_ENDPOINT = String(SUPABASE_URL||"").replace(/\/+$/,"") + "/functions/v1/scan-upload";
+var SCAN_UPLOAD_ANON_KEY = SUPABASE_ANON_KEY;
+
+var docTypeSelect = document.getElementById("docType");
+var captureBtn = document.getElementById("captureBtn");
+var fileInput = document.getElementById("fileInput");
+var statusEl = document.getElementById("status");
+var uploadedList = document.getElementById("uploadedList");
+var mainCard = document.getElementById("mainCard");
+
+var TYPE_LABELS = {};
+Array.prototype.forEach.call(docTypeSelect.options, function(o){ TYPE_LABELS[o.value] = o.textContent; });
+
+function setStatus(message, type){
+  statusEl.textContent = message || "";
+  statusEl.className = "status" + (type ? " " + type : "");
+}
+
+if(!TOKEN){
+  mainCard.innerHTML = '<div class="expired-box">Link non valido: manca il codice della sessione.<br>Genera un nuovo QR code dal computer.</div>';
+}else{
+  captureBtn.addEventListener("click", function(){ fileInput.click(); });
+
+  fileInput.addEventListener("change", function(){
+    var file = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if(!file) return;
+    uploadScan(file);
+  });
+}
+
+async function uploadScan(file){
+  captureBtn.disabled = true;
+  captureBtn.textContent = "Caricamento in corso...";
+  setStatus("Caricamento foto in corso...", "");
+
+  var previewUrl = URL.createObjectURL(file);
+  var docType = docTypeSelect.value;
+
+  try{
+    var form = new FormData();
+    form.append("token", TOKEN);
+    form.append("document_type", docType);
+    form.append("file", file, file.name || "scan.jpg");
+
+    var resp = await fetch(SCAN_UPLOAD_ENDPOINT, {
+      method: "POST",
+      headers: { "apikey": SCAN_UPLOAD_ANON_KEY, "Authorization": "Bearer " + SCAN_UPLOAD_ANON_KEY },
+      body: form
+    });
+    var data = null;
+    try{ data = await resp.json(); }catch(e){}
+
+    if(!resp.ok || !data || !data.success){
+      var errMsg = (data && data.error) || ("Errore HTTP " + resp.status);
+      setStatus(errMsg, "error");
+      captureBtn.disabled = false;
+      captureBtn.textContent = "📷 Scatta foto documento";
+      if(/scaduta|non trovata|chiusa/i.test(errMsg)){
+        mainCard.innerHTML = '<div class="expired-box">' + errMsg + '<br>Genera un nuovo QR code dal computer.</div>';
+      }
+      return;
+    }
+
+    var row = document.createElement("div");
+    row.className = "uploaded-row";
+    row.innerHTML =
+      '<img src="' + previewUrl + '" alt="">' +
+      '<div class="info"><div class="name">' + (file.name || "scan.jpg") + '</div><div class="type">' + (TYPE_LABELS[docType] || docType) + '</div></div>' +
+      '<div class="ok">✓</div>';
+    uploadedList.insertBefore(row, uploadedList.firstChild);
+
+    setStatus("Foto caricata: comparirà subito sul computer.", "success");
+  }catch(e){
+    setStatus("Errore di rete durante il caricamento: " + (e.message || e), "error");
+  }
+
+  captureBtn.disabled = false;
+  captureBtn.textContent = "📷 Scatta foto documento";
+}
+</script>
+</body>
+</html>

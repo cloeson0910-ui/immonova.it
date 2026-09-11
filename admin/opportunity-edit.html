@@ -755,6 +755,24 @@ button.danger{
   font-size:10px;
 }
 
+.scan-modal-overlay{position:fixed;inset:0;background:rgba(30,22,10,.55);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
+.scan-modal{background:#fffaf0;border:1px solid rgba(166,127,52,.3);border-radius:4px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto}
+.scan-modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid rgba(166,127,52,.18)}
+.scan-modal-head strong{font-size:14px;color:#4a3c1d;letter-spacing:.03em}
+.scan-modal-close{background:none;border:none;font-size:24px;line-height:1;color:#8f7643;cursor:pointer;padding:0}
+.scan-modal-body{padding:20px}
+.scan-qr-box{display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid rgba(166,127,52,.18);border-radius:3px;padding:16px;margin-bottom:14px}
+.scan-qr-box img{width:220px;height:220px;image-rendering:pixelated}
+.scan-note{font-size:12.5px;color:#8f7643;line-height:1.6;margin-bottom:14px;text-align:center}
+.scan-link-row{display:flex;gap:8px;margin-bottom:14px}
+.scan-link-row input{flex:1;padding:10px 12px;font-size:12px;border:1px solid rgba(166,127,52,.3);border-radius:2px;background:#fff;color:#4a3c1d}
+.scan-session-status{font-size:12px;color:#a58139;text-align:center;margin-bottom:14px;min-height:16px}
+.scan-uploads-list{display:flex;flex-direction:column;gap:8px}
+.scan-upload-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid rgba(166,127,52,.16);border-radius:3px;padding:8px 10px}
+.scan-upload-row img{width:38px;height:38px;object-fit:cover;border-radius:2px;flex:none;background:#efe6d2}
+.scan-upload-row .info{flex:1;min-width:0;font-size:11.5px;color:#4a3c1d}
+.scan-upload-row .info .type{color:#8f7643;font-size:10.5px;margin-top:2px}
+
 .cadastral-unit-card{
   border:1px solid rgba(165,129,57,.25);
   background:rgba(255,252,244,.25);
@@ -1719,9 +1737,31 @@ button.danger{
         <div class="documents-progress">
           <div class="documents-progress-bar" id="documentsProgressBar"></div>
         </div>
+
+        <button type="button" class="soft" id="openScanModalBtn" data-i18n="btn_scan_from_phone">📱 Scansiona da smartphone</button>
+
         <div id="documentsGrid" class="documents-grid"></div>
         <div id="documentsStatus" class="file-note" style="margin-top:14px;"></div>
 
+      </div>
+
+      <div id="scanModalOverlay" class="scan-modal-overlay" hidden>
+        <div class="scan-modal">
+          <div class="scan-modal-head">
+            <strong data-i18n="scan_modal_title">Scansiona da smartphone</strong>
+            <button type="button" class="scan-modal-close" id="closeScanModalBtn">&times;</button>
+          </div>
+          <div class="scan-modal-body">
+            <div id="scanQrBox" class="scan-qr-box"></div>
+            <div class="scan-note" data-i18n="scan_modal_note">Inquadra il QR code con la fotocamera dello smartphone (senza bisogno di app o login). Ogni foto scattata compare qui sotto in tempo reale.</div>
+            <div class="scan-link-row">
+              <input type="text" id="scanLinkInput" readonly onclick="this.select()">
+              <button type="button" class="soft" id="copyScanLinkBtn" data-i18n="btn_copy_link">Copia link</button>
+            </div>
+            <div id="scanSessionStatus" class="scan-session-status"></div>
+            <div id="scanUploadsList" class="scan-uploads-list"></div>
+          </div>
+        </div>
       </div>
 
 
@@ -2240,6 +2280,7 @@ button.danger{
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="qrcode.min.js"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
 
@@ -2575,6 +2616,165 @@ async function loadOpportunityDocuments(){
 
   opportunityDocuments = result.data || [];
   renderDocuments();
+}
+
+/* ---- Scansione da smartphone: genera una sessione temporanea (20 minuti) con un token
+   casuale, mostra un QR code che apre scan-upload.html sul telefono (nessun login richiesto
+   sul telefono: il token stesso autorizza il caricamento, verificato dalla edge function
+   "scan-upload"). Ogni foto caricata dal telefono finisce nella stessa tabella/bucket
+   dell'upload manuale, quindi appare subito anche nella checklist documenti qui sopra — la
+   sottoscrizione Realtime sotto aggiorna tutto in tempo reale, senza bisogno di ricaricare. ---- */
+var scanSessionToken = null;
+var scanSessionExpiresAt = null;
+var scanRealtimeChannel = null;
+var scanCountdownInterval = null;
+var scanSeenDocumentIds = {};
+
+function genScanToken(){
+  if(window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g,"");
+  return "scan" + Date.now() + Math.random().toString(36).slice(2);
+}
+
+function buildScanUploadUrl(token){
+  var base = window.location.href.split("?")[0].replace(/[^\/]*$/, "");
+  return base + "scan-upload.html?token=" + encodeURIComponent(token);
+}
+
+async function openScanModal(){
+  if(!id){
+    setDocumentsStatus("Salva prima l’opportunità, poi potrai scansionare i documenti da smartphone.", "error");
+    return;
+  }
+
+  var overlay = document.getElementById("scanModalOverlay");
+  var qrBox = document.getElementById("scanQrBox");
+  var linkInput = document.getElementById("scanLinkInput");
+  var statusEl = document.getElementById("scanSessionStatus");
+  var uploadsList = document.getElementById("scanUploadsList");
+  if(!overlay) return;
+
+  overlay.hidden = false;
+  qrBox.innerHTML = "";
+  uploadsList.innerHTML = "";
+  scanSeenDocumentIds = {};
+  if(statusEl) statusEl.textContent = "Creazione sessione in corso...";
+
+  scanSessionToken = genScanToken();
+  var expires = new Date(Date.now() + 20*60*1000);
+  scanSessionExpiresAt = expires;
+
+  var insertRes = await client.from("scan_sessions").insert({
+    token: scanSessionToken,
+    opportunity_id: id,
+    created_by: currentUser ? currentUser.id : null,
+    expires_at: expires.toISOString(),
+    status: "active"
+  });
+
+  if(insertRes.error){
+    if(statusEl) statusEl.textContent = "Errore creazione sessione: " + insertRes.error.message + " (verifica di aver lanciato l'SQL crea_tabella_scan_sessions.sql).";
+    return;
+  }
+
+  var scanUrl = buildScanUploadUrl(scanSessionToken);
+  if(linkInput) linkInput.value = scanUrl;
+
+  try{
+    var qr = qrcode(0, "M");
+    qr.addData(scanUrl);
+    qr.make();
+    qrBox.innerHTML = qr.createImgTag(6, 4);
+  }catch(e){
+    qrBox.innerHTML = '<div style="font-size:12px;color:#9c2f2f">QR non generabile: usa il link qui sotto.</div>';
+  }
+
+  startScanCountdown();
+  subscribeScanRealtime();
+}
+
+function startScanCountdown(){
+  var statusEl = document.getElementById("scanSessionStatus");
+  if(scanCountdownInterval) clearInterval(scanCountdownInterval);
+  function tick(){
+    if(!statusEl || !scanSessionExpiresAt) return;
+    var remainingMs = scanSessionExpiresAt.getTime() - Date.now();
+    if(remainingMs <= 0){
+      statusEl.textContent = "Sessione scaduta. Chiudi e genera un nuovo QR code se ti servono altre scansioni.";
+      clearInterval(scanCountdownInterval);
+      return;
+    }
+    var mins = Math.floor(remainingMs/60000);
+    var secs = Math.floor((remainingMs%60000)/1000);
+    statusEl.textContent = "In attesa di foto dallo smartphone… sessione valida ancora " + mins + ":" + (secs<10?"0":"") + secs;
+  }
+  tick();
+  scanCountdownInterval = setInterval(tick, 1000);
+}
+
+function subscribeScanRealtime(){
+  if(scanRealtimeChannel){
+    client.removeChannel(scanRealtimeChannel);
+    scanRealtimeChannel = null;
+  }
+  scanRealtimeChannel = client
+    .channel("scan-uploads-" + id)
+    .on("postgres_changes", { event:"INSERT", schema:"public", table:"opportunity_documents", filter:"opportunity_id=eq."+id }, function(payload){
+      handleIncomingScanDocument(payload.new);
+    })
+    .subscribe();
+}
+
+function handleIncomingScanDocument(doc){
+  if(!doc || scanSeenDocumentIds[doc.id]) return;
+  scanSeenDocumentIds[doc.id] = true;
+
+  if(!opportunityDocuments.some(function(d){ return String(d.id) === String(doc.id); })){
+    opportunityDocuments.push(doc);
+    renderDocuments();
+  }
+
+  var uploadsList = document.getElementById("scanUploadsList");
+  if(uploadsList){
+    var row = document.createElement("div");
+    row.className = "scan-upload-row";
+    var typeLabel = (REQUIRED_DOCUMENTS.find(function(i){ return i.key === doc.document_type; }) || {label: doc.document_type}).label;
+    row.innerHTML =
+      '<img src="' + escapeHTML(doc.file_url||"") + '" alt="">' +
+      '<div class="info"><div>' + escapeHTML(doc.file_name||"scan") + '</div><div class="type">' + escapeHTML(typeLabel) + '</div></div>';
+    uploadsList.insertBefore(row, uploadsList.firstChild);
+  }
+}
+
+async function closeScanModal(){
+  var overlay = document.getElementById("scanModalOverlay");
+  if(overlay) overlay.hidden = true;
+
+  if(scanCountdownInterval){ clearInterval(scanCountdownInterval); scanCountdownInterval = null; }
+  if(scanRealtimeChannel){ client.removeChannel(scanRealtimeChannel); scanRealtimeChannel = null; }
+
+  if(scanSessionToken){
+    try{ await client.from("scan_sessions").update({status:"closed"}).eq("token", scanSessionToken); }catch(e){}
+  }
+  scanSessionToken = null;
+  scanSessionExpiresAt = null;
+}
+
+async function copyScanLink(){
+  var input = document.getElementById("scanLinkInput");
+  if(!input || !input.value) return;
+  try{ await navigator.clipboard.writeText(input.value); }
+  catch(e){ input.select(); document.execCommand("copy"); }
+}
+
+function bindScanModalEvents(){
+  var openBtn = document.getElementById("openScanModalBtn");
+  var closeBtn = document.getElementById("closeScanModalBtn");
+  var copyBtn = document.getElementById("copyScanLinkBtn");
+  var overlay = document.getElementById("scanModalOverlay");
+  if(openBtn) openBtn.addEventListener("click", openScanModal);
+  if(closeBtn) closeBtn.addEventListener("click", closeScanModal);
+  if(copyBtn) copyBtn.addEventListener("click", copyScanLink);
+  if(overlay) overlay.addEventListener("click", function(e){ if(e.target === overlay) closeScanModal(); });
 }
 
 async function uploadOpportunityDocumentFiles(documentType, files){
@@ -3050,6 +3250,7 @@ function bindGeoTools(){
 document.addEventListener("DOMContentLoaded", bindGeoTools);
 document.addEventListener("DOMContentLoaded", bindRoomInventoryEvents);
 document.addEventListener("DOMContentLoaded", bindCadastralUnitEvents);
+document.addEventListener("DOMContentLoaded", bindScanModalEvents);
 
 /* ---- Timeline / Milestone (tabella opportunity_timeline) ----
    Alimenta la timeline mostrata su opportunity.html e success-story.html. Le milestone con
