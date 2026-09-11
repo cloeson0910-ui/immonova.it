@@ -31,11 +31,11 @@
   .expired-box{text-align:center;padding:40px 20px;color:#8f7643;font-size:14px;line-height:1.7}
   .footer-note{text-align:center;font-size:11px;color:#a58139;margin-top:26px;letter-spacing:.04em}
 
-  /* --- Schermata di ritaglio/correzione (overlay a schermo intero) --- */
-  .crop-overlay{position:fixed;inset:0;background:#1c1206;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:14px 12px calc(14px + env(safe-area-inset-bottom,0px))}
+  /* --- Schermata di ritaglio manuale (overlay a schermo intero) --- */
+  .crop-overlay{position:fixed;inset:0;background:#1c1206;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:14px 12px calc(14px + env(safe-area-inset-bottom,0px));overflow-y:auto}
   .crop-overlay[hidden]{display:none}
   .crop-title{color:#f4ecdf;font-size:13px;letter-spacing:.08em;text-transform:uppercase;text-align:center;margin:4px 0 12px}
-  .crop-stage{position:relative;width:100%;max-width:480px;touch-action:none;line-height:0;background:#000}
+  .crop-stage{position:relative;width:100%;max-width:480px;touch-action:none;line-height:0;background:#000;flex:none}
   .crop-stage img{width:100%;display:block;pointer-events:none;user-select:none}
   .crop-stage svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
   .crop-handle{fill:#a67f34;stroke:#fffaf0;stroke-width:2;cursor:grab;touch-action:none}
@@ -44,16 +44,10 @@
   .crop-btn.primary{background:#a67f34;color:#fffaf0}
   .crop-btn.secondary{background:transparent;color:#e7d9b8}
   .crop-hint{color:#c9b686;font-size:12px;text-align:center;margin-top:12px;line-height:1.6;max-width:480px}
-  .crop-loading{color:#e7d9b8;font-size:13px;text-align:center;margin-top:40px}
 </style>
 </head>
 <body>
 <script src="../js/config.js"></script>
-<!-- OpenCV.js: usato solo per il rilevamento automatico dei bordi del documento e per il
-     raddrizzamento prospettico (getPerspectiveTransform/warpPerspective). Se il CDN non
-     carica in tempo (rete lenta), il flusso passa comunque all'inquadratura manuale con
-     i quattro angoli già preimpostati sui bordi della foto: la scansione non si blocca mai. -->
-<script src="https://docs.opencv.org/4.x/opencv.js" async></script>
 
 <div class="wrap">
   <div class="kicker">IMMONOVA</div>
@@ -88,17 +82,22 @@
   <div class="footer-note">Ogni foto scattata viene caricata subito e compare in tempo reale sul computer. Puoi scattarne quante ne servono — anche di tipi diversi — finché questa pagina resta aperta.</div>
 </div>
 
-<!-- Schermata di correzione angoli + anteprima documento raddrizzato -->
+<!-- Schermata di ritaglio: SOLO manuale, nessun rilevamento automatico. Un rettangolo con
+     quattro maniglie agli angoli, che l'utente trascina lui stesso; il ritaglio finale è
+     un semplice rettangolo allineato agli assi (niente raddrizzamento prospettico), preso
+     con un unico canvas.drawImage dalla stessa immagine mostrata a schermo — stesso sistema
+     di coordinate per quello che si vede e per quello che viene ritagliato, senza passaggi
+     intermedi che possano disallinearsi. -->
 <div id="cropOverlay" class="crop-overlay" hidden>
-  <div class="crop-title" id="cropTitle">Correggi gli angoli del documento</div>
+  <div class="crop-title">Ritaglia il documento</div>
   <div class="crop-stage" id="cropStage">
     <img id="cropImg" alt="">
     <svg id="cropSvg"></svg>
   </div>
-  <div class="crop-hint" id="cropHint">Trascina i quattro angoli sui bordi del documento, poi conferma.</div>
+  <div class="crop-hint" id="cropHint">Trascina i quattro angoli per inquadrare solo il documento, poi conferma.</div>
   <div class="crop-actions">
-    <button type="button" class="crop-btn secondary" id="cropCancelBtn">Annulla</button>
-    <button type="button" class="crop-btn primary" id="cropConfirmBtn">Conferma e carica</button>
+    <button type="button" class="crop-btn secondary" id="cropSkipBtn">Carica senza ritagliare</button>
+    <button type="button" class="crop-btn primary" id="cropConfirmBtn">Ritaglia e carica</button>
   </div>
 </div>
 
@@ -144,54 +143,38 @@ if(!TOKEN){
   });
 }
 
-/* ====================== SCHERMATA DI RITAGLIO / CORREZIONE ANGOLI ======================
-   Flusso: foto scattata -> carica in un'immagine offscreen -> se OpenCV.js è pronto, prova
-   a rilevare automaticamente il quadrilatero del documento (scala di grigi, sfocatura,
-   Canny, contorni, il quadrilatero più grande e plausibile) e i quattro angoli vengono mostrati
-   già posizionati, pronti per un solo tocco di conferma — non un upload automatico "alla
-   cieca": un documento appoggiato su un tavolo (o altra superficie con bordi netti) può
-   ingannare il rilevamento, che a volte scambia il bordo del tavolo per quello del foglio.
-   Un tocco di conferma è il minimo indispensabile per non rischiare di inviare a un cliente
-   una scansione sbagliata senza che nessuno se ne accorga. Se il rilevamento fallisce del
-   tutto, gli angoli partono dai bordi della foto e l'utente li corregge lui stesso. */
+/* ====================== RITAGLIO MANUALE (nessun rilevamento automatico) ======================
+   Un solo rettangolo, quattro maniglie agli angoli che si muovono in coppia (orizzontale e
+   verticale indipendenti, non un quadrilatero libero): sempre un rettangolo valido, mai una
+   forma strana. Tutto avviene sulla STESSA immagine mostrata (stesso <img>, stesso sistema di
+   coordinate "naturali" via viewBox), quindi quello che l'utente vede è esattamente quello che
+   viene ritagliato — nessuna conversione tra spazi di coordinate diversi che possa sbagliare. */
 
 var cropOverlay = document.getElementById("cropOverlay");
-var cropStage = document.getElementById("cropStage");
 var cropImg = document.getElementById("cropImg");
 var cropSvg = document.getElementById("cropSvg");
 var cropHint = document.getElementById("cropHint");
-var cropCancelBtn = document.getElementById("cropCancelBtn");
+var cropSkipBtn = document.getElementById("cropSkipBtn");
 var cropConfirmBtn = document.getElementById("cropConfirmBtn");
 
-var cropState = null; // { file, imgEl, naturalW, naturalH, points:[{x,y} x4] } — coordinate in px reali dell'immagine
+var cropState = null; // { file, naturalW, naturalH, rect:{x,y,w,h} } — coordinate in px reali dell'immagine
 
 function openCropScreen(file){
   var url = URL.createObjectURL(file);
   var probe = new Image();
   probe.onload = function(){
+    var w = probe.naturalWidth, h = probe.naturalHeight;
+    var mx = Math.round(w * 0.06), my = Math.round(h * 0.06);
     cropState = {
       file: file,
-      naturalW: probe.naturalWidth,
-      naturalH: probe.naturalHeight,
-      points: null
+      naturalW: w,
+      naturalH: h,
+      rect: { x: mx, y: my, w: w - mx * 2, h: h - my * 2 }
     };
     cropImg.src = url;
-
-    // I punti di default (fallback, usati SOLO se serve mostrare la schermata di correzione)
-    // sono i quattro angoli della foto stessa, con un piccolo margine.
-    var w = probe.naturalWidth, h = probe.naturalHeight;
-    var m = Math.round(Math.min(w, h) * 0.04);
-    cropState.points = [
-      { x: m, y: m },
-      { x: w - m, y: m },
-      { x: w - m, y: h - m },
-      { x: m, y: h - m }
-    ];
-
+    cropHint.textContent = "Trascina i quattro angoli per inquadrare solo il documento, poi conferma.";
     cropOverlay.hidden = false;
-    cropHint.textContent = "Rilevamento automatico dei bordi in corso...";
     drawCropHandles();
-    runAutoDetect(probe);
   };
   probe.onerror = function(){
     setStatus("Impossibile leggere la foto scattata. Riprova.", "error");
@@ -199,157 +182,31 @@ function openCropScreen(file){
   probe.src = url;
 }
 
-function cvReady(){
-  return typeof cv !== "undefined" && cv && typeof cv.Mat === "function" && cv.getBuildInformation;
+function closeCropScreen(){
+  cropOverlay.hidden = true;
+  if(cropImg.src) URL.revokeObjectURL(cropImg.src);
+  cropImg.src = "";
+  cropState = null;
 }
-
-function runAutoDetect(imgEl){
-  // OpenCV.js carica in modo asincrono ed espone cv.onRuntimeInitialized; se non è ancora
-  // pronto attendiamo fino a un massimo di 4 secondi, poi si resta sul ritaglio manuale.
-  var attempts = 0;
-  (function poll(){
-    if(cvReady()){
-      try{
-        var quad = detectDocumentQuad(imgEl);
-        if(quad){
-          cropState.points = quad;
-          drawCropHandles();
-          cropHint.textContent = "Bordi rilevati: controlla che siano sul documento (non sul tavolo/sfondo), correggi se serve, poi conferma.";
-        }else{
-          cropHint.textContent = "Bordi non rilevati con certezza: trascina i quattro angoli sul documento.";
-        }
-      }catch(e){
-        console.error("Rilevamento automatico bordi fallito:", e);
-        cropHint.textContent = "Trascina i quattro angoli sul documento, poi conferma.";
-      }
-      return;
-    }
-    attempts++;
-    if(attempts > 40){ // ~4s
-      cropHint.textContent = "Trascina i quattro angoli sul documento, poi conferma.";
-      return;
-    }
-    setTimeout(poll, 100);
-  })();
-}
-
-function detectDocumentQuad(imgEl){
-  var src = cv.imread(imgEl);
-  var w = src.cols, h = src.rows;
-
-  // Ridimensiona per velocità: il rilevamento bordi non ha bisogno della risoluzione piena.
-  var scale = Math.min(1, 900 / Math.max(w, h));
-  var small = new cv.Mat();
-  cv.resize(src, small, new cv.Size(Math.round(w * scale), Math.round(h * scale)), 0, 0, cv.INTER_AREA);
-
-  var gray = new cv.Mat();
-  cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
-  var blurred = new cv.Mat();
-  cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-  var edges = new cv.Mat();
-  cv.Canny(blurred, edges, 50, 150);
-  var dilated = new cv.Mat();
-  cv.dilate(edges, dilated, cv.Mat.ones(3, 3, cv.CV_8U));
-
-  var contours = new cv.MatVector();
-  var hierarchy = new cv.Mat();
-  cv.findContours(dilated, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
-
-  var bestQuad = null;
-  var bestArea = 0;
-  var imgArea = small.cols * small.rows;
-
-  for(var i = 0; i < contours.size(); i++){
-    var cnt = contours.get(i);
-    var peri = cv.arcLength(cnt, true);
-    var approx = new cv.Mat();
-    cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-
-    if(approx.rows === 4){
-      var area = Math.abs(cv.contourArea(approx));
-      // Il documento deve occupare una porzione ampia dell'inquadratura (non rumore, non un
-      // angolo di stanza/cornicione scambiato per bordo) ed essere convesso e ragionevolmente
-      // rettangolare. Soglia alzata al 35% (prima 15%): un rilevamento debole/incerto è più
-      // pericoloso di nessun rilevamento, perché un quadrilatero sbagliato può "catturare" solo
-      // una parete/soffitto invece del documento — meglio ripiegare sul ritaglio manuale.
-      if(area > imgArea * 0.35 && area > bestArea && cv.isContourConvex(approx) && isPlausibleDocumentQuad(approx)){
-        bestArea = area;
-        if(bestQuad) bestQuad.delete();
-        bestQuad = approx.clone();
-      }
-    }
-    approx.delete();
-    cnt.delete();
-  }
-
-  var result = null;
-  if(bestQuad){
-    var pts = [];
-    for(var j = 0; j < 4; j++){
-      pts.push({
-        x: bestQuad.intPtr(j, 0)[0] / scale,
-        y: bestQuad.intPtr(j, 0)[1] / scale
-      });
-    }
-    result = orderQuadPoints(pts);
-    bestQuad.delete();
-  }
-
-  src.delete(); small.delete(); gray.delete(); blurred.delete();
-  edges.delete(); dilated.delete(); contours.delete(); hierarchy.delete();
-
-  return result;
-}
-
-// Scarta quadrilateri implausibili come "documento": un angolo di stanza/cornicione produce
-// spesso un rettangolo valido dal punto di vista geometrico (4 lati, convesso) ma con un
-// rapporto lati troppo estremo (una striscia sottile) rispetto a un vero foglio/documento.
-function isPlausibleDocumentQuad(approx){
-  var pts = [];
-  for(var i = 0; i < 4; i++){
-    pts.push({ x: approx.intPtr(i, 0)[0], y: approx.intPtr(i, 0)[1] });
-  }
-  var ordered = orderQuadPoints(pts);
-  var widthTop = Math.hypot(ordered[1].x - ordered[0].x, ordered[1].y - ordered[0].y);
-  var widthBottom = Math.hypot(ordered[2].x - ordered[3].x, ordered[2].y - ordered[3].y);
-  var heightLeft = Math.hypot(ordered[3].x - ordered[0].x, ordered[3].y - ordered[0].y);
-  var heightRight = Math.hypot(ordered[2].x - ordered[1].x, ordered[2].y - ordered[1].y);
-  var w = (widthTop + widthBottom) / 2;
-  var h = (heightLeft + heightRight) / 2;
-  if(w < 1 || h < 1) return false;
-  var ratio = w > h ? w / h : h / w;
-  // Un foglio A4/lettera/documento d'identità sta tra ~1:1 (quadrato) e ~1:2.2 (molto
-  // allungato); oltre non è plausibile un documento reale, più probabile un falso positivo.
-  return ratio <= 2.2;
-}
-
-// Ordina i 4 punti come: alto-sinistra, alto-destra, basso-destra, basso-sinistra
-// (necessario sia per il disegno coerente delle maniglie sia per warpPerspective).
-function orderQuadPoints(pts){
-  var sum = pts.map(function(p){ return p.x + p.y; });
-  var diff = pts.map(function(p){ return p.x - p.y; });
-  var tl = pts[sum.indexOf(Math.min.apply(null, sum))];
-  var br = pts[sum.indexOf(Math.max.apply(null, sum))];
-  var tr = pts[diff.indexOf(Math.max.apply(null, diff))];
-  var bl = pts[diff.indexOf(Math.min.apply(null, diff))];
-  return [tl, tr, br, bl];
-}
-
-// --- Disegno e trascinamento delle 4 maniglie (coordinate SVG in spazio "naturale" dell'immagine,
-//     con viewBox impostato alla risoluzione reale della foto così i punti restano precisi a
-//     qualunque dimensione di visualizzazione) ---
-var draggingIdx = -1;
 
 function drawCropHandles(){
   var w = cropState.naturalW, h = cropState.naturalH;
+  var r = cropState.rect;
   cropSvg.setAttribute("viewBox", "0 0 " + w + " " + h);
-  var pts = cropState.points;
-  var poly = pts.map(function(p){ return p.x + "," + p.y; }).join(" ");
-  var r = Math.round(Math.min(w, h) * 0.018) || 10;
+  var handleR = Math.round(Math.min(w, h) * 0.018) || 10;
+  var strokeW = Math.max(2, w * 0.0025);
 
-  var svgHtml = '<polygon points="' + poly + '" fill="rgba(166,127,52,0.22)" stroke="#a67f34" stroke-width="' + Math.max(2, w * 0.0025) + '"></polygon>';
-  pts.forEach(function(p, i){
-    svgHtml += '<circle class="crop-handle" data-idx="' + i + '" cx="' + p.x + '" cy="' + p.y + '" r="' + r + '"></circle>';
+  var corners = [
+    { x: r.x, y: r.y },
+    { x: r.x + r.w, y: r.y },
+    { x: r.x + r.w, y: r.y + r.h },
+    { x: r.x, y: r.y + r.h }
+  ];
+
+  var svgHtml = '<rect x="' + r.x + '" y="' + r.y + '" width="' + r.w + '" height="' + r.h +
+    '" fill="rgba(166,127,52,0.18)" stroke="#a67f34" stroke-width="' + strokeW + '"></rect>';
+  corners.forEach(function(p, i){
+    svgHtml += '<circle class="crop-handle" data-idx="' + i + '" cx="' + p.x + '" cy="' + p.y + '" r="' + handleR + '"></circle>';
   });
   cropSvg.innerHTML = svgHtml;
 }
@@ -364,12 +221,8 @@ function svgPointFromEvent(evt){
   return { x: loc.x, y: loc.y };
 }
 
-function clampToImage(p){
-  return {
-    x: Math.max(0, Math.min(cropState.naturalW, p.x)),
-    y: Math.max(0, Math.min(cropState.naturalH, p.y))
-  };
-}
+var draggingIdx = -1;
+var MIN_RECT_SIZE = 24; // px reali, evita un rettangolo degenere trascinando un angolo sull'altro
 
 cropSvg.addEventListener("pointerdown", function(e){
   var target = e.target.closest(".crop-handle");
@@ -378,143 +231,72 @@ cropSvg.addEventListener("pointerdown", function(e){
   cropSvg.setPointerCapture(e.pointerId);
   e.preventDefault();
 });
+
 cropSvg.addEventListener("pointermove", function(e){
-  if(draggingIdx === -1) return;
-  var p = clampToImage(svgPointFromEvent(e));
-  cropState.points[draggingIdx] = p;
+  if(draggingIdx === -1 || !cropState) return;
+  var p = svgPointFromEvent(e);
+  var w = cropState.naturalW, h = cropState.naturalH;
+  p.x = Math.max(0, Math.min(w, p.x));
+  p.y = Math.max(0, Math.min(h, p.y));
+
+  var r = cropState.rect;
+  var left = r.x, top = r.y, right = r.x + r.w, bottom = r.y + r.h;
+
+  // Ogni indice controlla il proprio angolo: 0=alto-sx, 1=alto-dx, 2=basso-dx, 3=basso-sx.
+  if(draggingIdx === 0){ left = Math.min(p.x, right - MIN_RECT_SIZE); top = Math.min(p.y, bottom - MIN_RECT_SIZE); }
+  else if(draggingIdx === 1){ right = Math.max(p.x, left + MIN_RECT_SIZE); top = Math.min(p.y, bottom - MIN_RECT_SIZE); }
+  else if(draggingIdx === 2){ right = Math.max(p.x, left + MIN_RECT_SIZE); bottom = Math.max(p.y, top + MIN_RECT_SIZE); }
+  else if(draggingIdx === 3){ left = Math.min(p.x, right - MIN_RECT_SIZE); bottom = Math.max(p.y, top + MIN_RECT_SIZE); }
+
+  cropState.rect = { x: left, y: top, w: right - left, h: bottom - top };
   drawCropHandles();
   e.preventDefault();
 });
+
 ["pointerup", "pointercancel"].forEach(function(evtName){
-  cropSvg.addEventListener(evtName, function(e){
-    draggingIdx = -1;
-  });
+  cropSvg.addEventListener(evtName, function(){ draggingIdx = -1; });
 });
 
-cropCancelBtn.addEventListener("click", function(){
-  cropOverlay.hidden = true;
-  if(cropImg.src) URL.revokeObjectURL(cropImg.src);
-  cropImg.src = "";
-  cropState = null;
+cropSkipBtn.addEventListener("click", function(){
+  if(!cropState) return;
+  var file = cropState.file;
+  closeCropScreen();
+  uploadScan(file);
 });
 
-// L'utente ha visto gli angoli (rilevati automaticamente o di default) sulla foto reale e ha
-// potuto correggerli — a questo punto si carica direttamente, senza un'ulteriore schermata.
 cropConfirmBtn.addEventListener("click", function(){
   if(!cropState) return;
-  cropConfirmBtn.disabled = true;
-  cropCancelBtn.disabled = true;
-  cropHint.textContent = "Raddrizzamento ed elaborazione in corso...";
-  try{
-    var blob = buildEnhancedScanBlob(cropImg, cropState.points, cropState.file.type || "image/jpeg");
-    var originalFile = cropState.file;
-    var scanFile = new File([blob], originalFile.name || "scan.jpg", { type: blob.type });
-    cropConfirmBtn.disabled = false;
-    cropCancelBtn.disabled = false;
-    cropOverlay.hidden = true;
-    URL.revokeObjectURL(cropImg.src);
-    cropImg.src = "";
-    cropState = null;
-    uploadScan(scanFile);
-  }catch(e){
-    cropConfirmBtn.disabled = false;
-    cropCancelBtn.disabled = false;
+  var r = cropState.rect;
+  var file = cropState.file;
 
-    console.error("Elaborazione scansione fallita, carico la foto originale:", e);
-    var fallbackFile = cropState.file;
-    cropOverlay.hidden = true;
-    URL.revokeObjectURL(cropImg.src);
-    cropImg.src = "";
-    cropState = null;
-    uploadScan(fallbackFile);
+  try{
+    var canvas = document.createElement("canvas");
+    canvas.width = Math.round(r.w);
+    canvas.height = Math.round(r.h);
+    var ctx = canvas.getContext("2d");
+    // Stesso <img> mostrato a schermo, stesse coordinate "naturali" usate per disegnare il
+    // rettangolo: un solo drawImage, nessuna conversione intermedia.
+    ctx.drawImage(cropImg, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
+
+    var outMime = (file.type && /png/.test(file.type)) ? "image/png" : "image/jpeg";
+    var dataUrl = canvas.toDataURL(outMime, 0.92);
+    var parts = dataUrl.split(",");
+    var byteString = atob(parts[1]);
+    var buffer = new Uint8Array(byteString.length);
+    for(var i = 0; i < byteString.length; i++) buffer[i] = byteString.charCodeAt(i);
+    var blob = new Blob([buffer], { type: outMime });
+    var croppedFile = new File([blob], file.name || "scan.jpg", { type: outMime });
+
+    closeCropScreen();
+    uploadScan(croppedFile);
+  }catch(e){
+    console.error("Ritaglio fallito, carico la foto originale:", e);
+    closeCropScreen();
+    uploadScan(file);
   }
 });
 
-// Raddrizza la prospettiva secondo i 4 angoli scelti e, quando OpenCV è disponibile,
-// applica una schiaritura del fondo in stile "documento scansionato" (bianco pulito,
-// testo nitido) così la foto scattata con la fotocamera del telefono — che di norma ha
-// ombre, toni di colore e sfondo non perfettamente bianco — assomigli a una vera scansione.
-function buildEnhancedScanBlob(imgEl, points, mimeType){
-  var outMime = mimeType && /png/.test(mimeType) ? "image/png" : "image/jpeg";
-
-  if(!cvReady()){
-    // Fallback senza OpenCV: ritaglio prospettico "manuale" via canvas 2D (bounding box +
-    // maschera), senza correzione tonale. Mantiene comunque il ritaglio scelto dall'utente.
-    return manualPerspectiveCropBlob(imgEl, points, outMime);
-  }
-
-  var src = cv.imread(imgEl);
-
-  var tl = points[0], tr = points[1], br = points[2], bl = points[3];
-  var widthTop = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-  var widthBottom = Math.hypot(br.x - bl.x, br.y - bl.y);
-  var heightLeft = Math.hypot(bl.x - tl.x, bl.y - tl.y);
-  var heightRight = Math.hypot(br.x - tr.x, br.y - tr.y);
-  var outW = Math.max(200, Math.round(Math.max(widthTop, widthBottom)));
-  var outH = Math.max(200, Math.round(Math.max(heightLeft, heightRight)));
-
-  var srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
-  var dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, outW, 0, outW, outH, 0, outH]);
-  var M = cv.getPerspectiveTransform(srcTri, dstTri);
-  var warped = new cv.Mat();
-  cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-
-  /* NOTA IMPORTANTE: qui esistevano due elaborazioni automatiche del tono dell'immagine
-     (CLAHE + alzata artificiale di luminosità/contrasto, e prima ancora un controllo "ritaglio
-     vuoto" basato sulla deviazione standard dei grigi) — ENTRAMBE RIMOSSE perché causa diretta
-     di problemi reali riscontrati: la prima cancellava il testo (lo schiariva fino a farlo
-     sparire su foto già ben illuminate), la seconda bloccava documenti veri scambiandoli per
-     vuoti. Qualsiasi elaborazione automatica del tono è rischiosa perché non posso verificarne
-     l'effetto su condizioni di luce reali (nessuna fotocamera qui per testarla). Ora il
-     documento viene SOLO raddrizzato geometricamente (prospettiva), senza toccare colori,
-     luminosità o contrasto: il risultato è meno "da scanner patinato" ma non perde mai testo,
-     che è la cosa che conta davvero per un documento legale. */
-  var finalMat = warped;
-
-  var outCanvas = document.createElement("canvas");
-  outCanvas.width = outW;
-  outCanvas.height = outH;
-  cv.imshow(outCanvas, finalMat);
-
-  src.delete(); warped.delete(); srcTri.delete(); dstTri.delete(); M.delete();
-
-  return canvasToBlobSync(outCanvas, outMime);
-}
-
-// Fallback usato solo se OpenCV.js non è disponibile: ritaglia il bounding box del
-// quadrilatero scelto (senza raddrizzamento prospettico vero e proprio), così il flusso
-// funziona comunque anche in assenza della libreria di visione artificiale.
-function manualPerspectiveCropBlob(imgEl, points, outMime){
-  var xs = points.map(function(p){ return p.x; });
-  var ys = points.map(function(p){ return p.y; });
-  var minX = Math.max(0, Math.min.apply(null, xs));
-  var minY = Math.max(0, Math.min.apply(null, ys));
-  var maxX = Math.min(imgEl.naturalWidth, Math.max.apply(null, xs));
-  var maxY = Math.min(imgEl.naturalHeight, Math.max.apply(null, ys));
-  var w = Math.max(1, Math.round(maxX - minX));
-  var h = Math.max(1, Math.round(maxY - minY));
-
-  var canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  var ctx = canvas.getContext("2d");
-  ctx.drawImage(imgEl, minX, minY, w, h, 0, 0, w, h);
-  return canvasToBlobSync(canvas, outMime);
-}
-
-// toBlob è asincrono via callback: lo avvolgiamo qui in modo sincrono-per-il-chiamante
-// usando toDataURL, più semplice da integrare nel resto del codice sincrono sopra
-// (l'elaborazione immagine con OpenCV.js è comunque sincrona/bloccante sul thread UI).
-function canvasToBlobSync(canvas, mimeType){
-  var dataUrl = canvas.toDataURL(mimeType, 0.92);
-  var parts = dataUrl.split(",");
-  var byteString = atob(parts[1]);
-  var buffer = new Uint8Array(byteString.length);
-  for(var i = 0; i < byteString.length; i++) buffer[i] = byteString.charCodeAt(i);
-  return new Blob([buffer], { type: mimeType });
-}
-
-/* ====================== FINE SCHERMATA DI RITAGLIO ====================== */
+/* ====================== FINE RITAGLIO MANUALE ====================== */
 
 async function uploadScan(file){
   captureBtn.disabled = true;
