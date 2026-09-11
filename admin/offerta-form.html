@@ -400,10 +400,12 @@ input[readonly]{
 
     <div class="section-title">Dati catastali</div>
     <div class="section-hint">
-      Non presenti nella scheda immobile: vanno inseriti qui a mano, verificandoli sulla
-      visura catastale aggiornata. Struttura standard riconosciuta dai moduli di mediazione
-      immobiliare (identificativi catastali dell'unità). Se la proprietà è composta da più
-      particelle o subalterni (es. abitazione + box + cantina), aggiungi una riga per ciascuno.
+      Precompilati automaticamente da quanto registrato sulla scheda immobile, quando
+      presente: verificali comunque sulla visura catastale aggiornata prima di procedere,
+      restano sempre modificabili a mano. Struttura standard riconosciuta dai moduli di
+      mediazione immobiliare (identificativi catastali dell'unità). Se la proprietà è
+      composta da più particelle o subalterni (es. abitazione + box + cantina), aggiungi una
+      riga per ciascuno.
     </div>
 
     <div class="field">
@@ -972,6 +974,36 @@ document.getElementById("addCadastralUnitBtn").addEventListener("click", functio
   addCadastralUnitRow();
 });
 
+/* Precompila "Dati catastali" da opportunities.cadastral_units alla selezione
+   dell'immobile — quella tabella usa nomi di chiave diversi da quelli del form
+   (sheet/parcel/subalterno/category/income/surface/municipality invece di
+   foglio/particella/subalterno/categoria/rendita/mq/comune), quindi va rimappata. Tutto
+   resta comunque modificabile a mano dopo il precompilamento. */
+function applyCadastralFromOpportunity(opp){
+  document.getElementById("cadastralUnitsBox").innerHTML = "";
+
+  var units = (opp && Array.isArray(opp.cadastral_units)) ? opp.cadastral_units : [];
+  if(!units.length){
+    document.getElementById("cad_comune").value = "";
+    addCadastralUnitRow();
+    return;
+  }
+
+  var comune = units.find(function(u){ return u && u.municipality; });
+  document.getElementById("cad_comune").value = comune ? comune.municipality : "";
+
+  units.forEach(function(u){
+    addCadastralUnitRow({
+      foglio: u.sheet || "",
+      particella: u.parcel || "",
+      subalterno: u.subalterno || "",
+      categoria: u.category || "",
+      rendita: (u.income != null) ? u.income : "",
+      mq: (u.surface != null) ? u.surface : ""
+    });
+  });
+}
+
 document.getElementById("is_leased").addEventListener("change", function(){
   var leased = this.value === "si";
   document.getElementById("leaseTenantField").style.display = leased ? "" : "none";
@@ -1343,7 +1375,7 @@ function parsePriceToNumber(priceText){
 async function loadOpportunities(){
   var result = await client
     .from("opportunities")
-    .select("id,title,price,address,formatted_address,municipality,province,cover_image")
+    .select("id,title,price,address,formatted_address,municipality,province,cover_image,cadastral_units")
     .order("title", { ascending: true });
 
   if(result.error){
@@ -1716,6 +1748,7 @@ var sellerSigPad = null;
     }
     loadInvestorRequestsForOpportunity(id);
     loadSellerForOpportunity(id);
+    applyCadastralFromOpportunity(selectedOpportunity);
   });
 
   document.getElementById("clientSelect").addEventListener("change", function(e){
