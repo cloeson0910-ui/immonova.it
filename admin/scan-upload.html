@@ -147,12 +147,13 @@ if(!TOKEN){
 /* ====================== SCHERMATA DI RITAGLIO / CORREZIONE ANGOLI ======================
    Flusso: foto scattata -> carica in un'immagine offscreen -> se OpenCV.js è pronto, prova
    a rilevare automaticamente il quadrilatero del documento (scala di grigi, sfocatura,
-   Canny, contorni, il quadrilatero più grande e plausibile). Se il rilevamento riesce e il
-   risultato elaborato non è vuoto, si passa DIRETTAMENTE all'upload — zero tocchi aggiuntivi
-   oltre a scattare la foto, come richiesto (nessuna schermata di conferma per il caso buono).
-   La schermata di correzione angoli compare SOLO quando serve davvero: rilevamento fallito,
-   incerto, o risultato vuoto/illeggibile — mai come passaggio obbligato su una scansione già
-   riuscita. */
+   Canny, contorni, il quadrilatero più grande e plausibile) e i quattro angoli vengono mostrati
+   già posizionati, pronti per un solo tocco di conferma — non un upload automatico "alla
+   cieca": un documento appoggiato su un tavolo (o altra superficie con bordi netti) può
+   ingannare il rilevamento, che a volte scambia il bordo del tavolo per quello del foglio.
+   Un tocco di conferma è il minimo indispensabile per non rischiare di inviare a un cliente
+   una scansione sbagliata senza che nessuno se ne accorga. Se il rilevamento fallisce del
+   tutto, gli angoli partono dai bordi della foto e l'utente li corregge lui stesso. */
 
 var cropOverlay = document.getElementById("cropOverlay");
 var cropStage = document.getElementById("cropStage");
@@ -187,11 +188,10 @@ function openCropScreen(file){
       { x: m, y: h - m }
     ];
 
-    // Overlay NON mostrato subito: prima si tenta il percorso automatico completo (rilevamento
-    // + raddrizzamento + upload). Solo se qualcosa non torna si apre la correzione manuale.
-    setStatus("Elaborazione automatica in corso...", "");
-    captureBtn.disabled = true;
-    runAutoDetectAndUpload(probe, file);
+    cropOverlay.hidden = false;
+    cropHint.textContent = "Rilevamento automatico dei bordi in corso...";
+    drawCropHandles();
+    runAutoDetect(probe);
   };
   probe.onerror = function(){
     setStatus("Impossibile leggere la foto scattata. Riprova.", "error");
@@ -203,45 +203,30 @@ function cvReady(){
   return typeof cv !== "undefined" && cv && typeof cv.Mat === "function" && cv.getBuildInformation;
 }
 
-function showManualCropFallback(message){
-  cropOverlay.hidden = false;
-  cropHint.textContent = message;
-  drawCropHandles();
-  captureBtn.disabled = false;
-  setStatus("", "");
-}
-
-function runAutoDetectAndUpload(imgEl, originalFile){
+function runAutoDetect(imgEl){
   // OpenCV.js carica in modo asincrono ed espone cv.onRuntimeInitialized; se non è ancora
-  // pronto attendiamo fino a un massimo di 4 secondi, poi si passa al ritaglio manuale.
+  // pronto attendiamo fino a un massimo di 4 secondi, poi si resta sul ritaglio manuale.
   var attempts = 0;
   (function poll(){
     if(cvReady()){
-      var quad = null;
-      try{ quad = detectDocumentQuad(imgEl); }
-      catch(e){ console.error("Rilevamento automatico bordi fallito:", e); }
-
-      if(!quad){
-        showManualCropFallback("Bordi non rilevati con certezza: trascina i quattro angoli sul documento.");
-        return;
-      }
-
-      cropState.points = quad;
       try{
-        var blob = buildEnhancedScanBlob(imgEl, quad, originalFile.type || "image/jpeg");
-        var scanFile = new File([blob], originalFile.name || "scan.jpg", { type: blob.type });
-        // Percorso rapido: rilevamento riuscito — upload diretto, senza nessuna schermata
-        // intermedia, come richiesto.
-        uploadScan(scanFile);
+        var quad = detectDocumentQuad(imgEl);
+        if(quad){
+          cropState.points = quad;
+          drawCropHandles();
+          cropHint.textContent = "Bordi rilevati: controlla che siano sul documento (non sul tavolo/sfondo), correggi se serve, poi conferma.";
+        }else{
+          cropHint.textContent = "Bordi non rilevati con certezza: trascina i quattro angoli sul documento.";
+        }
       }catch(e){
-        console.error("Elaborazione automatica fallita, passo al ritaglio manuale:", e);
-        showManualCropFallback("Trascina i quattro angoli sul documento, poi conferma.");
+        console.error("Rilevamento automatico bordi fallito:", e);
+        cropHint.textContent = "Trascina i quattro angoli sul documento, poi conferma.";
       }
       return;
     }
     attempts++;
     if(attempts > 40){ // ~4s
-      showManualCropFallback("Trascina i quattro angoli sul documento, poi conferma.");
+      cropHint.textContent = "Trascina i quattro angoli sul documento, poi conferma.";
       return;
     }
     setTimeout(poll, 100);
@@ -413,9 +398,8 @@ cropCancelBtn.addEventListener("click", function(){
   cropState = null;
 });
 
-// Questo pulsante si raggiunge SOLO quando il rilevamento automatico non ce l'ha fatta da
-// solo (fallback) — qui l'utente ha già corretto gli angoli con i propri occhi sulla foto
-// reale, quindi si carica direttamente, senza un'ulteriore schermata di conferma.
+// L'utente ha visto gli angoli (rilevati automaticamente o di default) sulla foto reale e ha
+// potuto correggerli — a questo punto si carica direttamente, senza un'ulteriore schermata.
 cropConfirmBtn.addEventListener("click", function(){
   if(!cropState) return;
   cropConfirmBtn.disabled = true;
