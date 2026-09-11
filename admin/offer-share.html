@@ -33,9 +33,13 @@ body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-se
 .sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:28px;border-bottom:1px solid rgba(166,127,52,.2);padding-bottom:18px}
 h1{font-size:18px;color:#4a3c1f;font-weight:400;margin-bottom:10px}
 p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin-bottom:24px}
-.btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}
+.btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;margin:4px}
 .state{font-size:12.5px;color:#8f7643}
 .state.error{color:#9c2f2f}
+.signed-section{margin-top:28px;padding-top:22px;border-top:1px solid rgba(166,127,52,.2);text-align:left}
+.signed-section h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;margin-bottom:10px;text-align:center}
+.signed-doc-row{display:block;font-size:12.5px;color:#a67f34;text-decoration:none;padding:8px 10px;border:1px solid rgba(166,127,52,.2);border-radius:2px;margin-bottom:6px}
+.signed-doc-row:hover{background:rgba(166,127,52,.08)}
 </style>
 </head>
 <body>
@@ -66,7 +70,7 @@ var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     return;
   }
 
-  var result = await client.from("opportunity_offers").select("offer_kind,offered_price,opportunity_id,pdf_storage_path").eq("id", offerId).single();
+  var result = await client.from("opportunity_offers").select("offer_kind,offered_price,opportunity_id,pdf_storage_path,signed_documents").eq("id", offerId).single();
 
   /* Il path del PDF non è più fisso (vedi offer-detail.html): ogni generazione crea un file
      con nome nuovo per evitare che la CDN di Supabase Storage serva una versione vecchia in
@@ -90,6 +94,25 @@ var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     actionBox.innerHTML = '<a class="btn" href="' + pdfUrl + '" target="_blank" rel="noopener">Apri / Scarica il PDF</a>';
   }else{
     actionBox.innerHTML = '<span class="state error">PDF non ancora generato per questa proposta.</span>';
+  }
+
+  var signedDocs = (result.data && Array.isArray(result.data.signed_documents)) ? result.data.signed_documents : [];
+  if(signedDocs.length){
+    var section = document.createElement("div");
+    section.className = "signed-section";
+    var heading = document.createElement("h2");
+    heading.textContent = "Proposta firmata";
+    section.appendChild(heading);
+    signedDocs.forEach(function(d){
+      var a = document.createElement("a");
+      a.className = "signed-doc-row";
+      a.href = d.file_url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "📄 " + (d.file_name || "documento firmato");
+      section.appendChild(a);
+    });
+    document.querySelector(".card").appendChild(section);
   }
 })();
 </script>

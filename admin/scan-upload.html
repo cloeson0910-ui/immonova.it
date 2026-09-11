@@ -39,20 +39,22 @@
   <h1>Scansiona documento</h1>
 
   <div id="mainCard" class="card">
-    <label for="docType">Tipo di documento</label>
-    <select id="docType">
-      <option value="owner_identity">Documento identità proprietario</option>
-      <option value="owner_tax_code">Codice fiscale proprietario</option>
-      <option value="deed_of_origin">Atto di provenienza</option>
-      <option value="cadastral_report">Visure catastali</option>
-      <option value="cadastral_plan">Planimetrie catastali</option>
-      <option value="ape">APE</option>
-      <option value="urban_planning">Permessi edilizi / sanatorie</option>
-      <option value="technical_conformity">Conformità urbanistica e catastale</option>
-      <option value="habitability">Agibilità / abitabilità</option>
-      <option value="systems_certifications">Certificazioni impianti</option>
-      <option value="other">Altro documento</option>
-    </select>
+    <div id="docTypeField">
+      <label for="docType">Tipo di documento</label>
+      <select id="docType">
+        <option value="owner_identity">Documento identità proprietario</option>
+        <option value="owner_tax_code">Codice fiscale proprietario</option>
+        <option value="deed_of_origin">Atto di provenienza</option>
+        <option value="cadastral_report">Visure catastali</option>
+        <option value="cadastral_plan">Planimetrie catastali</option>
+        <option value="ape">APE</option>
+        <option value="urban_planning">Permessi edilizi / sanatorie</option>
+        <option value="technical_conformity">Conformità urbanistica e catastale</option>
+        <option value="habitability">Agibilità / abitabilità</option>
+        <option value="systems_certifications">Certificazioni impianti</option>
+        <option value="other">Altro documento</option>
+      </select>
+    </div>
 
     <button type="button" class="capture-btn" id="captureBtn">📷 Scatta foto documento</button>
     <input type="file" id="fileInput" accept="image/*" capture="environment">
@@ -68,9 +70,11 @@
 <script>
 var params = new URLSearchParams(window.location.search);
 var TOKEN = params.get("token") || "";
+var MODE = params.get("mode") === "offer" ? "offer" : "opportunity";
 var SCAN_UPLOAD_ENDPOINT = String(SUPABASE_URL||"").replace(/\/+$/,"") + "/functions/v1/scan-upload";
 var SCAN_UPLOAD_ANON_KEY = SUPABASE_ANON_KEY;
 
+var docTypeField = document.getElementById("docTypeField");
 var docTypeSelect = document.getElementById("docType");
 var captureBtn = document.getElementById("captureBtn");
 var fileInput = document.getElementById("fileInput");
@@ -80,6 +84,12 @@ var mainCard = document.getElementById("mainCard");
 
 var TYPE_LABELS = {};
 Array.prototype.forEach.call(docTypeSelect.options, function(o){ TYPE_LABELS[o.value] = o.textContent; });
+
+if(MODE === "offer"){
+  document.querySelector("h1").textContent = "Scansiona proposta firmata";
+  docTypeField.style.display = "none";
+  TYPE_LABELS.__offer__ = "Proposta firmata";
+}
 
 function setStatus(message, type){
   statusEl.textContent = message || "";
@@ -105,12 +115,12 @@ async function uploadScan(file){
   setStatus("Caricamento foto in corso...", "");
 
   var previewUrl = URL.createObjectURL(file);
-  var docType = docTypeSelect.value;
+  var docType = MODE === "offer" ? "__offer__" : docTypeSelect.value;
 
   try{
     var form = new FormData();
     form.append("token", TOKEN);
-    form.append("document_type", docType);
+    if(MODE !== "offer") form.append("document_type", docType);
     form.append("file", file, file.name || "scan.jpg");
 
     var resp = await fetch(SCAN_UPLOAD_ENDPOINT, {

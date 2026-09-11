@@ -2743,6 +2743,9 @@ function handleIncomingScanDocument(doc){
       '<div class="info"><div>' + escapeHTML(doc.file_name||"scan") + '</div><div class="type">' + escapeHTML(typeLabel) + '</div></div>';
     uploadsList.insertBefore(row, uploadsList.firstChild);
   }
+
+  var loggedTypeLabel = (REQUIRED_DOCUMENTS.find(function(i){ return i.key === doc.document_type; }) || {label: doc.document_type}).label;
+  autoLogTimeline("document_verification", "Documento scansionato da smartphone: " + loggedTypeLabel, doc.file_name || null);
 }
 
 async function closeScanModal(){
@@ -2850,6 +2853,9 @@ async function uploadOpportunityDocument(documentType, file, skipReload, index, 
     setDocumentRowProgress(documentType, prefix + "documento caricato correttamente.", 100, true);
     hideDocumentRowProgress(documentType, 1100);
     setDocumentsStatus("Documento caricato correttamente. Puoi caricarne subito un altro dalla stessa riga.", "success");
+
+    var uploadedTypeLabel = (REQUIRED_DOCUMENTS.find(function(i){ return i.key === documentType; }) || {label: documentType}).label;
+    autoLogTimeline("document_verification", "Documento caricato: " + uploadedTypeLabel, file.name || null);
   }catch(error){
     console.error(error);
     setDocumentRowProgress(documentType, "Errore durante il caricamento.", 100, true);
@@ -3374,6 +3380,33 @@ function startEditTimelineMilestone(timelineId){
   setTimelineStatus("Stai modificando una milestone esistente.", "");
 
   document.getElementById("timelineTitleInput").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+/* Log automatico in timeline per le attività svolte sull'opportunità (upload documenti,
+   scansioni da smartphone, ecc.) — best effort: un fallimento qui non deve mai bloccare
+   l'azione principale già riuscita (upload, ecc.), quindi solo console.error in caso di
+   errore. Sempre "interna" (non pubblica), per non riempire la timeline pubblica/Success
+   Story di voci puramente operative. */
+function autoLogTimeline(typeValue, titleText, descriptionText){
+  if(!id) return;
+  var operatorName = currentUserFullName || (currentUser ? currentUser.email : null);
+  var payload = {
+    opportunity_id: id,
+    created_at: new Date().toISOString(),
+    timeline_type: typeValue || "milestone",
+    title: titleText,
+    description: descriptionText || null,
+    visibility: "internal",
+    created_by: currentUser ? currentUser.id : null,
+    created_by_name: operatorName || null
+  };
+  client.from("opportunity_timeline").insert(payload).then(function(result){
+    if(result.error){
+      console.error("Auto-log timeline fallito:", result.error);
+      return;
+    }
+    if(typeof loadTimeline === "function") loadTimeline();
+  });
 }
 
 async function addTimelineMilestone(){

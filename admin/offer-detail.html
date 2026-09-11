@@ -46,6 +46,37 @@ button,.btn{cursor:pointer;font-family:inherit}
 .pdf-link-box.visible{display:flex}
 .pdf-link-box a{color:#4f7f45;font-weight:600}
 
+.signed-box{background:#fffdf7;border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.07);padding:28px 32px;margin-bottom:22px}
+.signed-box h2{font-size:14px;font-weight:600;color:#a67f34;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.signed-box .note{font-size:12.5px;color:#8f7643;line-height:1.6;margin-bottom:16px}
+.signed-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.signed-list{display:flex;flex-direction:column;gap:8px}
+.signed-row{display:flex;align-items:center;gap:12px;background:#f9f4e8;border:1px solid rgba(166,127,52,.15);border-radius:3px;padding:9px 12px}
+.signed-row img{width:40px;height:40px;object-fit:cover;border-radius:3px;flex:none;background:#efe6d2}
+.signed-row .info{flex:1;min-width:0;font-size:12.5px;color:#4a3c1f}
+.signed-row .info .meta{font-size:11px;color:#8f7643;margin-top:2px}
+.signed-row a.open{font-size:11px;color:#a67f34;text-decoration:none;font-weight:600;flex:none}
+.signed-empty{font-size:12.5px;color:#8f7643}
+.seller-status{margin-top:14px;font-size:12.5px;color:#4f7f45}
+.seller-status.error{color:#9c2f2f}
+input[type=file].hidden-input{display:none}
+
+.scan-modal-overlay{position:fixed;inset:0;background:rgba(74,60,31,.55);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px}
+.scan-modal{background:#fffaf0;border-radius:4px;max-width:380px;width:100%;max-height:90vh;overflow-y:auto}
+.scan-modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(166,127,52,.18)}
+.scan-modal-head strong{font-size:13px;color:#4a3c1f}
+.scan-modal-close{background:none;border:none;font-size:22px;line-height:1;color:#8f7643;cursor:pointer}
+.scan-modal-body{padding:20px}
+.scan-qr-box{text-align:center;margin-bottom:14px}
+.scan-qr-box img{width:200px;height:200px;image-rendering:pixelated}
+.scan-note{font-size:12px;color:#8f7643;line-height:1.6;margin-bottom:14px}
+.scan-link-row{display:flex;gap:8px;margin-bottom:12px}
+.scan-link-row input{flex:1;padding:9px 10px;font-size:11.5px;border:1px solid rgba(166,127,52,.3);border-radius:2px;background:#fff;color:#4a3c1f}
+.scan-session-status{font-size:12px;color:#8f7643;margin-bottom:10px}
+.scan-uploads-list{display:flex;flex-direction:column;gap:8px}
+.scan-upload-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid rgba(166,127,52,.15);border-radius:3px;padding:8px 10px;font-size:12px;color:#4a3c1f}
+.scan-upload-row img{width:36px;height:36px;object-fit:cover;border-radius:3px;background:#efe6d2}
+
 @media print{
   body *{visibility:hidden}
   .panel, .panel *{visibility:visible}
@@ -74,6 +105,38 @@ button,.btn{cursor:pointer;font-family:inherit}
 
   <div class="pdf-link-box" id="pdfLinkBox"></div>
 
+  <div class="signed-box" id="signedBox" style="display:none">
+    <h2>Proposta firmata dall'acquirente</h2>
+    <div class="note">Si aggiunge alla firma digitale a schermo raccolta nel form (se presente): carica qui la foto/scansione della proposta firmata su carta consegnata o inviata dal cliente, da PC o direttamente dallo smartphone.</div>
+    <div class="signed-actions">
+      <button type="button" class="btn secondary" id="uploadSignedPcBtn">📄 Carica da PC</button>
+      <input type="file" id="signedPcInput" class="hidden-input" accept="image/*,.pdf" multiple>
+      <button type="button" class="btn secondary" id="openSignedScanBtn">📱 Scansiona da smartphone</button>
+      <button type="button" class="btn" id="sendToSellerBtn">Invia al venditore</button>
+    </div>
+    <div id="signedList" class="signed-list"><div class="signed-empty">Nessun documento caricato.</div></div>
+    <div id="sellerStatus" class="seller-status"></div>
+  </div>
+
+  <div id="scanModalOverlay" class="scan-modal-overlay" hidden>
+    <div class="scan-modal">
+      <div class="scan-modal-head">
+        <strong>Scansiona proposta firmata</strong>
+        <button type="button" class="scan-modal-close" id="closeScanModalBtn">&times;</button>
+      </div>
+      <div class="scan-modal-body">
+        <div id="scanQrBox" class="scan-qr-box"></div>
+        <div class="scan-note">Inquadra il QR code con la fotocamera dello smartphone (senza bisogno di app o login). Ogni foto scattata compare qui sotto in tempo reale.</div>
+        <div class="scan-link-row">
+          <input type="text" id="scanLinkInput" readonly onclick="this.select()">
+          <button type="button" class="btn secondary" id="copyScanLinkBtn" style="padding:9px 12px;font-size:10.5px">Copia link</button>
+        </div>
+        <div id="scanSessionStatus" class="scan-session-status"></div>
+        <div id="scanUploadsList" class="scan-uploads-list"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="stateBox" class="loading-state">Caricamento proposta…</div>
 
   <div class="panel" id="docPanel" style="display:none">
@@ -90,6 +153,7 @@ button,.btn{cursor:pointer;font-family:inherit}
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="qrcode.min.js"></script>
 
 <script>
 var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -275,7 +339,301 @@ async function loadOffer(){
   currentPropertyTitle = propertyTitle;
   currentPropertyAddress = propertyAddress;
   currentIsCounter = isCounter;
+  currentOpportunityId = o.opportunity_id;
+
+  document.getElementById("signedBox").style.display = "block";
+  renderSignedDocuments(o.signed_documents || []);
+  updateSellerStatus(o);
 }
+
+/* ============================== Proposta firmata (import) ==============================
+   Documenti caricati DOPO il salvataggio del form — la foto/scansione della proposta firmata
+   su carta consegnata o rimandata dal cliente. Si AGGIUNGONO a buyer_signature_data_url (la
+   firma a schermo raccolta nel form), non la sostituiscono. Due vie di caricamento: da PC
+   (upload diretto, admin già autenticato) o scansione da smartphone (stesso meccanismo QR già
+   in uso in opportunity-edit.html per i documenti immobile, qui puntato su questa proposta). */
+var currentOpportunityId = null;
+var scanSessionToken = null;
+var scanSessionExpiresAt = null;
+var scanRealtimeChannel = null;
+var scanCountdownInterval = null;
+var scanSeenDocCount = 0;
+
+function cleanFileName(name){
+  return String(name || "documento").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120);
+}
+
+function renderSignedDocuments(list){
+  var box = document.getElementById("signedList");
+  scanSeenDocCount = list.length;
+  if(!list.length){
+    box.innerHTML = '<div class="signed-empty">Nessun documento caricato.</div>';
+    return;
+  }
+  box.innerHTML = list.map(function(d){
+    var isImg = /\.(jpe?g|png|gif|webp)$/i.test(d.file_name || "") || /image\//.test(d.mime_type || "");
+    var thumb = isImg ? '<img src="' + escapeHTML(d.file_url) + '" alt="">' : '<div style="width:40px;height:40px;border-radius:3px;background:#efe6d2;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px">📄</div>';
+    var sourceLabel = d.source === "scan" ? "Scansionato da smartphone" : "Caricato da PC";
+    return '<div class="signed-row">' + thumb +
+      '<div class="info">' + escapeHTML(d.file_name || "documento") +
+      '<div class="meta">' + sourceLabel + (d.uploaded_at ? " — " + escapeHTML(fmtDate(d.uploaded_at)) : "") + '</div></div>' +
+      '<a class="open" href="' + escapeHTML(d.file_url) + '" target="_blank" rel="noopener">Apri</a></div>';
+  }).join("");
+}
+
+function updateSellerStatus(o){
+  var el = document.getElementById("sellerStatus");
+  if(o.sent_to_seller_at){
+    el.className = "seller-status";
+    el.textContent = "Inviata al venditore il " + fmtDate(o.sent_to_seller_at) + (o.seller_notified_count > 1 ? " (" + o.seller_notified_count + " invii totali)" : "") + ".";
+  }else{
+    el.className = "seller-status";
+    el.textContent = "";
+  }
+}
+
+/* Log automatico in timeline (opportunity_timeline) per le attività di questa proposta —
+   best effort, mai bloccante rispetto all'azione principale già riuscita. */
+function autoLogTimeline(titleText, descriptionText){
+  if(!currentOpportunityId) return;
+  client.from("opportunity_timeline").insert({
+    opportunity_id: currentOpportunityId,
+    created_at: new Date().toISOString(),
+    timeline_type: "purchase_offer",
+    title: titleText,
+    description: descriptionText || null,
+    visibility: "internal"
+  }).then(function(result){
+    if(result.error) console.error("Auto-log timeline fallito:", result.error);
+  });
+}
+
+async function uploadSignedDocumentFiles(files){
+  files = Array.prototype.filter.call(files || [], Boolean);
+  if(!files.length || !currentOfferId) return;
+
+  var statusEl = document.getElementById("sellerStatus");
+  statusEl.className = "seller-status";
+  statusEl.textContent = "Caricamento in corso...";
+
+  for(var i = 0; i < files.length; i++){
+    var file = files[i];
+    try{
+      var safeName = cleanFileName(file.name);
+      var path = "signed/" + currentOfferId + "/" + Date.now() + "-" + safeName;
+
+      var uploadRes = await client.storage.from("offer-documents").upload(path, file, { upsert:false });
+      if(uploadRes.error) throw uploadRes.error;
+
+      var publicUrl = client.storage.from("offer-documents").getPublicUrl(path).data.publicUrl;
+
+      var getRes = await client.from("opportunity_offers").select("signed_documents").eq("id", currentOfferId).single();
+      if(getRes.error) throw getRes.error;
+      var existing = Array.isArray(getRes.data.signed_documents) ? getRes.data.signed_documents : [];
+      var newEntry = { file_name:safeName, file_url:publicUrl, mime_type:file.type||null, uploaded_at:new Date().toISOString(), source:"pc" };
+      var updateRes = await client.from("opportunity_offers").update({ signed_documents: existing.concat([newEntry]) }).eq("id", currentOfferId);
+      if(updateRes.error) throw updateRes.error;
+
+      currentOfferData.signed_documents = existing.concat([newEntry]);
+      renderSignedDocuments(currentOfferData.signed_documents);
+      autoLogTimeline("Proposta firmata caricata (da PC)", safeName);
+    }catch(err){
+      console.error(err);
+      statusEl.className = "seller-status error";
+      statusEl.textContent = "Errore caricamento: " + (err.message || "operazione non riuscita");
+      return;
+    }
+  }
+
+  statusEl.className = "seller-status";
+  statusEl.textContent = "Documento/i caricato/i correttamente.";
+}
+
+document.getElementById("uploadSignedPcBtn").addEventListener("click", function(){
+  document.getElementById("signedPcInput").click();
+});
+document.getElementById("signedPcInput").addEventListener("change", function(){
+  var files = this.files;
+  this.value = "";
+  uploadSignedDocumentFiles(files);
+});
+
+function genScanToken(){
+  if(window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g,"");
+  return "scan" + Date.now() + Math.random().toString(36).slice(2);
+}
+
+function buildScanUploadUrl(token){
+  var base = window.location.href.split("?")[0].replace(/[^\/]*$/, "");
+  return base + "scan-upload.html?mode=offer&token=" + encodeURIComponent(token);
+}
+
+async function openScanModal(){
+  if(!currentOfferId || !currentOpportunityId){
+    var statusEl = document.getElementById("sellerStatus");
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Proposta non ancora caricata.";
+    return;
+  }
+  var overlay = document.getElementById("scanModalOverlay");
+  var qrBox = document.getElementById("scanQrBox");
+  var linkInput = document.getElementById("scanLinkInput");
+  var statusEl = document.getElementById("scanSessionStatus");
+  var uploadsList = document.getElementById("scanUploadsList");
+  overlay.hidden = false;
+  qrBox.innerHTML = "";
+  uploadsList.innerHTML = "";
+  statusEl.textContent = "Creazione sessione in corso...";
+
+  scanSessionToken = genScanToken();
+  var expires = new Date(Date.now() + 20*60*1000);
+  scanSessionExpiresAt = expires;
+
+  var sessionAuth = await client.auth.getSession();
+  var userId = sessionAuth.data && sessionAuth.data.session ? sessionAuth.data.session.user.id : null;
+
+  var insertRes = await client.from("scan_sessions").insert({
+    token: scanSessionToken,
+    opportunity_id: currentOpportunityId,
+    offer_id: currentOfferId,
+    target_type: "offer_signed_document",
+    created_by: userId,
+    expires_at: expires.toISOString(),
+    status: "active"
+  });
+  if(insertRes.error){
+    statusEl.textContent = "Errore creazione sessione: " + insertRes.error.message + " (verifica di aver lanciato crea_tabella_scan_sessions.sql aggiornato).";
+    return;
+  }
+
+  var scanUrl = buildScanUploadUrl(scanSessionToken);
+  linkInput.value = scanUrl;
+  try{
+    var qr = qrcode(0, "M");
+    qr.addData(scanUrl);
+    qr.make();
+    qrBox.innerHTML = qr.createImgTag(6, 4);
+  }catch(e){
+    qrBox.innerHTML = '<div style="font-size:12px;color:#9c2f2f">QR non generabile: usa il link qui sotto.</div>';
+  }
+
+  startScanCountdown();
+  subscribeScanRealtime();
+}
+
+function startScanCountdown(){
+  var statusEl = document.getElementById("scanSessionStatus");
+  if(scanCountdownInterval) clearInterval(scanCountdownInterval);
+  function tick(){
+    if(!scanSessionExpiresAt) return;
+    var remainingMs = scanSessionExpiresAt.getTime() - Date.now();
+    if(remainingMs <= 0){
+      statusEl.textContent = "Sessione scaduta. Chiudi e genera un nuovo QR code se ti servono altre scansioni.";
+      clearInterval(scanCountdownInterval);
+      return;
+    }
+    var mins = Math.floor(remainingMs/60000);
+    var secs = Math.floor((remainingMs%60000)/1000);
+    statusEl.textContent = "In attesa di foto dallo smartphone… sessione valida ancora " + mins + ":" + (secs<10?"0":"") + secs;
+  }
+  tick();
+  scanCountdownInterval = setInterval(tick, 1000);
+}
+
+function subscribeScanRealtime(){
+  if(scanRealtimeChannel){
+    client.removeChannel(scanRealtimeChannel);
+    scanRealtimeChannel = null;
+  }
+  scanRealtimeChannel = client
+    .channel("offer-scan-" + currentOfferId)
+    .on("postgres_changes", { event:"UPDATE", schema:"public", table:"opportunity_offers", filter:"id=eq."+currentOfferId }, function(payload){
+      handleOfferRealtimeUpdate(payload.new);
+    })
+    .subscribe();
+}
+
+function handleOfferRealtimeUpdate(row){
+  if(!row || !Array.isArray(row.signed_documents)) return;
+  if(row.signed_documents.length <= scanSeenDocCount) return;
+
+  var newDocs = row.signed_documents.slice(scanSeenDocCount);
+  scanSeenDocCount = row.signed_documents.length;
+
+  currentOfferData.signed_documents = row.signed_documents;
+  renderSignedDocuments(row.signed_documents);
+
+  var uploadsList = document.getElementById("scanUploadsList");
+  newDocs.forEach(function(d){
+    var row2 = document.createElement("div");
+    row2.className = "scan-upload-row";
+    row2.innerHTML = '<img src="' + escapeHTML(d.file_url||"") + '" alt=""><div>' + escapeHTML(d.file_name||"scan") + '</div>';
+    uploadsList.insertBefore(row2, uploadsList.firstChild);
+    autoLogTimeline("Proposta firmata scansionata da smartphone", d.file_name || null);
+  });
+}
+
+async function closeScanModal(){
+  document.getElementById("scanModalOverlay").hidden = true;
+  if(scanCountdownInterval){ clearInterval(scanCountdownInterval); scanCountdownInterval = null; }
+  if(scanRealtimeChannel){ client.removeChannel(scanRealtimeChannel); scanRealtimeChannel = null; }
+  if(scanSessionToken){
+    try{ await client.from("scan_sessions").update({status:"closed"}).eq("token", scanSessionToken); }catch(e){}
+  }
+  scanSessionToken = null;
+  scanSessionExpiresAt = null;
+}
+
+document.getElementById("openSignedScanBtn").addEventListener("click", openScanModal);
+document.getElementById("closeScanModalBtn").addEventListener("click", closeScanModal);
+document.getElementById("scanModalOverlay").addEventListener("click", function(e){
+  if(e.target === this) closeScanModal();
+});
+document.getElementById("copyScanLinkBtn").addEventListener("click", async function(){
+  var input = document.getElementById("scanLinkInput");
+  if(!input.value) return;
+  try{ await navigator.clipboard.writeText(input.value); }
+  catch(e){ input.select(); document.execCommand("copy"); }
+});
+
+document.getElementById("sendToSellerBtn").addEventListener("click", async function(){
+  var btn = this;
+  var statusEl = document.getElementById("sellerStatus");
+  if(!currentOfferId){
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Proposta non ancora caricata.";
+    return;
+  }
+  var ok = confirm("Inviare la proposta" + ((currentOfferData.signed_documents||[]).length ? " (con il documento firmato allegato)" : "") + " via email al venditore?");
+  if(!ok) return;
+
+  btn.disabled = true;
+  statusEl.className = "seller-status";
+  statusEl.textContent = "Invio in corso...";
+
+  try{
+    var res = await client.functions.invoke("send-offer-to-seller", { body: { offer_id: currentOfferId } });
+    var data = res.data;
+    if(res.error || !data || !data.success){
+      var errMsg = (data && data.error) || (res.error && res.error.message) || "operazione non riuscita";
+      statusEl.className = "seller-status error";
+      statusEl.textContent = "Errore invio: " + errMsg;
+      return;
+    }
+    statusEl.className = "seller-status";
+    statusEl.textContent = "Email inviata al venditore correttamente.";
+    currentOfferData.sent_to_seller_at = new Date().toISOString();
+    currentOfferData.seller_notified_count = (currentOfferData.seller_notified_count || 0) + 1;
+    updateSellerStatus(currentOfferData);
+    autoLogTimeline("Proposta inviata al venditore per la controfirma");
+  }catch(err){
+    console.error(err);
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Errore invio: " + (err.message || "operazione non riuscita");
+  }finally{
+    btn.disabled = false;
+  }
+});
 
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
 
