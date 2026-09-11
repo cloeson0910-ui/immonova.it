@@ -55,6 +55,14 @@
   .sig-field-row input[type="text"], .sig-field-row input[type="date"]{flex:1;min-width:180px;padding:11px 12px;border:1px solid rgba(166,127,52,.35);background:#fff;font-size:13px;color:#4a3c1d;font-family:inherit;border-radius:2px}
   .sig-close-row{display:flex;justify-content:flex-end;margin-bottom:10px}
   .sig-close-row button{background:none;border:none;color:#8f7643;font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
+
+  .success-overlay{position:fixed;inset:0;height:100dvh;background:#f7f1e6;z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px}
+  .success-overlay[hidden]{display:none}
+  .success-card{max-width:440px;width:100%;background:#fffaf0;border:1px solid rgba(166,127,52,.25);border-radius:4px;box-shadow:0 24px 60px rgba(127,100,48,.12);padding:40px 32px;text-align:center}
+  .success-icon{width:56px;height:56px;border-radius:50%;background:rgba(79,127,69,.12);color:#4f7f45;font-size:28px;line-height:56px;margin:0 auto 18px}
+  .success-card h1{font-size:19px;margin:0 0 12px;color:#4a3c1d;font-weight:600}
+  .success-card p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin:0 0 6px}
+  .success-card .success-close-note{margin-top:18px;font-size:11.5px;color:#8f7643}
 </style>
 </head>
 <body>
@@ -62,7 +70,7 @@
   <div class="card">
     <p class="kicker">IMMONOVA - Off Market Consulting</p>
     <h1>Proposta d&#039;Acquisto - Appartamento Via Tito Schipa</h1>
-    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789167013751.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
+    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789168012634.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
   </div>
 
   <div class="section">
@@ -116,6 +124,16 @@
       </div>
       <div class="sig-status" id="sigStatus"></div>
     </div>
+  </div>
+</div>
+
+<div class="success-overlay" id="successOverlay" hidden>
+  <div class="success-card">
+    <p class="kicker">IMMONOVA - Off Market Consulting</p>
+    <div class="success-icon">✓</div>
+    <h1 id="successTitle">Complimenti per la firma!</h1>
+    <p id="successBody">La tua proposta è stata registrata correttamente.</p>
+    <p class="success-close-note">Puoi chiudere questa pagina.</p>
   </div>
 </div>
 
@@ -174,9 +192,14 @@
     }).join("");
   }
 
-  // Stato iniziale (documenti già caricati in precedenza, da eventuali visite passate).
+  // Stato iniziale (documenti già caricati in precedenza, da eventuali visite passate) —
+  // recupera anche il nome dell'immobile, usato dopo nella pagina di conferma firma.
+  var PROPERTY_TITLE = "";
   callAction({ action: "view" }).then(function(data){
-    if(data) renderDocs(data.signed_documents);
+    if(data){
+      renderDocs(data.signed_documents);
+      PROPERTY_TITLE = data.property_title || "";
+    }
   }).catch(function(){ /* silenzioso: la pagina resta comunque utilizzabile */ });
 
   /* ---------------- Pad firma (pointer events: mouse + touch + penna) ---------------- */
@@ -262,6 +285,24 @@
   document.getElementById("openSigBtn").addEventListener("click", openSigOverlay);
   document.getElementById("sigCancelBtn").addEventListener("click", closeSigOverlay);
 
+  /* Pagina di ringraziamento a tutto schermo dopo la firma, in stile IMMONOVA — il cliente
+     capisce chiaramente che è tutto fatto e può chiudere il telefono/la pagina, invece di
+     restare sul modulo firma. */
+  function showSuccessScreen(kind){
+    closeSigOverlay();
+    var titleEl = document.getElementById("successTitle");
+    var bodyEl = document.getElementById("successBody");
+    var propertyPart = PROPERTY_TITLE ? (" per l'immobile " + PROPERTY_TITLE) : "";
+    if(kind === "upload"){
+      titleEl.textContent = "Documento ricevuto" + propertyPart + "!";
+      bodyEl.textContent = "Il documento è stato caricato correttamente sulla proposta. Puoi uscire da questa pagina.";
+    } else {
+      titleEl.textContent = "Complimenti per la tua firma" + propertyPart + "!";
+      bodyEl.textContent = "La tua proposta è stata registrata correttamente. Puoi uscire da questa pagina.";
+    }
+    document.getElementById("successOverlay").hidden = false;
+  }
+
   function pointerPos(e){
     var rect = canvas.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -337,10 +378,7 @@
       if(data && data.signed_documents) renderDocs(data.signed_documents);
       statusEl.className = "sig-status";
       statusEl.textContent = "Firma registrata correttamente ✓";
-      var outcomeEl = document.getElementById("sigOutcomeStatus");
-      outcomeEl.className = "sig-status";
-      outcomeEl.textContent = "Firma registrata correttamente ✓ (" + (currentSigner === "buyer" ? "Acquirente" : "Venditore") + " — " + signerName + ")";
-      setTimeout(closeSigOverlay, 1200);
+      showSuccessScreen("sign");
     }catch(err){
       statusEl.className = "sig-status error";
       statusEl.textContent = "Errore: " + (err && err.message ? err.message : "operazione non riuscita.");
@@ -379,6 +417,7 @@
       renderDocs(data && data.signed_documents);
       statusEl.className = "upload-status";
       statusEl.textContent = "Documento caricato correttamente ✓";
+      showSuccessScreen("upload");
     }catch(err){
       statusEl.className = "upload-status error";
       statusEl.textContent = "Errore: " + (err && err.message ? err.message : "operazione non riuscita.");
