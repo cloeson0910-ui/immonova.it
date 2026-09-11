@@ -102,6 +102,24 @@
   </div>
 </div>
 
+<!-- Schermata di anteprima OBBLIGATORIA del risultato finale, prima dell'upload vero e
+     proprio: mostra esattamente l'immagine che verrebbe caricata (dopo raddrizzamento e
+     schiaritura), non solo gli angoli scelti sulla foto originale. Serve perché il
+     rilevamento automatico dei bordi può sbagliare in modi che un controllo statistico da
+     solo non intercetta sempre (es. uno spigolo di muro/cornicione scambiato per documento) —
+     qui è sempre un occhio umano a dare l'ultima parola prima che qualcosa venga inviato. -->
+<div id="reviewOverlay" class="crop-overlay" hidden>
+  <div class="crop-title">Controlla il risultato prima di caricare</div>
+  <div class="crop-stage" id="reviewStage">
+    <img id="reviewImg" alt="" style="width:100%;display:block">
+  </div>
+  <div class="crop-hint" id="reviewHint">Se il documento non si vede bene o l'immagine è vuota/sbagliata, torna indietro e correggi gli angoli — non caricare foto vuote o illeggibili.</div>
+  <div class="crop-actions">
+    <button type="button" class="crop-btn secondary" id="reviewBackBtn">Torna a correggere</button>
+    <button type="button" class="crop-btn primary" id="reviewUploadBtn">È corretto, carica</button>
+  </div>
+</div>
+
 <script>
 var params = new URLSearchParams(window.location.search);
 var TOKEN = params.get("token") || "";
@@ -396,6 +414,13 @@ cropCancelBtn.addEventListener("click", function(){
   cropState = null;
 });
 
+var reviewOverlay = document.getElementById("reviewOverlay");
+var reviewImg = document.getElementById("reviewImg");
+var reviewHint = document.getElementById("reviewHint");
+var reviewBackBtn = document.getElementById("reviewBackBtn");
+var reviewUploadBtn = document.getElementById("reviewUploadBtn");
+var pendingScanFile = null; // file già elaborato, in attesa di conferma visiva prima dell'upload
+
 cropConfirmBtn.addEventListener("click", function(){
   if(!cropState) return;
   cropConfirmBtn.disabled = true;
@@ -404,14 +429,18 @@ cropConfirmBtn.addEventListener("click", function(){
   try{
     var blob = buildEnhancedScanBlob(cropImg, cropState.points, cropState.file.type || "image/jpeg");
     var originalFile = cropState.file;
-    cropOverlay.hidden = true;
-    URL.revokeObjectURL(cropImg.src);
-    cropImg.src = "";
     var scanFile = new File([blob], originalFile.name || "scan.jpg", { type: blob.type });
-    cropState = null;
     cropConfirmBtn.disabled = false;
     cropCancelBtn.disabled = false;
-    uploadScan(scanFile);
+
+    // Non si carica subito: si mostra prima il risultato ESATTO che verrebbe inviato, così
+    // l'utente può controllare con i propri occhi che sia davvero il documento e non — come
+    // già successo — uno sfondo/parete scambiati per il documento dal rilevamento automatico.
+    pendingScanFile = scanFile;
+    reviewImg.src = URL.createObjectURL(blob);
+    reviewHint.textContent = "Se il documento non si vede bene o l'immagine è vuota/sbagliata, torna indietro e correggi gli angoli — non caricare foto vuote o illeggibili.";
+    cropOverlay.hidden = true;
+    reviewOverlay.hidden = false;
   }catch(e){
     cropConfirmBtn.disabled = false;
     cropCancelBtn.disabled = false;
@@ -432,6 +461,29 @@ cropConfirmBtn.addEventListener("click", function(){
     cropState = null;
     uploadScan(fallbackFile);
   }
+});
+
+reviewBackBtn.addEventListener("click", function(){
+  // Torna alla schermata di correzione angoli sulla STESSA foto originale, senza doverla
+  // riscattare — l'utente può semplicemente spostare gli angoli e riprovare.
+  if(pendingScanFile){ URL.revokeObjectURL(reviewImg.src); pendingScanFile = null; }
+  reviewImg.src = "";
+  reviewOverlay.hidden = true;
+  cropOverlay.hidden = false;
+  cropHint.textContent = "Correggi gli angoli sul documento, poi conferma di nuovo.";
+});
+
+reviewUploadBtn.addEventListener("click", function(){
+  if(!pendingScanFile) return;
+  var fileToUpload = pendingScanFile;
+  pendingScanFile = null;
+  URL.revokeObjectURL(reviewImg.src);
+  reviewImg.src = "";
+  reviewOverlay.hidden = true;
+  if(cropImg.src) URL.revokeObjectURL(cropImg.src);
+  cropImg.src = "";
+  cropState = null;
+  uploadScan(fileToUpload);
 });
 
 // Raddrizza la prospettiva secondo i 4 angoli scelti e, quando OpenCV è disponibile,
