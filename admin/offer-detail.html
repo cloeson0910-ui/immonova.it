@@ -438,7 +438,10 @@ function renderSignedDocuments(list){
   box.innerHTML = list.map(function(d, i){
     var isImg = /\.(jpe?g|png|gif|webp)$/i.test(d.file_name || "") || /image\//.test(d.mime_type || "");
     var thumb = isImg ? '<img src="' + escapeHTML(d.file_url) + '" alt="">' : '<div style="width:40px;height:40px;border-radius:3px;background:#efe6d2;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px">📄</div>';
-    var sourceLabel = d.source === "scan" ? "Scansionato da smartphone" : "Caricato da PC";
+    var sourceLabel = d.source === "scan" ? "Scansionato da smartphone" :
+      d.source === "firma_smartphone" ? "Firma raccolta da smartphone" :
+      d.source === "documento_identita" ? "🪪 Documento d'identità (verifica firma)" :
+      "Caricato da PC";
     return '<div class="signed-row">' + thumb +
       '<div class="info">' + escapeHTML(d.file_name || "documento") +
       '<div class="meta">' + sourceLabel + (d.uploaded_at ? " — " + escapeHTML(fmtDate(d.uploaded_at)) : "") + '</div></div>' +
@@ -1017,22 +1020,33 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
   ensureSpace(signBlockHeight);
   y += 20;
 
-  /* Luogo e data della firma, subito sopra le righe delle firme (usa i valori compilati
-     nel form; se mancanti, ripiega sulla data di creazione della proposta). */
-  var signPlaceText = o.sign_place || "________________";
-  var signDateText = o.sign_date ? fmtDate(o.sign_date) : fmtDate(o.created_at);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
-  doc.setTextColor.apply(doc, PDF_TEXT);
-  doc.text("Fatto a " + signPlaceText + ", il " + signDateText, PDF_MARGIN_LEFT, y);
-  y += 20;
+  /* Luogo e data della firma: ORA per-colonna, non più un'unica riga condivisa in alto.
+     Acquirente e venditore possono firmare in momenti/luoghi diversi (es. da smartphone
+     tramite link, in giorni diversi) — mostrare un solo "Fatto a X, il Y" per entrambi era
+     sbagliato (es. mostrava la data di creazione della proposta invece della data vera
+     scritta da chi firma). Ogni firmatario ha il proprio luogo/data (buyer_/seller_signer_place
+     + buyer_/seller_signed_at); si ripiega sul campo unico sign_place/sign_date SOLO per un
+     firmatario che non ha ancora questi campi propri (firma raccolta a mano dal PC admin,
+     percorso più vecchio senza luogo/data separati per persona). */
   var colWidth = (contentWidth - 30) / 2;
   var col1X = PDF_MARGIN_LEFT;
   var col2X = PDF_MARGIN_LEFT + colWidth + 30;
+  var placeLineY = y;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor.apply(doc, PDF_TEXT);
+  y += 14;
   var sigImgH = 46;
   var lineY = y + sigImgH + 6;
 
-  function drawSignature(dataUrl, x, label, signedAt){
+  function drawSignature(dataUrl, x, label, signedAt, signerPlace){
+    var placeText = signerPlace || o.sign_place || "________________";
+    var dateText = signedAt ? fmtDate(signedAt) : (o.sign_date ? fmtDate(o.sign_date) : "___________");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    doc.text("Fatto a " + placeText + ", il " + dateText, x, placeLineY);
+
     if(dataUrl){
       try{
         var imgProps = doc.getImageProperties(dataUrl);
@@ -1050,8 +1064,8 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
     doc.text(label + (signedAt ? " — " + fmtDate(signedAt) : ""), x, lineY + 12);
   }
 
-  drawSignature(o.buyer_signature_data_url, col1X, "Firma del Proponente/Acquirente", o.buyer_signed_at);
-  drawSignature(o.seller_signature_data_url, col2X, "Firma del Venditore/Proprietario (per accettazione)", o.seller_signed_at);
+  drawSignature(o.buyer_signature_data_url, col1X, "Firma del Proponente/Acquirente", o.buyer_signed_at, o.buyer_signer_place);
+  drawSignature(o.seller_signature_data_url, col2X, "Firma del Venditore/Proprietario (per accettazione)", o.seller_signed_at, o.seller_signer_place);
 
   var pageCount = doc.internal.getNumberOfPages();
   for(var i = 1; i <= pageCount; i++){
@@ -1286,7 +1300,8 @@ document.getElementById("sendToBuyerBtn").addEventListener("click", async functi
     if(currentOfferData.buyer_phone){
       var waPhone = normalizeItalianPhoneForWhatsapp(currentOfferData.buyer_phone);
       if(waPhone){
-        var waText = "Gentile Cliente, ecco il link per consultare/firmare la Sua proposta IMMONOVA: " + shareUrlToSend;
+        var buyerFullName = [currentOfferData.buyer_first_name, currentOfferData.buyer_last_name].filter(Boolean).join(" ");
+        var waText = "Gentile " + (buyerFullName || "Cliente") + ", ecco il link per consultare/firmare la Sua proposta IMMONOVA: " + shareUrlToSend;
         window.open("https://wa.me/" + waPhone + "?text=" + encodeURIComponent(waText), "_blank");
       }
     }
