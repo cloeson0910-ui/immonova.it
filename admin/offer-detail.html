@@ -358,6 +358,7 @@ var scanSessionToken = null;
 var scanSessionExpiresAt = null;
 var scanRealtimeChannel = null;
 var scanCountdownInterval = null;
+var scanPollInterval = null;
 var scanSeenDocCount = 0;
 
 function cleanFileName(name){
@@ -520,6 +521,19 @@ async function openScanModal(){
 
   startScanCountdown();
   subscribeScanRealtime();
+  startScanPolling();
+}
+
+/* Riserva oltre al tempo reale: se per qualsiasi motivo Realtime non fosse attivo (es.
+   pubblicazione non configurata sul progetto), questo controllo periodico garantisce comunque
+   che una foto caricata dal telefono compaia sul PC entro pochi secondi. */
+function startScanPolling(){
+  if(scanPollInterval) clearInterval(scanPollInterval);
+  scanPollInterval = setInterval(async function(){
+    if(!currentOfferId) return;
+    var res = await client.from("opportunity_offers").select("signed_documents").eq("id", currentOfferId).single();
+    if(!res.error && res.data) handleOfferRealtimeUpdate(res.data);
+  }, 3000);
 }
 
 function startScanCountdown(){
@@ -577,6 +591,7 @@ function handleOfferRealtimeUpdate(row){
 async function closeScanModal(){
   document.getElementById("scanModalOverlay").hidden = true;
   if(scanCountdownInterval){ clearInterval(scanCountdownInterval); scanCountdownInterval = null; }
+  if(scanPollInterval){ clearInterval(scanPollInterval); scanPollInterval = null; }
   if(scanRealtimeChannel){ client.removeChannel(scanRealtimeChannel); scanRealtimeChannel = null; }
   if(scanSessionToken){
     try{ await client.from("scan_sessions").update({status:"closed"}).eq("token", scanSessionToken); }catch(e){}

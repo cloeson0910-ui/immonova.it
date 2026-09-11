@@ -2629,7 +2629,9 @@ var scanSessionToken = null;
 var scanSessionExpiresAt = null;
 var scanRealtimeChannel = null;
 var scanCountdownInterval = null;
+var scanPollInterval = null;
 var scanSeenDocumentIds = {};
+var scanModalOpenedAt = null;
 
 function genScanToken(){
   if(window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g,"");
@@ -2658,6 +2660,7 @@ async function openScanModal(){
   qrBox.innerHTML = "";
   uploadsList.innerHTML = "";
   scanSeenDocumentIds = {};
+  scanModalOpenedAt = new Date().toISOString();
   if(statusEl) statusEl.textContent = "Creazione sessione in corso...";
 
   scanSessionToken = genScanToken();
@@ -2691,6 +2694,21 @@ async function openScanModal(){
 
   startScanCountdown();
   subscribeScanRealtime();
+  startScanPolling();
+}
+
+/* Riserva oltre al tempo reale: se per qualsiasi motivo Realtime non fosse attivo, questo
+   controllo periodico garantisce comunque che una foto caricata dal telefono compaia sul PC
+   entro pochi secondi. */
+function startScanPolling(){
+  if(scanPollInterval) clearInterval(scanPollInterval);
+  scanPollInterval = setInterval(async function(){
+    if(!id || !scanModalOpenedAt) return;
+    var res = await client.from("opportunity_documents").select("*").eq("opportunity_id", id).gte("uploaded_at", scanModalOpenedAt).order("uploaded_at", { ascending:false }).limit(20);
+    if(!res.error && res.data){
+      res.data.forEach(function(doc){ handleIncomingScanDocument(doc); });
+    }
+  }, 3000);
 }
 
 function startScanCountdown(){
@@ -2754,6 +2772,7 @@ async function closeScanModal(){
   if(overlay) overlay.hidden = true;
 
   if(scanCountdownInterval){ clearInterval(scanCountdownInterval); scanCountdownInterval = null; }
+  if(scanPollInterval){ clearInterval(scanPollInterval); scanPollInterval = null; }
   if(scanRealtimeChannel){ client.removeChannel(scanRealtimeChannel); scanRealtimeChannel = null; }
 
   if(scanSessionToken){
