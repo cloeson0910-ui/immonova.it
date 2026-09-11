@@ -372,16 +372,55 @@ function renderSignedDocuments(list){
     box.innerHTML = '<div class="signed-empty">Nessun documento caricato.</div>';
     return;
   }
-  box.innerHTML = list.map(function(d){
+  box.innerHTML = list.map(function(d, i){
     var isImg = /\.(jpe?g|png|gif|webp)$/i.test(d.file_name || "") || /image\//.test(d.mime_type || "");
     var thumb = isImg ? '<img src="' + escapeHTML(d.file_url) + '" alt="">' : '<div style="width:40px;height:40px;border-radius:3px;background:#efe6d2;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px">📄</div>';
     var sourceLabel = d.source === "scan" ? "Scansionato da smartphone" : "Caricato da PC";
     return '<div class="signed-row">' + thumb +
       '<div class="info">' + escapeHTML(d.file_name || "documento") +
       '<div class="meta">' + sourceLabel + (d.uploaded_at ? " — " + escapeHTML(fmtDate(d.uploaded_at)) : "") + '</div></div>' +
-      '<a class="open" href="' + escapeHTML(d.file_url) + '" target="_blank" rel="noopener">Apri</a></div>';
+      '<a class="open" href="' + escapeHTML(d.file_url) + '" target="_blank" rel="noopener">Apri</a>' +
+      '<a class="open" href="#" style="color:#9c2f2f" data-remove-signed-doc="' + i + '">Elimina</a></div>';
   }).join("");
 }
+
+async function removeSignedDocument(index){
+  var list = (currentOfferData && currentOfferData.signed_documents) || [];
+  var doc = list[index];
+  if(!doc) return;
+  var ok = confirm("Eliminare \"" + (doc.file_name || "questo documento") + "\" dalla proposta firmata?");
+  if(!ok) return;
+
+  var newList = list.slice(0, index).concat(list.slice(index + 1));
+  var updateRes = await client.from("opportunity_offers").update({ signed_documents: newList }).eq("id", currentOfferId);
+  if(updateRes.error){
+    console.error(updateRes.error);
+    var statusEl = document.getElementById("sellerStatus");
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Errore eliminazione: " + updateRes.error.message;
+    return;
+  }
+
+  try{
+    var marker = "/offer-documents/";
+    var idx = (doc.file_url || "").indexOf(marker);
+    if(idx !== -1){
+      var storagePath = doc.file_url.slice(idx + marker.length).split("?")[0];
+      await client.storage.from("offer-documents").remove([decodeURIComponent(storagePath)]);
+    }
+  }catch(e){ console.error("Rimozione file da storage non riuscita (riga eliminata comunque):", e); }
+
+  currentOfferData.signed_documents = newList;
+  renderSignedDocuments(newList);
+  autoLogTimeline("Documento rimosso dalla proposta firmata", doc.file_name || null);
+}
+
+document.getElementById("signedList").addEventListener("click", function(e){
+  var target = e.target.closest("[data-remove-signed-doc]");
+  if(!target) return;
+  e.preventDefault();
+  removeSignedDocument(parseInt(target.getAttribute("data-remove-signed-doc"), 10));
+});
 
 function updateSellerStatus(o){
   var el = document.getElementById("sellerStatus");
