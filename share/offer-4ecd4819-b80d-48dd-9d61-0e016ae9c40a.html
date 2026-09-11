@@ -42,6 +42,10 @@
   .empty-note{font-size:12.5px;color:#8f7643}
   .upload-status{font-size:12px;color:#4f7f45;margin-top:8px}
   .upload-status.error{color:#9c2f2f}
+  .id-doc-block{margin:14px 0;padding:12px;border:1px dashed rgba(166,127,52,.4);border-radius:2px;background:#fffaf0}
+  .id-doc-label{font-size:12px;color:#4a3c1d;margin-bottom:8px;font-weight:600}
+  .id-doc-preview{margin-top:10px;font-size:12px;color:#4f7f45}
+  .id-doc-preview img{display:block;max-width:160px;max-height:110px;margin-top:6px;border:1px solid rgba(166,127,52,.3);border-radius:2px}
   .footer-note{font-size:11px;color:#8f7643;text-align:center;line-height:1.6}
 
   .sig-overlay{position:fixed;inset:0;height:100dvh;background:#f7f1e6;z-index:9999;overflow-y:auto;padding:16px}
@@ -70,7 +74,7 @@
   <div class="card">
     <p class="kicker">IMMONOVA - Off Market Consulting</p>
     <h1>Proposta d&#039;Acquisto - Appartamento Via Tito Schipa</h1>
-    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789169094659.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
+    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789169935988.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
   </div>
 
   <div class="section">
@@ -113,6 +117,7 @@
       </div>
       <div class="sig-field-row">
         <input type="text" id="signerNameInput" placeholder="Nome e cognome di chi firma" autocomplete="name">
+        <input type="text" id="signerPlaceInput" placeholder="Luogo (es. Milano)" autocomplete="address-level2">
         <input type="date" id="signerDateInput">
       </div>
       <div class="sig-pad-box">
@@ -120,6 +125,18 @@
       </div>
       <div class="sig-actions">
         <button type="button" class="btn secondary" id="sigClearBtn">Cancella firma</button>
+      </div>
+      <div class="id-doc-block">
+        <div class="id-doc-label">Documento d'identità (fronte) — obbligatorio per verificare la firma</div>
+        <div class="upload-actions">
+          <button type="button" class="btn secondary" id="idDocCameraBtn">Scatta foto documento</button>
+          <button type="button" class="btn secondary" id="idDocPcBtn">Carica da PC</button>
+        </div>
+        <input type="file" id="idDocCameraInput" class="hidden-input" accept="image/*" capture="environment">
+        <input type="file" id="idDocPcInput" class="hidden-input" accept="image/*,.pdf">
+        <div class="id-doc-preview" id="idDocPreview" hidden></div>
+      </div>
+      <div class="sig-actions">
         <button type="button" class="btn" id="sigConfirmBtn">Conferma firma</button>
       </div>
       <div class="sig-status" id="sigStatus"></div>
@@ -207,11 +224,13 @@
   var ctx = canvas.getContext("2d");
   var drawing = false, hasStroke = false, last = null;
   var currentSigner = "buyer";
+  var idDocFile = null; // File scelto (fotocamera o PC), obbligatorio per confermare la firma
 
   var overlay = document.getElementById("sigOverlay");
   var rotatePrompt = document.getElementById("rotatePrompt");
   var sigFormArea = document.getElementById("sigFormArea");
   var nameInput = document.getElementById("signerNameInput");
+  var placeInput = document.getElementById("signerPlaceInput");
   var dateInput = document.getElementById("signerDateInput");
 
   function isLandscape(){ return window.innerWidth > window.innerHeight; }
@@ -331,6 +350,26 @@
     document.getElementById("sigStatus").textContent = "";
   });
 
+  function handleIdDocFile(file){
+    if(!file) return;
+    idDocFile = file;
+    var preview = document.getElementById("idDocPreview");
+    preview.hidden = false;
+    if(/^image\//.test(file.type || "")){
+      var reader = new FileReader();
+      reader.onload = function(){
+        preview.innerHTML = "Documento selezionato: " + escapeHTML(file.name || "foto") + '<br><img src="' + reader.result + '" alt="">';
+      };
+      reader.readAsDataURL(file);
+    }else{
+      preview.textContent = "Documento selezionato: " + (file.name || "file");
+    }
+  }
+  document.getElementById("idDocCameraBtn").addEventListener("click", function(){ document.getElementById("idDocCameraInput").click(); });
+  document.getElementById("idDocPcBtn").addEventListener("click", function(){ document.getElementById("idDocPcInput").click(); });
+  document.getElementById("idDocCameraInput").addEventListener("change", function(e){ handleIdDocFile(e.target.files && e.target.files[0]); });
+  document.getElementById("idDocPcInput").addEventListener("change", function(e){ handleIdDocFile(e.target.files && e.target.files[0]); });
+
   document.getElementById("signerToggle").addEventListener("click", function(e){
     var btn = e.target.closest("button[data-signer]");
     if(!btn) return;
@@ -343,12 +382,19 @@
   document.getElementById("sigConfirmBtn").addEventListener("click", async function(){
     var statusEl = document.getElementById("sigStatus");
     var signerName = nameInput.value.trim();
+    var signerPlace = placeInput.value.trim();
     var signerDate = dateInput.value; // input type="date" -> sempre "AAAA-MM-GG" o vuoto, scritta dal firmatario, mai automatica
 
     if(!signerName){
       statusEl.className = "sig-status error";
       statusEl.textContent = "Inserisci nome e cognome di chi firma.";
       nameInput.focus();
+      return;
+    }
+    if(!signerPlace){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Inserisci il luogo della firma (come su un documento cartaceo, es. \"Fatto a Milano\").";
+      placeInput.focus();
       return;
     }
     if(!signerDate){
@@ -362,18 +408,28 @@
       statusEl.textContent = "Disegna la firma prima di confermare.";
       return;
     }
+    if(!idDocFile){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Carica una foto del documento d'identità (fronte) prima di confermare: è obbligatorio per la verifica della firma.";
+      document.getElementById("idDocPreview").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
 
     var btn = this;
     btn.disabled = true;
     statusEl.className = "sig-status";
     statusEl.textContent = "Salvataggio in corso...";
     try{
+      var idDocBase64 = await fileToBase64(idDocFile);
       var data = await callAction({
         action: "sign",
         signer: currentSigner,
         signature_data_url: canvas.toDataURL("image/png"),
         signer_name: signerName,
-        signer_date: signerDate
+        signer_place: signerPlace,
+        signer_date: signerDate,
+        id_document_base64: idDocBase64,
+        id_document_mime_type: idDocFile.type || "image/jpeg"
       });
       if(data && data.signed_documents) renderDocs(data.signed_documents);
       statusEl.className = "sig-status";
