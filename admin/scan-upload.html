@@ -265,9 +265,12 @@ function detectDocumentQuad(imgEl){
 
     if(approx.rows === 4){
       var area = Math.abs(cv.contourArea(approx));
-      // Il documento deve occupare una porzione ragionevole dell'inquadratura (non rumore,
-      // non l'intera foto se non è veramente il contorno esterno) ed essere convesso.
-      if(area > imgArea * 0.15 && area > bestArea && cv.isContourConvex(approx)){
+      // Il documento deve occupare una porzione ampia dell'inquadratura (non rumore, non un
+      // angolo di stanza/cornicione scambiato per bordo) ed essere convesso e ragionevolmente
+      // rettangolare. Soglia alzata al 35% (prima 15%): un rilevamento debole/incerto è più
+      // pericoloso di nessun rilevamento, perché un quadrilatero sbagliato può "catturare" solo
+      // una parete/soffitto invece del documento — meglio ripiegare sul ritaglio manuale.
+      if(area > imgArea * 0.35 && area > bestArea && cv.isContourConvex(approx) && isPlausibleDocumentQuad(approx)){
         bestArea = area;
         if(bestQuad) bestQuad.delete();
         bestQuad = approx.clone();
@@ -294,6 +297,28 @@ function detectDocumentQuad(imgEl){
   edges.delete(); dilated.delete(); contours.delete(); hierarchy.delete();
 
   return result;
+}
+
+// Scarta quadrilateri implausibili come "documento": un angolo di stanza/cornicione produce
+// spesso un rettangolo valido dal punto di vista geometrico (4 lati, convesso) ma con un
+// rapporto lati troppo estremo (una striscia sottile) rispetto a un vero foglio/documento.
+function isPlausibleDocumentQuad(approx){
+  var pts = [];
+  for(var i = 0; i < 4; i++){
+    pts.push({ x: approx.intPtr(i, 0)[0], y: approx.intPtr(i, 0)[1] });
+  }
+  var ordered = orderQuadPoints(pts);
+  var widthTop = Math.hypot(ordered[1].x - ordered[0].x, ordered[1].y - ordered[0].y);
+  var widthBottom = Math.hypot(ordered[2].x - ordered[3].x, ordered[2].y - ordered[3].y);
+  var heightLeft = Math.hypot(ordered[3].x - ordered[0].x, ordered[3].y - ordered[0].y);
+  var heightRight = Math.hypot(ordered[2].x - ordered[1].x, ordered[2].y - ordered[1].y);
+  var w = (widthTop + widthBottom) / 2;
+  var h = (heightLeft + heightRight) / 2;
+  if(w < 1 || h < 1) return false;
+  var ratio = w > h ? w / h : h / w;
+  // Un foglio A4/lettera/documento d'identità sta tra ~1:1 (quadrato) e ~1:2.2 (molto
+  // allungato); oltre non è plausibile un documento reale, più probabile un falso positivo.
+  return ratio <= 2.2;
 }
 
 // Ordina i 4 punti come: alto-sinistra, alto-destra, basso-destra, basso-sinistra
@@ -388,9 +413,18 @@ cropConfirmBtn.addEventListener("click", function(){
     cropCancelBtn.disabled = false;
     uploadScan(scanFile);
   }catch(e){
-    console.error("Elaborazione scansione fallita, carico la foto originale:", e);
     cropConfirmBtn.disabled = false;
     cropCancelBtn.disabled = false;
+
+    if(e && e.isEmptyCrop){
+      // Il ritaglio scelto risulta vuoto/uniforme (nessun documento reale dentro gli angoli
+      // selezionati): NON si carica nulla in automatico, si resta sulla schermata di
+      // correzione così l'utente vede subito il problema e può sistemare gli angoli.
+      cropHint.textContent = "Il ritaglio selezionato sembra vuoto (nessun documento riconoscibile dentro gli angoli). Sposta gli angoli in modo che contengano davvero il documento, poi conferma di nuovo.";
+      return;
+    }
+
+    console.error("Elaborazione scansione fallita, carico la foto originale:", e);
     var fallbackFile = cropState.file;
     cropOverlay.hidden = true;
     URL.revokeObjectURL(cropImg.src);
@@ -435,6 +469,24 @@ function buildEnhancedScanBlob(imgEl, points, mimeType){
   // quindi il risultato in bianco e nero è più leggibile e più "da scanner" di una foto a colori.
   var gray = new cv.Mat();
   cv.cvtColor(warped, gray, cv.COLOR_RGBA2GRAY);
+
+  // Controllo di sicurezza contro un ritaglio "vuoto": se il rilevamento automatico (o una
+  // correzione manuale imprecisa) ha catturato solo una superficie uniforme — un muro, un
+  // soffitto, uno sfondo — invece del documento, la deviazione standard dei toni di grigio
+  // qui è bassissima (un vero documento ha sempre bordi/testo che creano forte variazione).
+  // In quel caso NON si procede in automatico: si segnala l'errore e si torna alla schermata
+  // di correzione angoli, così non finisce mai in proposta una scansione vuota senza che
+  // nessuno se ne accorga prima dell'invio.
+  var meanStdDev = new cv.Mat(), stdDevMat = new cv.Mat();
+  cv.meanStdDev(gray, meanStdDev, stdDevMat);
+  var stdDev = stdDevMat.data64F[0];
+  meanStdDev.delete(); stdDevMat.delete();
+  if(stdDev < 12){
+    src.delete(); warped.delete(); gray.delete(); srcTri.delete(); dstTri.delete(); M.delete();
+    var blankErr = new Error("EMPTY_CROP");
+    blankErr.isEmptyCrop = true;
+    throw blankErr;
+  }
 
   var clahe = new cv.CLAHE(2.5, new cv.Size(8, 8));
   var claheOut = new cv.Mat();
