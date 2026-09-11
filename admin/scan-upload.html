@@ -101,7 +101,7 @@
     <img id="cropImg" alt="">
     <svg id="cropSvg"></svg>
   </div>
-  <div class="crop-hint" id="cropHint">Trascina i quattro angoli per inquadrare solo il documento, poi conferma.</div>
+  <div class="crop-hint" id="cropHint">Trascina ognuno dei quattro angoli esattamente sopra l'angolo corrispondente del documento (anche se la foto è storta o in prospettiva): il documento verrà raddrizzato automaticamente in un rettangolo dritto.</div>
   <label class="crop-clean-option">
     <input type="checkbox" id="cleanBgCheckbox">
     <span>Pulisci sfondo (bianco/nero, stile scanner) — attivala solo se il testo è ben leggibile nella foto: su foto scure o poco nitide può peggiorare il risultato invece di migliorarlo. Se hai dubbi, lasciala spenta.</span>
@@ -154,18 +154,24 @@ if(!TOKEN){
   });
 }
 
-/* ====================== RITAGLIO MANUALE + PULIZIA SFONDO OPZIONALE ======================
-   Ritaglio: un solo rettangolo, quattro maniglie agli angoli (orizzontale/verticale
-   indipendenti, non un quadrilatero libero) — sempre una forma valida. Stessa immagine
-   mostrata e stessa immagine ritagliata (stesso <img>, stesso sistema di coordinate), quindi
-   quello che si vede è esattamente quello che si ottiene.
+/* ====================== RITAGLIO + RADDRIZZAMENTO + PULIZIA SFONDO OPZIONALE ======================
+   Ritaglio: quadrilatero libero, quattro maniglie indipendenti (una per angolo). L'utente
+   trascina ogni maniglia sopra l'angolo reale del documento anche se la foto è storta o in
+   prospettiva (es. scattata di lato su un tavolo). Alla conferma, i quattro punti vengono
+   raddrizzati con una trasformazione prospettica (cv.getPerspectiveTransform +
+   cv.warpPerspective — SOLO geometria, nessuna modifica di toni/luminosità) in un rettangolo
+   dritto, con dimensioni calcolate dai lati del quadrilatero scelto (nessuno stiramento
+   arbitrario). Se OpenCV non è pronto o il raddrizzamento fallisce per qualsiasi motivo, si
+   usa automaticamente il ritaglio semplice del rettangolo che contiene il quadrilatero (senza
+   raddrizzamento): l'upload non si blocca mai.
 
    Pulizia sfondo: SOLO se l'utente spunta la casella, MAI automatica. Usa una binarizzazione
    adattiva (cv.adaptiveThreshold, tecnica standard e ben collaudata delle app di scansione —
    non un aggiustamento di luminosità inventato su misura) che confronta ogni pixel con la
    media della sua zona locale, quindi resta affidabile anche con luce non uniforme nella
-   foto. Se OpenCV non è disponibile o l'elaborazione fallisce, si carica comunque la versione
-   normale: la casella non può mai bloccare l'upload. */
+   foto, applicata DOPO il raddrizzamento. Se OpenCV non è disponibile o l'elaborazione
+   fallisce, si carica comunque la versione raddrizzata (o quella non pulita): la casella non
+   può mai bloccare l'upload. */
 
 var cropOverlay = document.getElementById("cropOverlay");
 var cropImg = document.getElementById("cropImg");
@@ -175,7 +181,11 @@ var cropSkipBtn = document.getElementById("cropSkipBtn");
 var cropConfirmBtn = document.getElementById("cropConfirmBtn");
 var cleanBgCheckbox = document.getElementById("cleanBgCheckbox");
 
-var cropState = null; // { file, naturalW, naturalH, rect:{x,y,w,h} } — coordinate in px reali dell'immagine
+var cropState = null; // { file, naturalW, naturalH, quad:[{x,y}x4] } — coordinate in px reali dell'immagine, quad in ordine alto-sx, alto-dx, basso-dx, basso-sx
+
+function cvReady(){
+  return typeof cv !== "undefined" && cv && typeof cv.Mat === "function" && cv.getBuildInformation;
+}
 
 function openCropScreen(file){
   var url = URL.createObjectURL(file);
@@ -187,13 +197,33 @@ function openCropScreen(file){
       file: file,
       naturalW: w,
       naturalH: h,
-      rect: { x: mx, y: my, w: w - mx * 2, h: h - my * 2 }
+      quad: [
+        { x: mx, y: my },
+        { x: w - mx, y: my },
+        { x: w - mx, y: h - my },
+        { x: mx, y: h - my }
+      ]
     };
     cropImg.src = url;
-    cropHint.textContent = "Trascina i quattro angoli per inquadrare solo il documento, poi conferma.";
     cleanBgCheckbox.checked = false;
     cropOverlay.hidden = false;
     drawCropHandles();
+
+    // Se OpenCV.js non ha ancora finito di caricarsi (caricato in background all'apertura
+    // della pagina), attende fino a ~4s prima di lasciare che l'utente confermi, così il
+    // raddrizzamento è disponibile fin dalla prima foto. Se non si carica in tempo, si procede
+    // comunque: il raddrizzamento verrà semplicemente saltato (fallback al ritaglio semplice).
+    if(!cvReady()){
+      cropHint.textContent = "Preparazione strumenti in corso...";
+      var waited = 0;
+      var poll = setInterval(function(){
+        waited += 150;
+        if(cvReady() || waited >= 4000){
+          clearInterval(poll);
+          cropHint.textContent = "Trascina ognuno dei quattro angoli esattamente sopra l'angolo corrispondente del documento (anche se la foto è storta o in prospettiva): il documento verrà raddrizzato automaticamente in un rettangolo dritto.";
+        }
+      }, 150);
+    }
   };
   probe.onerror = function(){
     setStatus("Impossibile leggere la foto scattata. Riprova.", "error");
@@ -210,21 +240,14 @@ function closeCropScreen(){
 
 function drawCropHandles(){
   var w = cropState.naturalW, h = cropState.naturalH;
-  var r = cropState.rect;
+  var q = cropState.quad;
   cropSvg.setAttribute("viewBox", "0 0 " + w + " " + h);
   var handleR = Math.round(Math.min(w, h) * 0.018) || 10;
   var strokeW = Math.max(2, w * 0.0025);
 
-  var corners = [
-    { x: r.x, y: r.y },
-    { x: r.x + r.w, y: r.y },
-    { x: r.x + r.w, y: r.y + r.h },
-    { x: r.x, y: r.y + r.h }
-  ];
-
-  var svgHtml = '<rect x="' + r.x + '" y="' + r.y + '" width="' + r.w + '" height="' + r.h +
-    '" fill="rgba(166,127,52,0.18)" stroke="#a67f34" stroke-width="' + strokeW + '"></rect>';
-  corners.forEach(function(p, i){
+  var pointsAttr = q.map(function(p){ return p.x + "," + p.y; }).join(" ");
+  var svgHtml = '<polygon points="' + pointsAttr + '" fill="rgba(166,127,52,0.18)" stroke="#a67f34" stroke-width="' + strokeW + '"></polygon>';
+  q.forEach(function(p, i){
     svgHtml += '<circle class="crop-handle" data-idx="' + i + '" cx="' + p.x + '" cy="' + p.y + '" r="' + handleR + '"></circle>';
   });
   cropSvg.innerHTML = svgHtml;
@@ -241,7 +264,6 @@ function svgPointFromEvent(evt){
 }
 
 var draggingIdx = -1;
-var MIN_RECT_SIZE = 24; // px reali, evita un rettangolo degenere trascinando un angolo sull'altro
 
 cropSvg.addEventListener("pointerdown", function(e){
   var target = e.target.closest(".crop-handle");
@@ -258,16 +280,10 @@ cropSvg.addEventListener("pointermove", function(e){
   p.x = Math.max(0, Math.min(w, p.x));
   p.y = Math.max(0, Math.min(h, p.y));
 
-  var r = cropState.rect;
-  var left = r.x, top = r.y, right = r.x + r.w, bottom = r.y + r.h;
-
-  // Ogni indice controlla il proprio angolo: 0=alto-sx, 1=alto-dx, 2=basso-dx, 3=basso-sx.
-  if(draggingIdx === 0){ left = Math.min(p.x, right - MIN_RECT_SIZE); top = Math.min(p.y, bottom - MIN_RECT_SIZE); }
-  else if(draggingIdx === 1){ right = Math.max(p.x, left + MIN_RECT_SIZE); top = Math.min(p.y, bottom - MIN_RECT_SIZE); }
-  else if(draggingIdx === 2){ right = Math.max(p.x, left + MIN_RECT_SIZE); bottom = Math.max(p.y, top + MIN_RECT_SIZE); }
-  else if(draggingIdx === 3){ left = Math.min(p.x, right - MIN_RECT_SIZE); bottom = Math.max(p.y, top + MIN_RECT_SIZE); }
-
-  cropState.rect = { x: left, y: top, w: right - left, h: bottom - top };
+  // Ogni maniglia sposta solo il proprio angolo: 0=alto-sx, 1=alto-dx, 2=basso-dx, 3=basso-sx.
+  // Quadrilatero libero (non più un rettangolo allineato agli assi) per poter inquadrare un
+  // documento storto o in prospettiva e raddrizzarlo.
+  cropState.quad[draggingIdx] = p;
   drawCropHandles();
   e.preventDefault();
 });
@@ -276,46 +292,104 @@ cropSvg.addEventListener("pointermove", function(e){
   cropSvg.addEventListener(evtName, function(){ draggingIdx = -1; });
 });
 
-function cvReady(){
-  return typeof cv !== "undefined" && cv && typeof cv.Mat === "function" && cv.getBuildInformation;
+function quadOutputSize(q){
+  function dist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
+  var wTop = dist(q[0], q[1]), wBottom = dist(q[3], q[2]);
+  var hLeft = dist(q[0], q[3]), hRight = dist(q[1], q[2]);
+  return {
+    w: Math.max(1, Math.round(Math.max(wTop, wBottom))),
+    h: Math.max(1, Math.round(Math.max(hLeft, hRight)))
+  };
 }
 
-// Disegna nel canvas dato il rettangolo scelto (o l'intera immagine se rect è null), poi,
-// se richiesto e possibile, applica la binarizzazione adattiva bianco/nero sopra.
-function renderToCanvas(rect, applyClean){
-  var w = rect ? Math.round(rect.w) : cropState.naturalW;
-  var h = rect ? Math.round(rect.h) : cropState.naturalH;
+function applyCleanBg(canvas){
+  var gray = new cv.Mat();
+  var srcMat = cv.imread(canvas);
+  cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY);
+  var bin = new cv.Mat();
+  var blockSize = Math.round(Math.min(canvas.width, canvas.height) / 25);
+  if(blockSize < 15) blockSize = 15;
+  if(blockSize % 2 === 0) blockSize += 1;
+  cv.adaptiveThreshold(gray, bin, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, blockSize, 12);
+  var outRGBA = new cv.Mat();
+  cv.cvtColor(bin, outRGBA, cv.COLOR_GRAY2RGBA);
+  cv.imshow(canvas, outRGBA);
+  srcMat.delete(); gray.delete(); bin.delete(); outRGBA.delete();
+}
+
+// Raddrizza il quadrilatero scelto dall'utente in un rettangolo dritto (solo geometria,
+// nessuna modifica di toni), poi applica opzionalmente la pulizia sfondo. Se OpenCV non è
+// pronto o qualcosa fallisce, ripiega su un ritaglio semplice (rettangolo che contiene il
+// quadrilatero, senza raddrizzamento) — non blocca mai l'upload.
+function renderQuad(quad, applyClean){
+  var out = quadOutputSize(quad);
   var canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, w);
-  canvas.height = Math.max(1, h);
-  var ctx = canvas.getContext("2d");
-  if(rect){
-    ctx.drawImage(cropImg, rect.x, rect.y, rect.w, rect.h, 0, 0, canvas.width, canvas.height);
+
+  if(cvReady()){
+    try{
+      var srcCanvas = document.createElement("canvas");
+      srcCanvas.width = cropState.naturalW;
+      srcCanvas.height = cropState.naturalH;
+      srcCanvas.getContext("2d").drawImage(cropImg, 0, 0);
+
+      canvas.width = out.w;
+      canvas.height = out.h;
+
+      var src = cv.imread(srcCanvas);
+      var dstMat = new cv.Mat();
+      var srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+        quad[0].x, quad[0].y, quad[1].x, quad[1].y, quad[2].x, quad[2].y, quad[3].x, quad[3].y
+      ]);
+      var dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+        0, 0, out.w, 0, out.w, out.h, 0, out.h
+      ]);
+      var M = cv.getPerspectiveTransform(srcTri, dstTri);
+      cv.warpPerspective(src, dstMat, M, new cv.Size(out.w, out.h), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
+      cv.imshow(canvas, dstMat);
+
+      src.delete(); dstMat.delete(); srcTri.delete(); dstTri.delete(); M.delete();
+
+      if(applyClean){
+        try{ applyCleanBg(canvas); }
+        catch(e){ console.error("Pulizia sfondo fallita dopo il raddrizzamento, uso solo il raddrizzamento:", e); }
+      }
+      return canvas;
+    }catch(e){
+      console.error("Raddrizzamento fallito, uso ritaglio semplice senza raddrizzare:", e);
+    }
   }else{
-    ctx.drawImage(cropImg, 0, 0, canvas.width, canvas.height);
+    console.error("Raddrizzamento non disponibile (OpenCV non ancora caricato): uso ritaglio semplice.");
   }
 
+  // Fallback: ritaglio semplice del rettangolo che contiene il quadrilatero, senza raddrizzare.
+  var xs = quad.map(function(p){ return p.x; }), ys = quad.map(function(p){ return p.y; });
+  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+  var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+  var bw = Math.max(1, Math.round(maxX - minX)), bh = Math.max(1, Math.round(maxY - minY));
+  canvas.width = bw;
+  canvas.height = bh;
+  canvas.getContext("2d").drawImage(cropImg, minX, minY, bw, bh, 0, 0, bw, bh);
+
   if(applyClean && cvReady()){
-    try{
-      var src = cv.imread(canvas);
-      var gray = new cv.Mat();
-      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-      var dst = new cv.Mat();
-      var blockSize = Math.round(Math.min(canvas.width, canvas.height) / 25);
-      if(blockSize < 15) blockSize = 15;
-      if(blockSize % 2 === 0) blockSize += 1;
-      cv.adaptiveThreshold(gray, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, blockSize, 12);
-      var outRGBA = new cv.Mat();
-      cv.cvtColor(dst, outRGBA, cv.COLOR_GRAY2RGBA);
-      cv.imshow(canvas, outRGBA);
-      src.delete(); gray.delete(); dst.delete(); outRGBA.delete();
-    }catch(e){
-      console.error("Pulizia sfondo fallita, carico la versione non pulita:", e);
-    }
+    try{ applyCleanBg(canvas); }
+    catch(e){ console.error("Pulizia sfondo fallita, carico la versione non pulita:", e); }
+  }
+  return canvas;
+}
+
+// Nessun ritaglio/raddrizzamento: carica l'immagine intera così com'è (solo pulizia sfondo
+// opzionale, se richiesta).
+function renderWholeImage(applyClean){
+  var canvas = document.createElement("canvas");
+  canvas.width = cropState.naturalW;
+  canvas.height = cropState.naturalH;
+  canvas.getContext("2d").drawImage(cropImg, 0, 0);
+  if(applyClean && cvReady()){
+    try{ applyCleanBg(canvas); }
+    catch(e){ console.error("Pulizia sfondo fallita, carico la versione non pulita:", e); }
   }else if(applyClean && !cvReady()){
     console.error("Pulizia sfondo non disponibile (libreria non ancora caricata): carico la versione non pulita.");
   }
-
   return canvas;
 }
 
@@ -335,7 +409,7 @@ cropSkipBtn.addEventListener("click", function(){
   var file = cropState.file;
   var applyClean = cleanBgCheckbox.checked;
   try{
-    var canvas = renderToCanvas(null, applyClean);
+    var canvas = renderWholeImage(applyClean);
     var outFile = canvasToFile(canvas, file);
     closeCropScreen();
     uploadScan(outFile);
@@ -348,22 +422,22 @@ cropSkipBtn.addEventListener("click", function(){
 
 cropConfirmBtn.addEventListener("click", function(){
   if(!cropState) return;
-  var r = cropState.rect;
+  var quad = cropState.quad;
   var file = cropState.file;
   var applyClean = cleanBgCheckbox.checked;
   try{
-    var canvas = renderToCanvas(r, applyClean);
+    var canvas = renderQuad(quad, applyClean);
     var outFile = canvasToFile(canvas, file);
     closeCropScreen();
     uploadScan(outFile);
   }catch(e){
-    console.error("Ritaglio fallito, carico la foto originale:", e);
+    console.error("Ritaglio/raddrizzamento fallito, carico la foto originale:", e);
     closeCropScreen();
     uploadScan(file);
   }
 });
 
-/* ====================== FINE RITAGLIO + PULIZIA SFONDO ====================== */
+/* ====================== FINE RITAGLIO + RADDRIZZAMENTO + PULIZIA SFONDO ====================== */
 
 async function uploadScan(file){
   captureBtn.disabled = true;
