@@ -19,6 +19,10 @@ button,.btn{cursor:pointer;font-family:inherit}
 .btn{padding:11px 18px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .btn.secondary{background:transparent;color:#a67f34}
 .badge{padding:6px 14px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid transparent}
+.status-select{padding:6px 10px;font-size:11.5px;border:1px solid rgba(166,127,52,.35);background:#fffdf7;color:#4a3c1f;font-family:inherit;border-radius:2px}
+.status-select:disabled{opacity:.5}
+.status-save-note{font-size:11px;color:#4f7f45}
+.status-save-note.error{color:#9c2f2f}
 .badge-bozza{background:rgba(143,118,67,.15);color:#8f7643;border-color:rgba(143,118,67,.3)}
 .badge-inviata{background:rgba(166,127,52,.15);color:#a67f34;border-color:rgba(166,127,52,.35)}
 .badge-accettata{background:rgba(81,122,79,.15);color:#4f7f45;border-color:rgba(81,122,79,.35)}
@@ -97,6 +101,8 @@ input[type=file].hidden-input{display:none}
 <div class="container">
   <div class="top-actions" id="topActions" style="display:none">
     <span class="badge" id="statusBadge"></span>
+    <select id="statusSelect" class="status-select"></select>
+    <span id="statusSaveNote" class="status-save-note"></span>
     <div style="display:flex;gap:10px">
       <a href="#" class="btn secondary" id="editBtn">Modifica proposta</a>
       <button type="button" class="btn" id="generatePdfBtn">Genera PDF (con link)</button>
@@ -164,6 +170,48 @@ var STATUS_LABELS = {
   controfferta_ricevuta:"Controfferta ricevuta", ritirata:"Ritirata", scaduta:"Scaduta"
 };
 var DECL_VALUE_LABELS = { si:"Sì", no:"No", da_verificare:"Da verificare" };
+
+/* Cambio stato manuale: prima non esisteva nessun controllo per farlo, lo stato restava
+   sempre quello impostato alla creazione (di norma "bozza") finché non veniva cambiato da
+   un automatismo (es. firma del cliente dal link condiviso). Qui l'agente puo' forzarlo in
+   qualunque momento, per qualunque motivo (accordo verbale, telefonata, ecc.). */
+function renderStatusSelect(currentStatus){
+  var select = document.getElementById("statusSelect");
+  select.innerHTML = Object.keys(STATUS_LABELS).map(function(key){
+    return '<option value="' + key + '"' + (key === currentStatus ? " selected" : "") + '>' + escapeHTML(STATUS_LABELS[key]) + '</option>';
+  }).join("");
+}
+
+document.getElementById("statusSelect").addEventListener("change", async function(){
+  var select = this;
+  var noteEl = document.getElementById("statusSaveNote");
+  var newStatus = select.value;
+  var previousStatus = (currentOfferData && currentOfferData.status) || "bozza";
+  if(newStatus === previousStatus) return;
+
+  select.disabled = true;
+  noteEl.className = "status-save-note";
+  noteEl.textContent = "Salvataggio...";
+
+  var updateRes = await client.from("opportunity_offers").update({ status: newStatus }).eq("id", currentOfferId);
+  select.disabled = false;
+
+  if(updateRes.error){
+    noteEl.className = "status-save-note error";
+    noteEl.textContent = "Errore: " + updateRes.error.message;
+    select.value = previousStatus; // ripristina la selezione, l'update non è andato a buon fine
+    return;
+  }
+
+  currentOfferData.status = newStatus;
+  var badge = document.getElementById("statusBadge");
+  badge.className = "badge badge-" + newStatus;
+  badge.textContent = STATUS_LABELS[newStatus] || newStatus;
+  noteEl.className = "status-save-note";
+  noteEl.textContent = "Stato aggiornato ✓";
+  autoLogTimeline("Stato proposta cambiato manualmente", STATUS_LABELS[newStatus] || newStatus);
+  setTimeout(function(){ noteEl.textContent = ""; }, 2500);
+});
 
 function escapeHTML(v){ return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
 function fmtDate(d){ if(!d) return ""; try{ return new Date(d).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}); }catch(e){ return d; } }
@@ -276,6 +324,7 @@ async function loadOffer(){
   var badge = document.getElementById("statusBadge");
   badge.className = "badge badge-" + (o.status || "bozza");
   badge.textContent = STATUS_LABELS[o.status] || o.status || "";
+  renderStatusSelect(o.status || "bozza");
 
   var isCounter = o.offer_kind === "controfferta";
   document.getElementById("docTitle").textContent = isCounter ? "Proposta di Controfferta" : "Proposta Irrevocabile d'Acquisto";
