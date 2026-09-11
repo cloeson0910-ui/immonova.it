@@ -62,7 +62,7 @@
   <div class="card">
     <p class="kicker">IMMONOVA - Off Market Consulting</p>
     <h1>Proposta d&#039;Acquisto - Appartamento Via Tito Schipa</h1>
-    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789166287975.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
+    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789167013751.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
   </div>
 
   <div class="section">
@@ -128,7 +128,7 @@
 
   function escapeHTML(v){ return String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
 
-  async function callAction(payload){
+  async function callActionOnce(payload){
     var res = await fetch(ACTIONS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -140,6 +140,26 @@
       throw new Error((body && body.error) || "Operazione non riuscita.");
     }
     return body.data;
+  }
+
+  /* Un solo ritentativo automatico su errore di RETE (non su un errore applicativo tornato
+     dal server, che non cambierebbe ritentando): serve soprattutto su connessioni mobili
+     instabili, dove Safari su iPhone mostra "Load failed" per una singola richiesta caduta
+     senza che ci sia nulla di rotto lato server (verificato: la funzione risponde
+     correttamente quando la richiesta arriva). */
+  async function callAction(payload){
+    try{
+      return await callActionOnce(payload);
+    }catch(err){
+      var isNetworkError = err instanceof TypeError || /load failed|failed to fetch|network/i.test(String(err && err.message));
+      if(!isNetworkError) throw err;
+      await new Promise(function(r){ setTimeout(r, 1200); });
+      try{
+        return await callActionOnce(payload);
+      }catch(err2){
+        throw new Error("Connessione instabile, riprova (" + (err2 && err2.message ? err2.message : "operazione non riuscita") + ").");
+      }
+    }
   }
 
   function renderDocs(list){
@@ -174,7 +194,10 @@
   function isLandscape(){ return window.innerWidth > window.innerHeight; }
 
   function resizeCanvas(){
-    var ratio = window.devicePixelRatio || 1;
+    // Limite a 2x: su iPhone devicePixelRatio è spesso 3, che su un canvas largo (orizzontale
+    // obbligatoria) produce un PNG inutilmente pesante da inviare su rete mobile — 2x resta
+    // più che nitido per una firma.
+    var ratio = Math.min(window.devicePixelRatio || 1, 2);
     var rect = canvas.getBoundingClientRect();
     if(rect.width < 1 || rect.height < 1) return;
     var prevData = hasStroke ? canvas.toDataURL() : null;
