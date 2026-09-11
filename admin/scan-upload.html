@@ -39,7 +39,10 @@
   .crop-stage img{width:100%;display:block;pointer-events:none;user-select:none}
   .crop-stage svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
   .crop-handle{fill:#a67f34;stroke:#fffaf0;stroke-width:2;cursor:grab;touch-action:none}
-  .crop-actions{display:flex;gap:10px;width:100%;max-width:480px;margin-top:16px}
+  .crop-clean-option{display:flex;align-items:center;gap:8px;width:100%;max-width:480px;margin-top:14px;padding:12px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(166,127,52,.4);border-radius:2px}
+  .crop-clean-option input{width:18px;height:18px;flex:none}
+  .crop-clean-option span{color:#e7d9b8;font-size:12.5px;line-height:1.5}
+  .crop-actions{display:flex;gap:10px;width:100%;max-width:480px;margin-top:12px}
   .crop-btn{flex:1;padding:15px 10px;border-radius:2px;border:1px solid #a67f34;font-size:13px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-weight:600}
   .crop-btn.primary{background:#a67f34;color:#fffaf0}
   .crop-btn.secondary{background:transparent;color:#e7d9b8}
@@ -48,6 +51,12 @@
 </head>
 <body>
 <script src="../js/config.js"></script>
+<!-- OpenCV.js: usato SOLO, su richiesta esplicita e opzionale dell'utente (checkbox "Pulisci
+     sfondo"), per una binarizzazione adattiva (bianco/nero, tecnica standard delle app di
+     scansione documenti) — mai applicata automaticamente. Se il CDN non fa in tempo a
+     caricare, la casella semplicemente non ha effetto e si carica la versione normale: il
+     flusso non si blocca mai. -->
+<script src="https://docs.opencv.org/4.x/opencv.js" async></script>
 
 <div class="wrap">
   <div class="kicker">IMMONOVA</div>
@@ -82,12 +91,10 @@
   <div class="footer-note">Ogni foto scattata viene caricata subito e compare in tempo reale sul computer. Puoi scattarne quante ne servono — anche di tipi diversi — finché questa pagina resta aperta.</div>
 </div>
 
-<!-- Schermata di ritaglio: SOLO manuale, nessun rilevamento automatico. Un rettangolo con
-     quattro maniglie agli angoli, che l'utente trascina lui stesso; il ritaglio finale è
-     un semplice rettangolo allineato agli assi (niente raddrizzamento prospettico), preso
-     con un unico canvas.drawImage dalla stessa immagine mostrata a schermo — stesso sistema
-     di coordinate per quello che si vede e per quello che viene ritagliato, senza passaggi
-     intermedi che possano disallinearsi. -->
+<!-- Schermata di ritaglio: manuale (nessun rilevamento automatico dei bordi) + pulizia sfondo
+     OPZIONALE (checkbox, spenta di default). Un rettangolo con quattro maniglie agli angoli,
+     trascinato dall'utente stesso; il ritaglio finale è un rettangolo allineato agli assi,
+     preso con un unico canvas.drawImage dalla stessa immagine mostrata a schermo. -->
 <div id="cropOverlay" class="crop-overlay" hidden>
   <div class="crop-title">Ritaglia il documento</div>
   <div class="crop-stage" id="cropStage">
@@ -95,6 +102,10 @@
     <svg id="cropSvg"></svg>
   </div>
   <div class="crop-hint" id="cropHint">Trascina i quattro angoli per inquadrare solo il documento, poi conferma.</div>
+  <label class="crop-clean-option">
+    <input type="checkbox" id="cleanBgCheckbox">
+    <span>Pulisci sfondo (bianco/nero, stile scanner) — attivala solo se il testo è ben leggibile nella foto: su foto scure o poco nitide può peggiorare il risultato invece di migliorarlo. Se hai dubbi, lasciala spenta.</span>
+  </label>
   <div class="crop-actions">
     <button type="button" class="crop-btn secondary" id="cropSkipBtn">Carica senza ritagliare</button>
     <button type="button" class="crop-btn primary" id="cropConfirmBtn">Ritaglia e carica</button>
@@ -143,12 +154,18 @@ if(!TOKEN){
   });
 }
 
-/* ====================== RITAGLIO MANUALE (nessun rilevamento automatico) ======================
-   Un solo rettangolo, quattro maniglie agli angoli che si muovono in coppia (orizzontale e
-   verticale indipendenti, non un quadrilatero libero): sempre un rettangolo valido, mai una
-   forma strana. Tutto avviene sulla STESSA immagine mostrata (stesso <img>, stesso sistema di
-   coordinate "naturali" via viewBox), quindi quello che l'utente vede è esattamente quello che
-   viene ritagliato — nessuna conversione tra spazi di coordinate diversi che possa sbagliare. */
+/* ====================== RITAGLIO MANUALE + PULIZIA SFONDO OPZIONALE ======================
+   Ritaglio: un solo rettangolo, quattro maniglie agli angoli (orizzontale/verticale
+   indipendenti, non un quadrilatero libero) — sempre una forma valida. Stessa immagine
+   mostrata e stessa immagine ritagliata (stesso <img>, stesso sistema di coordinate), quindi
+   quello che si vede è esattamente quello che si ottiene.
+
+   Pulizia sfondo: SOLO se l'utente spunta la casella, MAI automatica. Usa una binarizzazione
+   adattiva (cv.adaptiveThreshold, tecnica standard e ben collaudata delle app di scansione —
+   non un aggiustamento di luminosità inventato su misura) che confronta ogni pixel con la
+   media della sua zona locale, quindi resta affidabile anche con luce non uniforme nella
+   foto. Se OpenCV non è disponibile o l'elaborazione fallisce, si carica comunque la versione
+   normale: la casella non può mai bloccare l'upload. */
 
 var cropOverlay = document.getElementById("cropOverlay");
 var cropImg = document.getElementById("cropImg");
@@ -156,6 +173,7 @@ var cropSvg = document.getElementById("cropSvg");
 var cropHint = document.getElementById("cropHint");
 var cropSkipBtn = document.getElementById("cropSkipBtn");
 var cropConfirmBtn = document.getElementById("cropConfirmBtn");
+var cleanBgCheckbox = document.getElementById("cleanBgCheckbox");
 
 var cropState = null; // { file, naturalW, naturalH, rect:{x,y,w,h} } — coordinate in px reali dell'immagine
 
@@ -173,6 +191,7 @@ function openCropScreen(file){
     };
     cropImg.src = url;
     cropHint.textContent = "Trascina i quattro angoli per inquadrare solo il documento, poi conferma.";
+    cleanBgCheckbox.checked = false;
     cropOverlay.hidden = false;
     drawCropHandles();
   };
@@ -257,38 +276,86 @@ cropSvg.addEventListener("pointermove", function(e){
   cropSvg.addEventListener(evtName, function(){ draggingIdx = -1; });
 });
 
+function cvReady(){
+  return typeof cv !== "undefined" && cv && typeof cv.Mat === "function" && cv.getBuildInformation;
+}
+
+// Disegna nel canvas dato il rettangolo scelto (o l'intera immagine se rect è null), poi,
+// se richiesto e possibile, applica la binarizzazione adattiva bianco/nero sopra.
+function renderToCanvas(rect, applyClean){
+  var w = rect ? Math.round(rect.w) : cropState.naturalW;
+  var h = rect ? Math.round(rect.h) : cropState.naturalH;
+  var canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, w);
+  canvas.height = Math.max(1, h);
+  var ctx = canvas.getContext("2d");
+  if(rect){
+    ctx.drawImage(cropImg, rect.x, rect.y, rect.w, rect.h, 0, 0, canvas.width, canvas.height);
+  }else{
+    ctx.drawImage(cropImg, 0, 0, canvas.width, canvas.height);
+  }
+
+  if(applyClean && cvReady()){
+    try{
+      var src = cv.imread(canvas);
+      var gray = new cv.Mat();
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      var dst = new cv.Mat();
+      var blockSize = Math.round(Math.min(canvas.width, canvas.height) / 25);
+      if(blockSize < 15) blockSize = 15;
+      if(blockSize % 2 === 0) blockSize += 1;
+      cv.adaptiveThreshold(gray, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, blockSize, 12);
+      var outRGBA = new cv.Mat();
+      cv.cvtColor(dst, outRGBA, cv.COLOR_GRAY2RGBA);
+      cv.imshow(canvas, outRGBA);
+      src.delete(); gray.delete(); dst.delete(); outRGBA.delete();
+    }catch(e){
+      console.error("Pulizia sfondo fallita, carico la versione non pulita:", e);
+    }
+  }else if(applyClean && !cvReady()){
+    console.error("Pulizia sfondo non disponibile (libreria non ancora caricata): carico la versione non pulita.");
+  }
+
+  return canvas;
+}
+
+function canvasToFile(canvas, originalFile){
+  var outMime = (originalFile.type && /png/.test(originalFile.type)) ? "image/png" : "image/jpeg";
+  var dataUrl = canvas.toDataURL(outMime, 0.92);
+  var parts = dataUrl.split(",");
+  var byteString = atob(parts[1]);
+  var buffer = new Uint8Array(byteString.length);
+  for(var i = 0; i < byteString.length; i++) buffer[i] = byteString.charCodeAt(i);
+  var blob = new Blob([buffer], { type: outMime });
+  return new File([blob], originalFile.name || "scan.jpg", { type: outMime });
+}
+
 cropSkipBtn.addEventListener("click", function(){
   if(!cropState) return;
   var file = cropState.file;
-  closeCropScreen();
-  uploadScan(file);
+  var applyClean = cleanBgCheckbox.checked;
+  try{
+    var canvas = renderToCanvas(null, applyClean);
+    var outFile = canvasToFile(canvas, file);
+    closeCropScreen();
+    uploadScan(outFile);
+  }catch(e){
+    console.error("Elaborazione fallita, carico la foto originale:", e);
+    closeCropScreen();
+    uploadScan(file);
+  }
 });
 
 cropConfirmBtn.addEventListener("click", function(){
   if(!cropState) return;
   var r = cropState.rect;
   var file = cropState.file;
-
+  var applyClean = cleanBgCheckbox.checked;
   try{
-    var canvas = document.createElement("canvas");
-    canvas.width = Math.round(r.w);
-    canvas.height = Math.round(r.h);
-    var ctx = canvas.getContext("2d");
-    // Stesso <img> mostrato a schermo, stesse coordinate "naturali" usate per disegnare il
-    // rettangolo: un solo drawImage, nessuna conversione intermedia.
-    ctx.drawImage(cropImg, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
-
-    var outMime = (file.type && /png/.test(file.type)) ? "image/png" : "image/jpeg";
-    var dataUrl = canvas.toDataURL(outMime, 0.92);
-    var parts = dataUrl.split(",");
-    var byteString = atob(parts[1]);
-    var buffer = new Uint8Array(byteString.length);
-    for(var i = 0; i < byteString.length; i++) buffer[i] = byteString.charCodeAt(i);
-    var blob = new Blob([buffer], { type: outMime });
-    var croppedFile = new File([blob], file.name || "scan.jpg", { type: outMime });
-
+    var canvas = renderToCanvas(r, applyClean);
+    var outFile = canvasToFile(canvas, file);
     closeCropScreen();
-    uploadScan(croppedFile);
+    uploadScan(outFile);
   }catch(e){
     console.error("Ritaglio fallito, carico la foto originale:", e);
     closeCropScreen();
@@ -296,7 +363,7 @@ cropConfirmBtn.addEventListener("click", function(){
   }
 });
 
-/* ====================== FINE RITAGLIO MANUALE ====================== */
+/* ====================== FINE RITAGLIO + PULIZIA SFONDO ====================== */
 
 async function uploadScan(file){
   captureBtn.disabled = true;
