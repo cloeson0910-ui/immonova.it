@@ -1948,6 +1948,45 @@ var sellerSigPad = null;
         console.error("Sincronizzazione PEC su investors non riuscita:", pecSyncErr);
       }
 
+      /* Se il cliente proponente non era già censito (nessun preselectedInvestor: è arrivato
+         solo compilando i campi a mano, non da "Documenti" né da una richiesta collegata),
+         gli si crea comunque una scheda contatto in investors — anche se la proposta va male,
+         non si perde il lead. Cerca prima per email per non duplicare un contatto già
+         esistente; se non trovato, crea una scheda marcata "da completare" (profile_incomplete),
+         che compare nel popup di avviso in dashboard.html finché non viene completata a mano.
+         Best effort: un fallimento qui non deve mai far sembrare fallito il salvataggio della
+         proposta, già andato a buon fine sopra. */
+      try{
+        if(!preselectedInvestor && payload.buyer_email){
+          var buyerEmailLower = payload.buyer_email.trim().toLowerCase();
+          var existingInvestorRes = await client.from("investors").select("id").ilike("email", buyerEmailLower).limit(1).maybeSingle();
+          var resolvedBuyerInvestorId = (existingInvestorRes.data && existingInvestorRes.data.id) ? existingInvestorRes.data.id : null;
+
+          if(!resolvedBuyerInvestorId && payload.buyer_first_name && payload.buyer_last_name){
+            var newInvestorRes = await client.from("investors").insert({
+              first_name: payload.buyer_first_name,
+              last_name: payload.buyer_last_name,
+              email: payload.buyer_email || null,
+              phone: payload.buyer_phone || null,
+              is_investor: true,
+              is_seller: false,
+              is_supplier: false,
+              status: "active",
+              profile_incomplete: true,
+              profile_incomplete_reason: "Proposta di acquisto ricevuta - scheda cliente da completare",
+              created_by: currentUser ? currentUser.id : null
+            }).select("id").single();
+            if(!newInvestorRes.error && newInvestorRes.data) resolvedBuyerInvestorId = newInvestorRes.data.id;
+          }
+
+          if(resolvedBuyerInvestorId){
+            await client.from("opportunity_offers").update({ investor_id: resolvedBuyerInvestorId }).eq("id", insertResult.data.id);
+          }
+        }
+      }catch(investorSyncErr){
+        console.error("Sincronizzazione scheda cliente (investors) non riuscita:", investorSyncErr);
+      }
+
       /* Follow-up email al professionista che ha creato la proposta — solo per una proposta
          NUOVA: in modifica di una già esistente non ha senso reinviare lo stesso avviso ogni
          volta che si corregge un errore. Best effort: un fallimento qui non deve mai far

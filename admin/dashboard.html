@@ -416,6 +416,22 @@ body::after{
 
 @media(max-width:1220px){.command-grid,.value-command-grid,.performance-grid{grid-template-columns:repeat(3,1fr)}.alerts-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.chart-grid{grid-template-columns:1fr}.mini-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.header{padding:24px 22px;flex-direction:column;gap:18px}.logo{align-items:center}.logo-svg{width:250px}.header-actions{justify-content:center}.container{padding:34px 22px 54px}.title{font-size:34px}.command-grid,.value-command-grid,.alerts-grid,.opportunity-grid,.mini-grid,.performance-grid{grid-template-columns:1fr}.quick-actions{justify-content:flex-start}.requests-row{grid-template-columns:1fr}.request-actions{justify-content:flex-start}.owner-filter select{min-width:100%;width:100%}}
+
+/* Popup "clienti da completare": proponenti creati automaticamente da una proposta
+   d'acquisto senza scheda contatto già esistente (vedi offerta-form.html). */
+.incomplete-overlay{position:fixed;inset:0;background:rgba(74,60,29,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
+.incomplete-overlay[hidden]{display:none}
+.incomplete-modal{background:#fffdf7;border:1px solid rgba(166,127,52,.3);box-shadow:0 30px 80px rgba(74,60,29,.25);max-width:480px;width:100%;padding:32px;max-height:80vh;overflow-y:auto}
+.incomplete-modal h2{font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:#a67f34;margin:0 0 8px;font-weight:600}
+.incomplete-modal p.hint{font-size:12.5px;color:#8f7643;line-height:1.6;margin:0 0 18px}
+.incomplete-list{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.incomplete-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;background:#f9f4e8;border:1px solid rgba(166,127,52,.18)}
+.incomplete-row .name{font-size:13px;color:#4a3c1d;font-weight:600}
+.incomplete-row .reason{font-size:11.5px;color:#8f7643;margin-top:2px}
+.incomplete-row a{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#a67f34;text-decoration:none;border:1px solid #a67f34;padding:7px 12px;flex:none}
+.incomplete-row a:hover{background:rgba(166,127,52,.08)}
+.incomplete-actions{display:flex;justify-content:flex-end}
+.incomplete-actions button{background:none;border:none;color:#8f7643;font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
 </style>
 </head>
 
@@ -915,7 +931,42 @@ document.addEventListener("click", function(){
 });
 
 document.getElementById("logoutBtn").addEventListener("click",async()=>{await client.auth.signOut();window.location.href="../index.html"});
-(async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadCollaborators();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);setBoot("","");}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
+
+/* Popup "clienti da completare": mostrato all'apertura della dashboard, elenca i
+   proponenti creati automaticamente da una proposta d'acquisto quando il cliente non era
+   già censito (vedi offerta-form.html) — cosi' non si perde il lead anche se la proposta
+   va male, ma resta comunque da completare la scheda anagrafica vera e propria. */
+async function loadIncompleteInvestorsPopup(){
+  try{
+    const {data,error}=await client.from("investors").select("id,first_name,last_name,profile_incomplete_reason").eq("profile_incomplete",true).order("created_at",{ascending:false});
+    if(error||!data||!data.length) return;
+    const overlay=document.getElementById("incompleteOverlay");
+    const list=document.getElementById("incompleteList");
+    list.innerHTML=data.map(function(inv){
+      const name=((inv.first_name||"")+" "+(inv.last_name||"")).trim()||"(senza nome)";
+      return '<div class="incomplete-row"><div><div class="name">'+escapeHTML(name)+'</div><div class="reason">'+escapeHTML(inv.profile_incomplete_reason||"Scheda da completare")+'</div></div><a href="investor-form.html?id='+encodeURIComponent(inv.id)+'">Completa</a></div>';
+    }).join("");
+    overlay.hidden=false;
+  }catch(e){
+    console.error("Popup clienti da completare non caricato:",e);
+  }
+}
+var incompleteOverlayEl=document.getElementById("incompleteOverlay");
+if(incompleteOverlayEl){
+  document.getElementById("incompleteCloseBtn").addEventListener("click",function(){ incompleteOverlayEl.hidden=true; });
+  incompleteOverlayEl.addEventListener("click",function(e){ if(e.target===incompleteOverlayEl) incompleteOverlayEl.hidden=true; });
+}
+
+(async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadCollaborators();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);await loadIncompleteInvestorsPopup();setBoot("","");}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
 </script>
+
+<div class="incomplete-overlay" id="incompleteOverlay" hidden>
+  <div class="incomplete-modal">
+    <h2>Clienti da completare</h2>
+    <p class="hint">Questi contatti sono stati creati automaticamente da una proposta d'acquisto perché non erano ancora censiti: completa la scheda anagrafica quando puoi, il lead comunque non va perso anche se la proposta non va a buon fine.</p>
+    <div class="incomplete-list" id="incompleteList"></div>
+    <div class="incomplete-actions"><button type="button" id="incompleteCloseBtn">Chiudi</button></div>
+  </div>
+</div>
 </body>
 </html>
