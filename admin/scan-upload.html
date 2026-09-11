@@ -47,6 +47,8 @@
   .crop-btn.primary{background:#a67f34;color:#fffaf0}
   .crop-btn.secondary{background:transparent;color:#e7d9b8}
   .crop-hint{color:#c9b686;font-size:12px;text-align:center;margin-top:12px;line-height:1.6;max-width:480px}
+  .crop-warn{color:#ffb4b4;background:rgba(156,47,47,.35);border:1px solid rgba(255,180,180,.5);border-radius:2px;padding:10px 12px;font-size:12.5px;text-align:center;margin-top:10px;line-height:1.6;max-width:480px;font-weight:600}
+  .crop-warn[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -102,13 +104,14 @@
     <svg id="cropSvg"></svg>
   </div>
   <div class="crop-hint" id="cropHint">Trascina ognuno dei quattro angoli esattamente sopra l'angolo corrispondente del documento (anche se la foto è storta o in prospettiva): il documento verrà raddrizzato automaticamente in un rettangolo dritto.</div>
+  <div class="crop-warn" id="cropWarn" hidden>⚠️ Non hai ancora spostato i quattro punti sugli angoli del documento: così com'è, la foto verrà ritagliata ma NON raddrizzata. Trascina i punti sui veri angoli del foglio prima di confermare.</div>
   <label class="crop-clean-option">
     <input type="checkbox" id="cleanBgCheckbox">
     <span>Pulisci sfondo (bianco/nero, stile scanner) — attivala solo se il testo è ben leggibile nella foto: su foto scure o poco nitide può peggiorare il risultato invece di migliorarlo. Se hai dubbi, lasciala spenta.</span>
   </label>
   <div class="crop-actions">
-    <button type="button" class="crop-btn secondary" id="cropSkipBtn">Carica senza ritagliare</button>
-    <button type="button" class="crop-btn primary" id="cropConfirmBtn">Ritaglia e carica</button>
+    <button type="button" class="crop-btn secondary" id="cropSkipBtn">Carica foto originale (senza raddrizzare)</button>
+    <button type="button" class="crop-btn primary" id="cropConfirmBtn">Raddrizza e carica</button>
   </div>
 </div>
 
@@ -177,11 +180,13 @@ var cropOverlay = document.getElementById("cropOverlay");
 var cropImg = document.getElementById("cropImg");
 var cropSvg = document.getElementById("cropSvg");
 var cropHint = document.getElementById("cropHint");
+var cropWarn = document.getElementById("cropWarn");
 var cropSkipBtn = document.getElementById("cropSkipBtn");
 var cropConfirmBtn = document.getElementById("cropConfirmBtn");
 var cleanBgCheckbox = document.getElementById("cleanBgCheckbox");
 
 var cropState = null; // { file, naturalW, naturalH, quad:[{x,y}x4] } — coordinate in px reali dell'immagine, quad in ordine alto-sx, alto-dx, basso-dx, basso-sx
+var quadTouched = false; // true appena l'utente sposta almeno un angolo — se resta false il quadrilatero è ancora quello di default e il raddrizzamento non correggerà nulla
 
 function cvReady(){
   return typeof cv !== "undefined" && cv && typeof cv.Mat === "function" && cv.getBuildInformation;
@@ -206,6 +211,8 @@ function openCropScreen(file){
     };
     cropImg.src = url;
     cleanBgCheckbox.checked = false;
+    quadTouched = false;
+    cropWarn.hidden = false;
     cropOverlay.hidden = false;
     drawCropHandles();
 
@@ -284,6 +291,8 @@ cropSvg.addEventListener("pointermove", function(e){
   // Quadrilatero libero (non più un rettangolo allineato agli assi) per poter inquadrare un
   // documento storto o in prospettiva e raddrizzarlo.
   cropState.quad[draggingIdx] = p;
+  quadTouched = true;
+  cropWarn.hidden = true;
   drawCropHandles();
   e.preventDefault();
 });
