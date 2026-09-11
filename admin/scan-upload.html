@@ -475,41 +475,24 @@ function buildEnhancedScanBlob(imgEl, points, mimeType){
   var warped = new cv.Mat();
   cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
 
-  // Schiaritura "da scansione": scala di grigi, normalizzazione locale del contrasto/luminosità
-  // (CLAHE) per compensare ombre/luce non uniforme del telefono, poi lieve alzata dei toni
-  // chiari per un fondo pulito quasi bianco. Il colore originale non serve per documenti/testo,
-  // quindi il risultato in bianco e nero è più leggibile e più "da scanner" di una foto a colori.
-  var gray = new cv.Mat();
-  cv.cvtColor(warped, gray, cv.COLOR_RGBA2GRAY);
-
-  /* NOTA: qui esisteva un controllo "ritaglio vuoto" basato sulla deviazione standard dei
-     toni di grigio, rimosso perché fondamentalmente sbagliato: un vero documento con molto
-     sfondo bianco e testo compatto ha spesso una varianza GLOBALE più bassa di una parete con
-     ombre/luce non uniforme — l'euristica bloccava documenti veri e lasciava passare pareti,
-     l'opposto di quello che doveva fare. Il rilevamento bordi (soglia area 35% + controllo
-     rapporto lati in isPlausibleDocumentQuad) resta l'unico filtro automatico. */
-
-  var clahe = new cv.CLAHE(2.5, new cv.Size(8, 8));
-  var claheOut = new cv.Mat();
-  clahe.apply(gray, claheOut);
-
-  // Alza ulteriormente i toni chiari verso il bianco (curva semplice: alpha/beta) mantenendo
-  // il testo scuro leggibile, evitando una binarizzazione dura che romperebbe testo sottile
-  // o timbri/loghi leggeri.
-  var brightened = new cv.Mat();
-  claheOut.convertTo(brightened, -1, 1.18, 18);
-
-  var finalMat = new cv.Mat();
-  cv.cvtColor(brightened, finalMat, cv.COLOR_GRAY2RGBA);
+  /* NOTA IMPORTANTE: qui esistevano due elaborazioni automatiche del tono dell'immagine
+     (CLAHE + alzata artificiale di luminosità/contrasto, e prima ancora un controllo "ritaglio
+     vuoto" basato sulla deviazione standard dei grigi) — ENTRAMBE RIMOSSE perché causa diretta
+     di problemi reali riscontrati: la prima cancellava il testo (lo schiariva fino a farlo
+     sparire su foto già ben illuminate), la seconda bloccava documenti veri scambiandoli per
+     vuoti. Qualsiasi elaborazione automatica del tono è rischiosa perché non posso verificarne
+     l'effetto su condizioni di luce reali (nessuna fotocamera qui per testarla). Ora il
+     documento viene SOLO raddrizzato geometricamente (prospettiva), senza toccare colori,
+     luminosità o contrasto: il risultato è meno "da scanner patinato" ma non perde mai testo,
+     che è la cosa che conta davvero per un documento legale. */
+  var finalMat = warped;
 
   var outCanvas = document.createElement("canvas");
   outCanvas.width = outW;
   outCanvas.height = outH;
   cv.imshow(outCanvas, finalMat);
 
-  src.delete(); warped.delete(); gray.delete(); claheOut.delete();
-  brightened.delete(); finalMat.delete(); srcTri.delete(); dstTri.delete(); M.delete();
-  clahe.delete();
+  src.delete(); warped.delete(); srcTri.delete(); dstTri.delete(); M.delete();
 
   return canvasToBlobSync(outCanvas, outMime);
 }
