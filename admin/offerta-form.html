@@ -326,6 +326,7 @@ input[readonly]{
 .print-doc-body h4{font-size:12.5px;color:#a67f34;margin:20px 0 6px;text-transform:uppercase;letter-spacing:.06em}
 .print-doc-body p{font-size:13px;line-height:1.8;color:#3f321c;margin-bottom:8px}
 .print-doc-body ul{margin:6px 0 6px 20px;color:#3f321c;font-size:13px;line-height:1.8}
+.print-sign-date{font-size:13px;color:#3f321c;margin-top:26px}
 .print-sign-row{display:flex;justify-content:space-between;gap:40px;margin-top:70px}
 .print-sign-col{flex:1;font-size:12.5px;color:#4a3c1f}
 .print-sign-line{border-top:1px solid #4a3c1f;margin-top:46px;padding-top:6px}
@@ -776,6 +777,21 @@ input[readonly]{
       </label>
     </div>
 
+    <div class="section-title">Luogo e data della firma</div>
+    <div class="field">
+      <label for="sign_place">Luogo</label>
+      <input type="text" id="sign_place" placeholder="Es. Milano">
+    </div>
+    <div class="field">
+      <label for="sign_date">Data</label>
+      <input type="date" id="sign_date">
+      <script>
+        /* Precompila con la data odierna per una nuova proposta; se si sta modificando una
+           proposta esistente, il valore viene sovrascritto più avanti dal caricamento dati. */
+        document.getElementById("sign_date").value = new Date().toISOString().slice(0, 10);
+      </script>
+    </div>
+
     <div class="section-title">Firme a schermo</div>
     <div class="section-hint">
       Firma qui direttamente sul dispositivo (dito o penna su tablet/telefono, mouse su
@@ -824,6 +840,7 @@ input[readonly]{
     <div class="print-sub">OFF MARKET · CONSULTING</div>
     <div class="print-doc-title">Proposta Irrevocabile d'Acquisto</div>
     <div class="print-doc-body" id="printDocBody"></div>
+    <div class="print-sign-date" id="printSignDate"></div>
     <div class="print-sign-row">
       <div class="print-sign-col">
         <div class="print-sign-line">Firma del Proponente/Acquirente</div>
@@ -1289,9 +1306,15 @@ function buildPrintableOffer(){
     html += "<h4>Mediazione</h4><p>" + escapeHTML(fieldVal("agency_mediation_note")) + "</p>";
   }
 
-  html += "<h4>Data</h4><p>" + new Date().toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }) + "</p>";
-
   document.getElementById("printDocBody").innerHTML = html;
+
+  /* Luogo e data della firma, mostrati subito sopra le firme (non più una generica "Data"
+     sepolta nel corpo del documento): usa i valori compilati nel form, con la data odierna
+     come ripiego se il campo data è vuoto. */
+  var signPlaceVal = fieldVal("sign_place");
+  var signDateVal = document.getElementById("sign_date").value;
+  var signDateLabel = signDateVal ? new Date(signDateVal + "T00:00:00").toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }) : new Date().toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" });
+  document.getElementById("printSignDate").textContent = "Fatto a " + (signPlaceVal || "________________") + ", il " + signDateLabel;
 
   /* Se le firme sono già state raccolte a schermo, le usa al posto delle righe vuote */
   var buyerSigImgHTML = (buyerSigPad && !buyerSigPad.isEmpty()) ? '<img src="' + buyerSigPad.toDataURL() + '" style="max-height:60px;display:block;margin-bottom:6px">' : "";
@@ -1560,6 +1583,9 @@ async function loadExistingOfferForEdit(offerId){
   setFieldValue("agency_mediation_note", o.agency_mediation_note);
   document.getElementById("privacy_accepted").checked = true;
   setFieldValue("notes", o.notes);
+
+  setFieldValue("sign_place", o.sign_place);
+  document.getElementById("sign_date").value = o.sign_date || "";
 
   if(o.buyer_documents && o.buyer_documents.length){
     var hint = document.getElementById("existingDocsHint");
@@ -1853,6 +1879,8 @@ var sellerSigPad = null;
           (editingOfferOriginal ? editingOfferOriginal.seller_signed_at : null),
 
         agency_mediation_note: document.getElementById("agency_mediation_note").value.trim() || null,
+        sign_place: document.getElementById("sign_place").value.trim() || null,
+        sign_date: document.getElementById("sign_date").value || null,
         privacy_accepted: true,
         privacy_accepted_at: editingOfferOriginal ? editingOfferOriginal.privacy_accepted_at : new Date().toISOString(),
 
