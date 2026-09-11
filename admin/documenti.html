@@ -52,7 +52,12 @@ button, .btn{cursor:pointer;font-family:inherit}
 .msg-box.error{color:#9c2f2f}
 .msg-box.success{color:#4f7f45}
 
-/* ---- Generatore documento (NDA / Incarico): pannello sovrapposto, stampabile isolatamente
+/* ---- Opportunità collegata al cliente: mostrata subito dopo la selezione del cliente ---- */
+.opp-select-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.opp-select-row .field{flex:1;min-width:220px;margin-bottom:0}
+.opp-hint{font-size:11.5px;color:#8f7643;margin-top:8px;line-height:1.5}
+
+/* ---- Generatore documento (NDA / Incarico / Onorario): pannello sovrapposto, stampabile isolatamente
    via @media print che nasconde tutto il resto della pagina. ---- */
 .gen-overlay{display:none;position:fixed;inset:0;background:rgba(74,60,31,.55);z-index:50;padding:30px;overflow-y:auto}
 .gen-overlay.visible{display:block}
@@ -136,6 +141,17 @@ button, .btn{cursor:pointer;font-family:inherit}
     <div class="msg-box" id="clientMsg"></div>
   </div>
 
+  <div class="panel" id="oppPanel" style="display:none">
+    <div class="panel-title">Opportunità collegata</div>
+    <div class="opp-select-row">
+      <div class="field">
+        <label>Immobile / opportunità</label>
+        <select id="oppSelect"><option value="">— Nessuna opportunità collegata a questo cliente —</option></select>
+      </div>
+    </div>
+    <div class="opp-hint" id="oppHint">Ricerco le opportunità collegate a questo cliente (come venditore o come proponente d'acquisto)…</div>
+  </div>
+
   <div class="panel" id="docsPanel" style="display:none">
     <div class="panel-title">Documenti per questo cliente</div>
     <div class="doc-grid">
@@ -159,6 +175,13 @@ button, .btn{cursor:pointer;font-family:inherit}
         <div class="dc-title">Incarico di Mediazione</div>
         <div class="dc-note">Incarico di vendita/mediazione immobiliare, con i dati dell'immobile e le condizioni economiche (esclusiva, durata, provvigione).</div>
         <button type="button" class="btn" id="openIncaricoBtn">Genera Incarico</button>
+      </div>
+
+      <div class="doc-card">
+        <div class="dc-icon">🧾</div>
+        <div class="dc-title">Riconoscimento Onorario di Consulenza</div>
+        <div class="dc-note">Riconoscimento formale dell'onorario di consulenza dovuto a IMMONOVA sull'opportunità collegata. L'importo è normalmente già fissato nel mandato di vendita/ricerca: se quel documento non esiste, qui puoi inserirlo manualmente.</div>
+        <button type="button" class="btn" id="openOnorarioBtn">Genera Riconoscimento</button>
       </div>
 
       <div class="doc-card">
@@ -218,7 +241,8 @@ button, .btn{cursor:pointer;font-family:inherit}
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let selectedClient = null;
-let currentGenType = null; // 'nda' | 'incarico'
+let selectedOpportunity = null; // { id, title, location } oppure null se nessuna collegata
+let currentGenType = null; // 'nda' | 'incarico' | 'onorario'
 
 async function checkAuth(){
   const { data:{ session }, error } = await client.auth.getSession();
@@ -301,16 +325,60 @@ document.getElementById("createClientBtn").addEventListener("click", async funct
 
 function selectClient(inv){
   selectedClient = inv;
+  selectedOpportunity = null;
   document.getElementById("clientSearchBlock").style.display = "none";
   document.getElementById("selectedClientBox").style.display = "flex";
   document.getElementById("scName").textContent = fullName(inv) + (inv.company ? " — " + inv.company : "");
   document.getElementById("scMeta").textContent = [inv.email, inv.pec, inv.phone].filter(Boolean).join(" · ") || "Nessun contatto registrato";
+  document.getElementById("oppPanel").style.display = "block";
   document.getElementById("docsPanel").style.display = "block";
   document.getElementById("historyPanel").style.display = "block";
   document.getElementById("editClientForm").style.display = "none";
   document.getElementById("clientMsg").textContent = "";
+  loadClientOpportunities(inv.id);
   loadClientHistory(inv.id);
 }
+
+/* ================================ Opportunità collegata al cliente ================================
+   Cerca le opportunità legate al cliente sia come venditore (investor_seller_properties) sia come
+   proponente d'acquisto o venditore su un'offerta (opportunity_offers.investor_id /
+   opportunity_offers.seller_investor_id). Se non ne trova nessuna, il menu resta con la sola
+   opzione "nessuna collegata" e i documenti generati useranno solo i dati testuali inseriti a
+   mano — non è un requisito bloccante, è un aiuto quando il collegamento esiste già. */
+async function loadClientOpportunities(investorId){
+  var oppSelect = document.getElementById("oppSelect");
+  var oppHint = document.getElementById("oppHint");
+  oppSelect.innerHTML = '<option value="">— Nessuna opportunità collegata a questo cliente —</option>';
+
+  var sellerRes = await client.from("investor_seller_properties").select("opportunity_id, opportunities(id,title,location)").eq("investor_id", investorId);
+  var offerBuyerRes = await client.from("opportunity_offers").select("opportunity_id, opportunities(id,title,location)").eq("investor_id", investorId);
+  var offerSellerRes = await client.from("opportunity_offers").select("opportunity_id, opportunities(id,title,location)").eq("seller_investor_id", investorId);
+
+  var map = {};
+  [sellerRes, offerBuyerRes, offerSellerRes].forEach(function(res){
+    (res.data || []).forEach(function(r){ if(r.opportunities) map[r.opportunities.id] = r.opportunities; });
+  });
+  var list = Object.values(map);
+
+  list.forEach(function(o){
+    var opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.title + (o.location ? " — " + o.location : "");
+    oppSelect.appendChild(opt);
+  });
+
+  oppHint.textContent = list.length
+    ? "Trovate " + list.length + " opportunità collegate a questo cliente: selezionane una per precompilare il documento, oppure lascia \"nessuna\"."
+    : "Nessuna opportunità risulta collegata a questo cliente su IMMONOVA (né come venditore né come proponente). Se serve, potrai comunque descrivere l'immobile a mano nel documento.";
+}
+
+document.getElementById("oppSelect").addEventListener("change", function(){
+  var id = this.value;
+  if(!id){ selectedOpportunity = null; return; }
+  client.from("opportunities").select("id,title,location,price").eq("id", id).single().then(function(res){
+    selectedOpportunity = res.data || null;
+  });
+});
 
 /* ================================ Modifica anagrafica cliente ================================ */
 document.getElementById("editClientBtn").addEventListener("click", function(){
@@ -357,8 +425,10 @@ document.getElementById("saveClientEditBtn").addEventListener("click", async fun
 
 document.getElementById("changeClientBtn").addEventListener("click", function(){
   selectedClient = null;
+  selectedOpportunity = null;
   document.getElementById("clientSearchBlock").style.display = "block";
   document.getElementById("selectedClientBox").style.display = "none";
+  document.getElementById("oppPanel").style.display = "none";
   document.getElementById("docsPanel").style.display = "none";
   document.getElementById("historyPanel").style.display = "none";
   searchInput.value = ""; resultsList.classList.remove("visible"); resultsList.innerHTML = "";
@@ -375,7 +445,7 @@ async function loadClientHistory(investorId){
   var offerRes = await client.from("opportunity_offers").select("id,created_at,offered_price,status").eq("investor_id", investorId).order("created_at", { ascending:false }).limit(10);
 
   var rows = [];
-  var typeLabels = { nda:"NDA — Accordo di Riservatezza", privacy:"Informativa Privacy", incarico:"Incarico di Mediazione" };
+  var typeLabels = { nda:"NDA — Accordo di Riservatezza", privacy:"Informativa Privacy", incarico:"Incarico di Mediazione", onorario:"Riconoscimento Onorario di Consulenza" };
   (docsRes.data || []).forEach(function(d){
     rows.push({ date:d.created_at, label: typeLabels[d.document_type] || d.document_type, meta: d.sent_via || "" });
   });
@@ -428,7 +498,7 @@ document.getElementById("openPrivacyBtn").addEventListener("click", async functi
   loadClientHistory(selectedClient.id);
 });
 
-/* ================================ Generatore NDA / Incarico ================================ */
+/* ================================ Generatore NDA / Incarico / Onorario ================================ */
 const genOverlay = document.getElementById("genOverlay");
 const genDocTitle = document.getElementById("genDocTitle");
 const genDocBody = document.getElementById("genDocBody");
@@ -502,6 +572,62 @@ function openIncarico(){
 }
 document.getElementById("openIncaricoBtn").addEventListener("click", function(){ if(selectedClient) openIncarico(); });
 
+/* ---- Riconoscimento Onorario di Consulenza ----
+   L'importo va normalmente già fissato nel mandato di vendita/ricerca sottoscritto a monte: qui
+   resta comunque sempre modificabile a mano, per i casi in cui quel mandato non esiste ancora o
+   non riporta un importo. Il documento non sostituisce un mandato né costituisce parcella fiscale:
+   è un riconoscimento firmato dal cliente dei termini economici della consulenza già concordati. */
+function onorarioBodyHTML(f){
+  var immobileText = f.immobileLabel || "—";
+  var importoText = f.importoTipo === "percentuale"
+    ? (f.importoValore ? f.importoValore + "% del prezzo di vendita/acquisto definitivo" : "da definire")
+    : (f.importoValore ? "€ " + Number(f.importoValore).toLocaleString("it-IT") + " (importo fisso)" : "da definire");
+  return '<p>Con il presente documento, <strong>' + escapeHTML(fullName(selectedClient)) + '</strong> (di seguito "il Cliente") riconosce e conferma quanto segue in merito all\'attività di consulenza svolta da <strong>IMMONOVA S.r.l.</strong> (di seguito "IMMONOVA") relativamente all\'opportunità di seguito indicata.</p>'
+    + '<h4>1. Opportunità/immobile di riferimento</h4><p>' + escapeHTML(immobileText) + '</p>'
+    + '<h4>2. Onorario di consulenza riconosciuto</h4><p>' + escapeHTML(importoText) + '.</p>'
+    + '<h4>3. Origine dell\'importo</h4><p>' + (f.daMandato ? 'L\'importo sopra indicato è quello già stabilito nel mandato di vendita/ricerca sottoscritto dal Cliente con IMMONOVA, qui richiamato e confermato.' : 'In assenza, alla data odierna, di un mandato di vendita/ricerca già sottoscritto che fissi tale importo, il Cliente e IMMONOVA concordano e riconoscono qui direttamente i termini economici sopra indicati.') + '</p>'
+    + '<h4>4. Modalità di corresponsione</h4><p>' + escapeHTML(f.modalita || "Da definire tra le parti, salvo diverso accordo scritto successivo.") + '</p>'
+    + (f.note ? '<h4>5. Note aggiuntive</h4><p>' + escapeHTML(f.note) + '</p>' : "");
+}
+
+function openOnorario(){
+  currentGenType = "onorario";
+  var immobileDefault = selectedOpportunity ? (selectedOpportunity.title + (selectedOpportunity.location ? " — " + selectedOpportunity.location : "")) : "";
+
+  genFormFields.innerHTML =
+    '<div class="gen-form-fields"><div class="grid2">' +
+    '<div class="field"><label>Immobile / opportunità</label><input type="text" id="onoImmobile" value="' + escapeHTML(immobileDefault) + '" placeholder="Descrizione immobile se non collegato sopra"></div>' +
+    '<div class="field"><label>Tipo importo</label><select id="onoTipo"><option value="percentuale">Percentuale sul prezzo</option><option value="fisso">Importo fisso (€)</option></select></div>' +
+    '<div class="field"><label>Valore</label><input type="number" id="onoValore" min="0" step="0.01" placeholder="Es. 3 oppure 2500"></div>' +
+    '<div class="field"><label>Origine importo</label><select id="onoOrigine"><option value="manuale">Inserito manualmente (nessun mandato ancora sottoscritto)</option><option value="mandato">Già fissato nel mandato di vendita/ricerca</option></select></div>' +
+    '</div><div class="field"><label>Modalità di corresponsione</label><input type="text" id="onoModalita" placeholder="Es. alla stipula del preliminare, in unica soluzione…"></div>' +
+    '<div class="field"><label>Note aggiuntive</label><input type="text" id="onoNote"></div>' +
+    '<button type="button" class="btn secondary" id="onoRefreshBtn" style="margin-top:6px">Aggiorna anteprima</button></div>';
+
+  function refresh(){
+    var f = {
+      immobileLabel: document.getElementById("onoImmobile").value.trim(),
+      importoTipo: document.getElementById("onoTipo").value,
+      importoValore: document.getElementById("onoValore").value,
+      daMandato: document.getElementById("onoOrigine").value === "mandato",
+      modalita: document.getElementById("onoModalita").value.trim(),
+      note: document.getElementById("onoNote").value.trim()
+    };
+    genDocBody.innerHTML = onorarioBodyHTML(f);
+    return f;
+  }
+  genDocTitle.textContent = "Riconoscimento Onorario di Consulenza";
+  refresh();
+  document.getElementById("onoRefreshBtn").addEventListener("click", refresh);
+  ["onoImmobile","onoTipo","onoValore","onoOrigine","onoModalita","onoNote"].forEach(function(id){
+    document.getElementById(id).addEventListener("change", refresh);
+  });
+  document.getElementById("genSignClient").textContent = fullName(selectedClient);
+  document.getElementById("genSignDate").textContent = todayIt();
+  genOverlay.classList.add("visible");
+}
+document.getElementById("openOnorarioBtn").addEventListener("click", function(){ if(selectedClient) openOnorario(); });
+
 document.getElementById("genCloseBtn").addEventListener("click", function(){ genOverlay.classList.remove("visible"); });
 document.getElementById("genPrintBtn").addEventListener("click", function(){ window.print(); });
 
@@ -517,6 +643,16 @@ document.getElementById("genSaveBtn").addEventListener("click", async function()
       durata: (document.getElementById("incDurata")||{}).value || null,
       provvigione: (document.getElementById("incProvvigione")||{}).value || null,
       note: (document.getElementById("incNote")||{}).value || null
+    };
+  }else if(currentGenType === "onorario"){
+    details = {
+      opportunity_id: selectedOpportunity ? selectedOpportunity.id : null,
+      immobile: (document.getElementById("onoImmobile")||{}).value || null,
+      importo_tipo: (document.getElementById("onoTipo")||{}).value || null,
+      importo_valore: (document.getElementById("onoValore")||{}).value || null,
+      da_mandato: (document.getElementById("onoOrigine")||{}).value === "mandato",
+      modalita: (document.getElementById("onoModalita")||{}).value || null,
+      note: (document.getElementById("onoNote")||{}).value || null
     };
   }
   var snapshot = genDocTitle.textContent + "\n\n" + genDocBody.innerText;
