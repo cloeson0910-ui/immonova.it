@@ -230,16 +230,12 @@ function runAutoDetectAndUpload(imgEl, originalFile){
       try{
         var blob = buildEnhancedScanBlob(imgEl, quad, originalFile.type || "image/jpeg");
         var scanFile = new File([blob], originalFile.name || "scan.jpg", { type: blob.type });
-        // Percorso rapido: rilevamento riuscito, risultato non vuoto — upload diretto, senza
-        // nessuna schermata intermedia, come richiesto.
+        // Percorso rapido: rilevamento riuscito — upload diretto, senza nessuna schermata
+        // intermedia, come richiesto.
         uploadScan(scanFile);
       }catch(e){
-        if(e && e.isEmptyCrop){
-          showManualCropFallback("Il rilevamento automatico non ha inquadrato correttamente il documento: sposta i quattro angoli sul foglio, poi conferma.");
-        }else{
-          console.error("Elaborazione automatica fallita, passo al ritaglio manuale:", e);
-          showManualCropFallback("Trascina i quattro angoli sul documento, poi conferma.");
-        }
+        console.error("Elaborazione automatica fallita, passo al ritaglio manuale:", e);
+        showManualCropFallback("Trascina i quattro angoli sul documento, poi conferma.");
       }
       return;
     }
@@ -440,14 +436,6 @@ cropConfirmBtn.addEventListener("click", function(){
     cropConfirmBtn.disabled = false;
     cropCancelBtn.disabled = false;
 
-    if(e && e.isEmptyCrop){
-      // Il ritaglio scelto risulta vuoto/uniforme (nessun documento reale dentro gli angoli
-      // selezionati): NON si carica nulla, si resta sulla schermata di correzione così
-      // l'utente vede subito il problema e può sistemare gli angoli.
-      cropHint.textContent = "Il ritaglio selezionato sembra vuoto (nessun documento dentro gli angoli scelti). Sposta gli angoli in modo che contengano davvero il documento, poi conferma di nuovo.";
-      return;
-    }
-
     console.error("Elaborazione scansione fallita, carico la foto originale:", e);
     var fallbackFile = cropState.file;
     cropOverlay.hidden = true;
@@ -494,23 +482,12 @@ function buildEnhancedScanBlob(imgEl, points, mimeType){
   var gray = new cv.Mat();
   cv.cvtColor(warped, gray, cv.COLOR_RGBA2GRAY);
 
-  // Controllo di sicurezza contro un ritaglio "vuoto": se il rilevamento automatico (o una
-  // correzione manuale imprecisa) ha catturato solo una superficie uniforme — un muro, un
-  // soffitto, uno sfondo — invece del documento, la deviazione standard dei toni di grigio
-  // qui è bassissima (un vero documento ha sempre bordi/testo che creano forte variazione).
-  // In quel caso NON si procede in automatico: si segnala l'errore e si torna alla schermata
-  // di correzione angoli, così non finisce mai in proposta una scansione vuota senza che
-  // nessuno se ne accorga prima dell'invio.
-  var meanStdDev = new cv.Mat(), stdDevMat = new cv.Mat();
-  cv.meanStdDev(gray, meanStdDev, stdDevMat);
-  var stdDev = stdDevMat.data64F[0];
-  meanStdDev.delete(); stdDevMat.delete();
-  if(stdDev < 12){
-    src.delete(); warped.delete(); gray.delete(); srcTri.delete(); dstTri.delete(); M.delete();
-    var blankErr = new Error("EMPTY_CROP");
-    blankErr.isEmptyCrop = true;
-    throw blankErr;
-  }
+  /* NOTA: qui esisteva un controllo "ritaglio vuoto" basato sulla deviazione standard dei
+     toni di grigio, rimosso perché fondamentalmente sbagliato: un vero documento con molto
+     sfondo bianco e testo compatto ha spesso una varianza GLOBALE più bassa di una parete con
+     ombre/luce non uniforme — l'euristica bloccava documenti veri e lasciava passare pareti,
+     l'opposto di quello che doveva fare. Il rilevamento bordi (soglia area 35% + controllo
+     rapporto lati in isPlausibleDocumentQuad) resta l'unico filtro automatico. */
 
   var clahe = new cv.CLAHE(2.5, new cv.Size(8, 8));
   var claheOut = new cv.Mat();
