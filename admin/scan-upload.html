@@ -31,6 +31,12 @@
   .expired-box{text-align:center;padding:40px 20px;color:#8f7643;font-size:14px;line-height:1.7}
   .footer-note{text-align:center;font-size:11px;color:#a58139;margin-top:26px;letter-spacing:.04em}
 
+  .side-toggle{display:flex;gap:8px;margin-bottom:6px}
+  .side-btn{flex:1;padding:11px 8px;font-size:13px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;border:1px solid rgba(166,127,52,.5);border-radius:2px;background:#fff;color:#8f7643;cursor:pointer}
+  .side-btn.active{background:#a67f34;color:#fffaf0;border-color:#a67f34}
+  .side-missing{font-size:12px;color:#9c2f2f;font-weight:600;margin:2px 0 16px}
+  .side-missing[hidden]{display:none}
+
   /* --- Schermata di ritaglio manuale (overlay a schermo intero) --- */
   .crop-overlay{position:fixed;inset:0;background:#1c1206;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:14px 12px calc(14px + env(safe-area-inset-bottom,0px));overflow-y:auto}
   .crop-overlay[hidden]{display:none}
@@ -63,6 +69,9 @@
   .camera-shutter{width:64px;height:64px;flex:none;border-radius:50%;background:#fffaf0;border:4px solid rgba(166,127,52,.6);cursor:pointer;padding:0}
   .camera-shutter:active{background:#e7d9b8}
   .camera-cancel{padding:12px 18px;border-radius:2px;border:1px solid rgba(231,217,184,.5);background:transparent;color:#e7d9b8;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-weight:600}
+  .rotate-prompt{display:flex;flex-direction:column;align-items:center;gap:10px;color:#fffaf0;font-size:14px;text-align:center;max-width:320px;margin-top:14px;line-height:1.6}
+  .rotate-prompt[hidden]{display:none}
+  .rotate-icon{font-size:34px}
 </style>
 </head>
 <body>
@@ -96,6 +105,15 @@
       </select>
     </div>
 
+    <div id="identitySideField" style="display:none">
+      <label>Lato del documento</label>
+      <div class="side-toggle">
+        <button type="button" class="side-btn" id="sideFrontBtn" data-side="front">Fronte</button>
+        <button type="button" class="side-btn" id="sideBackBtn" data-side="back">Retro</button>
+      </div>
+      <div class="side-missing" id="sideMissingNote" hidden></div>
+    </div>
+
     <button type="button" class="capture-btn" id="captureBtn">📷 Scatta foto documento</button>
     <input type="file" id="fileInput" accept="image/*" capture="environment">
 
@@ -116,7 +134,11 @@
     <video id="cameraVideo" autoplay playsinline muted></video>
     <svg id="cameraGuideSvg"></svg>
   </div>
-  <div class="camera-hint">Inquadra il documento dentro le quattro guide agli angoli, poi scatta.</div>
+  <div class="camera-hint" id="cameraHint">Inquadra il documento dentro le quattro guide agli angoli, poi scatta.</div>
+  <div class="rotate-prompt" id="rotatePrompt" hidden>
+    <div class="rotate-icon">↻ 📱</div>
+    <div>Ruota il telefono in orizzontale per scattare il documento d'identità</div>
+  </div>
   <div class="camera-actions">
     <button type="button" class="camera-cancel" id="cameraCancelBtn">Annulla</button>
     <button type="button" class="camera-shutter" id="cameraShutterBtn" aria-label="Scatta foto"></button>
@@ -160,19 +182,77 @@ var fileInput = document.getElementById("fileInput");
 var statusEl = document.getElementById("status");
 var uploadedList = document.getElementById("uploadedList");
 var mainCard = document.getElementById("mainCard");
+var identitySideField = document.getElementById("identitySideField");
+var sideFrontBtn = document.getElementById("sideFrontBtn");
+var sideBackBtn = document.getElementById("sideBackBtn");
+var sideMissingNote = document.getElementById("sideMissingNote");
 
 var TYPE_LABELS = {};
 Array.prototype.forEach.call(docTypeSelect.options, function(o){ TYPE_LABELS[o.value] = o.textContent; });
 
 if(MODE === "offer"){
   document.querySelector("h1").textContent = "Scansiona proposta firmata";
-  docTypeField.style.display = "none";
   TYPE_LABELS.__offer__ = "Proposta firmata";
+  // Il menu resta visibile anche nel flusso proposta: durante la firma spesso serve scattare
+  // anche i documenti d'identità delle parti, non solo la proposta. "Proposta firmata" resta
+  // la scelta predefinita in cima al menu.
+  var offerOpt = document.createElement("option");
+  offerOpt.value = "__offer__";
+  offerOpt.textContent = "Proposta firmata";
+  docTypeSelect.insertBefore(offerOpt, docTypeSelect.firstChild);
+  docTypeSelect.value = "__offer__";
+}
+
+function isIdentityDocType(t){
+  return t === "owner_identity" || t === "owner_tax_code";
 }
 
 function setStatus(message, type){
   statusEl.textContent = message || "";
   statusEl.className = "status" + (type ? " " + type : "");
+}
+
+// Documenti d'identità (carta d'identità, codice fiscale): richiedono fronte E retro. Tenuto
+// in memoria SOLO per la sessione corrente di questa pagina (si azzera ricaricandola) — non è
+// uno stato salvato sul server, serve solo a ricordare all'utente cosa manca mentre scatta.
+var identitySides = { owner_identity: { front: false, back: false }, owner_tax_code: { front: false, back: false } };
+var selectedSide = "front";
+
+// Chiamata quando cambia il TIPO di documento: sceglie automaticamente il lato mancante.
+function applyIdentityDefaultSide(){
+  var t = docTypeSelect.value;
+  if(!isIdentityDocType(t)) return;
+  var sides = identitySides[t];
+  if(!sides.front) selectedSide = "front";
+  else if(!sides.back) selectedSide = "back";
+  // Se entrambi già fatti, lascia selectedSide com'è (l'utente può comunque ririprendere un lato a mano).
+}
+
+// Ridisegna il pannello fronte/retro in base allo stato attuale, SENZA cambiare selectedSide
+// (quello lo decide solo applyIdentityDefaultSide, al cambio tipo documento, o il tocco
+// esplicito dell'utente su uno dei due pulsanti).
+function refreshIdentityUI(){
+  var t = docTypeSelect.value;
+  if(isIdentityDocType(t)){
+    var sides = identitySides[t];
+    identitySideField.style.display = "block";
+    sideFrontBtn.classList.toggle("active", selectedSide === "front");
+    sideBackBtn.classList.toggle("active", selectedSide === "back");
+    sideFrontBtn.textContent = "Fronte" + (sides.front ? " ✓" : "");
+    sideBackBtn.textContent = "Retro" + (sides.back ? " ✓" : "");
+    if(sides.front && !sides.back){
+      sideMissingNote.hidden = false;
+      sideMissingNote.textContent = "⚠ Manca ancora il RETRO di questo documento.";
+    }else if(!sides.front && sides.back){
+      sideMissingNote.hidden = false;
+      sideMissingNote.textContent = "⚠ Manca ancora il FRONTE di questo documento.";
+    }else{
+      sideMissingNote.hidden = true;
+    }
+  }else{
+    identitySideField.style.display = "none";
+    sideMissingNote.hidden = true;
+  }
 }
 
 if(!TOKEN){
@@ -186,6 +266,12 @@ if(!TOKEN){
     if(!file) return;
     openCropScreen(file);
   });
+
+  docTypeSelect.addEventListener("change", function(){ applyIdentityDefaultSide(); refreshIdentityUI(); });
+  sideFrontBtn.addEventListener("click", function(){ selectedSide = "front"; refreshIdentityUI(); });
+  sideBackBtn.addEventListener("click", function(){ selectedSide = "back"; refreshIdentityUI(); });
+  applyIdentityDefaultSide();
+  refreshIdentityUI();
 }
 
 /* ====================== FOTOCAMERA IN PAGINA CON GUIDE AGLI ANGOLI ======================
@@ -209,16 +295,32 @@ var cameraCancelBtn = document.getElementById("cameraCancelBtn");
 var cameraShutterBtn = document.getElementById("cameraShutterBtn");
 var cameraStream = null;
 
+var rotatePrompt = document.getElementById("rotatePrompt");
+var cameraHint = document.getElementById("cameraHint");
+
+var A4_RATIO = 210 / 297;        // larghezza/altezza foglio A4 (verticale) — le proposte sono sempre su A4
+var ID_CARD_RATIO = 85.6 / 53.98; // larghezza/altezza carta ID-1 (orizzontale) — carta d'identità, codice fiscale
+var guideRectPct = null; // { x0, y0, x1, y1 } in percentuale (0-100), coerente col frame video reale
+
+function requiresLandscapeGuide(){
+  return isIdentityDocType(docTypeSelect.value);
+}
+
+function isPhoneLandscape(){
+  return window.innerWidth > window.innerHeight;
+}
+
 function openCamera(){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     fileInput.click();
     return;
   }
+  var wantLandscape = requiresLandscapeGuide();
   navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: { ideal: "environment" },
-      width: { ideal: 2400 },
-      height: { ideal: 3200 }
+      width: { ideal: wantLandscape ? 3200 : 2400 },
+      height: { ideal: wantLandscape ? 2400 : 3200 }
     },
     audio: false
   })
@@ -227,6 +329,7 @@ function openCamera(){
       cameraVideo.srcObject = stream;
       cameraOverlay.hidden = false;
       cameraVideo.play().catch(function(){});
+      updateOrientationGate();
     })
     .catch(function(e){
       console.error("Fotocamera in pagina non disponibile, uso la fotocamera nativa del telefono:", e);
@@ -234,42 +337,63 @@ function openCamera(){
     });
 }
 
-var A4_RATIO = 210 / 297; // larghezza/altezza foglio A4 — le proposte sono sempre su A4
-var guideRectPct = null; // { x0, y0, x1, y1 } in percentuale (0-100), coerente col frame video reale
+// Per i documenti d'identità (carta ID-1, orizzontale) obbliga l'orientamento orizzontale del
+// telefono prima di permettere lo scatto: senza, l'inquadratura non corrisponderebbe più alla
+// guida disegnata. Non usa la Fullscreen/Screen Orientation API (poco affidabile nei browser
+// mobile in una pagina normale, non installata come app): rileva l'orientamento reale dello
+// schermo e blocca semplicemente il pulsante di scatto finché non è quello giusto.
+function updateOrientationGate(){
+  if(cameraOverlay.hidden) return;
+  var blocked = requiresLandscapeGuide() && !isPhoneLandscape();
+  rotatePrompt.hidden = !blocked;
+  cameraShutterBtn.style.visibility = blocked ? "hidden" : "visible";
+  cameraHint.style.visibility = blocked ? "hidden" : "visible";
+}
+window.addEventListener("resize", updateOrientationGate);
+window.addEventListener("orientationchange", updateOrientationGate);
 
 cameraVideo.addEventListener("loadedmetadata", function(){
   if(cameraVideo.videoWidth && cameraVideo.videoHeight){
     cameraStage.style.aspectRatio = cameraVideo.videoWidth + " / " + cameraVideo.videoHeight;
   }
   drawCameraGuide();
+  updateOrientationGate();
 });
+
+// Adatta un rettangolo con un dato rapporto larghezza/altezza (ratio) al fotogramma reale
+// (vw x vh), centrato, rispettando quanto possibile il margine richiesto. Il viewBox 0-100x0-100
+// con preserveAspectRatio="none" scala x e y in modo indipendente, quindi il calcolo passa
+// sempre per i pixel reali del video, non per percentuali "a occhio".
+function fitRatioRectPct(vw, vh, ratio, marginPct){
+  var realH = vh * (100 - marginPct * 2) / 100;
+  var realW = realH * ratio;
+  var wPct = (realW / vw) * 100;
+  if(wPct <= 100 - marginPct){
+    var xMargin = (100 - wPct) / 2;
+    return { x0: xMargin, y0: marginPct, x1: 100 - xMargin, y1: 100 - marginPct };
+  }
+  var wPct2 = 100 - marginPct * 2;
+  var realW2 = vw * wPct2 / 100;
+  var realH2 = realW2 / ratio;
+  var hPct2 = (realH2 / vh) * 100;
+  var yMargin = (100 - hPct2) / 2;
+  return { x0: marginPct, y0: yMargin, x1: 100 - marginPct, y1: 100 - yMargin };
+}
 
 function computeGuideRectPct(){
   var vw = cameraVideo.videoWidth, vh = cameraVideo.videoHeight;
-  if(!vw || !vh){
-    // Fallback prima che il video abbia dimensioni note: margini generici.
-    return { x0: 8, y0: 12, x1: 92, y1: 88 };
+  if(!vw || !vh) return { x0: 8, y0: 12, x1: 92, y1: 88 };
+  var docType = docTypeSelect.value;
+  if(docType === "__offer__"){
+    // Guida con le vere proporzioni di un foglio A4 (verticale), centrata nel fotogramma.
+    return fitRatioRectPct(vw, vh, A4_RATIO, 6);
   }
-  if(MODE === "offer"){
-    // Guida con le VERE proporzioni di un foglio A4, centrata nel fotogramma. Il calcolo passa
-    // per i pixel reali (non le percentuali) perché il viewBox 0-100x0-100 con
-    // preserveAspectRatio="none" scala x e y in modo indipendente: una percentuale "quadrata"
-    // non è un quadrato reale a meno di convertirla tenendo conto della vera risoluzione video.
-    var marginYPct = 6;
-    var realH = vh * (100 - marginYPct * 2) / 100;
-    var realW = realH * A4_RATIO;
-    var wPct = (realW / vw) * 100;
-    if(wPct > 96){ // il fotogramma è troppo "stretto" per un A4 intero con questo margine verticale: adatta dalla larghezza
-      wPct = 96;
-      realW = vw * (wPct / 100);
-      realH = realW / A4_RATIO;
-      var hPctAdj = (realH / vh) * 100;
-      var yMarginAdj = (100 - hPctAdj) / 2;
-      return { x0: (100 - wPct) / 2, y0: yMarginAdj, x1: 100 - (100 - wPct) / 2, y1: 100 - yMarginAdj };
-    }
-    return { x0: (100 - wPct) / 2, y0: marginYPct, x1: 100 - (100 - wPct) / 2, y1: 100 - marginYPct };
+  if(isIdentityDocType(docType)){
+    // Guida con le vere proporzioni di una carta ID-1 (orizzontale) — valida solo quando il
+    // telefono è già ruotato in orizzontale (vedi updateOrientationGate).
+    return fitRatioRectPct(vw, vh, ID_CARD_RATIO, 10);
   }
-  // Altri documenti (carte d'identità, planimetrie, ecc.): formato variabile, margini generici.
+  // Altri documenti (planimetrie, certificazioni, ecc.): formato variabile, margini generici.
   return { x0: 8, y0: 12, x1: 92, y1: 88 };
 }
 
@@ -277,7 +401,13 @@ function drawCameraGuide(){
   guideRectPct = computeGuideRectPct();
   cameraGuideSvg.setAttribute("viewBox", "0 0 100 100");
   cameraGuideSvg.setAttribute("preserveAspectRatio", "none");
-  var color = MODE === "offer" ? "#e14b3d" : "#fffaf0";
+  var docType = docTypeSelect.value;
+  if(isIdentityDocType(docType)){
+    cameraHint.textContent = "Inquadra il " + (selectedSide === "front" ? "FRONTE" : "RETRO") + " del documento dentro le guide, poi scatta.";
+  }else{
+    cameraHint.textContent = "Inquadra il documento dentro le quattro guide agli angoli, poi scatta.";
+  }
+  var color = (docType === "__offer__" || isIdentityDocType(docType)) ? "#e14b3d" : "#fffaf0";
   var x0 = guideRectPct.x0, y0 = guideRectPct.y0, x1 = guideRectPct.x1, y1 = guideRectPct.y1;
   var arm = 6;
   function corner(x, y, dx, dy){
@@ -300,6 +430,7 @@ cameraCancelBtn.addEventListener("click", closeCamera);
 
 cameraShutterBtn.addEventListener("click", function(){
   if(!cameraVideo.videoWidth || !cameraVideo.videoHeight) return;
+  if(requiresLandscapeGuide() && !isPhoneLandscape()) return; // guardia extra: non scatta finché non è orizzontale
   var canvas = document.createElement("canvas");
   canvas.width = cameraVideo.videoWidth;
   canvas.height = cameraVideo.videoHeight;
@@ -309,7 +440,9 @@ cameraShutterBtn.addEventListener("click", function(){
       setStatus("Scatto non riuscito. Riprova.", "error");
       return;
     }
-    var file = new File([blob], "scan-" + Date.now() + ".jpg", { type: "image/jpeg" });
+    var docType = docTypeSelect.value;
+    var namePrefix = isIdentityDocType(docType) ? (docType + "-" + selectedSide) : "scan";
+    var file = new File([blob], namePrefix + "-" + Date.now() + ".jpg", { type: "image/jpeg" });
     closeCamera();
     openCropScreen(file, true);
   }, "image/jpeg", 0.92);
@@ -358,43 +491,31 @@ function openCropScreen(file, fromGuidedCamera){
   var probe = new Image();
   probe.onload = function(){
     var w = probe.naturalWidth, h = probe.naturalHeight;
-    // Se la foto viene dalla fotocamera in pagina, il quadrilatero iniziale ricalca ESATTAMENTE
-    // le guide già mostrate sul vivo (stessi margini in percentuale) — l'inquadratura è già
-    // stata corretta al momento dello scatto, quindi non serve altro tocco per default.
-    // Se invece la foto arriva dalla fotocamera nativa del telefono (fallback), si usa il
-    // margine generico del 6% come prima e resta il tocco manuale a definire gli angoli.
-    var qx0, qy0, qx1, qy1;
-    if(fromGuidedCamera && guideRectPct){
-      // La foto catturata ha ESATTAMENTE le dimensioni del fotogramma video mostrato con le
-      // guide, quindi lo stesso rettangolo in percentuale (x0/y0/x1/y1) si converte qui in
-      // pixel reali usando w per l'asse x e h per l'asse y — stessa logica di
-      // computeGuideRectPct, così il quadrilatero iniziale ricalca ESATTAMENTE le guide viste.
-      qx0 = Math.round(w * guideRectPct.x0 / 100);
-      qy0 = Math.round(h * guideRectPct.y0 / 100);
-      qx1 = Math.round(w * guideRectPct.x1 / 100);
-      qy1 = Math.round(h * guideRectPct.y1 / 100);
-    }else{
-      var mx = Math.round(w * 0.06), my = Math.round(h * 0.06);
-      qx0 = mx; qy0 = my; qx1 = w - mx; qy1 = h - my;
-    }
+    // IMPORTANTE: la guida mostrata in fotocamera è solo un aiuto per l'INQUADRATURA (far
+    // entrare tutto il documento nel frame, nell'orientamento giusto) — NON è mai il contorno
+    // vero del documento nella foto scattata, perché qualsiasi prospettiva (anche minima, quasi
+    // sempre presente) fa sì che il foglio nell'immagine sia un quadrilatero irregolare, non un
+    // rettangolo con le proporzioni A4/carta d'identità. Usare il rettangolo della guida come
+    // quadrilatero di raddrizzamento tagliava via pezzi veri di documento. Per questo il
+    // quadrilatero iniziale è SEMPRE un margine generico di sicurezza, e l'utente deve sempre
+    // verificare/aggiustare i quattro angoli sui bordi reali prima di confermare — sia che la
+    // foto arrivi dalla fotocamera in pagina sia da quella nativa del telefono.
+    var mx = Math.round(w * 0.06), my = Math.round(h * 0.06);
     cropState = {
       file: file,
       naturalW: w,
       naturalH: h,
       quad: [
-        { x: qx0, y: qy0 },
-        { x: qx1, y: qy0 },
-        { x: qx1, y: qy1 },
-        { x: qx0, y: qy1 }
+        { x: mx, y: my },
+        { x: w - mx, y: my },
+        { x: w - mx, y: h - my },
+        { x: mx, y: h - my }
       ]
     };
     cropImg.src = url;
     cleanBgCheckbox.checked = true;
-    // Se l'inquadratura è già stata guidata in fotocamera, non serve ripetere l'avviso "sposta
-    // i quattro angoli": l'utente può ancora aggiustarli se vuole, ma parte già da un buon
-    // allineamento e non da un rettangolo generico.
-    quadTouched = !!fromGuidedCamera;
-    cropWarn.hidden = !!fromGuidedCamera;
+    quadTouched = false;
+    cropWarn.hidden = false;
     cropOverlay.hidden = false;
     drawCropHandles();
 
@@ -678,12 +799,13 @@ async function uploadScan(file){
   setStatus("Caricamento foto in corso...", "");
 
   var previewUrl = URL.createObjectURL(file);
-  var docType = MODE === "offer" ? "__offer__" : docTypeSelect.value;
+  var docType = docTypeSelect.value;
+  var uploadedSide = isIdentityDocType(docType) ? selectedSide : null;
 
   try{
     var form = new FormData();
     form.append("token", TOKEN);
-    if(MODE !== "offer") form.append("document_type", docType);
+    if(docType !== "__offer__") form.append("document_type", docType);
     form.append("file", file, file.name || "scan.jpg");
 
     var resp = await fetch(SCAN_UPLOAD_ENDPOINT, {
@@ -705,15 +827,29 @@ async function uploadScan(file){
       return;
     }
 
+    var typeLabel = TYPE_LABELS[docType] || docType;
+    if(uploadedSide) typeLabel += " — " + (uploadedSide === "front" ? "fronte" : "retro");
     var row = document.createElement("div");
     row.className = "uploaded-row";
     row.innerHTML =
       '<img src="' + previewUrl + '" alt="">' +
-      '<div class="info"><div class="name">' + (file.name || "scan.jpg") + '</div><div class="type">' + (TYPE_LABELS[docType] || docType) + '</div></div>' +
+      '<div class="info"><div class="name">' + (file.name || "scan.jpg") + '</div><div class="type">' + typeLabel + '</div></div>' +
       '<div class="ok">✓</div>';
     uploadedList.insertBefore(row, uploadedList.firstChild);
 
-    setStatus("Foto caricata: comparirà subito sul computer.", "success");
+    if(uploadedSide){
+      identitySides[docType][uploadedSide] = true;
+      applyIdentityDefaultSide();
+      refreshIdentityUI();
+      var sides = identitySides[docType];
+      if(sides.front && sides.back){
+        setStatus("Fronte e retro caricati: documento completo.", "success");
+      }else{
+        setStatus("Foto caricata. Manca ancora il " + (uploadedSide === "front" ? "RETRO" : "FRONTE") + " di questo documento.", "success");
+      }
+    }else{
+      setStatus("Foto caricata: comparirà subito sul computer.", "success");
+    }
   }catch(e){
     setStatus("Errore di rete durante il caricamento: " + (e.message || e), "error");
   }
