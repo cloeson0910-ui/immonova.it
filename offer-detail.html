@@ -19,6 +19,12 @@ button,.btn{cursor:pointer;font-family:inherit}
 .btn{padding:11px 18px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .btn.secondary{background:transparent;color:#a67f34}
 .badge{padding:6px 14px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid transparent}
+.status-select{padding:6px 10px;font-size:11.5px;border:1px solid rgba(166,127,52,.35);background:#fffdf7;color:#4a3c1f;font-family:inherit;border-radius:2px}
+.status-select:disabled{opacity:.5}
+.status-save-note{font-size:11px;color:#4f7f45}
+.status-save-note.error{color:#9c2f2f}
+.btn.danger{background:#9c2f2f;border-color:#9c2f2f;color:#fff}
+.btn.danger:hover{background:#7f2626}
 .badge-bozza{background:rgba(143,118,67,.15);color:#8f7643;border-color:rgba(143,118,67,.3)}
 .badge-inviata{background:rgba(166,127,52,.15);color:#a67f34;border-color:rgba(166,127,52,.35)}
 .badge-accettata{background:rgba(81,122,79,.15);color:#4f7f45;border-color:rgba(81,122,79,.35)}
@@ -97,10 +103,13 @@ input[type=file].hidden-input{display:none}
 <div class="container">
   <div class="top-actions" id="topActions" style="display:none">
     <span class="badge" id="statusBadge"></span>
+    <select id="statusSelect" class="status-select"></select>
+    <span id="statusSaveNote" class="status-save-note"></span>
     <div style="display:flex;gap:10px">
       <a href="#" class="btn secondary" id="editBtn">Modifica proposta</a>
       <button type="button" class="btn" id="generatePdfBtn">Genera PDF (con link)</button>
       <button type="button" class="btn secondary" id="printBtn">Stampa dal browser</button>
+      <button type="button" class="btn danger" id="deleteOfferBtn" style="display:none">Elimina proposta</button>
     </div>
   </div>
 
@@ -114,9 +123,11 @@ input[type=file].hidden-input{display:none}
       <input type="file" id="signedPcInput" class="hidden-input" accept="image/*,.pdf" multiple>
       <button type="button" class="btn secondary" id="openSignedScanBtn">📱 Scansiona da smartphone</button>
       <button type="button" class="btn" id="sendToSellerBtn">Invia al venditore</button>
+      <button type="button" class="btn secondary" id="sendToBuyerBtn">Invia al proponente</button>
     </div>
     <div id="signedList" class="signed-list"><div class="signed-empty">Nessun documento caricato.</div></div>
     <div id="sellerStatus" class="seller-status"></div>
+    <div id="buyerStatus" class="seller-status"></div>
   </div>
 
   <div id="scanModalOverlay" class="scan-modal-overlay" hidden>
@@ -165,16 +176,67 @@ var STATUS_LABELS = {
 };
 var DECL_VALUE_LABELS = { si:"Sì", no:"No", da_verificare:"Da verificare" };
 
+/* Cambio stato manuale: prima non esisteva nessun controllo per farlo, lo stato restava
+   sempre quello impostato alla creazione (di norma "bozza") finché non veniva cambiato da
+   un automatismo (es. firma del cliente dal link condiviso). Qui l'agente puo' forzarlo in
+   qualunque momento, per qualunque motivo (accordo verbale, telefonata, ecc.). */
+function renderStatusSelect(currentStatus){
+  var select = document.getElementById("statusSelect");
+  select.innerHTML = Object.keys(STATUS_LABELS).map(function(key){
+    return '<option value="' + key + '"' + (key === currentStatus ? " selected" : "") + '>' + escapeHTML(STATUS_LABELS[key]) + '</option>';
+  }).join("");
+}
+
+document.getElementById("statusSelect").addEventListener("change", async function(){
+  var select = this;
+  var noteEl = document.getElementById("statusSaveNote");
+  var newStatus = select.value;
+  var previousStatus = (currentOfferData && currentOfferData.status) || "bozza";
+  if(newStatus === previousStatus) return;
+
+  select.disabled = true;
+  noteEl.className = "status-save-note";
+  noteEl.textContent = "Salvataggio...";
+
+  var updateRes = await client.from("opportunity_offers").update({ status: newStatus }).eq("id", currentOfferId);
+  select.disabled = false;
+
+  if(updateRes.error){
+    noteEl.className = "status-save-note error";
+    noteEl.textContent = "Errore: " + updateRes.error.message;
+    select.value = previousStatus; // ripristina la selezione, l'update non è andato a buon fine
+    return;
+  }
+
+  currentOfferData.status = newStatus;
+  var badge = document.getElementById("statusBadge");
+  badge.className = "badge badge-" + newStatus;
+  badge.textContent = STATUS_LABELS[newStatus] || newStatus;
+  noteEl.className = "status-save-note";
+  noteEl.textContent = "Stato aggiornato ✓";
+  autoLogTimeline("Stato proposta cambiato manualmente", STATUS_LABELS[newStatus] || newStatus);
+  setTimeout(function(){ noteEl.textContent = ""; }, 2500);
+});
+
 function escapeHTML(v){ return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
 function fmtDate(d){ if(!d) return ""; try{ return new Date(d).toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}); }catch(e){ return d; } }
 function fmtPrice(p){ if(p == null || p === "") return ""; return "€ " + Number(p).toLocaleString("it-IT"); }
 function fullName(first, last){ return [first, last].filter(Boolean).join(" ") || "—"; }
+
+// Tasto "Elimina proposta": mostrato SOLO per questo account, richiesto esplicitamente
+// per non lasciare in giro le proposte di prova durante i test — non deve comparire per
+// gli altri collaboratori che usano lo stesso pannello.
+var DELETE_BUTTON_ALLOWED_EMAIL = "claudio.romano@bluewin.ch";
 
 async function checkAuth(){
   var result = await client.auth.getSession();
   if(result.error || !result.data.session){
     window.location.href = "login.html";
     return false;
+  }
+  var email = (result.data.session.user && result.data.session.user.email) || "";
+  if(email.toLowerCase() === DELETE_BUTTON_ALLOWED_EMAIL){
+    document.getElementById("deleteOfferBtn").style.display = "inline-block";
   }
   return true;
 }
@@ -276,6 +338,7 @@ async function loadOffer(){
   var badge = document.getElementById("statusBadge");
   badge.className = "badge badge-" + (o.status || "bozza");
   badge.textContent = STATUS_LABELS[o.status] || o.status || "";
+  renderStatusSelect(o.status || "bozza");
 
   var isCounter = o.offer_kind === "controfferta";
   document.getElementById("docTitle").textContent = isCounter ? "Proposta di Controfferta" : "Proposta Irrevocabile d'Acquisto";
@@ -358,6 +421,7 @@ var scanSessionToken = null;
 var scanSessionExpiresAt = null;
 var scanRealtimeChannel = null;
 var scanCountdownInterval = null;
+var scanPollInterval = null;
 var scanSeenDocCount = 0;
 
 function cleanFileName(name){
@@ -371,16 +435,55 @@ function renderSignedDocuments(list){
     box.innerHTML = '<div class="signed-empty">Nessun documento caricato.</div>';
     return;
   }
-  box.innerHTML = list.map(function(d){
+  box.innerHTML = list.map(function(d, i){
     var isImg = /\.(jpe?g|png|gif|webp)$/i.test(d.file_name || "") || /image\//.test(d.mime_type || "");
     var thumb = isImg ? '<img src="' + escapeHTML(d.file_url) + '" alt="">' : '<div style="width:40px;height:40px;border-radius:3px;background:#efe6d2;flex:none;display:flex;align-items:center;justify-content:center;font-size:16px">📄</div>';
     var sourceLabel = d.source === "scan" ? "Scansionato da smartphone" : "Caricato da PC";
     return '<div class="signed-row">' + thumb +
       '<div class="info">' + escapeHTML(d.file_name || "documento") +
       '<div class="meta">' + sourceLabel + (d.uploaded_at ? " — " + escapeHTML(fmtDate(d.uploaded_at)) : "") + '</div></div>' +
-      '<a class="open" href="' + escapeHTML(d.file_url) + '" target="_blank" rel="noopener">Apri</a></div>';
+      '<a class="open" href="' + escapeHTML(d.file_url) + '" target="_blank" rel="noopener">Apri</a>' +
+      '<a class="open" href="#" style="color:#9c2f2f" data-remove-signed-doc="' + i + '">Elimina</a></div>';
   }).join("");
 }
+
+async function removeSignedDocument(index){
+  var list = (currentOfferData && currentOfferData.signed_documents) || [];
+  var doc = list[index];
+  if(!doc) return;
+  var ok = confirm("Eliminare \"" + (doc.file_name || "questo documento") + "\" dalla proposta firmata?");
+  if(!ok) return;
+
+  var newList = list.slice(0, index).concat(list.slice(index + 1));
+  var updateRes = await client.from("opportunity_offers").update({ signed_documents: newList }).eq("id", currentOfferId);
+  if(updateRes.error){
+    console.error(updateRes.error);
+    var statusEl = document.getElementById("sellerStatus");
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Errore eliminazione: " + updateRes.error.message;
+    return;
+  }
+
+  try{
+    var marker = "/offer-documents/";
+    var idx = (doc.file_url || "").indexOf(marker);
+    if(idx !== -1){
+      var storagePath = doc.file_url.slice(idx + marker.length).split("?")[0];
+      await client.storage.from("offer-documents").remove([decodeURIComponent(storagePath)]);
+    }
+  }catch(e){ console.error("Rimozione file da storage non riuscita (riga eliminata comunque):", e); }
+
+  currentOfferData.signed_documents = newList;
+  renderSignedDocuments(newList);
+  autoLogTimeline("Documento rimosso dalla proposta firmata", doc.file_name || null);
+}
+
+document.getElementById("signedList").addEventListener("click", function(e){
+  var target = e.target.closest("[data-remove-signed-doc]");
+  if(!target) return;
+  e.preventDefault();
+  removeSignedDocument(parseInt(target.getAttribute("data-remove-signed-doc"), 10));
+});
 
 function updateSellerStatus(o){
   var el = document.getElementById("sellerStatus");
@@ -520,6 +623,19 @@ async function openScanModal(){
 
   startScanCountdown();
   subscribeScanRealtime();
+  startScanPolling();
+}
+
+/* Riserva oltre al tempo reale: se per qualsiasi motivo Realtime non fosse attivo (es.
+   pubblicazione non configurata sul progetto), questo controllo periodico garantisce comunque
+   che una foto caricata dal telefono compaia sul PC entro pochi secondi. */
+function startScanPolling(){
+  if(scanPollInterval) clearInterval(scanPollInterval);
+  scanPollInterval = setInterval(async function(){
+    if(!currentOfferId) return;
+    var res = await client.from("opportunity_offers").select("signed_documents").eq("id", currentOfferId).single();
+    if(!res.error && res.data) handleOfferRealtimeUpdate(res.data);
+  }, 3000);
 }
 
 function startScanCountdown(){
@@ -577,6 +693,7 @@ function handleOfferRealtimeUpdate(row){
 async function closeScanModal(){
   document.getElementById("scanModalOverlay").hidden = true;
   if(scanCountdownInterval){ clearInterval(scanCountdownInterval); scanCountdownInterval = null; }
+  if(scanPollInterval){ clearInterval(scanPollInterval); scanPollInterval = null; }
   if(scanRealtimeChannel){ client.removeChannel(scanRealtimeChannel); scanRealtimeChannel = null; }
   if(scanSessionToken){
     try{ await client.from("scan_sessions").update({status:"closed"}).eq("token", scanSessionToken); }catch(e){}
@@ -638,6 +755,47 @@ document.getElementById("sendToSellerBtn").addEventListener("click", async funct
 
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
 
+document.getElementById("deleteOfferBtn").addEventListener("click", async function(){
+  if(!currentOfferId) return;
+  var propertyLabel = currentPropertyTitle || ("Immobile #" + (currentOfferData ? currentOfferData.opportunity_id : ""));
+  var ok = confirm("Eliminare definitivamente questa proposta (" + propertyLabel + ")? Verranno rimossi anche il PDF e i documenti firmati caricati. L'operazione non è reversibile.");
+  if(!ok) return;
+
+  var btn = this;
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.textContent = "Eliminazione in corso...";
+
+  // Pulizia file su storage: best effort, un fallimento qui non deve impedire la
+  // cancellazione della riga (che è la parte che conta davvero per il test).
+  try{
+    var pdfList = await client.storage.from("offer-documents").list("pdf/" + currentOfferId);
+    if(pdfList.data && pdfList.data.length){
+      await client.storage.from("offer-documents").remove(pdfList.data.map(function(f){ return "pdf/" + currentOfferId + "/" + f.name; }));
+    }
+  }catch(e){ console.error("Pulizia PDF non riuscita:", e); }
+  try{
+    var signedList = await client.storage.from("offer-documents").list("signed/" + currentOfferId);
+    if(signedList.data && signedList.data.length){
+      await client.storage.from("offer-documents").remove(signedList.data.map(function(f){ return "signed/" + currentOfferId + "/" + f.name; }));
+    }
+  }catch(e){ console.error("Pulizia documenti firmati non riuscita:", e); }
+
+  var deleteRes = await client.from("opportunity_offers").delete().eq("id", currentOfferId);
+  if(deleteRes.error){
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    alert("Errore nell'eliminazione: " + deleteRes.error.message);
+    return;
+  }
+
+  // Nota: la pagina statica share/offer-<id>.html eventualmente generata su GitHub (link
+  // condiviso) NON viene rimossa da qui — questa pagina non ha accesso al GITHUB_TOKEN.
+  // Resta online ma innocua (nessuna riga collegata da mostrare); va tolta a mano dal
+  // repository se proprio non la si vuole più vedere in giro.
+  window.location.href = "opportunities-pipeline.html";
+});
+
 /* ================================ Generazione PDF reale ================================
    PRIMA versione usava jsPDF + html2canvas (screenshot del DOM): produceva testo con
    spaziature rotte (difetto noto di quella tecnica coi web font) e l'header si sovrapponeva
@@ -650,6 +808,10 @@ var currentOfferData = null;
 var currentPropertyTitle = "";
 var currentPropertyAddress = "";
 var currentIsCounter = false;
+// Ultimo link di condivisione generato (PDF diretto o pagina GitHub con anteprima), cosi'
+// "Invia al proponente" può riusarlo senza rigenerare tutto se è già stato creato.
+var currentPdfPublicUrl = null;
+var currentShareUrl = null;
 
 var PDF_MARGIN_LEFT = 48;
 var PDF_MARGIN_RIGHT = 48;
@@ -851,16 +1013,37 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
 
   /* Blocco firme: tenuto insieme sulla stessa pagina, con le immagini delle firme già
      raccolte (se presenti) incollate come immagine reale nel PDF, non come screenshot. */
-  var signBlockHeight = 110;
+  var signBlockHeight = 130;
   ensureSpace(signBlockHeight);
   y += 20;
+
+  /* Luogo e data della firma: ORA per-colonna, non più un'unica riga condivisa in alto.
+     Acquirente e venditore possono firmare in momenti/luoghi diversi (es. da smartphone
+     tramite link, in giorni diversi) — mostrare un solo "Fatto a X, il Y" per entrambi era
+     sbagliato (es. mostrava la data di creazione della proposta invece della data vera
+     scritta da chi firma). Ogni firmatario ha il proprio luogo/data (buyer_/seller_signer_place
+     + buyer_/seller_signed_at); si ripiega sul campo unico sign_place/sign_date SOLO per un
+     firmatario che non ha ancora questi campi propri (firma raccolta a mano dal PC admin,
+     percorso più vecchio senza luogo/data separati per persona). */
   var colWidth = (contentWidth - 30) / 2;
   var col1X = PDF_MARGIN_LEFT;
   var col2X = PDF_MARGIN_LEFT + colWidth + 30;
+  var placeLineY = y;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor.apply(doc, PDF_TEXT);
+  y += 14;
   var sigImgH = 46;
   var lineY = y + sigImgH + 6;
 
-  function drawSignature(dataUrl, x, label, signedAt){
+  function drawSignature(dataUrl, x, label, signedAt, signerPlace){
+    var placeText = signerPlace || o.sign_place || "________________";
+    var dateText = signedAt ? fmtDate(signedAt) : (o.sign_date ? fmtDate(o.sign_date) : "___________");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor.apply(doc, PDF_TEXT);
+    doc.text("Fatto a " + placeText + ", il " + dateText, x, placeLineY);
+
     if(dataUrl){
       try{
         var imgProps = doc.getImageProperties(dataUrl);
@@ -878,8 +1061,8 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
     doc.text(label + (signedAt ? " — " + fmtDate(signedAt) : ""), x, lineY + 12);
   }
 
-  drawSignature(o.buyer_signature_data_url, col1X, "Firma del Proponente/Acquirente", o.buyer_signed_at);
-  drawSignature(o.seller_signature_data_url, col2X, "Firma del Venditore/Proprietario (per accettazione)", o.seller_signed_at);
+  drawSignature(o.buyer_signature_data_url, col1X, "Firma del Proponente/Acquirente", o.buyer_signed_at, o.buyer_signer_place);
+  drawSignature(o.seller_signature_data_url, col2X, "Firma del Venditore/Proprietario (per accettazione)", o.seller_signed_at, o.seller_signer_place);
 
   var pageCount = doc.internal.getNumberOfPages();
   for(var i = 1; i <= pageCount; i++){
@@ -891,26 +1074,28 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
   return doc;
 }
 
-document.getElementById("generatePdfBtn").addEventListener("click", async function(){
-  var btn = document.getElementById("generatePdfBtn");
+// Estratta dal click handler di "Genera PDF (con link)" cosi' anche "Invia al proponente"
+// può generare/riusare lo stesso PDF+link senza duplicare tutta la logica. Ritorna
+// { publicUrl, shareUrl } quando riesce, null se fallisce (l'errore è già mostrato nel box).
+// awaitPublish=true fa aspettare la pubblicazione reale su GitHub Pages prima di risolvere
+// (serve a chi deve mandare subito il link per email/WhatsApp), invece di limitarsi a
+// mostrare "Pubblicazione in corso..." nell'interfaccia come fa il pulsante da solo.
+async function generatePdfAndShareLink(awaitPublish){
   var linkBox = document.getElementById("pdfLinkBox");
 
   if(!currentOfferId || !currentOfferData){
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Nessuna proposta caricata da esportare.";
-    return;
+    return null;
   }
   if(typeof window.jspdf === "undefined"){
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Libreria di generazione PDF non caricata (controlla la connessione) — riprova.";
-    return;
+    return null;
   }
 
-  btn.disabled = true;
-  var originalLabel = btn.textContent;
-  btn.textContent = "Generazione PDF in corso...";
   linkBox.className = "pdf-link-box";
   linkBox.textContent = "";
 
@@ -956,7 +1141,7 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
       var shareTitle = (currentIsCounter ? "Controfferta" : "Proposta d'Acquisto") +
         (currentPropertyTitle ? " - " + currentPropertyTitle : "");
       var shareFnResult = await client.functions.invoke("share-offer", {
-        body: { offerId: currentOfferId, title: shareTitle, pdfUrl: publicUrl }
+        body: { offerId: currentOfferId, title: shareTitle, pdfUrl: publicUrl, token: currentOfferData.share_token }
       });
       if(!shareFnResult.error && shareFnResult.data && shareFnResult.data.url){
         shareUrl = shareFnResult.data.url;
@@ -996,43 +1181,136 @@ document.getElementById("generatePdfBtn").addEventListener("click", async functi
       });
     }
 
+    async function waitUntilShareLinkIsLive(){
+      var attempts = 0;
+      var maxAttempts = 40; // ~ fino a 2 minuti (40 tentativi x 3s)
+      while(attempts < maxAttempts){
+        attempts++;
+        try{
+          var checkResp = await fetch(shareUrl, { method: "GET", cache: "no-store" });
+          if(checkResp.ok) return true;
+        }catch(checkErr){
+          // rete/CORS momentanei durante la propagazione: si continua a riprovare
+        }
+        await new Promise(function(resolve){ setTimeout(resolve, 3000); });
+      }
+      return false; // oltre il timeout: si procede comunque, l'utente può riprovare da solo
+    }
+
     if(!shareIsFreshGithubLink){
       // Nessuna pubblicazione da attendere: è già il link diretto al PDF, disponibile subito.
+      renderShareLinkReady();
+    }else if(awaitPublish){
+      // Chi ha chiamato questa funzione deve mandare subito il link (email/WhatsApp al
+      // proponente): si aspetta davvero che GitHub Pages lo pubblichi prima di continuare,
+      // invece di limitarsi a mostrarlo "in corso" nell'interfaccia.
+      shareSlot.textContent = "Pubblicazione in corso...";
+      await waitUntilShareLinkIsLive();
       renderShareLinkReady();
     }else{
       // Il link punta a un file appena scritto su GitHub: GitHub Pages impiega qualche istante
       // a pubblicarlo dopo il commit. Il link resta nascosto (non copiabile/apribile) finché
       // non risulta davvero raggiungibile — nessun avviso, solo un controllo automatico.
       shareSlot.textContent = "Pubblicazione in corso...";
-      (async function waitUntilShareLinkIsLive(){
-        var attempts = 0;
-        var maxAttempts = 40; // ~ fino a 2 minuti (40 tentativi x 3s)
-        while(attempts < maxAttempts){
-          attempts++;
-          try{
-            var checkResp = await fetch(shareUrl, { method: "GET", cache: "no-store" });
-            if(checkResp.ok){
-              renderShareLinkReady();
-              return;
-            }
-          }catch(checkErr){
-            // rete/CORS momentanei durante la propagazione: si continua a riprovare
-          }
-          await new Promise(function(resolve){ setTimeout(resolve, 3000); });
-        }
-        // Oltre il timeout: si mostra comunque il link (l'utente può riprovare da solo),
-        // invece di lasciare la scritta "Pubblicazione in corso..." per sempre.
-        renderShareLinkReady();
-      })();
+      waitUntilShareLinkIsLive().then(renderShareLinkReady);
     }
+
+    currentPdfPublicUrl = publicUrl;
+    currentShareUrl = shareUrl;
+    return { publicUrl: publicUrl, shareUrl: shareUrl };
   }catch(err){
     console.error(err);
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#9c2f2f";
     linkBox.textContent = "Errore nella generazione del PDF: " + (err && err.message ? err.message : String(err));
+    return null;
+  }
+}
+
+document.getElementById("generatePdfBtn").addEventListener("click", async function(){
+  var btn = document.getElementById("generatePdfBtn");
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.textContent = "Generazione PDF in corso...";
+  try{
+    await generatePdfAndShareLink(false);
   }finally{
     btn.disabled = false;
     btn.textContent = originalLabel;
+  }
+});
+
+function normalizeItalianPhoneForWhatsapp(raw){
+  var digits = String(raw || "").replace(/[^\d]/g, "");
+  if(!digits) return null;
+  if(digits.charAt(0) === "0") digits = digits.substring(1); // eventuale 0 iniziale da fisso/errore
+  if(digits.length <= 10 && digits.indexOf("39") !== 0) digits = "39" + digits;
+  return digits;
+}
+
+document.getElementById("sendToBuyerBtn").addEventListener("click", async function(){
+  var btn = this;
+  var statusEl = document.getElementById("buyerStatus");
+  if(!currentOfferId || !currentOfferData){
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Proposta non ancora caricata.";
+    return;
+  }
+  if(!currentOfferData.buyer_email){
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Nessuna email del proponente compilata su questa proposta: inseriscila nel form prima di inviare.";
+    return;
+  }
+  var ok = confirm("Inviare al proponente il link per firmare/scaricare la proposta (email" + (currentOfferData.buyer_phone ? " + WhatsApp" : ", nessun numero di telefono compilato per WhatsApp") + ")?");
+  if(!ok) return;
+
+  btn.disabled = true;
+  statusEl.className = "seller-status";
+  statusEl.textContent = "Preparazione link in corso...";
+
+  try{
+    var linkResult = currentShareUrl ? { shareUrl: currentShareUrl } : await generatePdfAndShareLink(true);
+    if(!linkResult || !linkResult.shareUrl){
+      statusEl.className = "seller-status error";
+      statusEl.textContent = "Impossibile generare il link della proposta.";
+      return;
+    }
+    var shareUrlToSend = linkResult.shareUrl;
+
+    statusEl.textContent = "Invio email in corso...";
+    var res = await client.functions.invoke("send-offer-to-buyer", { body: { offer_id: currentOfferId, share_url: shareUrlToSend } });
+    var data = res.data;
+    if(res.error || !data || !data.success){
+      var errMsg = (data && data.error) || (res.error && res.error.message) || "operazione non riuscita";
+      statusEl.className = "seller-status error";
+      statusEl.textContent = "Errore invio email: " + errMsg;
+      return;
+    }
+
+    currentOfferData.sent_to_buyer_at = new Date().toISOString();
+    currentOfferData.buyer_notified_count = (currentOfferData.buyer_notified_count || 0) + 1;
+    autoLogTimeline("Link proposta inviato al proponente via email" + (currentOfferData.buyer_phone ? " e WhatsApp" : ""));
+
+    // WhatsApp: nessuna API a pagamento, si apre semplicemente wa.me con il link già scritto
+    // nel testo — l'admin preme solo "Invia" dentro WhatsApp Web/app, stesso numero salvato
+    // sulla proposta (buyer_phone). Se manca il numero, si manda solo l'email.
+    if(currentOfferData.buyer_phone){
+      var waPhone = normalizeItalianPhoneForWhatsapp(currentOfferData.buyer_phone);
+      if(waPhone){
+        var buyerFullName = [currentOfferData.buyer_first_name, currentOfferData.buyer_last_name].filter(Boolean).join(" ");
+        var waText = "Gentile " + (buyerFullName || "Cliente") + ", ecco il link per consultare/firmare la Sua proposta IMMONOVA: " + shareUrlToSend;
+        window.open("https://wa.me/" + waPhone + "?text=" + encodeURIComponent(waText), "_blank");
+      }
+    }
+
+    statusEl.className = "seller-status";
+    statusEl.textContent = "Link inviato al proponente via email" + (currentOfferData.buyer_phone ? " — si apre ora WhatsApp per l'invio del messaggio." : ".");
+  }catch(err){
+    console.error(err);
+    statusEl.className = "seller-status error";
+    statusEl.textContent = "Errore invio: " + (err && err.message ? err.message : "operazione non riuscita");
+  }finally{
+    btn.disabled = false;
   }
 });
 
