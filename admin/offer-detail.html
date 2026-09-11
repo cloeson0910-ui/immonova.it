@@ -23,6 +23,8 @@ button,.btn{cursor:pointer;font-family:inherit}
 .status-select:disabled{opacity:.5}
 .status-save-note{font-size:11px;color:#4f7f45}
 .status-save-note.error{color:#9c2f2f}
+.btn.danger{background:#9c2f2f;border-color:#9c2f2f;color:#fff}
+.btn.danger:hover{background:#7f2626}
 .badge-bozza{background:rgba(143,118,67,.15);color:#8f7643;border-color:rgba(143,118,67,.3)}
 .badge-inviata{background:rgba(166,127,52,.15);color:#a67f34;border-color:rgba(166,127,52,.35)}
 .badge-accettata{background:rgba(81,122,79,.15);color:#4f7f45;border-color:rgba(81,122,79,.35)}
@@ -107,6 +109,7 @@ input[type=file].hidden-input{display:none}
       <a href="#" class="btn secondary" id="editBtn">Modifica proposta</a>
       <button type="button" class="btn" id="generatePdfBtn">Genera PDF (con link)</button>
       <button type="button" class="btn secondary" id="printBtn">Stampa dal browser</button>
+      <button type="button" class="btn danger" id="deleteOfferBtn" style="display:none">Elimina proposta</button>
     </div>
   </div>
 
@@ -218,11 +221,20 @@ function fmtDate(d){ if(!d) return ""; try{ return new Date(d).toLocaleDateStrin
 function fmtPrice(p){ if(p == null || p === "") return ""; return "€ " + Number(p).toLocaleString("it-IT"); }
 function fullName(first, last){ return [first, last].filter(Boolean).join(" ") || "—"; }
 
+// Tasto "Elimina proposta": mostrato SOLO per questo account, richiesto esplicitamente
+// per non lasciare in giro le proposte di prova durante i test — non deve comparire per
+// gli altri collaboratori che usano lo stesso pannello.
+var DELETE_BUTTON_ALLOWED_EMAIL = "cloeson0910@gmail.com";
+
 async function checkAuth(){
   var result = await client.auth.getSession();
   if(result.error || !result.data.session){
     window.location.href = "login.html";
     return false;
+  }
+  var email = (result.data.session.user && result.data.session.user.email) || "";
+  if(email.toLowerCase() === DELETE_BUTTON_ALLOWED_EMAIL){
+    document.getElementById("deleteOfferBtn").style.display = "inline-block";
   }
   return true;
 }
@@ -740,6 +752,47 @@ document.getElementById("sendToSellerBtn").addEventListener("click", async funct
 });
 
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
+
+document.getElementById("deleteOfferBtn").addEventListener("click", async function(){
+  if(!currentOfferId) return;
+  var propertyLabel = currentPropertyTitle || ("Immobile #" + (currentOfferData ? currentOfferData.opportunity_id : ""));
+  var ok = confirm("Eliminare definitivamente questa proposta (" + propertyLabel + ")? Verranno rimossi anche il PDF e i documenti firmati caricati. L'operazione non è reversibile.");
+  if(!ok) return;
+
+  var btn = this;
+  btn.disabled = true;
+  var originalLabel = btn.textContent;
+  btn.textContent = "Eliminazione in corso...";
+
+  // Pulizia file su storage: best effort, un fallimento qui non deve impedire la
+  // cancellazione della riga (che è la parte che conta davvero per il test).
+  try{
+    var pdfList = await client.storage.from("offer-documents").list("pdf/" + currentOfferId);
+    if(pdfList.data && pdfList.data.length){
+      await client.storage.from("offer-documents").remove(pdfList.data.map(function(f){ return "pdf/" + currentOfferId + "/" + f.name; }));
+    }
+  }catch(e){ console.error("Pulizia PDF non riuscita:", e); }
+  try{
+    var signedList = await client.storage.from("offer-documents").list("signed/" + currentOfferId);
+    if(signedList.data && signedList.data.length){
+      await client.storage.from("offer-documents").remove(signedList.data.map(function(f){ return "signed/" + currentOfferId + "/" + f.name; }));
+    }
+  }catch(e){ console.error("Pulizia documenti firmati non riuscita:", e); }
+
+  var deleteRes = await client.from("opportunity_offers").delete().eq("id", currentOfferId);
+  if(deleteRes.error){
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    alert("Errore nell'eliminazione: " + deleteRes.error.message);
+    return;
+  }
+
+  // Nota: la pagina statica share/offer-<id>.html eventualmente generata su GitHub (link
+  // condiviso) NON viene rimossa da qui — questa pagina non ha accesso al GITHUB_TOKEN.
+  // Resta online ma innocua (nessuna riga collegata da mostrare); va tolta a mano dal
+  // repository se proprio non la si vuole più vedere in giro.
+  window.location.href = "opportunities-pipeline.html";
+});
 
 /* ================================ Generazione PDF reale ================================
    PRIMA versione usava jsPDF + html2canvas (screenshot del DOM): produceva testo con
