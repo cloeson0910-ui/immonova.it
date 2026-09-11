@@ -39,13 +39,15 @@
   .crop-stage img{width:100%;display:block;pointer-events:none;user-select:none}
   .crop-stage svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
   .crop-handle{fill:#a67f34;stroke:#fffaf0;stroke-width:2;cursor:grab;touch-action:none}
+  .crop-loupe{position:absolute;width:132px;height:132px;border-radius:50%;border:3px solid #fffaf0;box-shadow:0 2px 10px rgba(0,0,0,.5);overflow:hidden;pointer-events:none;z-index:5;background:#000;display:none}
+  .crop-loupe canvas{width:100%;height:100%;display:block}
   .crop-clean-option{display:flex;align-items:center;gap:8px;width:100%;max-width:480px;margin-top:14px;padding:12px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(166,127,52,.4);border-radius:2px}
   .crop-clean-option input{width:18px;height:18px;flex:none}
   .crop-clean-option span{color:#e7d9b8;font-size:12.5px;line-height:1.5}
-  .crop-actions{display:flex;gap:10px;width:100%;max-width:480px;margin-top:12px}
-  .crop-btn{flex:1;padding:15px 10px;border-radius:2px;border:1px solid #a67f34;font-size:13px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-weight:600}
+  .crop-actions{display:flex;flex-direction:column;gap:10px;width:100%;max-width:480px;margin-top:12px}
+  .crop-btn{padding:16px 10px;border-radius:2px;border:1px solid #a67f34;font-size:14px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-weight:600}
   .crop-btn.primary{background:#a67f34;color:#fffaf0}
-  .crop-btn.secondary{background:transparent;color:#e7d9b8}
+  .crop-btn.secondary{background:none;border:none;color:#8a7757;font-size:11.5px;text-transform:none;letter-spacing:0;font-weight:400;text-decoration:underline;padding:8px}
   .crop-hint{color:#c9b686;font-size:12px;text-align:center;margin-top:12px;line-height:1.6;max-width:480px}
   .crop-warn{color:#ffb4b4;background:rgba(156,47,47,.35);border:1px solid rgba(255,180,180,.5);border-radius:2px;padding:10px 12px;font-size:12.5px;text-align:center;margin-top:10px;line-height:1.6;max-width:480px;font-weight:600}
   .crop-warn[hidden]{display:none}
@@ -130,6 +132,7 @@
   <div class="crop-stage" id="cropStage">
     <img id="cropImg" alt="">
     <svg id="cropSvg"></svg>
+    <div class="crop-loupe" id="cropLoupe"><canvas id="cropLoupeCanvas" width="132" height="132"></canvas></div>
   </div>
   <div class="crop-hint" id="cropHint">Trascina ognuno dei quattro angoli esattamente sopra l'angolo corrispondente del documento (anche se la foto è storta o in prospettiva): il documento verrà raddrizzato automaticamente in un rettangolo dritto.</div>
   <div class="crop-warn" id="cropWarn" hidden>⚠️ Non hai ancora spostato i quattro punti sugli angoli del documento: così com'è, la foto verrà ritagliata ma NON raddrizzata. Trascina i punti sui veri angoli del foglio prima di confermare.</div>
@@ -138,8 +141,8 @@
     <span>Pulisci sfondo (bianco/nero, stile scanner) — attiva di default, elimina ombre e sfondo grigio lasciando solo testo nero su bianco. Disattivala solo se la foto è scura o poco nitida e il risultato pulito peggiora rispetto all'originale.</span>
   </label>
   <div class="crop-actions">
-    <button type="button" class="crop-btn secondary" id="cropSkipBtn">Carica foto originale (senza raddrizzare)</button>
     <button type="button" class="crop-btn primary" id="cropConfirmBtn">Raddrizza e carica</button>
+    <button type="button" class="crop-btn secondary" id="cropSkipBtn">Salta il raddrizzamento e carica la foto grezza originale</button>
   </div>
 </div>
 
@@ -206,17 +209,19 @@ var cameraCancelBtn = document.getElementById("cameraCancelBtn");
 var cameraShutterBtn = document.getElementById("cameraShutterBtn");
 var cameraStream = null;
 
-// Margini guida in percentuale (0-100) del fotogramma: usati sia per disegnare le guide sia
-// come quadrilatero iniziale nella schermata di ritaglio successiva, per coerenza.
-var GUIDE_MARGIN_X_PCT = 8;
-var GUIDE_MARGIN_Y_PCT = 12;
-
 function openCamera(){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     fileInput.click();
     return;
   }
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+  navigator.mediaDevices.getUserMedia({
+    video: {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 2400 },
+      height: { ideal: 3200 }
+    },
+    audio: false
+  })
     .then(function(stream){
       cameraStream = stream;
       cameraVideo.srcObject = stream;
@@ -229,6 +234,9 @@ function openCamera(){
     });
 }
 
+var A4_RATIO = 210 / 297; // larghezza/altezza foglio A4 — le proposte sono sempre su A4
+var guideRectPct = null; // { x0, y0, x1, y1 } in percentuale (0-100), coerente col frame video reale
+
 cameraVideo.addEventListener("loadedmetadata", function(){
   if(cameraVideo.videoWidth && cameraVideo.videoHeight){
     cameraStage.style.aspectRatio = cameraVideo.videoWidth + " / " + cameraVideo.videoHeight;
@@ -236,15 +244,45 @@ cameraVideo.addEventListener("loadedmetadata", function(){
   drawCameraGuide();
 });
 
+function computeGuideRectPct(){
+  var vw = cameraVideo.videoWidth, vh = cameraVideo.videoHeight;
+  if(!vw || !vh){
+    // Fallback prima che il video abbia dimensioni note: margini generici.
+    return { x0: 8, y0: 12, x1: 92, y1: 88 };
+  }
+  if(MODE === "offer"){
+    // Guida con le VERE proporzioni di un foglio A4, centrata nel fotogramma. Il calcolo passa
+    // per i pixel reali (non le percentuali) perché il viewBox 0-100x0-100 con
+    // preserveAspectRatio="none" scala x e y in modo indipendente: una percentuale "quadrata"
+    // non è un quadrato reale a meno di convertirla tenendo conto della vera risoluzione video.
+    var marginYPct = 6;
+    var realH = vh * (100 - marginYPct * 2) / 100;
+    var realW = realH * A4_RATIO;
+    var wPct = (realW / vw) * 100;
+    if(wPct > 96){ // il fotogramma è troppo "stretto" per un A4 intero con questo margine verticale: adatta dalla larghezza
+      wPct = 96;
+      realW = vw * (wPct / 100);
+      realH = realW / A4_RATIO;
+      var hPctAdj = (realH / vh) * 100;
+      var yMarginAdj = (100 - hPctAdj) / 2;
+      return { x0: (100 - wPct) / 2, y0: yMarginAdj, x1: 100 - (100 - wPct) / 2, y1: 100 - yMarginAdj };
+    }
+    return { x0: (100 - wPct) / 2, y0: marginYPct, x1: 100 - (100 - wPct) / 2, y1: 100 - marginYPct };
+  }
+  // Altri documenti (carte d'identità, planimetrie, ecc.): formato variabile, margini generici.
+  return { x0: 8, y0: 12, x1: 92, y1: 88 };
+}
+
 function drawCameraGuide(){
+  guideRectPct = computeGuideRectPct();
   cameraGuideSvg.setAttribute("viewBox", "0 0 100 100");
   cameraGuideSvg.setAttribute("preserveAspectRatio", "none");
-  var x0 = GUIDE_MARGIN_X_PCT, y0 = GUIDE_MARGIN_Y_PCT;
-  var x1 = 100 - GUIDE_MARGIN_X_PCT, y1 = 100 - GUIDE_MARGIN_Y_PCT;
+  var color = MODE === "offer" ? "#e14b3d" : "#fffaf0";
+  var x0 = guideRectPct.x0, y0 = guideRectPct.y0, x1 = guideRectPct.x1, y1 = guideRectPct.y1;
   var arm = 6;
   function corner(x, y, dx, dy){
     return '<path d="M ' + x + ' ' + (y + dy * arm) + ' L ' + x + ' ' + y + ' L ' + (x + dx * arm) + ' ' + y +
-      '" fill="none" stroke="#fffaf0" stroke-width="0.6" vector-effect="non-scaling-stroke"></path>';
+      '" fill="none" stroke="' + color + '" stroke-width="0.9" vector-effect="non-scaling-stroke"></path>';
   }
   cameraGuideSvg.innerHTML = corner(x0, y0, 1, 1) + corner(x1, y0, -1, 1) + corner(x1, y1, -1, -1) + corner(x0, y1, 1, -1);
 }
@@ -299,6 +337,7 @@ cameraShutterBtn.addEventListener("click", function(){
    può mai bloccare l'upload. */
 
 var cropOverlay = document.getElementById("cropOverlay");
+var cropStage = document.getElementById("cropStage");
 var cropImg = document.getElementById("cropImg");
 var cropSvg = document.getElementById("cropSvg");
 var cropHint = document.getElementById("cropHint");
@@ -324,23 +363,29 @@ function openCropScreen(file, fromGuidedCamera){
     // stata corretta al momento dello scatto, quindi non serve altro tocco per default.
     // Se invece la foto arriva dalla fotocamera nativa del telefono (fallback), si usa il
     // margine generico del 6% come prima e resta il tocco manuale a definire gli angoli.
-    var mx, my;
-    if(fromGuidedCamera){
-      mx = Math.round(w * (GUIDE_MARGIN_X_PCT / 100));
-      my = Math.round(h * (GUIDE_MARGIN_Y_PCT / 100));
+    var qx0, qy0, qx1, qy1;
+    if(fromGuidedCamera && guideRectPct){
+      // La foto catturata ha ESATTAMENTE le dimensioni del fotogramma video mostrato con le
+      // guide, quindi lo stesso rettangolo in percentuale (x0/y0/x1/y1) si converte qui in
+      // pixel reali usando w per l'asse x e h per l'asse y — stessa logica di
+      // computeGuideRectPct, così il quadrilatero iniziale ricalca ESATTAMENTE le guide viste.
+      qx0 = Math.round(w * guideRectPct.x0 / 100);
+      qy0 = Math.round(h * guideRectPct.y0 / 100);
+      qx1 = Math.round(w * guideRectPct.x1 / 100);
+      qy1 = Math.round(h * guideRectPct.y1 / 100);
     }else{
-      mx = Math.round(w * 0.06);
-      my = Math.round(h * 0.06);
+      var mx = Math.round(w * 0.06), my = Math.round(h * 0.06);
+      qx0 = mx; qy0 = my; qx1 = w - mx; qy1 = h - my;
     }
     cropState = {
       file: file,
       naturalW: w,
       naturalH: h,
       quad: [
-        { x: mx, y: my },
-        { x: w - mx, y: my },
-        { x: w - mx, y: h - my },
-        { x: mx, y: h - my }
+        { x: qx0, y: qy0 },
+        { x: qx1, y: qy0 },
+        { x: qx1, y: qy1 },
+        { x: qx0, y: qy1 }
       ]
     };
     cropImg.src = url;
@@ -386,7 +431,7 @@ function drawCropHandles(){
   var w = cropState.naturalW, h = cropState.naturalH;
   var q = cropState.quad;
   cropSvg.setAttribute("viewBox", "0 0 " + w + " " + h);
-  var handleR = Math.round(Math.min(w, h) * 0.018) || 10;
+  var handleR = Math.round(Math.min(w, h) * 0.032) || 16; // maniglie più grandi: più facili da afferrare col dito
   var strokeW = Math.max(2, w * 0.0025);
 
   var pointsAttr = q.map(function(p){ return p.x + "," + p.y; }).join(" ");
@@ -408,12 +453,18 @@ function svgPointFromEvent(evt){
 }
 
 var draggingIdx = -1;
+var cropLoupe = document.getElementById("cropLoupe");
+var cropLoupeCanvas = document.getElementById("cropLoupeCanvas");
+var cropLoupeCtx = cropLoupeCanvas.getContext("2d");
+var LOUPE_ZOOM = 3.2; // ingrandimento della lente rispetto all'immagine reale
 
 cropSvg.addEventListener("pointerdown", function(e){
   var target = e.target.closest(".crop-handle");
   if(!target) return;
   draggingIdx = parseInt(target.getAttribute("data-idx"), 10);
   cropSvg.setPointerCapture(e.pointerId);
+  cropLoupe.style.display = "block";
+  updateLoupe(cropState.quad[draggingIdx]);
   e.preventDefault();
 });
 
@@ -431,12 +482,48 @@ cropSvg.addEventListener("pointermove", function(e){
   quadTouched = true;
   cropWarn.hidden = true;
   drawCropHandles();
+  updateLoupe(p);
   e.preventDefault();
 });
 
 ["pointerup", "pointercancel"].forEach(function(evtName){
-  cropSvg.addEventListener(evtName, function(){ draggingIdx = -1; });
+  cropSvg.addEventListener(evtName, function(){
+    draggingIdx = -1;
+    cropLoupe.style.display = "none";
+  });
 });
+
+// Mostra, mentre si trascina un angolo, un cerchio ingrandito centrato sul punto reale
+// dell'immagine (non sul dito, che lo coprirebbe), posizionato sopra al dito e con un
+// mirino al centro per vedere esattamente dove cadrà l'angolo — pensato per foto ad alta
+// risoluzione dove il punto esatto è difficile da individuare a "dito nudo".
+function updateLoupe(p){
+  var w = cropState.naturalW, h = cropState.naturalH;
+  var region = Math.min(w, h) * 0.05; // metà lato della zona reale inquadrata dalla lente
+  var sx = Math.max(0, Math.min(w - region * 2, p.x - region));
+  var sy = Math.max(0, Math.min(h - region * 2, p.y - region));
+  cropLoupeCtx.clearRect(0, 0, 132, 132);
+  cropLoupeCtx.drawImage(cropImg, sx, sy, region * 2, region * 2, 0, 0, 132, 132);
+  cropLoupeCtx.strokeStyle = "#e14b3d";
+  cropLoupeCtx.lineWidth = 1.5;
+  cropLoupeCtx.beginPath();
+  cropLoupeCtx.moveTo(66, 0); cropLoupeCtx.lineTo(66, 132);
+  cropLoupeCtx.moveTo(0, 66); cropLoupeCtx.lineTo(132, 66);
+  cropLoupeCtx.stroke();
+
+  // Posiziona la lente sullo schermo in base alle coordinate reali del punto, convertite
+  // nelle dimensioni effettivamente renderizzate dello stage (stessa immagine, stesso
+  // rapporto — nessun sistema di coordinate separato che possa disallinearsi).
+  var stageW = cropStage.clientWidth, stageH = cropStage.clientHeight;
+  var screenX = (p.x / w) * stageW;
+  var screenY = (p.y / h) * stageH;
+  var loupeSize = 132;
+  var left = Math.max(0, Math.min(stageW - loupeSize, screenX - loupeSize / 2));
+  var top = screenY - loupeSize - 24; // sopra al dito
+  if(top < 0) top = Math.min(stageH - loupeSize, screenY + 24); // se troppo in alto, la mostra sotto
+  cropLoupe.style.left = left + "px";
+  cropLoupe.style.top = top + "px";
+}
 
 function quadOutputSize(q){
   function dist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
