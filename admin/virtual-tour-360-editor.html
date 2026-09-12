@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>IMMONOVA — Editor Virtual Tour 360°</title>
+<link rel="stylesheet" href="pannellum.css">
+<style>
+  :root{--gold:#a67f34}
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f2ee;color:#2b2b2b}
+  header{background:#1c1c1c;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header .opp{font-size:12px;color:#c9a568}
+  .wrap{display:flex;gap:16px;padding:16px;align-items:flex-start}
+  .panel{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .left{width:280px;flex-shrink:0}
+  .left h2{font-size:13px;margin:0 0 10px}
+  .scene-item{display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #eee;border-radius:4px;margin-bottom:6px;font-size:12px;cursor:pointer}
+  .scene-item.active{border-color:var(--gold);background:#fbf6ea}
+  .scene-item button{border:none;background:none;color:#b23;cursor:pointer;font-size:11px}
+  .btn{background:var(--gold);color:#fff;border:none;border-radius:4px;padding:8px 12px;font-size:12px;cursor:pointer;width:100%;margin-top:6px}
+  .btn.secondary{background:#eee;color:#333}
+  input[type=file]{font-size:11px;width:100%}
+  input[type=text]{width:100%;padding:6px;font-size:12px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;margin-top:4px}
+  label{font-size:11px;color:#666;display:block;margin-top:10px}
+  .center{flex:1;min-width:0}
+  #pano{width:100%;height:560px;background:#111;border-radius:6px}
+  .hint{font-size:11px;color:#888;margin-top:8px;line-height:1.5}
+  .hotspot-list{margin-top:12px;font-size:12px}
+  .hotspot-list div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0}
+  .hotspot-list button{border:none;background:none;color:#b23;cursor:pointer;font-size:11px}
+  .status{font-size:12px;margin-top:10px;padding:8px;border-radius:4px}
+  .status.ok{background:#eaf6ee;color:#1a7a3c}
+  .status.err{background:#fbeaea;color:#b23}
+  select{width:100%;padding:6px;font-size:12px;border:1px solid #ccc;border-radius:4px;margin-top:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Editor Virtual Tour 360° — IMMONOVA</h1>
+  <span class="opp" id="oppLabel">opportunity_id: —</span>
+</header>
+
+<div class="wrap">
+  <div class="panel left">
+    <h2>Scene (stanze)</h2>
+    <div id="sceneList"></div>
+    <label>Nuova scena — nome stanza</label>
+    <input type="text" id="newSceneTitle" placeholder="es. Cucina">
+    <label>Foto panoramica 360° (equirettangolare, rapporto 2:1)</label>
+    <input type="file" id="newSceneFile" accept="image/*">
+    <button class="btn" id="addSceneBtn">+ Aggiungi scena</button>
+
+    <div class="hint">
+      Suggerimento: la foto va scattata con la modalità "Panorama 360°"/"Photo Sphere"
+      presente nella fotocamera di quasi tutti gli smartphone recenti (Android e iPhone),
+      oppure con una action-cam 360 economica. Deve essere un'unica immagine
+      "equirettangolare" (rapporto larghezza:altezza = 2:1).
+    </div>
+
+    <button class="btn secondary" id="saveBtn" style="margin-top:16px">Salva tour su IMMONOVA</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="center panel">
+    <div id="pano"></div>
+    <div class="hint" id="editHint">Carica almeno una scena per iniziare. Poi clicca su un punto del panorama per aggiungere un hotspot che porta a un'altra stanza.</div>
+    <div class="hotspot-list" id="hotspotList"></div>
+  </div>
+</div>
+
+<script src="pannellum.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+/* SUPABASE_URL e SUPABASE_ANON_KEY arrivano da ../js/config.js, esattamente come in
+   opportunity-edit.html. Se questo file non sta nella stessa cartella di
+   opportunity-edit.html, correggi il percorso qui sopra. */
+var BUCKET = "virtual-tours-360";
+
+var params = new URLSearchParams(location.search);
+var opportunityId = params.get("opportunity_id");
+document.getElementById("oppLabel").textContent = "opportunity_id: " + (opportunityId || "MANCANTE — apri questa pagina con ?opportunity_id=123");
+
+var supabaseClient = (typeof SUPABASE_URL !== "undefined" && SUPABASE_URL)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+var tour = { first_scene_id: null, scenes: [] };
+var activeSceneId = null;
+var viewer = null;
+var pendingHotspotCoords = null;
+
+function slugify(s) {
+  return String(s || "scena").toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || ("scena-" + Date.now());
+}
+
+function findScene(id) { return tour.scenes.find(function (s) { return s.id === id; }); }
+
+function renderSceneList() {
+  var el = document.getElementById("sceneList");
+  el.innerHTML = "";
+  tour.scenes.forEach(function (s) {
+    var div = document.createElement("div");
+    div.className = "scene-item" + (s.id === activeSceneId ? " active" : "");
+    div.innerHTML = '<span>' + s.title + '</span>';
+    var btn = document.createElement("button");
+    btn.textContent = "elimina";
+    btn.onclick = function (e) { e.stopPropagation(); removeScene(s.id); };
+    div.appendChild(btn);
+    div.onclick = function () { activateScene(s.id); };
+    el.appendChild(div);
+  });
+}
+
+function renderHotspotList() {
+  var scene = findScene(activeSceneId);
+  var el = document.getElementById("hotspotList");
+  el.innerHTML = "";
+  if (!scene) return;
+  (scene.hotspots || []).forEach(function (h, idx) {
+    var row = document.createElement("div");
+    var targetScene = findScene(h.target_scene_id);
+    row.innerHTML = '<span>→ ' + (h.text || "") + " (" + (targetScene ? targetScene.title : h.target_scene_id) + ")</span>";
+    var btn = document.createElement("button");
+    btn.textContent = "rimuovi";
+    btn.onclick = function () { scene.hotspots.splice(idx, 1); activateScene(activeSceneId); };
+    row.appendChild(btn);
+    el.appendChild(row);
+  });
+}
+
+function pannellumScenesConfig() {
+  var scenes = {};
+  tour.scenes.forEach(function (s) {
+    scenes[s.id] = {
+      type: "equirectangular",
+      panorama: s.image_url,
+      pitch: s.pitch || 0,
+      yaw: s.yaw || 0,
+      hfov: s.hfov || 110,
+      hotSpots: (s.hotspots || []).map(function (h) {
+        return { pitch: h.pitch, yaw: h.yaw, type: "scene", text: h.text, sceneId: h.target_scene_id };
+      }),
+    };
+  });
+  return scenes;
+}
+
+function activateScene(id) {
+  activeSceneId = id;
+  renderSceneList();
+  renderHotspotList();
+  var scene = findScene(id);
+  if (!scene) return;
+  if (viewer) { viewer.destroy(); viewer = null; }
+  viewer = pannellum.viewer("pano", {
+    default: { firstScene: id, sceneFadeDuration: 400, autoLoad: true },
+    scenes: pannellumScenesConfig(),
+  });
+  viewer.on("mousedown", function (event) {
+    if (!(event.altKey || event.metaKey)) return; // ALT/CMD+click per aggiungere hotspot
+    var coords = viewer.mouseEventToCoords(event);
+    pendingHotspotCoords = { pitch: coords[0], yaw: coords[1] };
+    promptNewHotspot();
+  });
+  document.getElementById("editHint").textContent =
+    "Tieni premuto ALT (o CMD su Mac) e clicca su un punto del panorama per aggiungere un hotspot verso un'altra stanza.";
+}
+
+function promptNewHotspot() {
+  if (tour.scenes.length < 2) { alert("Aggiungi almeno una seconda scena prima di creare un collegamento."); return; }
+  var others = tour.scenes.filter(function (s) { return s.id !== activeSceneId; });
+  var list = others.map(function (s, i) { return (i + 1) + ") " + s.title; }).join("\n");
+  var choice = prompt("A quale stanza porta questo punto?\n" + list + "\n\nScrivi il numero:");
+  var idx = parseInt(choice, 10) - 1;
+  if (!others[idx]) return;
+  var label = prompt("Testo del collegamento (es. \"Vai al soggiorno\"):", "Vai a " + others[idx].title) || ("Vai a " + others[idx].title);
+  var scene = findScene(activeSceneId);
+  scene.hotspots = scene.hotspots || [];
+  scene.hotspots.push({ pitch: pendingHotspotCoords.pitch, yaw: pendingHotspotCoords.yaw, target_scene_id: others[idx].id, text: label });
+  activateScene(activeSceneId);
+}
+
+function removeScene(id) {
+  if (!confirm("Eliminare questa scena? Verranno rimossi anche gli hotspot che la usano.")) return;
+  tour.scenes = tour.scenes.filter(function (s) { return s.id !== id; });
+  tour.scenes.forEach(function (s) { s.hotspots = (s.hotspots || []).filter(function (h) { return h.target_scene_id !== id; }); });
+  if (tour.first_scene_id === id) tour.first_scene_id = tour.scenes[0] ? tour.scenes[0].id : null;
+  if (activeSceneId === id) activeSceneId = tour.scenes[0] ? tour.scenes[0].id : null;
+  if (activeSceneId) activateScene(activeSceneId); else { if (viewer) viewer.destroy(); renderSceneList(); renderHotspotList(); }
+}
+
+async function addScene() {
+  var title = document.getElementById("newSceneTitle").value.trim();
+  var file = document.getElementById("newSceneFile").files[0];
+  if (!title) { alert("Dai un nome alla stanza."); return; }
+  if (!file) { alert("Carica una foto panoramica."); return; }
+  if (!opportunityId) { alert("Manca opportunity_id nell'URL."); return; }
+  if (!supabaseClient) { alert("Impossibile connettersi a Supabase: verifica che ../js/config.js sia raggiungibile da questa pagina."); return; }
+
+  var id = slugify(title) + "-" + Date.now().toString(36);
+  var path = opportunityId + "/" + id + ".jpg";
+  setStatus("Caricamento immagine...", "ok");
+  var upload = await supabaseClient.storage.from(BUCKET).upload(path, file, { contentType: file.type || "image/jpeg" });
+  if (upload.error) { setStatus("Errore upload: " + upload.error.message, "err"); return; }
+  var pub = supabaseClient.storage.from(BUCKET).getPublicUrl(path);
+
+  var scene = { id: id, title: title, image_url: pub.data.publicUrl, pitch: 0, yaw: 0, hfov: 110, hotspots: [] };
+  tour.scenes.push(scene);
+  if (!tour.first_scene_id) tour.first_scene_id = id;
+  document.getElementById("newSceneTitle").value = "";
+  document.getElementById("newSceneFile").value = "";
+  setStatus("Scena aggiunta.", "ok");
+  activateScene(id);
+}
+
+async function saveTour() {
+  if (!opportunityId) { alert("Manca opportunity_id nell'URL."); return; }
+  if (!supabaseClient) { alert("Impossibile connettersi a Supabase: verifica che ../js/config.js sia raggiungibile da questa pagina."); return; }
+  if (!tour.scenes.length) { alert("Aggiungi almeno una scena prima di salvare."); return; }
+  setStatus("Salvataggio...", "ok");
+  var update = await supabaseClient
+    .from("opportunities")
+    .update({ virtual_tour_360: tour, virtual_tour_360_published: true, virtual_tour_360_updated_at: new Date().toISOString() })
+    .eq("id", opportunityId);
+  if (update.error) { setStatus("Errore salvataggio: " + update.error.message, "err"); return; }
+  setStatus("Tour salvato e pubblicato ✓", "ok");
+}
+
+function setStatus(msg, cls) {
+  var el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = "status " + cls;
+}
+
+async function loadExisting() {
+  if (!opportunityId || !supabaseClient) return;
+  var res = await supabaseClient.from("opportunities").select("virtual_tour_360").eq("id", opportunityId).maybeSingle();
+  if (res.data && res.data.virtual_tour_360 && Array.isArray(res.data.virtual_tour_360.scenes) && res.data.virtual_tour_360.scenes.length) {
+    tour = res.data.virtual_tour_360;
+    activateScene(tour.first_scene_id || tour.scenes[0].id);
+  }
+}
+
+document.getElementById("addSceneBtn").onclick = addScene;
+document.getElementById("saveBtn").onclick = saveTour;
+loadExisting();
+</script>
+</body>
+</html>
