@@ -2106,6 +2106,83 @@ function renderFinancialSnapshot(){
 
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_financial_core)+'</div><h2 class="section-title">'+escapeHTML(T.title_roi_breakeven)+'</h2><div class="lux-rule"></div><div class="financial-layout"><div>'+leftColumn+'</div><div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.calc_rule_title)+'</div><p class="info-text">'+escapeHTML(ruleNote)+'</p></div></div></div></div></article>';
 }
+/* ---- Scenari fiscali + break-even netto, pagina richiesta esplicitamente per chi VALUTA
+   L'INVESTIMENTO (non per chi valuta un immobile da vendere -- quella e' tutt'altra pagina,
+   valuation-report.html, dove queste tasse non c'entrano). Riusa lo stesso "net" (gia' netto
+   dei costi operativi, calcolato da renderFinancialSnapshot/buildCashflowProjections) come
+   base imponibile, quindi NON sottrae di nuovo una percentuale di spese di gestione qui --
+   sarebbe una doppia detrazione. Aliquote 2026 verificate (stesse di valuation-report.html):
+   IRPEF 23/33/43% (soglie 28.000/50.000), cedolare secca 21%/10% (solo categorie residenziali,
+   qui approssimato con !isCommercialCategory() perche' le opportunity non hanno una categoria
+   catastale strutturata come le valutazioni), IRES 24%+IRAP 3,9% per SRL/holding. Per la holding
+   il test "societa' di comodo" usa qui il prezzo di acquisto come proxy del valore immobile
+   (non esiste un valore catastale strutturato su questo tipo di scheda) -- dichiarato
+   esplicitamente nel testo, non spacciato per dato reale. ---- */
+function fiscalScenarioRowsHTML(grossNetIncome, totalInvestment, isResidential, purchasePriceForComodoTest){
+  var rows = [];
+  function addRow(label, netAfterTax, note){
+    var breakEvenYears = (totalInvestment > 0 && netAfterTax > 0) ? totalInvestment / netAfterTax : null;
+    rows.push('<tr><td>' + escapeHTML(label) + (note ? '<br><span style="font-size:10.5px;color:#8f7643">' + escapeHTML(note) + '</span>' : '') + '</td><td>' + escapeHTML(euro(netAfterTax)) + '</td><td>' + (breakEvenYears ? escapeHTML(String(Math.round(breakEvenYears*10)/10)) + escapeHTML(T.years_suffix||" anni") : escapeHTML(T.not_available_long||"non disponibile")) + '</td></tr>');
+  }
+
+  if(isResidential){
+    addRow("Persona fisica — Cedolare secca, canone libero (21%)", grossNetIncome * (1 - 0.21));
+    addRow("Persona fisica — Cedolare secca, canone concordato (10%)", grossNetIncome * (1 - 0.10));
+  }
+  var irpefBase = grossNetIncome * 0.95;
+  var addizionaliPct = 0.02;
+  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", grossNetIncome - irpefBase * (0.23 + addizionaliPct), "Base imponibile: 95% del reddito netto (deduzione forfettaria 5%)");
+  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", grossNetIncome - irpefBase * (0.43 + addizionaliPct), "Base imponibile: 95% del reddito netto (deduzione forfettaria 5%)");
+
+  var iresIrapTotalPct = 0.24 + 0.039;
+  var srlNet = grossNetIncome * (1 - iresIrapTotalPct);
+  addRow("Società di capitali (S.r.l.) — IRES 24% + IRAP 3,9%", srlNet);
+
+  var holdingNote = "Stessa aliquota IRES+IRAP della S.r.l.";
+  if(purchasePriceForComodoTest){
+    var redditoMinimoPresunto = purchasePriceForComodoTest * 0.0238;
+    if(grossNetIncome < redditoMinimoPresunto){
+      var comodoTax = redditoMinimoPresunto * 0.345;
+      holdingNote = "Attenzione: il reddito risulta inferiore al reddito minimo presunto (" + euro(redditoMinimoPresunto) + ", 2,38% del prezzo di acquisto usato come proxy del valore immobile) — rischio \"società di comodo\", con maggiorazione IRES di 10,5 punti (34,5% sul reddito minimo presunto, imposta stimata " + euro(comodoTax) + " anziché sul reddito reale). Vantaggio in compenso: se la società ha davvero patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL. Verificare con un commercialista.";
+    }else{
+      holdingNote = "Reddito superiore al reddito minimo presunto: test di operatività superato, nessun rischio di maggiorazione da società di comodo. Vantaggio specifico: se la società ha patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL applicato invece a una S.r.l. operativa generica.";
+    }
+  }
+  addRow("Holding / Società immobiliare di gestione — IRES 24% + IRAP 3,9%", srlNet, holdingNote);
+
+  return rows.join("");
+}
+function renderFiscalScenariosPage(){
+  var f = buildFinance();
+  var projs = buildCashflowProjections();
+  var isResidential = !isCommercialCategory();
+  var purchasePrice = f.purchase;
+  var blocks = [];
+
+  if(projs && projs.mode === "range" && (projs.min || projs.max)){
+    [["Scenario minimo", projs.min],["Scenario medio", projs.avg],["Scenario massimo", projs.max]].forEach(function(pair){
+      if(!pair[1]) return;
+      var net = pair[1].rows[0].net;
+      if(!(net > 0)) return;
+      blocks.push('<div class="cost-box" style="margin-bottom:18px"><div class="cost-title">' + escapeHTML(pair[0]) + '</div><table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, f.total, isResidential, purchasePrice) + '</tbody></table></div>');
+    });
+  }else{
+    var headline = projs ? (projs.mode === "range" ? (projs.min || projs.max) : projs.single) : null;
+    var net = headline ? headline.rows[0].net : f.net;
+    if(net > 0){
+      blocks.push('<table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, f.total, isResidential, purchasePrice) + '</tbody></table>');
+    }
+  }
+
+  if(!blocks.length){
+    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div><p class="info-text">Questa pagina non inventa scenari. Senza un reddito netto operativo disponibile (vedi sezione precedente), l\'impatto fiscale e il break-even netto restano esplicitamente non disponibili.</p></div></article>';
+  }
+
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div>'
+    + '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>'
+    + blocks.join("")
+    + '</div></article>';
+}
 function renovationRatesJs(style, level){
   var rates = {
     conservativo:{ min:400, max:700 },
@@ -3029,6 +3106,7 @@ function renderBook(){
     renderTourismDemandPage().forEach(function(p){ push(T.chapter_financial, p); });
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderFinancialSnapshot());
+    push(T.chapter_financial, renderFiscalScenariosPage());
   }
 
   var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["shopping",T.eco_shopping,T.eco_shopping_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
