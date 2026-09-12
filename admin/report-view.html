@@ -2185,7 +2185,7 @@ function renderFiscalScenariosPage(){
   var projs = buildCashflowProjections();
   var isResidential = !isCommercialCategory();
   var purchasePrice = f.purchase;
-  var blocks = [];
+  var tables = [];
 
   if(projs && projs.mode === "range" && (projs.min || projs.max)){
     [["Scenario minimo", projs.min],["Scenario medio", projs.avg],["Scenario massimo", projs.max]].forEach(function(pair){
@@ -2193,26 +2193,40 @@ function renderFiscalScenariosPage(){
       var net = pair[1].rows[0].net;
       var grossRev = pair[1].rows[0].revenue;
       if(!(net > 0)) return;
-      blocks.push('<div class="cost-box" style="margin-bottom:18px"><div class="cost-title">' + escapeHTML(pair[0]) + '</div><table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice) + '</tbody></table></div>');
+      tables.push({label: pair[0], html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice)});
     });
   }else{
     var headline = projs ? (projs.mode === "range" ? (projs.min || projs.max) : projs.single) : null;
     var net = headline ? headline.rows[0].net : f.net;
     var grossRev = headline ? headline.rows[0].revenue : f.revenue;
     if(net > 0){
-      blocks.push('<table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice) + '</tbody></table>');
+      tables.push({label: null, html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice)});
     }
   }
 
-  if(!blocks.length){
+  var ivaBoxHTML = '<div class="cost-box" style="margin-top:18px"><div class="cost-title">Nota IVA</div><p class="info-text" style="margin-top:0">Locazione a uso abitativo: sempre esente/fuori campo IVA, indipendentemente dal locatore. Locazione di immobile strumentale/commerciale da parte di un soggetto IVA (S.r.l., holding, o persona fisica con partita IVA in regime ordinario): esente IVA salvo opzione per l\'imponibilità (aliquota 22%) esercitata in contratto — se esercitata, l\'IVA è di norma neutra per il locatore (versata e recuperata sugli acquisti) ma va gestita negli adempimenti periodici. Regime forfettario: sempre in franchigia IVA, nessuna imposta addebitata né detratta.</p></div>';
+
+  if(!tables.length){
     return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div><p class="info-text">Questa pagina non inventa scenari. Senza un reddito netto operativo disponibile (vedi sezione precedente), l\'impatto fiscale e il break-even netto restano esplicitamente non disponibili.</p></div></article>';
   }
 
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div>'
-    + '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>'
-    + blocks.join("")
-    + '<div class="cost-box" style="margin-top:18px"><div class="cost-title">Nota IVA</div><p class="info-text" style="margin-top:0">Locazione a uso abitativo: sempre esente/fuori campo IVA, indipendentemente dal locatore. Locazione di immobile strumentale/commerciale da parte di un soggetto IVA (S.r.l., holding, o persona fisica con partita IVA in regime ordinario): esente IVA salvo opzione per l\'imponibilità (aliquota 22%) esercitata in contratto — se esercitata, l\'IVA è di norma neutra per il locatore (versata e recuperata sugli acquisti) ma va gestita negli adempimenti periodici. Regime forfettario: sempre in franchigia IVA, nessuna imposta addebitata né detratta.</p></div>'
-    + '</div></article>';
+  /* Una tabella fiscale completa (7-8 righe, alcune con note su piu' righe) non entra insieme
+     ad altre nella stessa pagina fissa da 210mm senza sovrapporsi al footer: ogni scenario
+     riceve una pagina report-page dedicata, come le altre sezioni multi-scenario del dossier. */
+  var intro = '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>';
+
+  var pages = tables.map(function(t, idx){
+    var titleSuffix = t.label ? (' — ' + escapeHTML(t.label)) : '';
+    var tableHTML = '<table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + t.html + '</tbody></table>';
+    var isLast = idx === tables.length - 1;
+    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto' + titleSuffix + '</h2><div class="lux-rule"></div>'
+      + (idx === 0 ? intro : '')
+      + tableHTML
+      + (isLast ? ivaBoxHTML : '')
+      + '</div></article>';
+  });
+
+  return pages.join("");
 }
 function renovationRatesJs(style, level){
   var rates = {
@@ -2256,7 +2270,16 @@ function renderRenovationScenariosBlock(){
   return '<div class="cost-box" style="margin-top:24px"><div class="cost-title">'+escapeHTML(T.renovation_scenarios_title)+'</div>' + rows
     + '<p class="info-text" style="margin-top:14px;font-size:12px">'+escapeHTML(T.renovation_scenarios_note)+'</p></div>';
 }
-function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">'+escapeHTML(T.declared_range_scheda)+'</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_investment_structure)+'</div><h2 class="section-title">'+escapeHTML(T.title_total_project_cost)+'</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_acquisition_title)+'</div>'+row(T.row_purchase_price,f.purchase)+row(T.row_taxes,f.taxes)+row(T.row_notary,f.notary)+row(T.row_agency,f.agency)+row(T.row_due_diligence,f.dueDiligence)+row(T.row_total_acquisition,f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_development_title)+'</div>'+row(T.row_renovation_avg,f.renovation)+renovationRangeNote+row(T.row_technical_fees,f.tech)+row(T.row_ffe,f.ffe)+row(T.row_marketing,f.marketing)+row(T.row_contingency,f.contingency)+row(T.row_total_development,f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row(T.row_total_project_cost,f.total,'total')+'</div>'+renderRenovationScenariosBlock()+'</div></article>';}
+function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRange();function row(a,b,cls){return '<div class="cost-row '+(cls||'')+'"><span>'+escapeHTML(a)+'</span><strong>'+escapeHTML(euro(b))+'</strong></div>'}var renovationRangeNote=(rr.min&&rr.max)?'<div class="cost-row" style="border-bottom:0"><span style="font-size:11px;color:#8f7643">'+escapeHTML(T.declared_range_scheda)+'</span><strong style="font-size:13px;font-weight:400;color:#8f7643">'+escapeHTML(euro(rr.min))+' \u2013 '+escapeHTML(euro(rr.max))+'</strong></div>':'';
+  var renovationBlock = renderRenovationScenariosBlock();
+  /* La pagina report-page ha altezza fissa (210mm, overflow:hidden): acquisizione+sviluppo+totale
+     riempivano gia' la pagina, e il blocco scenari di ristrutturazione (righe extra + nota) finiva
+     tagliato/sovrapposto al piede pagina. Lo scenari-block va su una pagina propria. */
+  var page1 = '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_investment_structure)+'</div><h2 class="section-title">'+escapeHTML(T.title_total_project_cost)+'</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_acquisition_title)+'</div>'+row(T.row_purchase_price,f.purchase)+row(T.row_taxes,f.taxes)+row(T.row_notary,f.notary)+row(T.row_agency,f.agency)+row(T.row_due_diligence,f.dueDiligence)+row(T.row_total_acquisition,f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_development_title)+'</div>'+row(T.row_renovation_avg,f.renovation)+renovationRangeNote+row(T.row_technical_fees,f.tech)+row(T.row_ffe,f.ffe)+row(T.row_marketing,f.marketing)+row(T.row_contingency,f.contingency)+row(T.row_total_development,f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row(T.row_total_project_cost,f.total,'total')+'</div></div></article>';
+  if(!renovationBlock) return page1;
+  var page2 = '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_investment_structure)+'</div><h2 class="section-title">'+escapeHTML(T.title_total_project_cost)+'</h2><div class="lux-rule"></div><div class="structure-grid">'+renovationBlock+'</div></div></article>';
+  return page1 + page2;
+}
 /* ---- Diagnostica fonti dati XLSX: legge diagnostics.documents_sample / tables_sample /
    source_logs dell'ultimo fetch live del Discovery Engine (lastDiscoveryDiagnostics), filtrata
    ai soli documenti di tipo xlsx, per capire in quale dei tre punti si ferma una fonte XLSX
