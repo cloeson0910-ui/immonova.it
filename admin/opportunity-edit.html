@@ -1728,8 +1728,13 @@ button.danger{
         opportunità, indipendentemente dal resto del form.
       </div>
       <div class="field full" style="margin-bottom:10px">
-        <button type="button" id="captureTourBtn" class="soft">📱 Scatta panorama dal telefono</button>
-        <span style="font-size:11.5px;color:#999;margin-left:8px">Apre lo strumento di cattura guidata — gli scatti si salvano in automatico su questo immobile.</span>
+        <button type="button" id="captureWalkTourBtn" class="soft">📱 Scatta ambiente (foto — consigliato)</button>
+        <span style="font-size:11.5px;color:#999;margin-left:8px">4 foto normali per ambiente, nessuna app esterna — si vede a destra/sinistra e si passa da un ambiente all'altro.</span>
+        <div id="captureWalkTourStatus" style="font-size:11.5px;margin-top:4px"></div>
+      </div>
+      <div class="field full" style="margin-bottom:10px">
+        <button type="button" id="captureTourBtn" class="soft">📱 Scatta panorama a sfera dal telefono</button>
+        <span style="font-size:11.5px;color:#999;margin-left:8px">Richiede un'app di fotosfera esterna — apre lo strumento di cattura guidata, gli scatti si salvano in automatico su questo immobile.</span>
         <div id="captureTourStatus" style="font-size:11.5px;margin-top:4px"></div>
       </div>
       <div class="field full">
@@ -2317,6 +2322,7 @@ if(id){
 }
 
 var captureTourBtn = document.getElementById("captureTourBtn");
+var captureWalkTourBtn = document.getElementById("captureWalkTourBtn");
 var captureTourOpportunityTitle = "";
 
 function genScanTokenGeneric(){
@@ -2324,13 +2330,13 @@ function genScanTokenGeneric(){
   return "scan" + Date.now() + Math.random().toString(36).slice(2);
 }
 
-async function openCaptureTourOnPhone(){
+async function openCaptureOnPhone(targetType, pageFile, statusElId){
   if(!id){
-    var st = document.getElementById("captureTourStatus");
-    if(st){ st.style.color = "#9c2f2f"; st.textContent = "Salva prima l'immobile, poi potrai scattare il panorama dal telefono."; }
+    var st0 = document.getElementById(statusElId);
+    if(st0){ st0.style.color = "#9c2f2f"; st0.textContent = "Salva prima l'immobile, poi potrai scattare dal telefono."; }
     return;
   }
-  var st = document.getElementById("captureTourStatus");
+  var st = document.getElementById(statusElId);
   if(st){ st.style.color = "#666"; st.textContent = "Creazione sessione in corso…"; }
 
   var token = genScanTokenGeneric();
@@ -2342,7 +2348,7 @@ async function openCaptureTourOnPhone(){
     created_by: currentUser ? currentUser.id : null,
     expires_at: expires.toISOString(),
     status: "active",
-    target_type: "virtual_tour_360_scene"
+    target_type: targetType
   });
 
   if(insertRes.error){
@@ -2351,14 +2357,19 @@ async function openCaptureTourOnPhone(){
   }
 
   var base = window.location.href.split("?")[0].replace(/[^\/]*$/, "");
-  var url = base + "virtual-tour-360-capture.html?token=" + encodeURIComponent(token);
+  var url = base + pageFile + "?token=" + encodeURIComponent(token);
   if(captureTourOpportunityTitle) url += "&opportunity_title=" + encodeURIComponent(captureTourOpportunityTitle);
 
   if(st){ st.textContent = ""; }
   window.open(url, "_blank");
 }
 
-if(captureTourBtn) captureTourBtn.addEventListener("click", openCaptureTourOnPhone);
+if(captureTourBtn) captureTourBtn.addEventListener("click", function(){
+  openCaptureOnPhone("virtual_tour_360_scene", "virtual-tour-360-capture.html", "captureTourStatus");
+});
+if(captureWalkTourBtn) captureWalkTourBtn.addEventListener("click", function(){
+  openCaptureOnPhone("virtual_walk_tour_scene", "virtual-walk-tour-capture.html", "captureWalkTourStatus");
+});
 
 var form = document.getElementById("opportunityForm");
 var loading = document.getElementById("loading");

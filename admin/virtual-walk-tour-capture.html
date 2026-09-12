@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IMMONOVA — Cattura Ambiente (foto multi-direzione)</title>
+<script src="../js/config.js"></script>
+<script src="qrcode.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;min-height:100%}
+  body{display:flex;flex-direction:column}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;gap:12px;z-index:20;overflow-y:auto}
+  .screen.active{display:flex}
+  h1{font-size:18px;margin:0 0 6px}
+  h2{font-size:16px;margin:0 0 4px}
+  p{font-size:13px;color:#ccc;line-height:1.6;max-width:420px;margin:0}
+  label{font-size:12px;color:#aaa;display:block;margin-top:10px;width:100%;max-width:320px}
+  select{width:100%;padding:8px;font-size:14px;border-radius:5px;border:1px solid #555;background:#111;color:#fff;box-sizing:border-box;margin-top:4px}
+  input[type=text]{width:100%;padding:8px;font-size:14px;border-radius:5px;border:1px solid #555;background:#111;color:#fff;box-sizing:border-box;margin-top:4px}
+  .btn{background:#a67f34;color:#fff;border:none;border-radius:6px;padding:12px 22px;font-size:14px;cursor:pointer;margin-top:10px}
+  .btn.secondary{background:#333}
+  .btn:disabled{opacity:.4}
+  .err{color:#e05a5a;font-size:12px;max-width:340px}
+  .ok{color:#7fbf6f;font-size:12px;max-width:340px}
+
+  .steps{text-align:left;max-width:360px;font-size:13px;color:#ccc;line-height:1.7;background:#151515;border-radius:8px;padding:14px 16px;margin-top:6px}
+  .steps b{color:#e3c789}
+
+  #shotPreview{max-width:88vw;max-height:42vh;border:1px solid #444;border-radius:4px}
+  .thumbRow{display:flex;gap:6px;justify-content:center;margin-top:6px;flex-wrap:wrap}
+  .thumbRow img{width:52px;height:52px;object-fit:cover;border-radius:4px;border:2px solid #4f7f45}
+  .thumbRow .empty{width:52px;height:52px;border-radius:4px;border:2px dashed #444}
+
+  .roomChips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:380px;margin-top:6px}
+  .roomChips button{background:#1c1c1c;border:1px solid #444;color:#7fbf6f;border-radius:14px;padding:4px 10px;font-size:11px}
+
+  #qrScreen #qrBox{background:#fff;padding:16px;border-radius:8px;margin-top:8px}
+  #qrScreen #qrBox img,#qrScreen #qrBox canvas,#qrScreen #qrBox table{display:block}
+</style>
+</head>
+<body>
+
+<div id="noIdScreen" class="screen"></div>
+
+<div id="qrScreen" class="screen">
+  <h1>Apri questa pagina sul cellulare</h1>
+  <p id="qrOpTitleLine" style="color:#e3c789;font-size:13px"></p>
+  <p>Serve la fotocamera del telefono in mano. Inquadra il QR code col cellulare per continuare da lì, già collegato a questo immobile.</p>
+  <div id="qrBox"></div>
+  <p id="qrFallbackUrl" style="font-size:11px;color:#888;word-break:break-all;max-width:340px"></p>
+  <button class="btn secondary" id="qrOverrideBtn" style="margin-top:16px">Continua comunque su questo dispositivo</button>
+</div>
+
+<!-- setup ambiente -->
+<div id="roomSetupScreen" class="screen">
+  <h1>Foto ambiente (vista 360°)</h1>
+  <p id="opTitleLine" style="color:#e3c789;font-size:13px"></p>
+  <div class="steps">
+    <b>Come si fa:</b><br>
+    1. Scegli l'ambiente qui sotto.<br>
+    2. Stai fermo in un punto e scatta <b>4 foto normali</b>, girando di circa un quarto di
+    giro (90°) su te stesso tra uno scatto e l'altro, sempre nello stesso punto.<br>
+    3. Il sito le userà per farti "guardare a destra e sinistra" in quel punto — nessuna
+    app esterna, nessuna fotosfera, foto normali fatte con la fotocamera di qui.<br>
+    4. Ripeti per un altro ambiente per poter "camminare avanti e indietro" tra le stanze,
+    nell'ordine in cui le aggiungi.
+  </div>
+
+  <label for="roomSelect">Ambiente
+    <select id="roomSelect">
+      <option value="">— scegli —</option>
+      <option>Ingresso</option>
+      <option>Soggiorno</option>
+      <option>Salotto</option>
+      <option>Cucina</option>
+      <option>Sala da pranzo</option>
+      <option>Camera da letto</option>
+      <option>Camera da letto 2</option>
+      <option>Camera da letto 3</option>
+      <option>Bagno</option>
+      <option>Bagno 2</option>
+      <option>Corridoio</option>
+      <option>Studio</option>
+      <option>Terrazzo</option>
+      <option>Balcone</option>
+      <option>Giardino</option>
+      <option>Garage</option>
+      <option value="__custom__">Altro (scrivi tu)…</option>
+    </select>
+  </label>
+  <input type="text" id="roomCustom" placeholder="Nome ambiente" style="display:none;max-width:320px">
+
+  <div class="thumbRow" id="thumbRow">
+    <div class="empty"></div><div class="empty"></div><div class="empty"></div><div class="empty"></div>
+  </div>
+  <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none">
+  <button class="btn" id="shootBtn" disabled>📷 Scatta foto 1/4</button>
+  <button class="btn secondary" id="restartShotsBtn" style="display:none">Ricomincia le 4 foto</button>
+  <button class="btn" id="saveSceneBtn" style="display:none">Salva questo ambiente</button>
+  <div id="saveStatus" style="font-size:12px;margin-top:4px"></div>
+</div>
+
+<div id="afterSaveScreen" class="screen">
+  <h2>Ambiente salvato ✓</h2>
+  <div class="roomChips" id="savedRoomsChips"></div>
+  <p style="margin-top:14px">Vuoi fotografare un altro ambiente per questo stesso immobile?</p>
+  <button class="btn" id="anotherRoomBtn">Sì, un altro ambiente</button>
+  <button class="btn secondary" id="finishAllBtn">No, ho finito</button>
+</div>
+
+<div id="doneScreen" class="screen">
+  <h1>Fatto</h1>
+  <p>Ambienti salvati su questo immobile, nell'ordine in cui li vedrai nel virtual tour: <b id="doneRoomsList"></b>.</p>
+</div>
+
+<script>
+/* ============================================================================
+ * Cattura 4 foto normali per ambiente (nessuna fotosfera, nessuno stitching)
+ * usando direttamente la fotocamera del sito (input file con capture, che
+ * funziona per foto singole — la limitazione della modalita' Panorama vale
+ * solo per quella modalita' specifica, non per gli scatti normali). Il
+ * viewer pubblico le mostra una alla volta con frecce sinistra/destra per
+ * "girare la testa", e avanti/indietro tra un ambiente e il successivo
+ * nell'ordine in cui vengono aggiunti qui.
+ *
+ * Apertura richiesta: ?token=<token da scan_sessions, target_type
+ * 'virtual_walk_tour_scene'>&opportunity_title=<opzionale>
+ * ==========================================================================*/
+
+var params = new URLSearchParams(location.search);
+var scanToken = params.get("token");
+var opportunityTitle = params.get("opportunity_title") || "";
+
+var hasConfig = (typeof SUPABASE_URL !== "undefined" && SUPABASE_URL && typeof SUPABASE_ANON_KEY !== "undefined" && SUPABASE_ANON_KEY);
+var uploadEndpoint = hasConfig ? (SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/scan-upload") : null;
+
+var TOTAL_SHOTS = 4;
+var currentRoomName = "";
+var shots = []; // File objects
+var savedRooms = [];
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
+  if(id) document.getElementById(id).classList.add("active");
+}
+
+function detectIsPhone(){
+  var ua = navigator.userAgent || "";
+  var isIPad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isAndroidTablet = /Android/.test(ua) && !/Mobile/.test(ua);
+  if(isIPad || isAndroidTablet) return false;
+  if(/iPhone|Android.*Mobile|Windows Phone/.test(ua)) return true;
+  var hasCoarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  var smallScreen = Math.min(window.screen.width, window.screen.height) <= 480;
+  return hasCoarsePointer && smallScreen;
+}
+
+function buildSelfUrl(){
+  var qp = new URLSearchParams();
+  qp.set("token", scanToken);
+  if(opportunityTitle) qp.set("opportunity_title", opportunityTitle);
+  return location.origin + location.pathname + "?" + qp.toString();
+}
+
+function showQrScreen(){
+  document.getElementById("qrOpTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
+  var url = buildSelfUrl();
+  var box = document.getElementById("qrBox");
+  box.innerHTML = "";
+  if(typeof qrcode === "function"){
+    var qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    box.innerHTML = qr.createImgTag(6, 8);
+  }
+  document.getElementById("qrFallbackUrl").textContent = url;
+  show("qrScreen");
+}
+
+document.getElementById("qrOverrideBtn").addEventListener("click", function(){
+  document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
+  show("roomSetupScreen");
+});
+
+if(!scanToken || !uploadEndpoint){
+  show("noIdScreen");
+  if(!uploadEndpoint){
+    document.getElementById("noIdScreen").innerHTML =
+      "<h1>Configurazione mancante</h1><p>Non trovo js/config.js con SUPABASE_URL raggiungibile da questa pagina (percorso atteso: ../js/config.js).</p>";
+  } else {
+    document.getElementById("noIdScreen").innerHTML =
+      "<h1>Link non valido o scaduto</h1><p>Apri questo strumento dal pulsante nella scheda dell'immobile (il link resta valido 20 minuti) — non aprirlo direttamente.</p>";
+  }
+} else if(!detectIsPhone()){
+  showQrScreen();
+} else {
+  document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
+  show("roomSetupScreen");
+}
+
+// ---- selezione ambiente ----
+document.getElementById("roomSelect").addEventListener("change", function(){
+  var v = this.value;
+  var custom = document.getElementById("roomCustom");
+  if(v === "__custom__"){
+    custom.style.display = "block";
+    custom.value = "";
+    custom.focus();
+  } else {
+    custom.style.display = "none";
+  }
+  checkRoomReady();
+});
+document.getElementById("roomCustom").addEventListener("input", checkRoomReady);
+
+function currentRoomLabel(){
+  var sel = document.getElementById("roomSelect").value;
+  if(sel === "__custom__") return document.getElementById("roomCustom").value.trim();
+  return sel;
+}
+function checkRoomReady(){
+  document.getElementById("shootBtn").disabled = !currentRoomLabel() || shots.length >= TOTAL_SHOTS;
+}
+
+function renderThumbs(){
+  var row = document.getElementById("thumbRow");
+  row.innerHTML = "";
+  for(var i=0;i<TOTAL_SHOTS;i++){
+    if(shots[i]){
+      var img = document.createElement("img");
+      img.src = URL.createObjectURL(shots[i]);
+      row.appendChild(img);
+    } else {
+      var d = document.createElement("div");
+      d.className = "empty";
+      row.appendChild(d);
+    }
+  }
+}
+renderThumbs();
+
+document.getElementById("shootBtn").addEventListener("click", function(){
+  currentRoomName = currentRoomLabel();
+  if(!currentRoomName || shots.length >= TOTAL_SHOTS) return;
+  document.getElementById("fileInput").click();
+});
+
+document.getElementById("fileInput").addEventListener("change", function(e){
+  var file = e.target.files && e.target.files[0];
+  if(!file) return;
+  shots.push(file);
+  renderThumbs();
+  document.getElementById("fileInput").value = "";
+
+  if(shots.length < TOTAL_SHOTS){
+    document.getElementById("shootBtn").textContent = "📷 Scatta foto " + (shots.length + 1) + "/" + TOTAL_SHOTS;
+    document.getElementById("restartShotsBtn").style.display = "inline-block";
+  } else {
+    document.getElementById("shootBtn").style.display = "none";
+    document.getElementById("saveSceneBtn").style.display = "inline-block";
+    document.getElementById("restartShotsBtn").style.display = "inline-block";
+  }
+});
+
+document.getElementById("restartShotsBtn").addEventListener("click", function(){
+  shots = [];
+  renderThumbs();
+  document.getElementById("shootBtn").style.display = "inline-block";
+  document.getElementById("shootBtn").textContent = "📷 Scatta foto 1/4";
+  document.getElementById("saveSceneBtn").style.display = "none";
+  document.getElementById("restartShotsBtn").style.display = "none";
+  checkRoomReady();
+});
+
+document.getElementById("saveSceneBtn").addEventListener("click", function(){
+  if(shots.length < 2) return;
+  var btn = this;
+  btn.disabled = true;
+  document.getElementById("saveStatus").textContent = "Caricamento in corso…";
+  document.getElementById("saveStatus").className = "";
+
+  var fd = new FormData();
+  fd.append("token", scanToken);
+  fd.append("room_name", currentRoomName);
+  shots.forEach(function(file, i){
+    fd.append("photo_" + i, file, file.name || ("foto" + i + ".jpg"));
+  });
+
+  fetch(uploadEndpoint, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY },
+    body: fd
+  }).then(function(res){
+    return res.json().catch(function(){ return { success:false, error: "Risposta del server non leggibile (HTTP " + res.status + ")." }; });
+  }).then(function(data){
+    if(!data || !data.success) throw new Error((data && data.error) || "Caricamento fallito.");
+    savedRooms.push(currentRoomName);
+    renderSavedChips();
+    show("afterSaveScreen");
+  }).catch(function(err){
+    document.getElementById("saveStatus").className = "err";
+    document.getElementById("saveStatus").textContent = "Errore salvataggio: " + (err && err.message ? err.message : err);
+    btn.disabled = false;
+  });
+});
+
+function renderSavedChips(){
+  var wrap = document.getElementById("savedRoomsChips");
+  wrap.innerHTML = "";
+  savedRooms.forEach(function(name){
+    var b = document.createElement("button");
+    b.textContent = "✓ " + name;
+    wrap.appendChild(b);
+  });
+}
+
+document.getElementById("anotherRoomBtn").addEventListener("click", function(){
+  document.getElementById("roomSelect").value = "";
+  document.getElementById("roomCustom").style.display = "none";
+  document.getElementById("roomCustom").value = "";
+  shots = [];
+  currentRoomName = "";
+  renderThumbs();
+  document.getElementById("shootBtn").style.display = "inline-block";
+  document.getElementById("shootBtn").textContent = "📷 Scatta foto 1/4";
+  document.getElementById("saveSceneBtn").style.display = "none";
+  document.getElementById("restartShotsBtn").style.display = "none";
+  document.getElementById("saveSceneBtn").disabled = false;
+  checkRoomReady();
+  show("roomSetupScreen");
+});
+
+document.getElementById("finishAllBtn").addEventListener("click", function(){
+  document.getElementById("doneRoomsList").textContent = savedRooms.join(" → ");
+  show("doneScreen");
+});
+</script>
+</body>
+</html>
