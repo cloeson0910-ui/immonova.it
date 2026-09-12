@@ -364,6 +364,11 @@ textarea{
     <p style="font-size:12.5px;color:#8f7643;line-height:1.6;margin:0 0 16px">Immobili visitati, proposte ricevute e proposte inviate per conto di questo cliente.</p>
 
     <div style="margin-bottom:18px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Immobili in vendita</div>
+      <div id="activitySellerPropsList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
+    </div>
+
+    <div style="margin-bottom:18px">
       <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Immobili visitati</div>
       <div id="activityVisitsList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
     </div>
@@ -1178,8 +1183,37 @@ var OFFER_STATUS_LABELS = {
    qui solo raccolti e mostrati insieme in un unico posto sulla scheda del cliente. Best
    effort: un fallimento qui non deve mai bloccare il resto della scheda già caricata. */
 async function loadInvestorActivity(id){
+  var sellerPropsBox = document.getElementById("activitySellerPropsList");
   var visitsBox = document.getElementById("activityVisitsList");
   var offersBox = document.getElementById("activityOffersList");
+  var sellerOpportunityIds = [];
+
+  try{
+    var sellerPropsRes = await client
+      .from("investor_seller_properties")
+      .select("opportunity_id, opportunities(id, title, status)")
+      .eq("investor_id", id);
+
+    if(sellerPropsRes.error) throw sellerPropsRes.error;
+    var sellerProps = sellerPropsRes.data || [];
+    sellerOpportunityIds = sellerProps.map(function(r){ return r.opportunity_id; }).filter(function(v){ return v != null; });
+
+    if(!sellerProps.length){
+      sellerPropsBox.innerHTML = '<div class="activity-empty">Nessun immobile in vendita per questo cliente.</div>';
+    }else{
+      sellerPropsBox.innerHTML = sellerProps.map(function(r){
+        var title = (r.opportunities && r.opportunities.title) || "Immobile #" + r.opportunity_id;
+        var statusText = (r.opportunities && r.opportunities.status) ? escapeHTML(r.opportunities.status) : "";
+        return '<div class="activity-row">' +
+          '<div><div class="main">' + escapeHTML(title) + '</div><div class="meta">Immobile in vendita' + (statusText ? " · " + statusText : "") + '</div></div>' +
+          '<a class="open-link" href="opportunity-edit.html?id=' + encodeURIComponent(r.opportunity_id) + '">Apri immobile</a>' +
+          '</div>';
+      }).join("");
+    }
+  }catch(e){
+    console.warn("Attività cliente: immobili in vendita non caricati (non bloccante):", e);
+    sellerPropsBox.innerHTML = '<div class="activity-empty">Impossibile caricare gli immobili in vendita.</div>';
+  }
 
   try{
     var visitsRes = await client
@@ -1214,16 +1248,19 @@ async function loadInvestorActivity(id){
       .eq("investor_id", id)
       .order("created_at", { ascending: false });
     if(buyerOffersRes.error) throw buyerOffersRes.error;
-
-    var sellerOffersRes = await client
-      .from("opportunity_offers")
-      .select("id, offer_kind, status, offered_price, created_at, seller_signed_at, opportunities(id, title)")
-      .eq("seller_investor_id", id)
-      .order("created_at", { ascending: false });
-    if(sellerOffersRes.error) throw sellerOffersRes.error;
-
     var buyerOffers = (buyerOffersRes.data || []).map(function(o){ o.__role = "buyer"; return o; });
-    var sellerOffers = (sellerOffersRes.data || []).map(function(o){ o.__role = "seller"; return o; });
+
+    var sellerOffers = [];
+    if(sellerOpportunityIds.length){
+      var sellerOffersRes = await client
+        .from("opportunity_offers")
+        .select("id, offer_kind, status, offered_price, created_at, seller_signed_at, opportunities(id, title), investors!opportunity_offers_investor_id_fkey(first_name, last_name)")
+        .in("opportunity_id", sellerOpportunityIds)
+        .order("created_at", { ascending: false });
+      if(sellerOffersRes.error) throw sellerOffersRes.error;
+      sellerOffers = (sellerOffersRes.data || []).map(function(o){ o.__role = "seller"; return o; });
+    }
+
     var offers = buyerOffers.concat(sellerOffers).sort(function(a, b){
       return new Date(b.created_at || 0) - new Date(a.created_at || 0);
     });
@@ -1234,7 +1271,8 @@ async function loadInvestorActivity(id){
       offersBox.innerHTML = offers.map(function(o){
         var title = (o.opportunities && o.opportunities.title) || "Immobile #" + (o.opportunities ? o.opportunities.id : "?");
         var kindLabel = o.offer_kind === "controfferta" ? "Controfferta" : "Proposta d'acquisto";
-        var roleLabel = o.__role === "seller" ? "Come venditore" : "Come acquirente";
+        var buyerName = o.investors ? [o.investors.first_name, o.investors.last_name].filter(Boolean).join(" ") : "";
+        var roleLabel = o.__role === "seller" ? ("Ricevuta come venditore" + (buyerName ? " da " + escapeHTML(buyerName) : "")) : "Come acquirente";
         var priceText = o.offered_price ? "€ " + Number(o.offered_price).toLocaleString("it-IT") : "";
         var dateText = o.created_at ? new Date(o.created_at).toLocaleDateString("it-IT", {day:"2-digit", month:"long", year:"numeric"}) : "";
         var statusLabel = OFFER_STATUS_LABELS[o.status] || o.status || "";
@@ -1275,6 +1313,12 @@ async function loadInvestor(){
   if(error || !data){
     setProgress(T.msg_investor_not_found, 100, "error");
     return;
+  }
+
+  var fullNameForTitle = [data.first_name, data.last_name].filter(Boolean).join(" ");
+  if(fullNameForTitle){
+    pageTitle.textContent = T.title_edit + " — " + fullNameForTitle;
+    document.title = fullNameForTitle + " | Modifica Contatto | IMMONOVA Admin";
   }
 
   document.getElementById("first_name").value = data.first_name || "";
