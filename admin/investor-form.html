@@ -168,6 +168,13 @@ body::after{
   color:#a67f34;
   margin-bottom:20px;
 }
+.activity-list{display:flex;flex-direction:column;gap:8px}
+.activity-empty{font-size:12.5px;color:#8f7643;padding:10px 0}
+.activity-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;background:#f9f4e8;border:1px solid rgba(166,127,52,.18);border-radius:2px;flex-wrap:wrap}
+.activity-row .main{font-size:13px;color:#4a3c1d;font-weight:600}
+.activity-row .meta{font-size:11.5px;color:#8f7643;margin-top:2px}
+.activity-row .status-tag{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:2px;background:rgba(166,127,52,.15);color:#a67f34;white-space:nowrap}
+.activity-row a.open-link{font-size:11.5px;color:#a67f34;text-decoration:underline;white-space:nowrap}
 .grid{
   display:grid;
   grid-template-columns:repeat(2,1fr);
@@ -534,6 +541,21 @@ textarea{
       <div class="field full">
         <label data-i18n="label_internal_notes">Note interne</label>
         <textarea id="notes" data-i18n-placeholder="ph_notes" placeholder="Preferenze, conversazioni, richieste specifiche, follow-up futuri..."></textarea>
+      </div>
+    </div>
+
+    <div class="section" id="activitySection" style="display:none">
+      <h2 class="section-title">Attività cliente</h2>
+      <p style="font-size:12.5px;color:#8f7643;line-height:1.6;margin:0 0 16px">Immobili visitati, proposte ricevute e proposte inviate per conto di questo cliente.</p>
+
+      <div style="margin-bottom:18px">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Immobili visitati</div>
+        <div id="activityVisitsList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Proposte (ricevute o inviate per suo conto)</div>
+        <div id="activityOffersList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
       </div>
     </div>
 
@@ -1120,6 +1142,83 @@ async function checkPendingNewsBadge(id){
   }
 }
 
+function escapeHTML(value){
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+var OFFER_STATUS_LABELS = {
+  bozza:"Bozza", inviata:"Inviata", accettata:"Accettata", rifiutata:"Rifiutata",
+  controfferta_ricevuta:"Controfferta ricevuta", ritirata:"Ritirata", scaduta:"Scaduta"
+};
+
+/* "Attività cliente": visite fatte, proposte ricevute e proposte inviate per suo conto —
+   dati già esistenti (property_visits, opportunity_offers) collegati via investor_id,
+   qui solo raccolti e mostrati insieme in un unico posto sulla scheda del cliente. Best
+   effort: un fallimento qui non deve mai bloccare il resto della scheda già caricata. */
+async function loadInvestorActivity(id){
+  var visitsBox = document.getElementById("activityVisitsList");
+  var offersBox = document.getElementById("activityOffersList");
+
+  try{
+    var visitsRes = await client
+      .from("property_visits")
+      .select("id, visit_date, pdf_url, created_at, opportunities(id, title)")
+      .eq("investor_id", id)
+      .order("visit_date", { ascending: false });
+
+    if(visitsRes.error) throw visitsRes.error;
+    var visits = visitsRes.data || [];
+    if(!visits.length){
+      visitsBox.innerHTML = '<div class="activity-empty">Nessuna visita registrata per questo cliente.</div>';
+    }else{
+      visitsBox.innerHTML = visits.map(function(v){
+        var title = (v.opportunities && v.opportunities.title) || "Immobile #" + (v.opportunities ? v.opportunities.id : "?");
+        var dateText = v.visit_date ? new Date(v.visit_date).toLocaleDateString("it-IT", {day:"2-digit", month:"long", year:"numeric"}) : "";
+        return '<div class="activity-row">' +
+          '<div><div class="main">' + escapeHTML(title) + '</div><div class="meta">Visita' + (dateText ? " del " + dateText : "") + '</div></div>' +
+          (v.pdf_url ? '<a class="open-link" href="' + escapeHTML(v.pdf_url) + '" target="_blank" rel="noopener">Apri scheda visita</a>' : '') +
+          '</div>';
+      }).join("");
+    }
+  }catch(e){
+    console.warn("Attività cliente: visite non caricate (non bloccante):", e);
+    visitsBox.innerHTML = '<div class="activity-empty">Impossibile caricare le visite.</div>';
+  }
+
+  try{
+    var offersRes = await client
+      .from("opportunity_offers")
+      .select("id, offer_kind, status, offered_price, created_at, buyer_signed_at, opportunities(id, title)")
+      .eq("investor_id", id)
+      .order("created_at", { ascending: false });
+
+    if(offersRes.error) throw offersRes.error;
+    var offers = offersRes.data || [];
+    if(!offers.length){
+      offersBox.innerHTML = '<div class="activity-empty">Nessuna proposta collegata a questo cliente.</div>';
+    }else{
+      offersBox.innerHTML = offers.map(function(o){
+        var title = (o.opportunities && o.opportunities.title) || "Immobile #" + (o.opportunities ? o.opportunities.id : "?");
+        var kindLabel = o.offer_kind === "controfferta" ? "Controfferta" : "Proposta d'acquisto";
+        var priceText = o.offered_price ? "€ " + Number(o.offered_price).toLocaleString("it-IT") : "";
+        var dateText = o.created_at ? new Date(o.created_at).toLocaleDateString("it-IT", {day:"2-digit", month:"long", year:"numeric"}) : "";
+        var statusLabel = OFFER_STATUS_LABELS[o.status] || o.status || "";
+        var signedNote = o.buyer_signed_at ? " · firmata dal cliente" : "";
+        return '<div class="activity-row">' +
+          '<div><div class="main">' + escapeHTML(title) + '</div><div class="meta">' + kindLabel + (priceText ? " — " + escapeHTML(priceText) : "") + (dateText ? " · " + dateText : "") + escapeHTML(signedNote) + '</div></div>' +
+          '<span class="status-tag">' + escapeHTML(statusLabel) + '</span>' +
+          '<a class="open-link" href="offer-detail.html?offer_id=' + encodeURIComponent(o.id) + '">Apri proposta</a>' +
+          '</div>';
+      }).join("");
+    }
+  }catch(e){
+    console.warn("Attività cliente: proposte non caricate (non bloccante):", e);
+    offersBox.innerHTML = '<div class="activity-empty">Impossibile caricare le proposte.</div>';
+  }
+}
+
 async function loadInvestor(){
   if(!investorId) return;
 
@@ -1181,6 +1280,9 @@ async function loadInvestor(){
   document.querySelectorAll('input[name="category"]').forEach(input => {
     input.checked = categories.includes(input.value);
   });
+
+  document.getElementById("activitySection").style.display = "block";
+  loadInvestorActivity(investorId);
 
   setProgress("", 0, "");
 }
