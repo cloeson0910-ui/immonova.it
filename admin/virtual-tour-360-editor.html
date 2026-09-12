@@ -43,7 +43,8 @@
 <div class="wrap">
   <div class="panel left">
     <h2>Scene (stanze)</h2>
-    <div id="sceneList"></div>
+    <button class="btn secondary" id="reloadBtn" style="margin-top:0">🔄 Ricarica tour (vedi eventuali ambienti aggiunti da telefono)</button>
+    <div id="sceneList" style="margin-top:10px"></div>
     <label>Nuova scena — nome stanza</label>
     <input type="text" id="newSceneTitle" placeholder="es. Cucina">
     <label>Foto panoramica 360° (equirettangolare, rapporto 2:1)</label>
@@ -89,6 +90,13 @@ var tour = { first_scene_id: null, scenes: [] };
 var activeSceneId = null;
 var viewer = null;
 var pendingHotspotCoords = null;
+/* Timestamp dell'ultima versione del tour vista da questa pagina (dal DB, non
+   inventato in locale): usato per accorgersi se qualcun altro -- un'altra
+   scheda aperta, o uno degli strumenti di cattura dal telefono -- ha
+   modificato il tour nel frattempo, cosa che prima non veniva controllata e
+   causava resurrezioni di scene gia' cancellate quando si salvava una copia
+   in memoria ormai vecchia sopra a quella piu' recente. */
+var loadedUpdatedAt = null;
 
 function slugify(s) {
   return String(s || "scena").toLowerCase().trim()
@@ -183,7 +191,7 @@ function promptNewHotspot() {
 }
 
 function removeScene(id) {
-  if (!confirm("Eliminare questa scena? Verranno rimossi anche gli hotspot che la usano.")) return;
+  if (!confirm("Eliminare questa scena? Verranno rimossi anche gli hotspot che la usano. Ricordati di premere \"Salva tour\" dopo.")) return;
   tour.scenes = tour.scenes.filter(function (s) { return s.id !== id; });
   tour.scenes.forEach(function (s) { s.hotspots = (s.hotspots || []).filter(function (h) { return h.target_scene_id !== id; }); });
   if (tour.first_scene_id === id) tour.first_scene_id = tour.scenes[0] ? tour.scenes[0].id : null;
@@ -211,7 +219,7 @@ async function addScene() {
   if (!tour.first_scene_id) tour.first_scene_id = id;
   document.getElementById("newSceneTitle").value = "";
   document.getElementById("newSceneFile").value = "";
-  setStatus("Scena aggiunta.", "ok");
+  setStatus("Scena aggiunta — ricordati di premere \"Salva tour su IMMONOVA\".", "ok");
   activateScene(id);
 }
 
@@ -219,12 +227,30 @@ async function saveTour() {
   if (!opportunityId) { alert("Manca opportunity_id nell'URL."); return; }
   if (!supabaseClient) { alert("Impossibile connettersi a Supabase: verifica che ../js/config.js sia raggiungibile da questa pagina."); return; }
   if (!tour.scenes.length) { alert("Aggiungi almeno una scena prima di salvare."); return; }
+
+  setStatus("Verifica versione corrente...", "ok");
+  /* Prima di sovrascrivere l'intero tour, controlla se qualcun altro lo ha modificato nel
+     frattempo (un'altra scheda di questo editor rimasta aperta, o uno degli strumenti di
+     cattura dal telefono che scrive in autonomia): se e' cambiato rispetto a quando questa
+     pagina lo ha caricato l'ultima volta, blocca il salvataggio invece di sovrascrivere alla
+     cieca -- altrimenti si rischia di cancellare scene aggiunte altrove o "resuscitare"
+     scene che erano state eliminate da un'altra copia dell'editor. */
+  var check = await supabaseClient.from("opportunities").select("virtual_tour_360_updated_at").eq("id", opportunityId).maybeSingle();
+  if (check.error) { setStatus("Errore verifica versione: " + check.error.message, "err"); return; }
+  var remoteUpdatedAt = check.data ? check.data.virtual_tour_360_updated_at : null;
+  if (loadedUpdatedAt !== null && remoteUpdatedAt !== loadedUpdatedAt) {
+    setStatus("Il tour è stato modificato altrove nel frattempo (un'altra scheda aperta, oppure un ambiente aggiunto dal telefono). Per non perdere quelle modifiche, premi \"🔄 Ricarica tour\" qui sopra e rifai le tue modifiche sulla versione più recente prima di salvare.", "err");
+    return;
+  }
+
   setStatus("Salvataggio...", "ok");
+  var newUpdatedAt = new Date().toISOString();
   var update = await supabaseClient
     .from("opportunities")
-    .update({ virtual_tour_360: tour, virtual_tour_360_published: true, virtual_tour_360_updated_at: new Date().toISOString() })
+    .update({ virtual_tour_360: tour, virtual_tour_360_published: true, virtual_tour_360_updated_at: newUpdatedAt })
     .eq("id", opportunityId);
   if (update.error) { setStatus("Errore salvataggio: " + update.error.message, "err"); return; }
+  loadedUpdatedAt = newUpdatedAt;
   setStatus("Tour salvato e pubblicato ✓", "ok");
 }
 
@@ -236,15 +262,24 @@ function setStatus(msg, cls) {
 
 async function loadExisting() {
   if (!opportunityId || !supabaseClient) return;
-  var res = await supabaseClient.from("opportunities").select("virtual_tour_360").eq("id", opportunityId).maybeSingle();
+  var res = await supabaseClient.from("opportunities").select("virtual_tour_360, virtual_tour_360_updated_at").eq("id", opportunityId).maybeSingle();
+  loadedUpdatedAt = res.data ? res.data.virtual_tour_360_updated_at : null;
   if (res.data && res.data.virtual_tour_360 && Array.isArray(res.data.virtual_tour_360.scenes) && res.data.virtual_tour_360.scenes.length) {
     tour = res.data.virtual_tour_360;
     activateScene(tour.first_scene_id || tour.scenes[0].id);
+    setStatus("", "ok");
+  } else {
+    tour = { first_scene_id: null, scenes: [] };
+    activeSceneId = null;
+    if (viewer) { viewer.destroy(); viewer = null; }
+    renderSceneList();
+    renderHotspotList();
   }
 }
 
 document.getElementById("addSceneBtn").onclick = addScene;
 document.getElementById("saveBtn").onclick = saveTour;
+document.getElementById("reloadBtn").onclick = loadExisting;
 loadExisting();
 </script>
 </body>
