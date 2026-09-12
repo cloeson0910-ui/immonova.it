@@ -824,6 +824,7 @@ html[dir="rtl"] .data-grid{direction:rtl}
 <link rel="stylesheet" href="pannellum.css">
 <script src="pannellum.js"></script>
 <script src="virtual-tour-360-viewer.js"></script>
+<script src="virtual-walk-tour-viewer.js"></script>
 </head>
 
 <body>
@@ -1437,6 +1438,27 @@ function safeVirtualTour360(data){
   return allValid ? tour : null;
 }
 
+/* ---- Walk Tour: foto normali multi-direzione per ambiente (nessuna fotosfera,
+   nessuno stitching) — alternativa al tour a sfera qui sopra, stesso bucket. ---- */
+function safeVirtualWalkTour(data){
+  if(!data || data.virtual_walk_tour_published !== true) return null;
+  var tour = data.virtual_walk_tour;
+  if(!tour || !Array.isArray(tour.scenes) || !tour.scenes.length) return null;
+  var allValid = tour.scenes.every(function(s){
+    if(!s || !Array.isArray(s.photos) || !s.photos.length) return false;
+    return s.photos.every(function(p){
+      try{
+        var url = new URL(String(p.url || ""));
+        var host = url.hostname.toLowerCase();
+        return url.protocol === "https:" && host.endsWith(".supabase.co") && url.pathname.indexOf("/storage/v1/object/public/virtual-tours-360/") !== -1;
+      }catch(error){
+        return false;
+      }
+    });
+  });
+  return allValid ? tour : null;
+}
+
 async function renderOpportunity(data){
   data = await getRenderData(data);
   updatePageMeta(data);
@@ -1454,6 +1476,7 @@ async function renderOpportunity(data){
   const timeline = timelineFor(data);
   const events = data.immonova_events || [];
   const virtualTour360 = safeVirtualTour360(data);
+  const virtualWalkTour = safeVirtualWalkTour(data);
 
   pageContent.className = "";
   pageContent.innerHTML = `
@@ -1513,7 +1536,12 @@ async function renderOpportunity(data){
           </div>
         </div>
 
-        ${virtualTour360 ? `
+        ${virtualWalkTour ? `
+        <div class="panel">
+          <h2 class="section-title">${escapeHTML(dict("virtual_tour_360"))}</h2>
+          <p class="text" style="margin-top:0">${escapeHTML(dict("virtual_tour_360_intro"))}</p>
+          <div class="virtual-tour-public" id="walkTourContainer"></div>
+        </div>` : virtualTour360 ? `
         <div class="panel">
           <h2 class="section-title">${escapeHTML(dict("virtual_tour_360"))}</h2>
           <p class="text" style="margin-top:0">${escapeHTML(dict("virtual_tour_360_intro"))}</p>
@@ -1584,7 +1612,9 @@ async function renderOpportunity(data){
     }
   `;
 
-  if(virtualTour360 && window.ImmonovaTour360){
+  if(virtualWalkTour && window.ImmonovaWalkTour){
+    ImmonovaWalkTour.render("walkTourContainer", virtualWalkTour);
+  } else if(virtualTour360 && window.ImmonovaTour360){
     ImmonovaTour360.render("tour360Container", virtualTour360);
   }
 
