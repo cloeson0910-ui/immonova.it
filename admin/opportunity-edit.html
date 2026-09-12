@@ -1728,8 +1728,9 @@ button.danger{
         opportunità, indipendentemente dal resto del form.
       </div>
       <div class="field full" style="margin-bottom:10px">
-        <a id="captureTourBtn" href="#" target="_blank" class="soft" style="display:inline-block;text-decoration:none">📱 Scatta panorama dal telefono</a>
+        <button type="button" id="captureTourBtn" class="soft">📱 Scatta panorama dal telefono</button>
         <span style="font-size:11.5px;color:#999;margin-left:8px">Apre lo strumento di cattura guidata — gli scatti si salvano in automatico su questo immobile.</span>
+        <div id="captureTourStatus" style="font-size:11.5px;margin-top:4px"></div>
       </div>
       <div class="field full">
         <iframe id="tour360EditorFrame" src="" style="width:100%;height:720px;border:1px solid #ddd;border-radius:8px" title="Editor Virtual Tour 360°"></iframe>
@@ -2313,9 +2314,51 @@ var id = params.get("id");
 if(id){
   var tour360Frame = document.getElementById("tour360EditorFrame");
   if(tour360Frame) tour360Frame.src = "virtual-tour-360-editor.html?opportunity_id=" + encodeURIComponent(id);
-  var captureTourBtn = document.getElementById("captureTourBtn");
-  if(captureTourBtn) captureTourBtn.href = "virtual-tour-360-capture.html?opportunity_id=" + encodeURIComponent(id);
 }
+
+var captureTourBtn = document.getElementById("captureTourBtn");
+var captureTourOpportunityTitle = "";
+
+function genScanTokenGeneric(){
+  if(window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g,"");
+  return "scan" + Date.now() + Math.random().toString(36).slice(2);
+}
+
+async function openCaptureTourOnPhone(){
+  if(!id){
+    var st = document.getElementById("captureTourStatus");
+    if(st){ st.style.color = "#9c2f2f"; st.textContent = "Salva prima l'immobile, poi potrai scattare il panorama dal telefono."; }
+    return;
+  }
+  var st = document.getElementById("captureTourStatus");
+  if(st){ st.style.color = "#666"; st.textContent = "Creazione sessione in corso…"; }
+
+  var token = genScanTokenGeneric();
+  var expires = new Date(Date.now() + 20*60*1000);
+
+  var insertRes = await client.from("scan_sessions").insert({
+    token: token,
+    opportunity_id: id,
+    created_by: currentUser ? currentUser.id : null,
+    expires_at: expires.toISOString(),
+    status: "active",
+    target_type: "virtual_tour_360_scene"
+  });
+
+  if(insertRes.error){
+    if(st){ st.style.color = "#9c2f2f"; st.textContent = "Errore creazione sessione: " + insertRes.error.message; }
+    return;
+  }
+
+  var base = window.location.href.split("?")[0].replace(/[^\/]*$/, "");
+  var url = base + "virtual-tour-360-capture.html?token=" + encodeURIComponent(token);
+  if(captureTourOpportunityTitle) url += "&opportunity_title=" + encodeURIComponent(captureTourOpportunityTitle);
+
+  if(st){ st.textContent = ""; }
+  window.open(url, "_blank");
+}
+
+if(captureTourBtn) captureTourBtn.addEventListener("click", openCaptureTourOnPhone);
 
 var form = document.getElementById("opportunityForm");
 var loading = document.getElementById("loading");
@@ -5374,8 +5417,8 @@ async function loadOpportunity(){
   var data = result.data;
   loadedOpportunity = data;
 
-  if(captureTourBtn && data.title){
-    captureTourBtn.href = "virtual-tour-360-capture.html?opportunity_id=" + encodeURIComponent(id) + "&opportunity_title=" + encodeURIComponent(data.title);
+  if(data.title){
+    captureTourOpportunityTitle = data.title;
   }
 
   await loadCategories(data.category || "");

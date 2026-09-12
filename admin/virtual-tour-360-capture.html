@@ -224,12 +224,11 @@ var SIZE_PROFILES = {
 };
 
 var params = new URLSearchParams(location.search);
-var opportunityId = params.get("opportunity_id");
+var scanToken = params.get("token");
 var opportunityTitle = params.get("opportunity_title") || "";
 
-var supabaseClient = (typeof SUPABASE_URL !== "undefined" && SUPABASE_URL && window.supabase)
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
+var hasConfig = (typeof SUPABASE_URL !== "undefined" && SUPABASE_URL && typeof SUPABASE_ANON_KEY !== "undefined" && SUPABASE_ANON_KEY);
+var uploadEndpoint = hasConfig ? (SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/scan-upload") : null;
 
 var currentYaw = 0, currentPitch = 0, currentRoll = 0;
 var yawOffset = null;
@@ -266,13 +265,13 @@ function detectIsPhone(){
 
 function buildSelfUrl(){
   var qp = new URLSearchParams();
-  qp.set("opportunity_id", opportunityId);
+  qp.set("token", scanToken);
   if(opportunityTitle) qp.set("opportunity_title", opportunityTitle);
   return location.origin + location.pathname + "?" + qp.toString();
 }
 
 function showQrScreen(){
-  document.getElementById("qrOpTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : ("Immobile ID: " + opportunityId);
+  document.getElementById("qrOpTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
   var url = buildSelfUrl();
   var box = document.getElementById("qrBox");
   box.innerHTML = "";
@@ -287,20 +286,23 @@ function showQrScreen(){
 }
 
 document.getElementById("qrOverrideBtn").addEventListener("click", function(){
-  document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : ("Immobile ID: " + opportunityId);
+  document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
   show("startScreen");
 });
 
-if(!opportunityId || !supabaseClient){
+if(!scanToken || !uploadEndpoint){
   show("noIdScreen");
-  if(!supabaseClient){
+  if(!uploadEndpoint){
     document.getElementById("noIdScreen").innerHTML =
-      "<h1>Configurazione mancante</h1><p>Non trovo js/config.js con SUPABASE_URL/SUPABASE_ANON_KEY raggiungibile da questa pagina (percorso atteso: ../js/config.js). Verifica la posizione del file sul server.</p>";
+      "<h1>Configurazione mancante</h1><p>Non trovo js/config.js con SUPABASE_URL raggiungibile da questa pagina (percorso atteso: ../js/config.js). Verifica la posizione del file sul server.</p>";
+  } else {
+    document.getElementById("noIdScreen").innerHTML =
+      "<h1>Link non valido o scaduto</h1><p>Apri questo strumento dal pulsante \"Scatta panorama dal telefono\" nella scheda dell'immobile (genera un link valido 20 minuti) — non aprirlo direttamente senza passare da lì.</p>";
   }
 } else if(!detectIsPhone()){
   showQrScreen();
 } else {
-  document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : ("Immobile ID: " + opportunityId);
+  document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
   show("startScreen");
 }
 
@@ -498,7 +500,14 @@ function composePanorama(){
         var dx = Math.cos(phi)*Math.sin(theta);
         var dy = Math.sin(phi);
         var dz = Math.cos(phi)*Math.cos(theta);
-        var rSum=0, gSum=0, bSum=0, wSum=0;
+        /* Niente piu' media pesata tra tessere sovrapposte: con uno smartphone tenuto in
+           mano la rotazione non avviene attorno al punto nodale dell'obiettivo, quindi due
+           tessere che inquadrano lo stesso punto lo vedono da angolazioni leggermente
+           diverse (parallasse) — mediarle crea doppie esposizioni ("fantasmi") su oggetti
+           vicini. Si sceglie invece, per ogni pixel, UNA sola tessera: quella il cui centro
+           e' piu' vicino angolarmente — elimina i fantasmi, le cuciture restano visibili
+           ma nitide (compromesso onesto senza un vero allineamento per feature-matching). */
+        var bestWgt = -1, bestR=20, bestG=20, bestB=20, bestFound=false;
         for(var i=0;i<tiles.length;i++){
           var t = tiles[i];
           var cosY = Math.cos(-t.yaw), sinY = Math.sin(-t.yaw);
@@ -520,14 +529,18 @@ function composePanorama(){
           var idx = (vy*t.w + ux)*4;
           var edgeWX = 1 - Math.abs(angX)/(t.fovHrad/2);
           var edgeWY = 1 - Math.abs(angY)/(t.fovVrad/2);
-          var wgt = Math.max(0.001, edgeWX*edgeWY);
-          rSum += t.data[idx]*wgt; gSum += t.data[idx+1]*wgt; bSum += t.data[idx+2]*wgt; wSum += wgt;
+          var wgt = edgeWX*edgeWY; // piu' vicino al centro della tessera = piu' affidabile
+          if(wgt > bestWgt){
+            bestWgt = wgt;
+            bestR = t.data[idx]; bestG = t.data[idx+1]; bestB = t.data[idx+2];
+            bestFound = true;
+          }
         }
         var oidx = (y*outW+x)*4;
-        if(wSum>0){
-          outImg.data[oidx] = rSum/wSum;
-          outImg.data[oidx+1] = gSum/wSum;
-          outImg.data[oidx+2] = bSum/wSum;
+        if(bestFound){
+          outImg.data[oidx] = bestR;
+          outImg.data[oidx+1] = bestG;
+          outImg.data[oidx+2] = bestB;
           outImg.data[oidx+3] = 255;
         }else{
           outImg.data[oidx]=20; outImg.data[oidx+1]=20; outImg.data[oidx+2]=20; outImg.data[oidx+3]=255;
@@ -565,50 +578,26 @@ document.getElementById("retryRoomBtn").addEventListener("click", function(){
   updateReticle();
 });
 
-function slugify(s){
-  return s.toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "ambiente";
-}
-
 document.getElementById("saveSceneBtn").addEventListener("click", function(){
   if(!lastComposedBlob) return;
   var btn = this;
   btn.disabled = true;
-  document.getElementById("saveStatus").textContent = "Caricamento su Supabase…";
+  document.getElementById("saveStatus").textContent = "Caricamento in corso…";
   document.getElementById("saveStatus").className = "";
 
-  var sceneId = slugify(currentRoomName) + "-" + Math.random().toString(36).slice(2,10);
-  var path = opportunityId + "/" + sceneId + ".jpg";
+  var fd = new FormData();
+  fd.append("token", scanToken);
+  fd.append("room_name", currentRoomName);
+  fd.append("file", lastComposedBlob, "panorama.jpg");
 
-  supabaseClient.storage.from("virtual-tours-360").upload(path, lastComposedBlob, {
-    contentType: "image/jpeg", upsert: false
+  fetch(uploadEndpoint, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY },
+    body: fd
   }).then(function(res){
-    if(res.error) throw res.error;
-    var pub = supabaseClient.storage.from("virtual-tours-360").getPublicUrl(path);
-    var imageUrl = pub.data.publicUrl;
-
-    return supabaseClient.from("opportunities").select("virtual_tour_360").eq("id", opportunityId).single().then(function(sel){
-      if(sel.error) throw sel.error;
-      var tour = sel.data && sel.data.virtual_tour_360 ? sel.data.virtual_tour_360 : { scenes: [] };
-      if(!Array.isArray(tour.scenes)) tour.scenes = [];
-      tour.scenes.push({
-        id: sceneId,
-        title: currentRoomName,
-        image_url: imageUrl,
-        pitch: 0, yaw: 0, hfov: 110,
-        hotspots: []
-      });
-      if(!tour.first_scene_id) tour.first_scene_id = sceneId;
-
-      return supabaseClient.from("opportunities").update({
-        virtual_tour_360: tour,
-        virtual_tour_360_published: true,
-        virtual_tour_360_updated_at: new Date().toISOString()
-      }).eq("id", opportunityId);
-    });
-  }).then(function(upd){
-    if(upd && upd.error) throw upd.error;
+    return res.json().catch(function(){ return { success:false, error: "Risposta del server non leggibile (HTTP " + res.status + ")." }; });
+  }).then(function(data){
+    if(!data || !data.success) throw new Error((data && data.error) || "Caricamento fallito.");
     savedRooms.push(currentRoomName);
     document.getElementById("saveStatus").textContent = "";
     renderSavedChips();
