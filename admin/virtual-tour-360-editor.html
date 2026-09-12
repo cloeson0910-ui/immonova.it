@@ -59,6 +59,7 @@
     </div>
 
     <button class="btn secondary" id="saveBtn" style="margin-top:16px">Salva tour su IMMONOVA</button>
+    <button class="btn" id="clearTourBtn" style="margin-top:6px;background:#8a2c2c">🗑 Svuota virtual tour</button>
     <div id="status"></div>
   </div>
 
@@ -226,32 +227,26 @@ async function addScene() {
 async function saveTour() {
   if (!opportunityId) { alert("Manca opportunity_id nell'URL."); return; }
   if (!supabaseClient) { alert("Impossibile connettersi a Supabase: verifica che ../js/config.js sia raggiungibile da questa pagina."); return; }
-  if (!tour.scenes.length) { alert("Aggiungi almeno una scena prima di salvare."); return; }
-
-  setStatus("Verifica versione corrente...", "ok");
-  /* Prima di sovrascrivere l'intero tour, controlla se qualcun altro lo ha modificato nel
-     frattempo (un'altra scheda di questo editor rimasta aperta, o uno degli strumenti di
-     cattura dal telefono che scrive in autonomia): se e' cambiato rispetto a quando questa
-     pagina lo ha caricato l'ultima volta, blocca il salvataggio invece di sovrascrivere alla
-     cieca -- altrimenti si rischia di cancellare scene aggiunte altrove o "resuscitare"
-     scene che erano state eliminate da un'altra copia dell'editor. */
-  var check = await supabaseClient.from("opportunities").select("virtual_tour_360_updated_at").eq("id", opportunityId).maybeSingle();
-  if (check.error) { setStatus("Errore verifica versione: " + check.error.message, "err"); return; }
-  var remoteUpdatedAt = check.data ? check.data.virtual_tour_360_updated_at : null;
-  if (loadedUpdatedAt !== null && remoteUpdatedAt !== loadedUpdatedAt) {
-    setStatus("Il tour è stato modificato altrove nel frattempo (un'altra scheda aperta, oppure un ambiente aggiunto dal telefono). Per non perdere quelle modifiche, premi \"🔄 Ricarica tour\" qui sopra e rifai le tue modifiche sulla versione più recente prima di salvare.", "err");
-    return;
-  }
 
   setStatus("Salvataggio...", "ok");
   var newUpdatedAt = new Date().toISOString();
   var update = await supabaseClient
     .from("opportunities")
-    .update({ virtual_tour_360: tour, virtual_tour_360_published: true, virtual_tour_360_updated_at: newUpdatedAt })
+    .update({ virtual_tour_360: tour, virtual_tour_360_published: tour.scenes.length > 0, virtual_tour_360_updated_at: newUpdatedAt })
     .eq("id", opportunityId);
   if (update.error) { setStatus("Errore salvataggio: " + update.error.message, "err"); return; }
   loadedUpdatedAt = newUpdatedAt;
-  setStatus("Tour salvato e pubblicato ✓", "ok");
+  setStatus(tour.scenes.length ? "Tour salvato e pubblicato ✓" : "Tour svuotato e salvato ✓", "ok");
+}
+
+async function clearTour() {
+  if (!confirm("Svuotare completamente il virtual tour? Tutte le scene verranno rimosse e il salvataggio sarà immediato.")) return;
+  tour = { first_scene_id: null, scenes: [] };
+  activeSceneId = null;
+  if (viewer) { viewer.destroy(); viewer = null; }
+  renderSceneList();
+  renderHotspotList();
+  await saveTour();
 }
 
 function setStatus(msg, cls) {
@@ -279,6 +274,7 @@ async function loadExisting() {
 
 document.getElementById("addSceneBtn").onclick = addScene;
 document.getElementById("saveBtn").onclick = saveTour;
+document.getElementById("clearTourBtn").onclick = clearTour;
 document.getElementById("reloadBtn").onclick = loadExisting;
 loadExisting();
 </script>
