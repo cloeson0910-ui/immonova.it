@@ -69,6 +69,13 @@
   .success-card h1{font-size:19px;margin:0 0 12px;color:#4a3c1d;font-weight:600}
   .success-card p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin:0 0 6px}
   .success-card .success-close-note{margin-top:18px;font-size:11.5px;color:#8f7643}
+  .saving-overlay{position:fixed;inset:0;height:100dvh;background:rgba(74,60,29,.55);z-index:10500;display:flex;align-items:center;justify-content:center;padding:24px}
+  .saving-overlay[hidden]{display:none}
+  .saving-card{max-width:340px;width:100%;background:#fffaf0;border:1px solid rgba(166,127,52,.3);border-radius:4px;box-shadow:0 24px 60px rgba(0,0,0,.25);padding:32px 28px;text-align:center}
+  .saving-spinner{width:38px;height:38px;margin:0 auto 16px;border:3px solid rgba(166,127,52,.25);border-top-color:#a67f34;border-radius:50%;animation:saving-spin .8s linear infinite}
+  @keyframes saving-spin{to{transform:rotate(360deg)}}
+  .saving-card p{margin:0 0 8px;font-size:14px;color:#4a3c1d;font-weight:600}
+  .saving-card .saving-note{margin-top:6px;font-size:11.5px;color:#8f7643;font-weight:400}
 </style>
 </head>
 <body>
@@ -76,7 +83,7 @@
   <div class="card">
     <p class="kicker">IMMONOVA - Off Market Consulting</p>
     <h1>Proposta d&#039;Acquisto - Appartamento Via Tito Schipa</h1>
-    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789171046372.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
+    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/4ecd4819-b80d-48dd-9d61-0e016ae9c40a/proposta-1789171486116.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
   </div>
 
   <div class="section">
@@ -163,6 +170,14 @@
     <h1 id="successTitle">Complimenti per la firma!</h1>
     <p id="successBody">La tua proposta è stata registrata correttamente.</p>
     <p class="success-close-note">Puoi chiudere questa pagina.</p>
+  </div>
+</div>
+
+<div class="saving-overlay" id="savingOverlay" hidden>
+  <div class="saving-card">
+    <div class="saving-spinner"></div>
+    <p id="savingText">Attendi, salvataggio in corso...</p>
+    <p class="saving-note">Non chiudere la pagina né tornare indietro: l'operazione può richiedere qualche secondo.</p>
   </div>
 </div>
 
@@ -348,6 +363,18 @@
   document.getElementById("sigCancelBtn").addEventListener("click", closeSigOverlay);
   document.getElementById("backToDetailsBtn").addEventListener("click", backToDetails);
 
+  /* Banner di attesa a tutto schermo durante il salvataggio (firma o documento caricato):
+     l'operazione (upload firma + upload documento identità + email di conferma) può
+     richiedere qualche secondo su rete mobile, e senza un avviso chiaro il cliente non
+     capisce se è ancora in corso o si è bloccato — richiesto esplicitamente. */
+  function showSavingOverlay(text){
+    document.getElementById("savingText").textContent = text || "Attendi, salvataggio in corso...";
+    document.getElementById("savingOverlay").hidden = false;
+  }
+  function hideSavingOverlay(){
+    document.getElementById("savingOverlay").hidden = true;
+  }
+
   /* Pagina di ringraziamento a tutto schermo dopo la firma, in stile IMMONOVA — il cliente
      capisce chiaramente che è tutto fatto e può chiudere il telefono/la pagina, invece di
      restare sul modulo firma. */
@@ -484,7 +511,8 @@
     var btn = this;
     btn.disabled = true;
     statusEl.className = "sig-status";
-    statusEl.textContent = "Salvataggio in corso...";
+    statusEl.textContent = "";
+    showSavingOverlay("Attendi, salvataggio della firma in corso...");
     try{
       var idDocBase64 = await fileToBase64(idDocFile);
       var data = await callAction({
@@ -500,8 +528,10 @@
       if(data && data.signed_documents) renderDocs(data.signed_documents);
       statusEl.className = "sig-status";
       statusEl.textContent = "Firma registrata correttamente ✓";
+      hideSavingOverlay();
       showSuccessScreen("sign");
     }catch(err){
+      hideSavingOverlay();
       statusEl.className = "sig-status error";
       statusEl.textContent = "Errore: " + (err && err.message ? err.message : "operazione non riuscita.");
     }
@@ -526,7 +556,8 @@
     var statusEl = document.getElementById("uploadStatus");
     if(!file) return;
     statusEl.className = "upload-status";
-    statusEl.textContent = "Caricamento in corso...";
+    statusEl.textContent = "";
+    showSavingOverlay("Attendi, caricamento del documento in corso...");
     try{
       var base64 = await fileToBase64(file);
       var data = await callAction({
@@ -539,8 +570,10 @@
       renderDocs(data && data.signed_documents);
       statusEl.className = "upload-status";
       statusEl.textContent = "Documento caricato correttamente ✓";
+      hideSavingOverlay();
       showSuccessScreen("upload");
     }catch(err){
+      hideSavingOverlay();
       statusEl.className = "upload-status error";
       statusEl.textContent = "Errore: " + (err && err.message ? err.message : "operazione non riuscita.");
     }
