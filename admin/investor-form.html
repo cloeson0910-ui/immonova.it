@@ -1191,7 +1191,7 @@ async function loadInvestorActivity(id){
   try{
     var sellerPropsRes = await client
       .from("investor_seller_properties")
-      .select("opportunity_id, opportunities(id, title, status)")
+      .select("opportunity_id, opportunities(id, title, commercial_status)")
       .eq("investor_id", id);
 
     if(sellerPropsRes.error) throw sellerPropsRes.error;
@@ -1203,7 +1203,8 @@ async function loadInvestorActivity(id){
     }else{
       sellerPropsBox.innerHTML = sellerProps.map(function(r){
         var title = (r.opportunities && r.opportunities.title) || "Immobile #" + r.opportunity_id;
-        var statusText = (r.opportunities && r.opportunities.status) ? escapeHTML(r.opportunities.status) : "";
+        var commercialStatus = r.opportunities ? r.opportunities.commercial_status : null;
+        var statusText = commercialStatus === "sold" ? "Venduto" : (commercialStatus ? "In vendita" : "");
         return '<div class="activity-row">' +
           '<div><div class="main">' + escapeHTML(title) + '</div><div class="meta">Immobile in vendita' + (statusText ? " · " + statusText : "") + '</div></div>' +
           '<a class="open-link" href="opportunity-edit.html?id=' + encodeURIComponent(r.opportunity_id) + '">Apri immobile</a>' +
