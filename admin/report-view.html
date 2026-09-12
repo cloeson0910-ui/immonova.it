@@ -2118,7 +2118,7 @@ function renderFinancialSnapshot(){
    il test "societa' di comodo" usa qui il prezzo di acquisto come proxy del valore immobile
    (non esiste un valore catastale strutturato su questo tipo di scheda) -- dichiarato
    esplicitamente nel testo, non spacciato per dato reale. ---- */
-function fiscalScenarioRowsHTML(grossNetIncome, totalInvestment, isResidential, purchasePriceForComodoTest){
+function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestment, isResidential, purchasePriceForComodoTest){
   var rows = [];
   function addRow(label, netAfterTax, note){
     var breakEvenYears = (totalInvestment > 0 && netAfterTax > 0) ? totalInvestment / netAfterTax : null;
@@ -2134,18 +2134,43 @@ function fiscalScenarioRowsHTML(grossNetIncome, totalInvestment, isResidential, 
   addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", grossNetIncome - irpefBase * (0.23 + addizionaliPct), "Base imponibile: 95% del reddito netto (deduzione forfettaria 5%)");
   addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", grossNetIncome - irpefBase * (0.43 + addizionaliPct), "Base imponibile: 95% del reddito netto (deduzione forfettaria 5%)");
 
+  /* ---- Regime forfettario: si applica SOLO se l'attivita' e' svolta in forma d'impresa
+     (non ai redditi fondiari da locazione ordinaria di un privato) -- tipicamente locazioni
+     brevi/turistiche gestite professionalmente (dal 2026 presunzione d'impresa oltre 2 unita'
+     locate). Soglia 85.000 EUR di RICAVI LORDI annui (non del reddito netto): sopra 100.000
+     decadenza immediata con IVA applicata dalla fattura che sfora, tra 85.000 e 100.000
+     decadenza dall'anno successivo. Base imponibile = ricavi lordi x coefficiente di
+     redditivita' (qui stimato 40%, quello tipico delle attivita' di alloggio/servizi -- la
+     tabella ufficiale non elenca esplicitamente "locazione turistica", va verificato il
+     codice ATECO esatto), NON sui costi realmente sostenuti: aliquota 15% ordinaria o 5%
+     nei primi 5 anni di attivita'. In franchigia IVA (nessuna IVA addebitata ne' detratta). ---- */
+  if(grossRevenueYear1 > 0){
+    if(grossRevenueYear1 > 85000){
+      rows.push('<tr><td>Persona fisica — Regime forfettario<br><span style="font-size:10.5px;color:#8f3f2d">Non applicabile: i ricavi lordi (' + escapeHTML(euro(grossRevenueYear1)) + ') superano la soglia di 85.000€/anno prevista per il regime forfettario.</span></td><td>—</td><td>—</td></tr>');
+    }else{
+      var forfCoefficiente = 0.40;
+      var forfImponibile = grossRevenueYear1 * forfCoefficiente;
+      var forfTaxOrdinario = forfImponibile * 0.15;
+      var forfTaxStartup = forfImponibile * 0.05;
+      var forfNetOrdinario = grossNetIncome - forfTaxOrdinario;
+      var forfNetStartup = grossNetIncome - forfTaxStartup;
+      addRow("Persona fisica — Regime forfettario, aliquota 15%", forfNetOrdinario, "Applicabile SOLO se l'attività è svolta in forma d'impresa (es. locazioni brevi/turistiche gestite professionalmente — dal 2026 presunzione d'impresa oltre 2 unità locate), non ai redditi da locazione ordinaria di un privato. Base imponibile stimata: 40% dei ricavi lordi (coefficiente indicativo per attività di alloggio, verificare il codice ATECO esatto con un commercialista). Regime in franchigia IVA.");
+      addRow("Persona fisica — Regime forfettario, aliquota 5% (primi 5 anni attività)", forfNetStartup, "Stesse condizioni di applicabilità della riga precedente, aliquota agevolata valida solo nei primi 5 anni di una nuova attività.");
+    }
+  }
+
   var iresIrapTotalPct = 0.24 + 0.039;
   var srlNet = grossNetIncome * (1 - iresIrapTotalPct);
-  addRow("Società di capitali (S.r.l.) — IRES 24% + IRAP 3,9%", srlNet);
+  addRow("Società di capitali (S.r.l.) — IRES 24% + IRAP 3,9%", srlNet, "Canone soggetto a IVA solo se l'immobile è strumentale/commerciale e il locatore ha esercitato l'opzione per l'imponibilità (aliquota ordinaria 22%): di norma neutra per il locatore soggetto IVA, ma incide sugli adempimenti. Locazione abitativa: sempre esente/fuori campo IVA.");
 
   var holdingNote = "Stessa aliquota IRES+IRAP della S.r.l.";
   if(purchasePriceForComodoTest){
     var redditoMinimoPresunto = purchasePriceForComodoTest * 0.0238;
     if(grossNetIncome < redditoMinimoPresunto){
       var comodoTax = redditoMinimoPresunto * 0.345;
-      holdingNote = "Attenzione: il reddito risulta inferiore al reddito minimo presunto (" + euro(redditoMinimoPresunto) + ", 2,38% del prezzo di acquisto usato come proxy del valore immobile) — rischio \"società di comodo\", con maggiorazione IRES di 10,5 punti (34,5% sul reddito minimo presunto, imposta stimata " + euro(comodoTax) + " anziché sul reddito reale). Vantaggio in compenso: se la società ha davvero patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL. Verificare con un commercialista.";
+      holdingNote = "Attenzione: il reddito risulta inferiore al reddito minimo presunto (" + euro(redditoMinimoPresunto) + ", 2,38% del prezzo di acquisto usato come proxy del valore immobile) — rischio \"società di comodo\", con maggiorazione IRES di 10,5 punti (34,5% sul reddito minimo presunto, imposta stimata " + euro(comodoTax) + " anziché sul reddito reale). Vantaggio in compenso: se la società ha davvero patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL. Stesso trattamento IVA della S.r.l. (esente, salvo opzione per l'imponibilità sugli immobili strumentali). Verificare con un commercialista.";
     }else{
-      holdingNote = "Reddito superiore al reddito minimo presunto: test di operatività superato, nessun rischio di maggiorazione da società di comodo. Vantaggio specifico: se la società ha patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL applicato invece a una S.r.l. operativa generica.";
+      holdingNote = "Reddito superiore al reddito minimo presunto: test di operatività superato, nessun rischio di maggiorazione da società di comodo. Vantaggio specifico: se la società ha patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL applicato invece a una S.r.l. operativa generica. Stesso trattamento IVA della S.r.l.";
     }
   }
   addRow("Holding / Società immobiliare di gestione — IRES 24% + IRAP 3,9%", srlNet, holdingNote);
@@ -2163,14 +2188,16 @@ function renderFiscalScenariosPage(){
     [["Scenario minimo", projs.min],["Scenario medio", projs.avg],["Scenario massimo", projs.max]].forEach(function(pair){
       if(!pair[1]) return;
       var net = pair[1].rows[0].net;
+      var grossRev = pair[1].rows[0].revenue;
       if(!(net > 0)) return;
-      blocks.push('<div class="cost-box" style="margin-bottom:18px"><div class="cost-title">' + escapeHTML(pair[0]) + '</div><table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, f.total, isResidential, purchasePrice) + '</tbody></table></div>');
+      blocks.push('<div class="cost-box" style="margin-bottom:18px"><div class="cost-title">' + escapeHTML(pair[0]) + '</div><table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice) + '</tbody></table></div>');
     });
   }else{
     var headline = projs ? (projs.mode === "range" ? (projs.min || projs.max) : projs.single) : null;
     var net = headline ? headline.rows[0].net : f.net;
+    var grossRev = headline ? headline.rows[0].revenue : f.revenue;
     if(net > 0){
-      blocks.push('<table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, f.total, isResidential, purchasePrice) + '</tbody></table>');
+      blocks.push('<table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice) + '</tbody></table>');
     }
   }
 
@@ -2181,6 +2208,7 @@ function renderFiscalScenariosPage(){
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div>'
     + '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>'
     + blocks.join("")
+    + '<div class="cost-box" style="margin-top:18px"><div class="cost-title">Nota IVA</div><p class="info-text" style="margin-top:0">Locazione a uso abitativo: sempre esente/fuori campo IVA, indipendentemente dal locatore. Locazione di immobile strumentale/commerciale da parte di un soggetto IVA (S.r.l., holding, o persona fisica con partita IVA in regime ordinario): esente IVA salvo opzione per l\'imponibilità (aliquota 22%) esercitata in contratto — se esercitata, l\'IVA è di norma neutra per il locatore (versata e recuperata sugli acquisti) ma va gestita negli adempimenti periodici. Regime forfettario: sempre in franchigia IVA, nessuna imposta addebitata né detratta.</p></div>'
     + '</div></article>';
 }
 function renovationRatesJs(style, level){
