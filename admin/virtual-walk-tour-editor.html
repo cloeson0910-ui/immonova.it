@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>IMMONOVA — Editor Walk Tour</title>
+<style>
+  :root{--gold:#a67f34}
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f4f2ee;color:#2b2b2b}
+  header{background:#1c1c1c;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header .opp{font-size:12px;color:#c9a568}
+  .wrap{display:flex;gap:16px;padding:16px;align-items:flex-start}
+  .panel{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .left{width:300px;flex-shrink:0}
+  .left h2{font-size:13px;margin:0 0 10px}
+  .scene-item{padding:8px;border:1px solid #eee;border-radius:4px;margin-bottom:6px;font-size:12px}
+  .scene-item.active{border-color:var(--gold);background:#fbf6ea}
+  .scene-item .row{display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+  .scene-item button{border:none;background:none;color:#b23;cursor:pointer;font-size:11px;margin-left:4px}
+  .scene-item .ord{color:#888;cursor:pointer;font-size:13px;margin-left:4px}
+  .btn{background:var(--gold);color:#fff;border:none;border-radius:4px;padding:8px 12px;font-size:12px;cursor:pointer;width:100%;margin-top:6px}
+  .btn.secondary{background:#eee;color:#333}
+  input[type=text]{width:100%;padding:6px;font-size:12px;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;margin-top:4px}
+  label{font-size:11px;color:#666;display:block;margin-top:10px}
+  .center{flex:1;min-width:0}
+  #stage{width:100%;height:480px;background:#111;border-radius:6px;position:relative;cursor:crosshair}
+  #stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+  .hint{font-size:11px;color:#888;margin-top:8px;line-height:1.5}
+  .photo-thumbs{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .photo-thumbs .ph{position:relative;width:76px;height:56px;border-radius:4px;overflow:hidden;border:2px solid transparent;cursor:pointer}
+  .photo-thumbs .ph.active{border-color:var(--gold)}
+  .photo-thumbs .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo-thumbs .ph .del{position:absolute;top:1px;right:1px;background:rgba(0,0,0,.6);color:#fff;border:none;font-size:10px;border-radius:3px;padding:1px 4px;cursor:pointer}
+  .photo-thumbs .ph .mv{position:absolute;bottom:1px;background:rgba(0,0,0,.6);color:#fff;border:none;font-size:10px;border-radius:3px;padding:1px 3px;cursor:pointer}
+  .photo-thumbs .ph .mv.l{left:1px}
+  .photo-thumbs .ph .mv.r{right:1px}
+  .hotspot-list{margin-top:12px;font-size:12px}
+  .hotspot-list div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0}
+  .hotspot-list button{border:none;background:none;color:#b23;cursor:pointer;font-size:11px}
+  .hs-mark{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:rgba(198,150,60,.85);border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .status{font-size:12px;margin-top:10px;padding:8px;border-radius:4px}
+  .status.ok{background:#eaf6ee;color:#1a7a3c}
+  .status.err{background:#fbeaea;color:#b23}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Editor Walk Tour (4 foto) — IMMONOVA</h1>
+  <span class="opp" id="oppLabel">opportunity_id: —</span>
+</header>
+
+<div class="wrap">
+  <div class="panel left">
+    <h2>Ambienti (stanze)</h2>
+    <button class="btn secondary" id="reloadBtn" style="margin-top:0">🔄 Ricarica (vedi ambienti aggiunti da telefono)</button>
+    <div id="sceneList" style="margin-top:10px"></div>
+    <div class="hint">
+      Usa le frecce ▲▼ per riordinare le stanze e ✕ per eliminarle. Nuovi ambienti
+      si aggiungono dal pulsante "📱 Scatta ambiente" nella scheda immobile.
+    </div>
+    <div class="toggle">
+      <input type="checkbox" id="publishedToggle">
+      <label style="margin:0" for="publishedToggle">Pubblicato sul sito pubblico</label>
+    </div>
+    <button class="btn secondary" id="saveBtn" style="margin-top:16px">Salva walk tour su IMMONOVA</button>
+    <button class="btn" id="clearTourBtn" style="margin-top:6px;background:#8a2c2c">🗑 Svuota walk tour</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="center panel">
+    <div id="stage"><div id="hsLayer" style="position:absolute;inset:0"></div></div>
+    <div class="photo-thumbs" id="photoThumbs"></div>
+    <div class="hint" id="editHint">Seleziona una stanza a sinistra. Clicca su un punto della foto per aggiungere un hotspot che porta a un'altra stanza (come nel tour a sfera).</div>
+    <div class="hotspot-list" id="hotspotList"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+/* SUPABASE_URL e SUPABASE_ANON_KEY arrivano da ../js/config.js, come in
+   opportunity-edit.html. Se questo file non sta nella stessa cartella,
+   correggi il percorso qui sopra. */
+var params = new URLSearchParams(location.search);
+var opportunityId = params.get("opportunity_id");
+document.getElementById("oppLabel").textContent = "opportunity_id: " + (opportunityId || "MANCANTE — apri questa pagina con ?opportunity_id=123");
+
+var supabaseClient = (typeof SUPABASE_URL !== "undefined" && SUPABASE_URL)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+var tour = { scenes: [] };
+var published = false;
+var activeSceneId = null;
+var activePhotoIndex = 0;
+
+function findScene(id) { return tour.scenes.find(function (s) { return s.id === id; }); }
+function findSceneIndex(id) { return tour.scenes.findIndex(function (s) { return s.id === id; }); }
+
+function renderSceneList() {
+  var el = document.getElementById("sceneList");
+  el.innerHTML = "";
+  tour.scenes.forEach(function (s, i) {
+    var div = document.createElement("div");
+    div.className = "scene-item" + (s.id === activeSceneId ? " active" : "");
+    var row = document.createElement("div");
+    row.className = "row";
+    var nameSpan = document.createElement("span");
+    nameSpan.textContent = s.title || s.id;
+    nameSpan.onclick = function () { activateScene(s.id); };
+    nameSpan.style.flex = "1";
+    row.appendChild(nameSpan);
+    var up = document.createElement("span");
+    up.className = "ord"; up.textContent = "▲";
+    up.onclick = function (e) { e.stopPropagation(); moveScene(i, -1); };
+    var down = document.createElement("span");
+    down.className = "ord"; down.textContent = "▼";
+    down.onclick = function (e) { e.stopPropagation(); moveScene(i, 1); };
+    var ren = document.createElement("button");
+    ren.textContent = "rinomina";
+    ren.onclick = function (e) { e.stopPropagation(); renameScene(s.id); };
+    var del = document.createElement("button");
+    del.textContent = "elimina";
+    del.onclick = function (e) { e.stopPropagation(); removeScene(s.id); };
+    row.appendChild(up); row.appendChild(down); row.appendChild(ren); row.appendChild(del);
+    div.appendChild(row);
+    el.appendChild(div);
+  });
+}
+
+function moveScene(index, dir) {
+  var newIndex = index + dir;
+  if (newIndex < 0 || newIndex >= tour.scenes.length) return;
+  var tmp = tour.scenes[index];
+  tour.scenes[index] = tour.scenes[newIndex];
+  tour.scenes[newIndex] = tmp;
+  renderSceneList();
+  setStatus("Ordine cambiato — ricordati di salvare.", "ok");
+}
+
+function renameScene(id) {
+  var scene = findScene(id);
+  var t = prompt("Nome ambiente:", scene.title || "");
+  if (t === null) return;
+  scene.title = t.trim() || scene.title;
+  renderSceneList();
+  if (activeSceneId === id) document.getElementById("editHint").textContent = scene.title;
+}
+
+function removeScene(id) {
+  if (!confirm("Eliminare questo ambiente e le sue foto dal tour? Ricordati di premere \"Salva\" dopo.")) return;
+  tour.scenes.forEach(function (s) { s.hotspots = (s.hotspots || []).filter(function (h) { return h.target_scene_id !== id; }); });
+  tour.scenes = tour.scenes.filter(function (s) { return s.id !== id; });
+  if (activeSceneId === id) { activeSceneId = null; }
+  renderSceneList();
+  renderStage();
+}
+
+function renderPhotoThumbs() {
+  var el = document.getElementById("photoThumbs");
+  el.innerHTML = "";
+  var scene = findScene(activeSceneId);
+  if (!scene) return;
+  (scene.photos || []).forEach(function (p, i) {
+    var box = document.createElement("div");
+    box.className = "ph" + (i === activePhotoIndex ? " active" : "");
+    var img = document.createElement("img");
+    img.src = p.url;
+    box.appendChild(img);
+    box.onclick = function () { activePhotoIndex = i; renderStage(); };
+    if (i > 0) {
+      var mvl = document.createElement("button");
+      mvl.className = "mv l"; mvl.textContent = "◀";
+      mvl.onclick = function (e) { e.stopPropagation(); movePhoto(i, -1); };
+      box.appendChild(mvl);
+    }
+    if (i < scene.photos.length - 1) {
+      var mvr = document.createElement("button");
+      mvr.className = "mv r"; mvr.textContent = "▶";
+      mvr.onclick = function (e) { e.stopPropagation(); movePhoto(i, 1); };
+      box.appendChild(mvr);
+    }
+    var del = document.createElement("button");
+    del.className = "del"; del.textContent = "✕";
+    del.onclick = function (e) { e.stopPropagation(); removePhoto(i); };
+    box.appendChild(del);
+    el.appendChild(box);
+  });
+}
+
+function movePhoto(index, dir) {
+  var scene = findScene(activeSceneId);
+  var newIndex = index + dir;
+  if (newIndex < 0 || newIndex >= scene.photos.length) return;
+  var tmp = scene.photos[index];
+  scene.photos[index] = scene.photos[newIndex];
+  scene.photos[newIndex] = tmp;
+  if (activePhotoIndex === index) activePhotoIndex = newIndex;
+  else if (activePhotoIndex === newIndex) activePhotoIndex = index;
+  renderPhotoThumbs();
+  renderStage();
+  setStatus("Ordine foto cambiato — ricordati di salvare.", "ok");
+}
+
+function removePhoto(index) {
+  var scene = findScene(activeSceneId);
+  if (scene.photos.length <= 1) { alert("Deve restare almeno una foto per ambiente. Elimina l'intero ambiente se non serve più."); return; }
+  if (!confirm("Eliminare questa foto?")) return;
+  scene.photos.splice(index, 1);
+  scene.hotspots = (scene.hotspots || []).filter(function (h) { return h.photo_index !== index; });
+  scene.hotspots.forEach(function (h) { if (typeof h.photo_index === "number" && h.photo_index > index) h.photo_index -= 1; });
+  if (activePhotoIndex >= scene.photos.length) activePhotoIndex = scene.photos.length - 1;
+  renderPhotoThumbs();
+  renderStage();
+  setStatus("Foto eliminata — ricordati di salvare.", "ok");
+}
+
+function renderHotspotList() {
+  var scene = findScene(activeSceneId);
+  var el = document.getElementById("hotspotList");
+  el.innerHTML = "";
+  if (!scene) return;
+  (scene.hotspots || []).forEach(function (h, idx) {
+    var row = document.createElement("div");
+    var targetScene = findScene(h.target_scene_id);
+    row.innerHTML = '<span>→ ' + (h.text || "") + " (" + (targetScene ? targetScene.title : h.target_scene_id) + ")</span>";
+    var btn = document.createElement("button");
+    btn.textContent = "rimuovi";
+    btn.onclick = function () { scene.hotspots.splice(idx, 1); renderStage(); renderHotspotList(); };
+    row.appendChild(btn);
+    el.appendChild(row);
+  });
+}
+
+function renderStage() {
+  var stage = document.getElementById("stage");
+  var scene = findScene(activeSceneId);
+  var existingImg = stage.querySelector("img");
+  if (existingImg) existingImg.remove();
+  var hsLayer = document.getElementById("hsLayer");
+  hsLayer.innerHTML = "";
+  if (!scene || !scene.photos || !scene.photos.length) {
+    document.getElementById("editHint").textContent = "Seleziona una stanza a sinistra.";
+    renderPhotoThumbs();
+    renderHotspotList();
+    return;
+  }
+  var img = document.createElement("img");
+  img.src = scene.photos[activePhotoIndex].url;
+  stage.insertBefore(img, hsLayer);
+  document.getElementById("editHint").textContent =
+    "Clicca sulla foto per aggiungere un hotspot verso un'altra stanza. Foto " + (activePhotoIndex + 1) + "/" + scene.photos.length + ".";
+  (scene.hotspots || []).forEach(function (h) {
+    if (typeof h.photo_index === "number" && h.photo_index !== activePhotoIndex) return;
+    var mark = document.createElement("div");
+    mark.className = "hs-mark";
+    mark.style.left = h.x_pct + "%";
+    mark.style.top = h.y_pct + "%";
+    mark.textContent = "→";
+    mark.title = h.text || "";
+    hsLayer.appendChild(mark);
+  });
+  renderPhotoThumbs();
+  renderHotspotList();
+}
+
+function activateScene(id) {
+  activeSceneId = id;
+  activePhotoIndex = 0;
+  renderSceneList();
+  renderStage();
+}
+
+document.getElementById("stage").addEventListener("click", function (e) {
+  var scene = findScene(activeSceneId);
+  if (!scene || !scene.photos || !scene.photos.length) return;
+  if (tour.scenes.length < 2) { alert("Aggiungi almeno un secondo ambiente prima di creare un collegamento."); return; }
+  var rect = e.currentTarget.getBoundingClientRect();
+  var xPct = ((e.clientX - rect.left) / rect.width) * 100;
+  var yPct = ((e.clientY - rect.top) / rect.height) * 100;
+  var others = tour.scenes.filter(function (s) { return s.id !== activeSceneId; });
+  var list = others.map(function (s, i) { return (i + 1) + ") " + s.title; }).join("\n");
+  var choice = prompt("A quale ambiente porta questo punto?\n" + list + "\n\nScrivi il numero:");
+  var idx = parseInt(choice, 10) - 1;
+  if (!others[idx]) return;
+  var label = prompt("Testo del collegamento (es. \"Vai alla cucina\"):", "Vai a " + others[idx].title) || ("Vai a " + others[idx].title);
+  scene.hotspots = scene.hotspots || [];
+  scene.hotspots.push({ photo_index: activePhotoIndex, x_pct: xPct, y_pct: yPct, target_scene_id: others[idx].id, text: label });
+  renderStage();
+});
+
+async function saveTour() {
+  if (!opportunityId) { alert("Manca opportunity_id nell'URL."); return; }
+  if (!supabaseClient) { alert("Impossibile connettersi a Supabase: verifica che ../js/config.js sia raggiungibile da questa pagina."); return; }
+  setStatus("Salvataggio...", "ok");
+  var update = await supabaseClient
+    .from("opportunities")
+    .update({
+      virtual_walk_tour: tour,
+      virtual_walk_tour_published: tour.scenes.length > 0 ? document.getElementById("publishedToggle").checked : false,
+      virtual_walk_tour_updated_at: new Date().toISOString(),
+    })
+    .eq("id", opportunityId);
+  if (update.error) { setStatus("Errore salvataggio: " + update.error.message, "err"); return; }
+  setStatus(tour.scenes.length ? "Walk tour salvato ✓" : "Walk tour svuotato e salvato ✓", "ok");
+}
+
+async function clearTour() {
+  if (!confirm("Svuotare completamente il walk tour? Tutti gli ambienti verranno rimossi e il salvataggio sarà immediato.")) return;
+  tour = { scenes: [] };
+  activeSceneId = null;
+  renderSceneList();
+  renderStage();
+  document.getElementById("publishedToggle").checked = false;
+  await saveTour();
+}
+
+function setStatus(msg, cls) {
+  var el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = "status " + cls;
+}
+
+async function loadExisting() {
+  if (!opportunityId || !supabaseClient) return;
+  var res = await supabaseClient.from("opportunities").select("virtual_walk_tour, virtual_walk_tour_published").eq("id", opportunityId).maybeSingle();
+  if (res.data && res.data.virtual_walk_tour && Array.isArray(res.data.virtual_walk_tour.scenes)) {
+    tour = res.data.virtual_walk_tour;
+    published = !!res.data.virtual_walk_tour_published;
+  } else {
+    tour = { scenes: [] };
+    published = false;
+  }
+  document.getElementById("publishedToggle").checked = published;
+  activeSceneId = tour.scenes.length ? tour.scenes[0].id : null;
+  activePhotoIndex = 0;
+  renderSceneList();
+  renderStage();
+  setStatus("", "ok");
+}
+
+document.getElementById("saveBtn").onclick = saveTour;
+document.getElementById("clearTourBtn").onclick = clearTour;
+document.getElementById("reloadBtn").onclick = loadExisting;
+loadExisting();
+</script>
+</body>
+</html>
