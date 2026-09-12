@@ -3,63 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>IMMONOVA — Cattura Panoramica 360°</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<title>IMMONOVA — Carica Panoramica 360°</title>
 <script src="../js/config.js"></script>
 <script src="qrcode.min.js"></script>
 <style>
-  html,body{margin:0;padding:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;overflow:hidden;height:100%}
+  html,body{margin:0;padding:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;min-height:100%}
+  body{display:flex;flex-direction:column}
   .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;gap:12px;z-index:20;overflow-y:auto}
   .screen.active{display:flex}
   h1{font-size:18px;margin:0 0 6px}
   h2{font-size:16px;margin:0 0 4px}
   p{font-size:13px;color:#ccc;line-height:1.6;max-width:420px;margin:0}
   label{font-size:12px;color:#aaa;display:block;margin-top:10px;width:100%;max-width:320px}
-  input[type=number],input[type=text],select{width:100%;padding:8px;font-size:14px;border-radius:5px;border:1px solid #555;background:#111;color:#fff;box-sizing:border-box;margin-top:4px}
+  select{width:100%;padding:8px;font-size:14px;border-radius:5px;border:1px solid #555;background:#111;color:#fff;box-sizing:border-box;margin-top:4px}
+  input[type=text]{width:100%;padding:8px;font-size:14px;border-radius:5px;border:1px solid #555;background:#111;color:#fff;box-sizing:border-box;margin-top:4px}
   .btn{background:#a67f34;color:#fff;border:none;border-radius:6px;padding:12px 22px;font-size:14px;cursor:pointer;margin-top:10px}
   .btn.secondary{background:#333}
-  .btn.danger{background:#5a2a2a}
   .btn:disabled{opacity:.4}
   .err{color:#e05a5a;font-size:12px;max-width:340px}
   .ok{color:#7fbf6f;font-size:12px;max-width:340px}
 
-  .size-opt{border:1px solid #444;border-radius:8px;padding:10px 14px;width:100%;max-width:340px;text-align:left;cursor:pointer;margin-top:8px;background:#151515}
-  .size-opt.selected{border-color:#a67f34;background:#241c0f}
-  .size-opt b{font-size:13.5px}
-  .size-opt span{display:block;font-size:11.5px;color:#999;margin-top:2px}
+  .steps{text-align:left;max-width:360px;font-size:13px;color:#ccc;line-height:1.7;background:#151515;border-radius:8px;padding:14px 16px;margin-top:6px}
+  .steps b{color:#e3c789}
 
-  #camWrap{position:fixed;inset:0;display:none}
-  #camWrap.active{display:block}
-  video{width:100%;height:100%;object-fit:cover}
-  canvas#captureCanvas{display:none}
-
-  #overlay{position:absolute;inset:0;pointer-events:none}
-  #overlay button{pointer-events:auto}
-  #reticleTarget, #reticleCurrent{
-    position:absolute;top:50%;left:50%;width:56px;height:56px;border-radius:50%;
-    transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.5);
-  }
-  #reticleCurrent{border-color:#fff;width:14px;height:14px;box-shadow:0 0 6px rgba(0,0,0,.6)}
-  #reticleTarget.aligned{border-color:#4f7f45;background:rgba(79,127,69,.25)}
-
-  #hud{position:absolute;top:0;left:0;right:0;padding:14px 16px;background:linear-gradient(rgba(0,0,0,.55),transparent);font-size:12px}
-  #hud .roomLabel{font-size:13px;font-weight:bold;color:#e3c789}
-  #hud .count{font-size:14px;font-weight:bold}
-  #hint{position:absolute;bottom:110px;left:0;right:0;text-align:center;font-size:13px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
-  #shotBtn{
-    position:absolute;bottom:24px;left:50%;transform:translateX(-50%);
-    width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.4);
-  }
-  #shotBtn:disabled{background:#888;border-color:rgba(255,255,255,.15)}
-  #finishBtn{position:absolute;bottom:34px;right:18px;font-size:12px;padding:8px 12px}
-  #warnRoll{position:absolute;top:70px;left:0;right:0;text-align:center;color:#e0a83f;font-size:12px;display:none}
-
-  #progressBar{width:280px;height:8px;background:#333;border-radius:4px;overflow:hidden}
-  #progressFill{height:100%;width:0%;background:#a67f34;transition:width .2s}
-  #resultImg{max-width:92vw;max-height:42vh;border:1px solid #444}
-
-  .thumbs{position:absolute;bottom:0;left:0;right:0;display:flex;gap:4px;padding:6px;overflow-x:auto;background:rgba(0,0,0,.3)}
-  .thumbs img{width:34px;height:34px;object-fit:cover;border-radius:3px;opacity:.85}
+  #previewImg{max-width:88vw;max-height:38vh;border:1px solid #444;border-radius:4px;display:none}
 
   .roomChips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:380px;margin-top:6px}
   .roomChips button{background:#1c1c1c;border:1px solid #444;color:#7fbf6f;border-radius:14px;padding:4px 10px;font-size:11px}
@@ -70,47 +37,31 @@
 </head>
 <body>
 
-<!-- SCHERMATA 0: nessun opportunity_id in URL -->
-<div id="noIdScreen" class="screen">
-  <h1>Parametro mancante</h1>
-  <p>Questo strumento va aperto da un pulsante dentro la scheda dell'immobile (Modifica immobile / Valutazioni / Acquisizioni), che passa automaticamente l'immobile a cui salvare gli scatti. Apri questa pagina da lì.</p>
-</div>
+<!-- link non valido -->
+<div id="noIdScreen" class="screen"></div>
 
-<!-- SCHERMATA QR: aperto da PC/tablet, va scansionato col telefono -->
+<!-- QR: aperto da PC/tablet -->
 <div id="qrScreen" class="screen">
   <h1>Apri questa pagina sul cellulare</h1>
   <p id="qrOpTitleLine" style="color:#e3c789;font-size:13px"></p>
-  <p>
-    Per scattare le foto panoramiche serve la fotocamera e il giroscopio del
-    telefono in mano — da qui non posso guidarti negli scatti. Inquadra il
-    QR code col cellulare per aprire lo strumento già collegato a questo
-    immobile.
-  </p>
+  <p>Serve la fotocamera del telefono in mano. Inquadra il QR code col cellulare per continuare da lì, già collegato a questo immobile.</p>
   <div id="qrBox"></div>
   <p id="qrFallbackUrl" style="font-size:11px;color:#888;word-break:break-all;max-width:340px"></p>
   <button class="btn secondary" id="qrOverrideBtn" style="margin-top:16px">Continua comunque su questo dispositivo</button>
 </div>
 
-<!-- SCHERMATA 1: avvio -->
-<div id="startScreen" class="screen">
-  <h1>Cattura Panoramica 360°</h1>
-  <p id="opTitleLine" style="color:#e3c789;font-size:13px"></p>
-  <p>
-    Tieni il telefono in verticale, davanti a te, e ruota su te stesso lentamente.
-    Lo strumento ti guida a scattare una foto ferma e a fuoco per ogni direzione —
-    niente sfocatura da movimento, niente compressione automatica del panorama
-    del telefono. Serve buona luce, stai fermo sul posto (non camminare).
-  </p>
-  <label for="fovInput">Campo visivo orizzontale della fotocamera (va bene il default per la maggior parte dei telefoni)
-    <input type="number" id="fovInput" value="70" min="50" max="100">
-  </label>
-  <button class="btn" id="startBtn">Continua — attiva fotocamera e sensori</button>
-  <div id="startError" class="err"></div>
-</div>
-
-<!-- SCHERMATA 2: setup ambiente (nome + dimensione) -->
+<!-- setup ambiente -->
 <div id="roomSetupScreen" class="screen">
-  <h2>Che ambiente stai fotografando?</h2>
+  <h1>Foto panoramica ambiente</h1>
+  <p id="opTitleLine" style="color:#e3c789;font-size:13px"></p>
+  <div class="steps">
+    <b>Come si fa:</b><br>
+    1. Scegli l'ambiente qui sotto.<br>
+    2. Premi "Scatta panoramica" — si apre la fotocamera del telefono.<br>
+    3. Nella fotocamera scegli tu la modalità <b>Panorama</b> (o "Fotosfera" con l'app Street View se l'hai installata) e scatta.<br>
+    4. Torni qui automaticamente e la foto si salva da sola su questo immobile.
+  </div>
+
   <label for="roomSelect">Ambiente
     <select id="roomSelect">
       <option value="">— scegli —</option>
@@ -135,93 +86,52 @@
   </label>
   <input type="text" id="roomCustom" placeholder="Nome ambiente" style="display:none;max-width:320px">
 
-  <div style="margin-top:14px;width:100%;max-width:340px">
-    <label style="margin-top:0">Dimensione ambiente</label>
-    <div class="size-opt" data-size="small">
-      <b>Piccolo</b><span>Fino a circa 3×2 m — bagni, corridoi, ripostigli. 6 scatti, ~1 minuto.</span>
-    </div>
-    <div class="size-opt" data-size="normal">
-      <b>Normale</b><span>Circa 3×3–5×5 m — camere, cucina, soggiorni medi. 10 scatti, ~1,5-2 minuti.</span>
-    </div>
-    <div class="size-opt" data-size="large">
-      <b>Grande</b><span>Oltre 5×5 m o open space — soggiorni ampi, terrazzi. 14 scatti, ~2-3 minuti.</span>
-    </div>
-  </div>
-
-  <button class="btn" id="roomContinueBtn" disabled>Inizia scatti di questo ambiente</button>
+  <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none">
+  <button class="btn" id="shootBtn" disabled>📷 Scatta panoramica</button>
   <div id="roomSetupError" class="err"></div>
 </div>
 
-<div id="camWrap">
-  <video id="video" autoplay playsinline muted></video>
-  <div id="overlay">
-    <div id="hud">
-      <div class="roomLabel" id="hudRoomLabel"></div>
-      <span class="count" id="shotCount">0</span> / <span id="shotTotal">10</span> foto scattate
-      <div id="warnRoll">Tieni il telefono più dritto (non inclinato lateralmente)</div>
-    </div>
-    <div id="reticleTarget"></div>
-    <div id="reticleCurrent"></div>
-    <div id="hint">Ruota lentamente finché il cerchio piccolo entra in quello grande, poi scatta</div>
-    <button class="btn secondary" id="finishBtn">Componi adesso</button>
-  </div>
-  <button id="shotBtn" disabled></button>
-  <div class="thumbs" id="thumbs"></div>
-</div>
-
-<!-- SCHERMATA composizione + salvataggio -->
-<div id="composeScreen" class="screen">
-  <h2 id="composeTitle">Composizione panoramica in corso…</h2>
-  <div id="progressBar"><div id="progressFill"></div></div>
-  <div id="composeStatus" style="font-size:12px;color:#ccc"></div>
-  <img id="resultImg" style="display:none">
-  <button class="btn" id="saveSceneBtn" style="display:none">Salva questo ambiente sull'immobile</button>
+<!-- anteprima + salvataggio -->
+<div id="previewScreen" class="screen">
+  <h2 id="previewTitle">Anteprima — Ambiente</h2>
+  <img id="previewImg">
+  <button class="btn" id="saveSceneBtn">Salva questo ambiente sull'immobile</button>
+  <button class="btn secondary" id="retakeBtn">Rifai la foto</button>
   <div id="saveStatus" style="font-size:12px;margin-top:4px"></div>
-  <button class="btn secondary" id="retryRoomBtn" style="display:none">Rifai questo ambiente</button>
 </div>
 
-<!-- SCHERMATA dopo salvataggio: altro ambiente o fine -->
+<!-- dopo salvataggio -->
 <div id="afterSaveScreen" class="screen">
   <h2>Ambiente salvato ✓</h2>
   <div class="roomChips" id="savedRoomsChips"></div>
   <p style="margin-top:14px">Vuoi fotografare un altro ambiente per questo stesso immobile?</p>
-  <button class="btn" id="anotherRoomBtn">Sì, foto un altro ambiente</button>
+  <button class="btn" id="anotherRoomBtn">Sì, un altro ambiente</button>
   <button class="btn secondary" id="finishAllBtn">No, ho finito</button>
 </div>
 
-<!-- SCHERMATA finale -->
+<!-- finale -->
 <div id="doneScreen" class="screen">
   <h1>Fatto</h1>
   <p>Ambienti salvati su questo immobile: <b id="doneRoomsList"></b>.</p>
   <p>Apri l'editor Virtual Tour 360° dell'immobile per collegare gli ambienti tra loro con gli hotspot (il percorso di navigazione tra le stanze).</p>
 </div>
 
-<canvas id="captureCanvas"></canvas>
-
 <script>
 /* ============================================================================
- * Cattura guidata multi-scatto + composizione equirettangolare, con salvataggio
- * diretto su Supabase (bucket "virtual-tours-360", colonna
- * opportunities.virtual_tour_360) — nessun download manuale, nessun passaggio
- * nell'editor per caricare il file.
+ * Carica foto panoramiche gia' scattate con la fotocamera nativa del telefono
+ * (modalita' Panorama / Fotosfera) e le salva come scene sul virtual tour
+ * dell'immobile. Nessuno stitching fatto in JavaScript: un sito web non puo'
+ * attivare la modalita' Panorama della fotocamera nativa (limite di iOS e
+ * Android, non aggirabile), quindi la cattura vera resta all'app Fotocamera
+ * del telefono, che la fa gia' bene; questo strumento si limita a guidare la
+ * persona nel farla per ogni ambiente e a caricarla subito, senza passaggi
+ * nell'editor.
  *
- * Apertura richiesta: ?opportunity_id=<id>&opportunity_title=<titolo opzionale>
- * (aggiungi il link/pulsante nelle pagine da cui vuoi attivarlo: scheda
- * immobile, valutazioni, acquisizioni — tutte passano lo stesso parametro).
- *
- * Tecnica di composizione: invece di stitching per feature-matching (pesante,
- * instabile in puro JS), ogni foto viene scattata con orientamento noto
- * (giroscopio) e ricomposta matematicamente sulla sfera equirettangolare
- * tramite proiezione gnomonica inversa. Limite noto: assume lente rettilinea
- * (nessuna correzione della distorsione ottica del telefono) e roll≈0
- * (telefono dritto, da qui l'avviso a schermo).
+ * Apertura richiesta: ?token=<token da scan_sessions>&opportunity_title=<opz.>
+ * Il salvataggio passa dalla edge function "scan-upload" (bypassa le RLS con
+ * la service role key, valida il token, scrive su Storage + sulla colonna
+ * opportunities.virtual_tour_360).
  * ==========================================================================*/
-
-var SIZE_PROFILES = {
-  small:  { yawSteps: 4, pitchRows: [-30, 30] },
-  normal: { yawSteps: 6, pitchRows: [-30, 0, 30] },
-  large:  { yawSteps: 8, pitchRows: [-35, 0, 35] }
-};
 
 var params = new URLSearchParams(location.search);
 var scanToken = params.get("token");
@@ -230,37 +140,24 @@ var opportunityTitle = params.get("opportunity_title") || "";
 var hasConfig = (typeof SUPABASE_URL !== "undefined" && SUPABASE_URL && typeof SUPABASE_ANON_KEY !== "undefined" && SUPABASE_ANON_KEY);
 var uploadEndpoint = hasConfig ? (SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/scan-upload") : null;
 
-var currentYaw = 0, currentPitch = 0, currentRoll = 0;
-var yawOffset = null;
-var shots = [];
-var targets = [];
-var nextTargetIndex = 0;
-var video = document.getElementById("video");
-var fovH = 70;
-var selectedSize = null;
 var currentRoomName = "";
-var savedRooms = []; // { name, sceneId }
+var currentFile = null;
+var savedRooms = [];
 
 function show(id){
   document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
-  document.getElementById("camWrap").className = "";
   if(id) document.getElementById(id).classList.add("active");
 }
 
-// ---- rilevamento dispositivo: PC/tablet -> mostra QR da scansionare col telefono ----
 function detectIsPhone(){
   var ua = navigator.userAgent || "";
-  var isIPad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); // iPadOS si presenta come Mac
+  var isIPad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   var isAndroidTablet = /Android/.test(ua) && !/Mobile/.test(ua);
-  var isTablet = isIPad || isAndroidTablet;
-  var isKnownPhone = /iPhone|Android.*Mobile|Windows Phone/.test(ua);
+  if(isIPad || isAndroidTablet) return false;
+  if(/iPhone|Android.*Mobile|Windows Phone/.test(ua)) return true;
   var hasCoarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   var smallScreen = Math.min(window.screen.width, window.screen.height) <= 480;
-  // telefono: UA da telefono, oppure touch+schermo piccolo e non riconosciuto come tablet/desktop
-  if(isTablet) return false;
-  if(isKnownPhone) return true;
-  if(hasCoarsePointer && smallScreen) return true;
-  return false;
+  return hasCoarsePointer && smallScreen;
 }
 
 function buildSelfUrl(){
@@ -276,7 +173,7 @@ function showQrScreen(){
   var box = document.getElementById("qrBox");
   box.innerHTML = "";
   if(typeof qrcode === "function"){
-    var qr = qrcode(0, "M"); // type 0 = auto-dimensiona in base al contenuto
+    var qr = qrcode(0, "M");
     qr.addData(url);
     qr.make();
     box.innerHTML = qr.createImgTag(6, 8);
@@ -287,34 +184,26 @@ function showQrScreen(){
 
 document.getElementById("qrOverrideBtn").addEventListener("click", function(){
   document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
-  show("startScreen");
+  show("roomSetupScreen");
 });
 
 if(!scanToken || !uploadEndpoint){
   show("noIdScreen");
   if(!uploadEndpoint){
     document.getElementById("noIdScreen").innerHTML =
-      "<h1>Configurazione mancante</h1><p>Non trovo js/config.js con SUPABASE_URL raggiungibile da questa pagina (percorso atteso: ../js/config.js). Verifica la posizione del file sul server.</p>";
+      "<h1>Configurazione mancante</h1><p>Non trovo js/config.js con SUPABASE_URL raggiungibile da questa pagina (percorso atteso: ../js/config.js).</p>";
   } else {
     document.getElementById("noIdScreen").innerHTML =
-      "<h1>Link non valido o scaduto</h1><p>Apri questo strumento dal pulsante \"Scatta panorama dal telefono\" nella scheda dell'immobile (genera un link valido 20 minuti) — non aprirlo direttamente senza passare da lì.</p>";
+      "<h1>Link non valido o scaduto</h1><p>Apri questo strumento dal pulsante \"Scatta panorama dal telefono\" nella scheda dell'immobile (il link resta valido 20 minuti) — non aprirlo direttamente.</p>";
   }
 } else if(!detectIsPhone()){
   showQrScreen();
 } else {
   document.getElementById("opTitleLine").textContent = opportunityTitle ? ("Immobile: " + opportunityTitle) : "";
-  show("startScreen");
+  show("roomSetupScreen");
 }
 
-// ---- selezione dimensione ambiente ----
-document.querySelectorAll(".size-opt").forEach(function(el){
-  el.addEventListener("click", function(){
-    document.querySelectorAll(".size-opt").forEach(function(o){ o.classList.remove("selected"); });
-    el.classList.add("selected");
-    selectedSize = el.getAttribute("data-size");
-    checkRoomReady();
-  });
-});
+// ---- selezione ambiente ----
 document.getElementById("roomSelect").addEventListener("change", function(){
   var v = this.value;
   var custom = document.getElementById("roomCustom");
@@ -335,251 +224,36 @@ function currentRoomLabel(){
   return sel;
 }
 function checkRoomReady(){
-  var ok = currentRoomLabel() && selectedSize;
-  document.getElementById("roomContinueBtn").disabled = !ok;
+  document.getElementById("shootBtn").disabled = !currentRoomLabel();
 }
 
-document.getElementById("roomContinueBtn").addEventListener("click", function(){
+document.getElementById("shootBtn").addEventListener("click", function(){
   currentRoomName = currentRoomLabel();
-  var profile = SIZE_PROFILES[selectedSize];
-  targets = [];
-  profile.pitchRows.forEach(function(pitch){
-    for(var i=0;i<profile.yawSteps;i++){
-      targets.push({ yaw: (360/profile.yawSteps)*i, pitch: pitch });
-    }
-  });
-  targets.forEach(function(t){ if(t.yaw>180) t.yaw -= 360; });
-  shots = [];
-  yawOffset = null;
-  document.getElementById("shotTotal").textContent = targets.length;
-  document.getElementById("shotCount").textContent = "0";
-  document.getElementById("thumbs").innerHTML = "";
-  document.getElementById("hudRoomLabel").textContent = currentRoomName + " (" +
-    (selectedSize === "small" ? "piccolo" : selectedSize === "large" ? "grande" : "normale") + ")";
-  document.getElementById("camWrap").className = "active";
-  document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
-  updateReticle();
+  if(!currentRoomName) return;
+  document.getElementById("fileInput").click();
 });
 
-// ---- orientamento / fotocamera ----
-function angDiff(a,b){
-  var d = ((a - b + 540) % 360) - 180;
-  return Math.abs(d);
-}
-function closestTargetIndex(){
-  var best = -1, bestScore = 1e9;
-  targets.forEach(function(t, idx){
-    if(shots.some(function(s){ return s.targetIndex === idx; })) return;
-    var score = angDiff(currentYaw, t.yaw) + Math.abs(currentPitch - t.pitch);
-    if(score < bestScore){ bestScore = score; best = idx; }
-  });
-  return best;
-}
-function updateReticle(){
-  var idx = closestTargetIndex();
-  if(idx === -1){
-    document.getElementById("hint").textContent = "Tutte le direzioni coperte — premi \"Componi adesso\"";
-    document.getElementById("shotBtn").disabled = true;
-    return;
-  }
-  nextTargetIndex = idx;
-  var t = targets[idx];
-  var dYaw = angDiff(currentYaw, t.yaw);
-  var dPitch = Math.abs(currentPitch - t.pitch);
-  var aligned = dYaw < 7 && dPitch < 7;
-  document.getElementById("reticleTarget").className = aligned ? "aligned" : "";
-  var px = (t.yaw - currentYaw);
-  while(px > 180) px -= 360;
-  while(px < -180) px += 360;
-  var py = (t.pitch - currentPitch);
-  var maxShift = 140;
-  var rx = Math.max(-maxShift, Math.min(maxShift, px * 3));
-  var ry = Math.max(-maxShift, Math.min(maxShift, -py * 3));
-  document.getElementById("reticleTarget").style.transform = "translate(calc(-50% + " + rx + "px), calc(-50% + " + ry + "px))";
-  document.getElementById("shotBtn").disabled = !aligned;
-  document.getElementById("warnRoll").style.display = Math.abs(currentRoll) > 15 ? "block" : "none";
-}
-function onOrientation(e){
-  var heading = (typeof e.webkitCompassHeading === "number") ? e.webkitCompassHeading : (360 - (e.alpha || 0));
-  if(yawOffset === null) yawOffset = heading;
-  currentYaw = ((heading - yawOffset) + 540) % 360 - 180;
-  currentPitch = Math.max(-90, Math.min(90, (e.beta || 90) - 90));
-  currentRoll = e.gamma || 0;
-  updateReticle();
-}
-var cameraStarted = false;
-function startCamera(){
-  if(cameraStarted) return Promise.resolve();
-  var constraints = {
-    audio: false,
-    video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } }
-  };
-  return navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
-    video.srcObject = stream;
-    cameraStarted = true;
-    return video.play();
-  });
-}
-function requestOrientationPermission(){
-  if(typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function"){
-    return DeviceOrientationEvent.requestPermission();
-  }
-  return Promise.resolve("granted");
-}
-
-document.getElementById("startBtn").addEventListener("click", function(){
-  fovH = Number(document.getElementById("fovInput").value) || 70;
-  document.getElementById("startError").textContent = "";
-  requestOrientationPermission().then(function(state){
-    if(state !== "granted"){
-      document.getElementById("startError").textContent = "Permesso sensori di movimento negato: senza questo non posso guidarti nella direzione giusta.";
-      return;
-    }
-    return startCamera().then(function(){
-      window.addEventListener("deviceorientation", onOrientation);
-      show("roomSetupScreen");
-    });
-  }).catch(function(err){
-    document.getElementById("startError").textContent = "Errore accesso fotocamera/sensori: " + (err && err.message ? err.message : err);
-  });
-});
-
-document.getElementById("shotBtn").addEventListener("click", function(){
-  var vw = video.videoWidth, vh = video.videoHeight;
-  var c = document.createElement("canvas");
-  c.width = vw; c.height = vh;
-  c.getContext("2d").drawImage(video, 0, 0, vw, vh);
-  shots.push({ yaw: currentYaw, pitch: currentPitch, canvas: c, targetIndex: nextTargetIndex });
-  document.getElementById("shotCount").textContent = shots.length;
-  var thumb = document.createElement("img");
-  thumb.src = c.toDataURL("image/jpeg", 0.5);
-  document.getElementById("thumbs").appendChild(thumb);
-  updateReticle();
-});
-
-document.getElementById("finishBtn").addEventListener("click", composePanorama);
-
-var lastComposedBlob = null;
-
-function composePanorama(){
-  if(!shots.length){ alert("Scatta almeno qualche foto prima di comporre."); return; }
-  document.getElementById("camWrap").className = "";
-  show("composeScreen");
-  document.getElementById("composeTitle").textContent = "Composizione — " + currentRoomName;
-  document.getElementById("saveSceneBtn").style.display = "none";
-  document.getElementById("retryRoomBtn").style.display = "none";
+document.getElementById("fileInput").addEventListener("change", function(e){
+  var file = e.target.files && e.target.files[0];
+  if(!file) return;
+  currentFile = file;
+  var url = URL.createObjectURL(file);
+  var img = document.getElementById("previewImg");
+  img.src = url;
+  img.style.display = "block";
+  document.getElementById("previewTitle").textContent = "Anteprima — " + currentRoomName;
   document.getElementById("saveStatus").textContent = "";
-  document.getElementById("resultImg").style.display = "none";
+  document.getElementById("saveSceneBtn").disabled = false;
+  show("previewScreen");
+});
 
-  var outW = 3200, outH = 1600;
-  var out = document.createElement("canvas");
-  out.width = outW; out.height = outH;
-  var octx = out.getContext("2d");
-  var outImg = octx.createImageData(outW, outH);
-
-  var tiles = shots.map(function(s){
-    var ctx = s.canvas.getContext("2d");
-    return {
-      yaw: s.yaw * Math.PI/180,
-      pitch: s.pitch * Math.PI/180,
-      w: s.canvas.width, h: s.canvas.height,
-      fovHrad: fovH * Math.PI/180,
-      fovVrad: (fovH * (s.canvas.height/s.canvas.width)) * Math.PI/180,
-      data: ctx.getImageData(0,0,s.canvas.width,s.canvas.height).data
-    };
-  });
-
-  var row = 0;
-  function processChunk(){
-    var rowsPerChunk = 20;
-    var endRow = Math.min(outH, row + rowsPerChunk);
-    for(var y=row; y<endRow; y++){
-      var phi = (0.5 - y/outH) * Math.PI;
-      for(var x=0; x<outW; x++){
-        var theta = (x/outW - 0.5) * 2 * Math.PI;
-        var dx = Math.cos(phi)*Math.sin(theta);
-        var dy = Math.sin(phi);
-        var dz = Math.cos(phi)*Math.cos(theta);
-        /* Niente piu' media pesata tra tessere sovrapposte: con uno smartphone tenuto in
-           mano la rotazione non avviene attorno al punto nodale dell'obiettivo, quindi due
-           tessere che inquadrano lo stesso punto lo vedono da angolazioni leggermente
-           diverse (parallasse) — mediarle crea doppie esposizioni ("fantasmi") su oggetti
-           vicini. Si sceglie invece, per ogni pixel, UNA sola tessera: quella il cui centro
-           e' piu' vicino angolarmente — elimina i fantasmi, le cuciture restano visibili
-           ma nitide (compromesso onesto senza un vero allineamento per feature-matching). */
-        var bestWgt = -1, bestR=20, bestG=20, bestB=20, bestFound=false;
-        for(var i=0;i<tiles.length;i++){
-          var t = tiles[i];
-          var cosY = Math.cos(-t.yaw), sinY = Math.sin(-t.yaw);
-          var x1 = dx*cosY - dz*sinY;
-          var z1 = dx*sinY + dz*cosY;
-          var y1 = dy;
-          var cosP = Math.cos(-t.pitch), sinP = Math.sin(-t.pitch);
-          var y2 = y1*cosP - z1*sinP;
-          var z2 = y1*sinP + z1*cosP;
-          var x2 = x1;
-          if(z2 <= 0.05) continue;
-          var angX = Math.atan(x2/z2);
-          var angY = Math.atan(y2/z2);
-          if(Math.abs(angX) >= t.fovHrad/2 || Math.abs(angY) >= t.fovVrad/2) continue;
-          var u = (0.5 + (Math.tan(angX)/Math.tan(t.fovHrad/2))/2) * t.w;
-          var v = (0.5 - (Math.tan(angY)/Math.tan(t.fovVrad/2))/2) * t.h;
-          if(u<0||u>=t.w||v<0||v>=t.h) continue;
-          var ux = u|0, vy = v|0;
-          var idx = (vy*t.w + ux)*4;
-          var edgeWX = 1 - Math.abs(angX)/(t.fovHrad/2);
-          var edgeWY = 1 - Math.abs(angY)/(t.fovVrad/2);
-          var wgt = edgeWX*edgeWY; // piu' vicino al centro della tessera = piu' affidabile
-          if(wgt > bestWgt){
-            bestWgt = wgt;
-            bestR = t.data[idx]; bestG = t.data[idx+1]; bestB = t.data[idx+2];
-            bestFound = true;
-          }
-        }
-        var oidx = (y*outW+x)*4;
-        if(bestFound){
-          outImg.data[oidx] = bestR;
-          outImg.data[oidx+1] = bestG;
-          outImg.data[oidx+2] = bestB;
-          outImg.data[oidx+3] = 255;
-        }else{
-          outImg.data[oidx]=20; outImg.data[oidx+1]=20; outImg.data[oidx+2]=20; outImg.data[oidx+3]=255;
-        }
-      }
-    }
-    row = endRow;
-    var pct = Math.round(row/outH*100);
-    document.getElementById("progressFill").style.width = pct + "%";
-    document.getElementById("composeStatus").textContent = pct + "% — " + tiles.length + " foto combinate";
-    if(row < outH){
-      setTimeout(processChunk, 0);
-    }else{
-      octx.putImageData(outImg, 0, 0);
-      out.toBlob(function(blob){
-        lastComposedBlob = blob;
-        var url = URL.createObjectURL(blob);
-        var img = document.getElementById("resultImg");
-        img.src = url; img.style.display = "block";
-        document.getElementById("composeStatus").textContent = "Fatto — " + tiles.length + " foto combinate su " + targets.length + " direzioni target.";
-        document.getElementById("saveSceneBtn").style.display = "inline-block";
-        document.getElementById("retryRoomBtn").style.display = "inline-block";
-      }, "image/jpeg", 0.92);
-    }
-  }
-  processChunk();
-}
-
-document.getElementById("retryRoomBtn").addEventListener("click", function(){
-  shots = [];
-  document.getElementById("shotCount").textContent = "0";
-  document.getElementById("thumbs").innerHTML = "";
-  document.getElementById("camWrap").className = "active";
-  document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
-  updateReticle();
+document.getElementById("retakeBtn").addEventListener("click", function(){
+  document.getElementById("fileInput").value = "";
+  show("roomSetupScreen");
 });
 
 document.getElementById("saveSceneBtn").addEventListener("click", function(){
-  if(!lastComposedBlob) return;
+  if(!currentFile) return;
   var btn = this;
   btn.disabled = true;
   document.getElementById("saveStatus").textContent = "Caricamento in corso…";
@@ -588,7 +262,7 @@ document.getElementById("saveSceneBtn").addEventListener("click", function(){
   var fd = new FormData();
   fd.append("token", scanToken);
   fd.append("room_name", currentRoomName);
-  fd.append("file", lastComposedBlob, "panorama.jpg");
+  fd.append("file", currentFile, currentFile.name || "panorama.jpg");
 
   fetch(uploadEndpoint, {
     method: "POST",
@@ -599,7 +273,6 @@ document.getElementById("saveSceneBtn").addEventListener("click", function(){
   }).then(function(data){
     if(!data || !data.success) throw new Error((data && data.error) || "Caricamento fallito.");
     savedRooms.push(currentRoomName);
-    document.getElementById("saveStatus").textContent = "";
     renderSavedChips();
     show("afterSaveScreen");
   }).catch(function(err){
@@ -623,10 +296,10 @@ document.getElementById("anotherRoomBtn").addEventListener("click", function(){
   document.getElementById("roomSelect").value = "";
   document.getElementById("roomCustom").style.display = "none";
   document.getElementById("roomCustom").value = "";
-  document.querySelectorAll(".size-opt").forEach(function(o){ o.classList.remove("selected"); });
-  selectedSize = null;
+  document.getElementById("fileInput").value = "";
+  currentFile = null;
   currentRoomName = "";
-  document.getElementById("roomContinueBtn").disabled = true;
+  checkRoomReady();
   show("roomSetupScreen");
 });
 
