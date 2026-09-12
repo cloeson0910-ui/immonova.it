@@ -496,6 +496,33 @@ h1{
   text-transform:uppercase;
   line-height:1.7;
 }
+.gallery-item{cursor:pointer}
+.lightbox-overlay{
+  position:fixed;inset:0;background:rgba(20,16,10,.92);z-index:9999;
+  display:flex;align-items:center;justify-content:center;
+}
+.lightbox-overlay[hidden]{display:none}
+.lightbox-overlay img{max-width:88vw;max-height:88vh;object-fit:contain;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.lightbox-close{
+  position:absolute;top:18px;right:22px;background:none;border:0;color:#fff;
+  font-size:32px;line-height:1;cursor:pointer;padding:6px 10px;
+}
+.lightbox-arrow{
+  position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.35);color:#fff;font-size:26px;width:48px;height:48px;
+  border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.lightbox-arrow:hover{background:rgba(255,255,255,.18)}
+.lightbox-prev{left:18px}
+.lightbox-next{right:18px}
+.lightbox-counter{
+  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  color:rgba(255,255,255,.75);font-size:12px;letter-spacing:.1em;
+}
+@media(max-width:600px){
+  .lightbox-arrow{width:40px;height:40px;font-size:20px}
+  .lightbox-close{font-size:26px}
+}
 .virtual-tour-public{
   position:relative;
   border:1px solid rgba(166,127,52,.22);
@@ -830,6 +857,14 @@ html[dir="rtl"] .data-grid{direction:rtl}
   </div>
 
   <div id="pageContent" class="empty">Caricamento opportunità...</div>
+
+  <div class="lightbox-overlay" id="lightboxOverlay" hidden>
+    <button type="button" class="lightbox-close" id="lightboxClose" aria-label="Chiudi">&times;</button>
+    <button type="button" class="lightbox-arrow lightbox-prev" id="lightboxPrev" aria-label="Precedente">&#8249;</button>
+    <img id="lightboxImg" src="" alt="">
+    <button type="button" class="lightbox-arrow lightbox-next" id="lightboxNext" aria-label="Successiva">&#8250;</button>
+    <div class="lightbox-counter" id="lightboxCounter"></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -846,6 +881,55 @@ const languageSelect = document.getElementById("languageSelect");
 const SUPPORTED_LANGUAGES = ["it","en","fr","de","es","ar"];
 
 let currentOpportunity = null;
+
+/* ---- Lightbox galleria pubblica: ingrandimento foto + navigazione avanti/indietro.
+   Un solo set di listener (non dentro renderOpportunity, che puo' essere richiamata
+   piu' volte cambiando lingua) — la lista immagini corrente viene aggiornata ad ogni
+   render tramite setGalleryLightboxImages(). ---- */
+let lightboxImages = [];
+let lightboxIndex = 0;
+const lightboxOverlay = document.getElementById("lightboxOverlay");
+const lightboxImg = document.getElementById("lightboxImg");
+const lightboxCounter = document.getElementById("lightboxCounter");
+
+function setGalleryLightboxImages(urls){
+  lightboxImages = Array.isArray(urls) ? urls : [];
+}
+
+function showLightboxImage(idx){
+  if(!lightboxImages.length) return;
+  lightboxIndex = (idx + lightboxImages.length) % lightboxImages.length;
+  lightboxImg.src = lightboxImages[lightboxIndex];
+  lightboxCounter.textContent = (lightboxIndex + 1) + " / " + lightboxImages.length;
+}
+
+function openLightbox(idx){
+  if(!lightboxImages.length) return;
+  showLightboxImage(idx);
+  lightboxOverlay.hidden = false;
+}
+
+function closeLightbox(){
+  lightboxOverlay.hidden = true;
+  lightboxImg.src = "";
+}
+
+document.getElementById("lightboxClose").addEventListener("click", closeLightbox);
+document.getElementById("lightboxPrev").addEventListener("click", function(){ showLightboxImage(lightboxIndex - 1); });
+document.getElementById("lightboxNext").addEventListener("click", function(){ showLightboxImage(lightboxIndex + 1); });
+lightboxOverlay.addEventListener("click", function(e){
+  if(e.target === lightboxOverlay) closeLightbox();
+});
+document.addEventListener("keydown", function(e){
+  if(lightboxOverlay.hidden) return;
+  if(e.key === "Escape") closeLightbox();
+  if(e.key === "ArrowLeft") showLightboxImage(lightboxIndex - 1);
+  if(e.key === "ArrowRight") showLightboxImage(lightboxIndex + 1);
+});
+pageContent.addEventListener("click", function(e){
+  const item = e.target.closest("[data-lightbox-index]");
+  if(item) openLightbox(Number(item.getAttribute("data-lightbox-index")));
+});
 let currentLanguage = normalizeLanguage(params.get("lang") || localStorage.getItem("immonova_public_language") || navigator.language || "en");
 let currentRequestTemplate = "";
 
@@ -1422,7 +1506,7 @@ async function renderOpportunity(data){
           <div class="gallery">
             ${
               gallery.length
-              ? gallery.map(url => `<div class="gallery-item"><img src="${escapeHTML(url)}" alt="${escapeHTML(title)}"></div>`).join("")
+              ? gallery.map((url, idx) => `<div class="gallery-item" data-lightbox-index="${idx}"><img src="${escapeHTML(url)}" alt="${escapeHTML(title)}"></div>`).join("")
               : `<div class="gallery-item"><div class="gallery-locked">${escapeHTML(dict("gallery_preview_placeholder"))}</div></div>`
             }
             <div class="gallery-item"><div class="gallery-locked">${lockedCount > 0 ? "+" + lockedCount + " " : ""}${escapeHTML(dict("gallery_locked"))}</div></div>
@@ -1503,6 +1587,8 @@ async function renderOpportunity(data){
   if(virtualTour360 && window.ImmonovaTour360){
     ImmonovaTour360.render("tour360Container", virtualTour360);
   }
+
+  setGalleryLightboxImages(gallery);
 
   currentRequestTemplate = dict("message_default") + " " + title;
 
