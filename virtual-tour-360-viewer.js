@@ -31,13 +31,16 @@
         yaw: typeof s.yaw === "number" ? s.yaw : 0,
         hfov: typeof s.hfov === "number" ? s.hfov : 110,
         hotSpots: (s.hotspots || []).map(function (h) {
+          /* NIENTE cssClass qui: Pannellum lo sostituisce interamente alle sue classi
+             predefinite invece di aggiungerlo, e senza quelle classi l'hotspot diventa
+             largo/alto 0px — invisibile e non cliccabile pur esistendo nel DOM. Lasciando
+             cssClass non impostato, Pannellum applica il suo pallino cliccabile standard. */
           return {
             pitch: h.pitch,
             yaw: h.yaw,
             type: "scene",
             text: h.text || "",
             sceneId: h.target_scene_id,
-            cssClass: "immonova-tour-hotspot",
           };
         }),
       };
