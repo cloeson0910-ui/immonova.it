@@ -4,11 +4,13 @@
  * scattate girando su se stessi (di solito 4, un quarto di giro l'una dall'altra).
  *
  * Interazione IDENTICA a un virtual tour a sfera:
- *  - si trascina con il mouse/dito per "girare la testa" (nessuna freccia) — qui
- *    il movimento è vincolato al solo asse orizzontale, non essendo una vera sfera;
+ *  - si trascina con il mouse/dito per "girare la testa" (nessuna freccia). Il
+ *    movimento è CONTINUO: mentre trascini, la foto attuale scorre/sfuma e quella
+ *    adiacente compare gradualmente in proporzione a quanto hai trascinato — non
+ *    scatta di colpo solo a fine corsa. È vincolato al solo asse orizzontale
+ *    (niente inclinazione su/giù, non essendo una vera sfera);
  *  - il cambio ambiente avviene tramite HOTSPOT posizionati sull'immagine (punti
- *    cliccabili che portano a un'altra stanza), esattamente come nel tour a sfera —
- *    NON con pulsanti fissi "ambiente precedente/successivo".
+ *    cliccabili che portano a un'altra stanza), esattamente come nel tour a sfera.
  *
  * Formato scena atteso:
  *   { id, title, photos: [{url, angle}],
@@ -26,8 +28,9 @@
 (function (global) {
   "use strict";
 
-  var TRANSITION_MS = 300;
-  var DRAG_DEGREES_PER_PIXEL = 0.35; // sensibilità del trascinamento
+  var SNAP_MS = 220;          // durata dell'animazione di completamento/ritorno
+  var DRAG_STEP_PX = 220;     // px di trascinamento per passare da una foto alla adiacente
+  var COMMIT_THRESHOLD = 0.5; // oltre questa frazione di DRAG_STEP_PX, al rilascio si passa alla foto vicina
 
   function injectStyles() {
     if (document.getElementById("immonova-walk-tour-style")) return;
@@ -36,7 +39,8 @@
     style.textContent =
       ".iwt-root{position:relative;width:100%;height:100%;overflow:hidden;background:#111;border-radius:8px;cursor:grab;touch-action:pan-y;user-select:none}" +
       ".iwt-root.iwt-dragging{cursor:grabbing}" +
-      ".iwt-layer{position:absolute;inset:0;background-size:cover;background-position:center;transition:opacity " + TRANSITION_MS + "ms ease, transform " + TRANSITION_MS + "ms ease;pointer-events:none}" +
+      ".iwt-layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none}" +
+      ".iwt-layer.iwt-snap{transition:opacity " + SNAP_MS + "ms ease, transform " + SNAP_MS + "ms ease}" +
       ".iwt-title{position:absolute;top:10px;left:12px;color:#fff;font-size:12.5px;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:12px;z-index:3;pointer-events:none}" +
       ".iwt-hint{position:absolute;top:10px;right:12px;color:#fff;font-size:11px;background:rgba(0,0,0,.4);padding:4px 10px;border-radius:12px;z-index:3;pointer-events:none;opacity:.85}" +
       ".iwt-hotspot{position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:rgba(198,150,60,.85);border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;z-index:4;box-shadow:0 0 0 4px rgba(198,150,60,.25)}" +
@@ -86,7 +90,8 @@
     hotspotLayer.style.zIndex = "3";
     root.appendChild(hotspotLayer);
 
-    var state = { sceneIndex: 0, photoIndex: 0, front: layerA, back: layerB, animating: false, yaw: 0 };
+    // front = foto corrente "ferma"; back = foto adiacente che entra durante il trascinamento
+    var state = { sceneIndex: 0, photoIndex: 0, front: layerA, back: layerB, dragDir: 0, dragging: false };
 
     function findSceneIndexById(id) {
       for (var i = 0; i < scenes.length; i++) if (scenes[i].id === id) return i;
@@ -111,7 +116,6 @@
         mark.className = "iwt-hotspot";
         mark.style.left = (h.x_pct != null ? h.x_pct : 50) + "%";
         mark.style.top = (h.y_pct != null ? h.y_pct : 50) + "%";
-        mark.style.pointerEvents = "auto";
         mark.innerHTML = "→" + '<span class="iwt-hotspot-label"></span>';
         mark.querySelector(".iwt-hotspot-label").textContent = h.text || "";
         mark.addEventListener("click", function (e) {
@@ -123,113 +127,133 @@
       });
     }
 
-    function goToPhoto(newIndex, direction) {
-      var scene = currentScene();
-      var photos = scene.photos || [];
-      if (!photos.length || state.animating) return;
-      var n = photos.length;
-      newIndex = ((newIndex % n) + n) % n;
-      if (newIndex === state.photoIndex) return;
-
-      state.animating = true;
-      var incoming = state.back;
-      var outgoing = state.front;
-      setLayerImage(incoming, photos[newIndex].url);
-      incoming.style.transition = "none";
-      incoming.style.opacity = "0";
-      incoming.style.transform = "translateX(" + (direction > 0 ? "6%" : "-6%") + ")";
-      // forza reflow prima di riattivare la transizione
-      incoming.offsetHeight;
-      incoming.style.transition = "";
-      requestAnimationFrame(function () {
-        incoming.style.opacity = "1";
-        incoming.style.transform = "translateX(0)";
-        outgoing.style.opacity = "0";
-        outgoing.style.transform = "translateX(" + (direction > 0 ? "-6%" : "6%") + ")";
-      });
-
-      setTimeout(function () {
-        outgoing.style.transition = "none";
-        outgoing.style.transform = "translateX(0)";
-        state.front = incoming;
-        state.back = outgoing;
-        state.photoIndex = newIndex;
-        state.animating = false;
-        renderHotspots();
-      }, TRANSITION_MS + 30);
+    function resetLayers() {
+      state.front.classList.remove("iwt-snap");
+      state.back.classList.remove("iwt-snap");
+      state.front.style.opacity = "1";
+      state.front.style.transform = "translateX(0)";
+      state.back.style.opacity = "0";
+      state.back.style.transform = "translateX(0)";
     }
 
     function loadScene(index) {
       index = Math.max(0, Math.min(scenes.length - 1, index));
       state.sceneIndex = index;
       state.photoIndex = 0;
-      state.yaw = 0;
       var scene = currentScene();
       var photos = scene.photos || [];
       title.textContent = scene.title || "";
       if (photos.length) {
         setLayerImage(state.front, photos[0].url);
-        state.front.style.transition = "none";
-        state.front.style.opacity = "1";
-        state.front.style.transform = "translateX(0)";
-        state.back.style.transition = "none";
-        state.back.style.opacity = "0";
-        state.back.style.transform = "translateX(0)";
       }
+      resetLayers();
       hint.style.display = photos.length > 1 ? "block" : "none";
       renderHotspots();
     }
 
-    /* Trascinamento continuo, solo asse orizzontale: si accumula un angolo virtuale
-       (come lo yaw di un tour a sfera) e, ogni volta che supera la soglia tra due
-       foto adiacenti, si passa alla foto più vicina. Nessuna freccia: si trascina
-       e basta, esattamente come nel virtual tour a sfera — qui però il movimento
-       non ha componente verticale. Il cambio ambiente avviene solo tramite hotspot. */
-    var dragging = false;
+    /* Trascinamento continuo, solo asse orizzontale, con feedback visivo in tempo
+       reale (niente attesa fino a fine corsa): mentre trascini, la foto adiacente
+       (nella direzione del trascinamento) viene mostrata dietro e la sua opacità/
+       posizione seguono 1:1 il movimento del dito. Al rilascio: se hai superato
+       COMMIT_THRESHOLD del percorso, si passa definitivamente alla foto adiacente
+       (piccola animazione di completamento), altrimenti si torna indietro alla
+       foto di partenza. Il cambio ambiente avviene solo tramite hotspot. */
     var dragStartX = 0;
-    var yawAtDragStart = 0;
+    var activePointerId = null;
 
-    function stepDegrees() {
-      var scene = currentScene();
-      var photos = scene.photos || [];
-      return photos.length ? (360 / photos.length) : 90;
+    function neighborIndex(dir) {
+      var photos = (currentScene().photos || []);
+      var n = photos.length;
+      if (!n) return state.photoIndex;
+      return ((state.photoIndex + dir) % n + n) % n;
     }
 
-    function onDragMove(clientX) {
-      if (!dragging) return;
-      var scene = currentScene();
-      var photos = scene.photos || [];
-      if (photos.length < 2) return;
-      var dx = clientX - dragStartX;
-      state.yaw = yawAtDragStart - dx * DRAG_DEGREES_PER_PIXEL;
-      var step = stepDegrees();
-      var targetIndex = Math.round(state.yaw / step) % photos.length;
-      targetIndex = ((targetIndex % photos.length) + photos.length) % photos.length;
-      if (targetIndex !== state.photoIndex) {
-        var direction = (targetIndex === (state.photoIndex + 1) % photos.length) ? 1 : -1;
-        goToPhoto(targetIndex, direction);
-      }
-    }
-
-    function startDrag(clientX) {
+    function updateDragVisual(dx) {
       var photos = (currentScene().photos || []);
       if (photos.length < 2) return;
-      dragging = true;
+      var dir = dx < 0 ? 1 : -1; // trascini a sinistra -> avanzi alla foto successiva (come guardare a destra)
+      if (dx === 0) dir = state.dragDir || 1;
+      state.dragDir = dir;
+      var progress = Math.min(1, Math.abs(dx) / DRAG_STEP_PX);
+      var nIdx = neighborIndex(dir);
+      setLayerImage(state.back, photos[nIdx].url);
+      state.front.classList.remove("iwt-snap");
+      state.back.classList.remove("iwt-snap");
+      state.back.style.opacity = String(progress);
+      state.back.style.transform = "translateX(" + (dir > 0 ? (1 - progress) * 10 : -(1 - progress) * 10) + "%)";
+      state.front.style.opacity = String(1 - progress * 0.85);
+      state.front.style.transform = "translateX(" + (dir > 0 ? -progress * 10 : progress * 10) + "%)";
+      state._dragProgress = progress;
+      state._dragNeighbor = nIdx;
+    }
+
+    function commitDrag() {
+      var nIdx = state._dragNeighbor;
+      state.front.classList.add("iwt-snap");
+      state.back.classList.add("iwt-snap");
+      state.back.style.opacity = "1";
+      state.back.style.transform = "translateX(0)";
+      state.front.style.opacity = "0";
+      var dir = state.dragDir;
+      state.front.style.transform = "translateX(" + (dir > 0 ? "-10%" : "10%") + ")";
+      var finishedFront = state.front, finishedBack = state.back;
+      setTimeout(function () {
+        finishedFront.classList.remove("iwt-snap");
+        finishedBack.classList.remove("iwt-snap");
+        state.front = finishedBack;
+        state.back = finishedFront;
+        state.photoIndex = nIdx;
+        renderHotspots();
+      }, SNAP_MS + 20);
+    }
+
+    function cancelDrag() {
+      state.front.classList.add("iwt-snap");
+      state.back.classList.add("iwt-snap");
+      state.front.style.opacity = "1";
+      state.front.style.transform = "translateX(0)";
+      state.back.style.opacity = "0";
+      state.back.style.transform = "translateX(0)";
+      var f = state.front, b = state.back;
+      setTimeout(function () {
+        f.classList.remove("iwt-snap");
+        b.classList.remove("iwt-snap");
+      }, SNAP_MS + 20);
+    }
+
+    function startDrag(clientX, pointerId) {
+      var photos = (currentScene().photos || []);
+      if (photos.length < 2) return;
+      state.dragging = true;
       dragStartX = clientX;
-      yawAtDragStart = state.yaw;
+      activePointerId = pointerId;
       root.classList.add("iwt-dragging");
     }
 
-    function endDrag() {
-      dragging = false;
-      root.classList.remove("iwt-dragging");
+    function onDragMove(clientX) {
+      if (!state.dragging) return;
+      updateDragVisual(clientX - dragStartX);
     }
 
-    root.addEventListener("pointerdown", function (e) { startDrag(e.clientX); if (root.setPointerCapture) root.setPointerCapture(e.pointerId); });
-    root.addEventListener("pointermove", function (e) { onDragMove(e.clientX); });
-    root.addEventListener("pointerup", endDrag);
-    root.addEventListener("pointercancel", endDrag);
-    root.addEventListener("pointerleave", function () { if (dragging) endDrag(); });
+    function endDrag() {
+      if (!state.dragging) return;
+      state.dragging = false;
+      root.classList.remove("iwt-dragging");
+      if ((state._dragProgress || 0) >= COMMIT_THRESHOLD) commitDrag();
+      else cancelDrag();
+      state._dragProgress = 0;
+    }
+
+    root.addEventListener("pointerdown", function (e) {
+      if (e.target.closest && e.target.closest(".iwt-hotspot")) return; // non avviare il trascinamento sopra un hotspot
+      startDrag(e.clientX, e.pointerId);
+    });
+    root.addEventListener("pointermove", function (e) {
+      if (state.dragging && e.pointerId === activePointerId) onDragMove(e.clientX);
+    });
+    root.addEventListener("pointerup", function (e) { if (e.pointerId === activePointerId) endDrag(); });
+    root.addEventListener("pointercancel", function (e) { if (e.pointerId === activePointerId) endDrag(); });
+    root.addEventListener("pointerleave", function (e) { if (e.pointerId === activePointerId) endDrag(); });
 
     loadScene(0);
     return { goToScene: loadScene };
