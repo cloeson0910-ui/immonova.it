@@ -168,6 +168,9 @@ body::after{
   color:#a67f34;
   margin-bottom:20px;
 }
+.record-tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid rgba(166,127,52,.25)}
+.record-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 4px;margin-bottom:-1px;font-family:inherit;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8f7643;cursor:pointer}
+.record-tab.active{color:#a67f34;border-bottom-color:#a67f34}
 .activity-list{display:flex;flex-direction:column;gap:8px}
 .activity-empty{font-size:12.5px;color:#8f7643;padding:10px 0}
 .activity-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;background:#f9f4e8;border:1px solid rgba(166,127,52,.18);border-radius:2px;flex-wrap:wrap}
@@ -350,6 +353,26 @@ textarea{
     Crea o aggiorna il profilo investitore con dati anagrafici, budget, aree geografiche, categorie di investimento,
     lingua preferita e consensi per future comunicazioni email / WhatsApp.
   </p>
+
+  <div class="record-tabs" id="recordTabs" style="display:none">
+    <button type="button" class="record-tab active" id="tabBtnData" data-tab="data">Scheda cliente</button>
+    <button type="button" class="record-tab" id="tabBtnActivity" data-tab="activity">Attività cliente</button>
+  </div>
+
+  <div id="activityTabPanel" class="section" style="display:none">
+    <h2 class="section-title">Attività cliente</h2>
+    <p style="font-size:12.5px;color:#8f7643;line-height:1.6;margin:0 0 16px">Immobili visitati, proposte ricevute e proposte inviate per conto di questo cliente.</p>
+
+    <div style="margin-bottom:18px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Immobili visitati</div>
+      <div id="activityVisitsList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
+    </div>
+
+    <div>
+      <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Proposte (ricevute o inviate per suo conto)</div>
+      <div id="activityOffersList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
+    </div>
+  </div>
 
   <form id="investorForm" class="form-wrapper">
 
@@ -544,21 +567,6 @@ textarea{
       </div>
     </div>
 
-    <div class="section" id="activitySection" style="display:none">
-      <h2 class="section-title">Attività cliente</h2>
-      <p style="font-size:12.5px;color:#8f7643;line-height:1.6;margin:0 0 16px">Immobili visitati, proposte ricevute e proposte inviate per conto di questo cliente.</p>
-
-      <div style="margin-bottom:18px">
-        <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Immobili visitati</div>
-        <div id="activityVisitsList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
-      </div>
-
-      <div>
-        <div style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#a67f34;margin-bottom:8px">Proposte (ricevute o inviate per suo conto)</div>
-        <div id="activityOffersList" class="activity-list"><div class="activity-empty">Caricamento...</div></div>
-      </div>
-    </div>
-
     <div class="footer-actions">
       <a class="secondary-link" href="investors.html" data-i18n="btn_cancel">Annulla</a>
 
@@ -594,6 +602,18 @@ const progressFill = document.getElementById("progressFill");
 
 let currentUser = null;
 let currentProfile = null;
+
+// Tab "Scheda cliente" / "Attività cliente": accanto, cliccabile subito senza dover
+// scorrere tutto il form — mostrate solo per un cliente già esistente (per un contatto
+// nuovo non c'è ancora nessuna attività da vedere).
+document.getElementById("tabBtnData").addEventListener("click", function(){ switchRecordTab("data"); });
+document.getElementById("tabBtnActivity").addEventListener("click", function(){ switchRecordTab("activity"); });
+function switchRecordTab(tab){
+  document.getElementById("tabBtnData").classList.toggle("active", tab === "data");
+  document.getElementById("tabBtnActivity").classList.toggle("active", tab === "activity");
+  document.getElementById("investorForm").style.display = tab === "data" ? "" : "none";
+  document.getElementById("activityTabPanel").style.display = tab === "activity" ? "block" : "none";
+}
 let currentUserLanguage = "it";
 
 var UI_STRINGS = {
@@ -1188,26 +1208,44 @@ async function loadInvestorActivity(id){
   }
 
   try{
-    var offersRes = await client
+    var buyerOffersRes = await client
       .from("opportunity_offers")
       .select("id, offer_kind, status, offered_price, created_at, buyer_signed_at, opportunities(id, title)")
       .eq("investor_id", id)
       .order("created_at", { ascending: false });
+    if(buyerOffersRes.error) throw buyerOffersRes.error;
 
-    if(offersRes.error) throw offersRes.error;
-    var offers = offersRes.data || [];
+    var sellerOffersRes = await client
+      .from("opportunity_offers")
+      .select("id, offer_kind, status, offered_price, created_at, seller_signed_at, opportunities(id, title)")
+      .eq("seller_investor_id", id)
+      .order("created_at", { ascending: false });
+    if(sellerOffersRes.error) throw sellerOffersRes.error;
+
+    var buyerOffers = (buyerOffersRes.data || []).map(function(o){ o.__role = "buyer"; return o; });
+    var sellerOffers = (sellerOffersRes.data || []).map(function(o){ o.__role = "seller"; return o; });
+    var offers = buyerOffers.concat(sellerOffers).sort(function(a, b){
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+
     if(!offers.length){
       offersBox.innerHTML = '<div class="activity-empty">Nessuna proposta collegata a questo cliente.</div>';
     }else{
       offersBox.innerHTML = offers.map(function(o){
         var title = (o.opportunities && o.opportunities.title) || "Immobile #" + (o.opportunities ? o.opportunities.id : "?");
         var kindLabel = o.offer_kind === "controfferta" ? "Controfferta" : "Proposta d'acquisto";
+        var roleLabel = o.__role === "seller" ? "Come venditore" : "Come acquirente";
         var priceText = o.offered_price ? "€ " + Number(o.offered_price).toLocaleString("it-IT") : "";
         var dateText = o.created_at ? new Date(o.created_at).toLocaleDateString("it-IT", {day:"2-digit", month:"long", year:"numeric"}) : "";
         var statusLabel = OFFER_STATUS_LABELS[o.status] || o.status || "";
-        var signedNote = o.buyer_signed_at ? " · firmata dal cliente" : "";
+        var signedAt = o.__role === "seller" ? o.seller_signed_at : o.buyer_signed_at;
+        var signedNote = signedAt ? " · firmata dal cliente" : "";
+        var soldNote = "";
+        if(o.__role === "seller" && o.status === "accettata"){
+          soldNote = '<div class="meta" style="color:#a67f34;font-weight:700;">💰 Vendita conclusa — potenziale liquidità' + (priceText ? " di circa " + escapeHTML(priceText) : "") + ' disponibile per un nuovo investimento</div>';
+        }
         return '<div class="activity-row">' +
-          '<div><div class="main">' + escapeHTML(title) + '</div><div class="meta">' + kindLabel + (priceText ? " — " + escapeHTML(priceText) : "") + (dateText ? " · " + dateText : "") + escapeHTML(signedNote) + '</div></div>' +
+          '<div><div class="main">' + escapeHTML(title) + '</div><div class="meta">' + roleLabel + " · " + kindLabel + (priceText ? " — " + escapeHTML(priceText) : "") + (dateText ? " · " + dateText : "") + escapeHTML(signedNote) + '</div>' + soldNote + '</div>' +
           '<span class="status-tag">' + escapeHTML(statusLabel) + '</span>' +
           '<a class="open-link" href="offer-detail.html?offer_id=' + encodeURIComponent(o.id) + '">Apri proposta</a>' +
           '</div>';
@@ -1281,7 +1319,7 @@ async function loadInvestor(){
     input.checked = categories.includes(input.value);
   });
 
-  document.getElementById("activitySection").style.display = "block";
+  document.getElementById("recordTabs").style.display = "flex";
   loadInvestorActivity(investorId);
 
   setProgress("", 0, "");
