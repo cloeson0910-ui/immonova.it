@@ -2125,14 +2125,17 @@ function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestme
     rows.push('<tr><td>' + escapeHTML(label) + (note ? '<br><span style="font-size:10.5px;color:#8f7643">' + escapeHTML(note) + '</span>' : '') + '</td><td>' + escapeHTML(euro(netAfterTax)) + '</td><td>' + (breakEvenYears ? escapeHTML(String(Math.round(breakEvenYears*10)/10)) + escapeHTML(T.years_suffix||" anni") : escapeHTML(T.not_available_long||"non disponibile")) + '</td></tr>');
   }
 
+  var taxBase = grossRevenueYear1;
   if(isResidential){
-    addRow("Persona fisica — Cedolare secca, canone libero (21%)", grossNetIncome * (1 - 0.21));
-    addRow("Persona fisica — Cedolare secca, canone concordato (10%)", grossNetIncome * (1 - 0.10));
+    var cedolareLiberoImposta = taxBase * 0.21;
+    var cedolareConcordatoImposta = taxBase * 0.10;
+    addRow("Persona fisica — Cedolare secca, canone libero (21%)", grossNetIncome - cedolareLiberoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
+    addRow("Persona fisica — Cedolare secca, canone concordato (10%)", grossNetIncome - cedolareConcordatoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
   }
-  var irpefBase = grossNetIncome * 0.95;
+  var irpefBase = taxBase * 0.95;
   var addizionaliPct = 0.02;
-  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", grossNetIncome - irpefBase * (0.23 + addizionaliPct), "Base imponibile: 95% del reddito netto (deduzione forfettaria 5%)");
-  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", grossNetIncome - irpefBase * (0.43 + addizionaliPct), "Base imponibile: 95% del reddito netto (deduzione forfettaria 5%)");
+  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", grossNetIncome - irpefBase * (0.23 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
+  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", grossNetIncome - irpefBase * (0.43 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
 
   /* ---- Regime forfettario: si applica SOLO se l'attivita' e' svolta in forma d'impresa
      (non ai redditi fondiari da locazione ordinaria di un privato) -- tipicamente locazioni
