@@ -1742,10 +1742,22 @@ function renderAssetCharacteristicsPage(){
   if(accessorySqm) rows.push([T.label_accessory_size, formatMetricVal(accessorySqm)+" mq"]);
   var roomInventoryBlock=renderRoomInventoryBlock();
   var cadastralBlock=renderCadastralUnitsBlock();
-  if(!rows.length && !roomInventoryBlock && !cadastralBlock) return "";
+  if(!rows.length && !roomInventoryBlock && !cadastralBlock) return [];
   var cards = rows.map(function(r){return '<div class="metric-card"><div class="metric-label">'+escapeHTML(r[0])+'</div><div class="metric-value">'+escapeHTML(r[1])+'</div></div>';}).join("");
   var cardsBlock=rows.length?('<div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">'+cards+'</div>'):'';
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_asset_characteristics)+'</div><h2 class="section-title">'+escapeHTML(T.title_asset_characteristics)+'</h2><div class="lux-rule"></div>'+cardsBlock+roomInventoryBlock+cadastralBlock+'</div></article>';
+  var pageHead='<div class="section-kicker">'+escapeHTML(T.kicker_asset_characteristics)+'</div><h2 class="section-title">'+escapeHTML(T.title_asset_characteristics)+'</h2><div class="lux-rule"></div>';
+  var detailsBlock=roomInventoryBlock+cadastralBlock;
+  if(!detailsBlock){
+    return ['<article class="report-page"><div class="page-inner">'+pageHead+cardsBlock+'</div></article>'];
+  }
+  /* Con più edifici/unità catastali il blocco camere+catasto (lunghezza variabile) non entra
+     insieme alle card sintetiche in una pagina fissa da 210mm senza sforare sul piè di pagina:
+     stesso difetto già corretto in Scenari Fiscali e Costo Totale del Progetto — dettagli su
+     pagina propria. Ritorna un array di pagine (come renderCashflowPage/renderTourismDemandPage)
+     cosi' il sommario/la numerazione contano correttamente ogni pagina reale. */
+  var page1='<article class="report-page"><div class="page-inner">'+pageHead+cardsBlock+'</div></article>';
+  var page2='<article class="report-page"><div class="page-inner">'+pageHead+detailsBlock+'</div></article>';
+  return cardsBlock ? [page1,page2] : [page2];
 }
 /* ---- Ogni immobile può avere più unità catastali (abitazione, garage, cantina...): una
    scheda per ciascuna, stesso pattern visivo già in uso per la composizione camere. ---- */
@@ -2207,7 +2219,7 @@ function renderFiscalScenariosPage(){
   var ivaBoxHTML = '<div class="cost-box" style="margin-top:18px"><div class="cost-title">Nota IVA</div><p class="info-text" style="margin-top:0">Locazione a uso abitativo: sempre esente/fuori campo IVA, indipendentemente dal locatore. Locazione di immobile strumentale/commerciale da parte di un soggetto IVA (S.r.l., holding, o persona fisica con partita IVA in regime ordinario): esente IVA salvo opzione per l\'imponibilità (aliquota 22%) esercitata in contratto — se esercitata, l\'IVA è di norma neutra per il locatore (versata e recuperata sugli acquisti) ma va gestita negli adempimenti periodici. Regime forfettario: sempre in franchigia IVA, nessuna imposta addebitata né detratta.</p></div>';
 
   if(!tables.length){
-    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div><p class="info-text">Questa pagina non inventa scenari. Senza un reddito netto operativo disponibile (vedi sezione precedente), l\'impatto fiscale e il break-even netto restano esplicitamente non disponibili.</p></div></article>';
+    return ['<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div><p class="info-text">Questa pagina non inventa scenari. Senza un reddito netto operativo disponibile (vedi sezione precedente), l\'impatto fiscale e il break-even netto restano esplicitamente non disponibili.</p></div></article>'];
   }
 
   /* Una tabella fiscale completa (7-8 righe, alcune con note su piu' righe) non entra insieme
@@ -2226,7 +2238,7 @@ function renderFiscalScenariosPage(){
       + '</div></article>';
   });
 
-  return pages.join("");
+  return pages;
 }
 function renovationRatesJs(style, level){
   var rates = {
@@ -2276,9 +2288,9 @@ function renderInvestmentStructure(){var f=buildFinance();var rr=getRenovationRa
      riempivano gia' la pagina, e il blocco scenari di ristrutturazione (righe extra + nota) finiva
      tagliato/sovrapposto al piede pagina. Lo scenari-block va su una pagina propria. */
   var page1 = '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_investment_structure)+'</div><h2 class="section-title">'+escapeHTML(T.title_total_project_cost)+'</h2><div class="lux-rule"></div><div class="structure-grid"><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_acquisition_title)+'</div>'+row(T.row_purchase_price,f.purchase)+row(T.row_taxes,f.taxes)+row(T.row_notary,f.notary)+row(T.row_agency,f.agency)+row(T.row_due_diligence,f.dueDiligence)+row(T.row_total_acquisition,f.acquisition,'total')+'</div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.cost_development_title)+'</div>'+row(T.row_renovation_avg,f.renovation)+renovationRangeNote+row(T.row_technical_fees,f.tech)+row(T.row_ffe,f.ffe)+row(T.row_marketing,f.marketing)+row(T.row_contingency,f.contingency)+row(T.row_total_development,f.development,'total')+'</div></div><div class="cost-box" style="margin-top:24px">'+row(T.row_total_project_cost,f.total,'total')+'</div></div></article>';
-  if(!renovationBlock) return page1;
+  if(!renovationBlock) return [page1];
   var page2 = '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_investment_structure)+'</div><h2 class="section-title">'+escapeHTML(T.title_total_project_cost)+'</h2><div class="lux-rule"></div><div class="structure-grid">'+renovationBlock+'</div></div></article>';
-  return page1 + page2;
+  return [page1, page2];
 }
 /* ---- Diagnostica fonti dati XLSX: legge diagnostics.documents_sample / tables_sample /
    source_logs dell'ultimo fetch live del Discovery Engine (lastDiscoveryDiagnostics), filtrata
@@ -3156,11 +3168,11 @@ function renderBook(){
     renderAdPagesForPosition("before_financial","after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider, true); });
     push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
     push(T.chapter_financial, renderInternalFacts());
-    push(T.chapter_financial, renderInvestmentStructure());
+    renderInvestmentStructure().forEach(function(p){ push(T.chapter_financial, p); });
     renderTourismDemandPage().forEach(function(p){ push(T.chapter_financial, p); });
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderFinancialSnapshot());
-    push(T.chapter_financial, renderFiscalScenariosPage());
+    renderFiscalScenariosPage().forEach(function(p){ push(T.chapter_financial, p); });
   }
 
   var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["shopping",T.eco_shopping,T.eco_shopping_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
@@ -3193,12 +3205,12 @@ function renderBook(){
 
   var docPages = preparedDocumentPages;
   var renovationPages = renderRenovationBeforeAfterPages();
-  var characteristicsPage = renderAssetCharacteristicsPage();
+  var characteristicsPages = renderAssetCharacteristicsPage();
   var hasMedia = normalizeGallery(opportunity&&opportunity.gallery_images).length || clean(opportunity&&opportunity.cover_image) || docPages.length || renovationPages.length;
-  if(hasMedia || characteristicsPage){
+  if(hasMedia || characteristicsPages.length){
     renderAdPagesForPosition("before_property","after_property").forEach(function(p){ push(T.chapter_property, p.html, p.divider, true); });
     push(T.chapter_property, dividerPageHTML(T.divider_property_title,T.divider_property_kicker), true);
-    push(T.chapter_property, characteristicsPage);
+    characteristicsPages.forEach(function(p){ push(T.chapter_property, p); });
     renderMediaGalleryPage().forEach(function(p){ push(T.chapter_property, p); });
     renovationPages.forEach(function(p){ push(T.chapter_property, p); });
     docPages.forEach(function(p){ push(T.chapter_property, p); });
