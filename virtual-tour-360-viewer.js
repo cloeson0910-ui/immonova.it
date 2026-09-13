@@ -61,10 +61,13 @@
       ".it3-hotspot-label{position:absolute;bottom:120%;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:3px 8px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .15s}" +
       ".it3-hotspot:hover .it3-hotspot-label{opacity:1}" +
       ".it3-fade{position:absolute;inset:0;background:#111;opacity:0;pointer-events:none;transition:opacity 260ms ease;z-index:5}" +
-      ".it3-fullscreen-btn{position:absolute;bottom:10px;right:10px;width:34px;height:34px;border-radius:6px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.3);color:#fff;cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;font-size:15px}" +
+      ".it3-fullscreen-btn{position:absolute;bottom:10px;right:10px;width:34px;height:34px;border-radius:6px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.3);color:#fff;cursor:pointer;z-index:6;display:flex;align-items:center;justify-content:center;font-size:15px}" +
       ".it3-fullscreen-btn:hover{background:rgba(0,0,0,.7)}" +
       ".it3-root:fullscreen{border-radius:0}" +
       ".it3-root:-webkit-full-screen{border-radius:0}" +
+      /* schermo intero "finto" via CSS: usato quando la Fullscreen API nativa non è
+         disponibile (es. Safari su iPhone, che la supporta solo per <video>) */
+      ".it3-root.it3-fake-fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:999999;border-radius:0}" +
       ".it3-empty{padding:16px;color:#888;font-size:13px}";
     document.head.appendChild(style);
   }
@@ -120,27 +123,43 @@
     });
     root.appendChild(fsBtn);
 
-    function isFullscreen() {
-      return document.fullscreenElement === root || document.webkitFullscreenElement === root;
+    /* La Fullscreen API nativa (requestFullscreen) non è supportata da Safari su
+       iPhone per elementi generici (solo per <video>): il pulsante sembrerebbe
+       "non funzionare" su iOS con quell'approccio. Si usa invece un fullscreen
+       "finto" via CSS, che funziona identico su qualunque browser/dispositivo:
+       l'elemento del tour diventa position:fixed a tutto schermo. */
+    var fakeFsPlaceholder = null;
+    function isFakeFullscreen() {
+      return root.classList.contains("it3-fake-fullscreen");
+    }
+    function enterFakeFullscreen() {
+      fakeFsPlaceholder = document.createComment("it3-fs-placeholder");
+      root.parentNode.insertBefore(fakeFsPlaceholder, root);
+      document.body.appendChild(root);
+      root.classList.add("it3-fake-fullscreen");
+      document.body.style.overflow = "hidden";
+    }
+    function exitFakeFullscreen() {
+      root.classList.remove("it3-fake-fullscreen");
+      if (fakeFsPlaceholder && fakeFsPlaceholder.parentNode) {
+        fakeFsPlaceholder.parentNode.insertBefore(root, fakeFsPlaceholder);
+        fakeFsPlaceholder.parentNode.removeChild(fakeFsPlaceholder);
+      }
+      fakeFsPlaceholder = null;
+      document.body.style.overflow = "";
     }
     function toggleFullscreen() {
-      if (isFullscreen()) {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      if (isFakeFullscreen()) {
+        exitFakeFullscreen();
       } else {
-        if (root.requestFullscreen) root.requestFullscreen();
-        else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+        enterFakeFullscreen();
       }
+      fsBtn.innerHTML = isFakeFullscreen() ? "✕" : "⛶";
+      fsBtn.title = isFakeFullscreen() ? "Esci da schermo intero" : "Schermo intero";
+      recomputeBounds();
     }
-    document.addEventListener("fullscreenchange", function () {
-      fsBtn.innerHTML = isFullscreen() ? "✕" : "⛶";
-      fsBtn.title = isFullscreen() ? "Esci da schermo intero" : "Schermo intero";
-      recomputeBounds();
-    });
-    document.addEventListener("webkitfullscreenchange", function () {
-      fsBtn.innerHTML = isFullscreen() ? "✕" : "⛶";
-      fsBtn.title = isFullscreen() ? "Esci da schermo intero" : "Schermo intero";
-      recomputeBounds();
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && isFakeFullscreen()) toggleFullscreen();
     });
 
     var state = { sceneIndex: 0, offset: 0, minOffset: 0, maxOffset: 0, imgW: 0, loop: false, offsetY: 0, minOffsetY: 0, maxOffsetY: 0 };
