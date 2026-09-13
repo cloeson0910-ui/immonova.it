@@ -293,7 +293,7 @@
     var activePointerId = null;
 
     root.addEventListener("pointerdown", function (e) {
-      if (e.target.closest && e.target.closest(".it3-hotspot")) return;
+      if (e.target.closest && e.target.closest(".it3-hotspot, .it3-fullscreen-btn")) return;
       if (state.minOffset === state.maxOffset && state.minOffsetY === state.maxOffsetY) return; // niente da trascinare
       dragging = true;
       activePointerId = e.pointerId;
