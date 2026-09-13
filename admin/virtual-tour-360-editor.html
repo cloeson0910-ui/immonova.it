@@ -25,7 +25,7 @@
   label{font-size:11px;color:#666;display:block;margin-top:10px}
   .center{flex:1;min-width:0}
   #stage{width:100%;height:520px;background:#111;border-radius:6px;position:relative;overflow:hidden;cursor:crosshair}
-  #stage img{position:absolute;top:0;left:0;height:100%;max-width:none;pointer-events:none}
+  #stage img{position:absolute;top:0;left:0;max-width:none;pointer-events:none}
   .hs-mark{position:absolute;top:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:rgba(198,150,60,.85);border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer}
   .hint{font-size:11px;color:#888;margin-top:8px;line-height:1.5}
   .hotspot-list{margin-top:12px;font-size:12px}
@@ -35,6 +35,12 @@
   .status.ok{background:#eaf6ee;color:#1a7a3c}
   .status.err{background:#fbeaea;color:#b23}
   .drag-hint{font-size:11px;color:#999;margin-top:4px}
+  .compose-box{border-top:1px dashed #ddd;margin-top:16px;padding-top:12px}
+  .compose-box h3{font-size:12px;margin:0 0 6px}
+  input[type=number]{width:70px;padding:5px;font-size:12px;border:1px solid #ccc;border-radius:4px}
+  #composePreview{width:100%;height:90px;background:#111;border-radius:4px;margin-top:8px;display:none}
+  .row-inline{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .row-inline label{margin:0;display:flex;align-items:center;gap:4px}
 </style>
 </head>
 <body>
@@ -59,6 +65,28 @@
       (quella già integrata in ogni telefono, non un'app esterna): ruota lentamente
       su te stesso tenendo il telefono orizzontale. Non serve un giro completo —
       anche 150-200° vanno benissimo, non compaiono soffitto/pavimento.
+    </div>
+
+    <div class="compose-box">
+      <h3>Oppure componi la scena da 2 o più panoramiche parziali</h3>
+      <div class="hint" style="margin-top:0">
+        Utile se una singola panoramica non basta a coprire tutto l'ambiente: carica 2-3 foto
+        scattate ruotando in sequenza (ognuna con un buon margine di sovrapposizione — 15-20% —
+        con la precedente), e vengono unite in una sola immagine continua. Con "chiudi il cerchio"
+        selezionato, il giro diventa un 360° pieno senza bordi: si può trascinare all'infinito.
+      </div>
+      <label>Foto in ordine (seleziona più file insieme)</label>
+      <input type="file" id="composeFiles" accept="image/*" multiple>
+      <div class="row-inline">
+        <label>Sovrapposizione <input type="number" id="composeOverlap" value="18" min="5" max="40">%</label>
+        <label><input type="checkbox" id="composeLoop"> chiudi il cerchio (360° pieno)</label>
+      </div>
+      <button class="btn secondary" id="composePreviewBtn" style="margin-top:8px">Genera anteprima</button>
+      <canvas id="composePreview"></canvas>
+      <label>Nome stanza per questa composizione</label>
+      <input type="text" id="composeTitle" placeholder="es. Soggiorno">
+      <button class="btn" id="composeUseBtn" style="margin-top:8px" disabled>Usa questa composizione come nuova scena</button>
+      <div id="composeStatus" style="font-size:11.5px;margin-top:6px"></div>
     </div>
 
     <button class="btn secondary" id="saveBtn" style="margin-top:16px">Salva tour su IMMONOVA</button>
@@ -94,8 +122,10 @@ var activeSceneId = null;
 
 /* Stato di visualizzazione/trascinamento della foto nello stage, stessa logica
    del viewer pubblico (virtual-tour-360-viewer.js): si trascina la stessa
-   immagine, movimento continuo, bloccato ai bordi reali della foto. */
-var view = { offset: 0, minOffset: 0, maxOffset: 0, imgW: 0 };
+   immagine, movimento continuo, bloccato ai bordi reali della foto, con lo
+   stesso margine verticale per il piccolo tilt su/giù. */
+var VERTICAL_OVERSCAN = 1.22;
+var view = { offset: 0, minOffset: 0, maxOffset: 0, imgW: 0, offsetY: 0, minOffsetY: 0, maxOffsetY: 0 };
 
 function slugify(s) {
   return String(s || "scena").toLowerCase().trim()
@@ -166,16 +196,22 @@ function recomputeBounds() {
   if (!img) return;
   var cw = stage.clientWidth, ch = stage.clientHeight;
   var natW = img.naturalWidth || 1, natH = img.naturalHeight || 1;
-  view.imgW = ch * (natW / natH);
+  var scaledH = ch * VERTICAL_OVERSCAN;
+  view.imgW = scaledH * (natW / natH);
   img.style.width = view.imgW + "px";
+  img.style.height = scaledH + "px";
   if (view.imgW <= cw) {
     view.minOffset = view.maxOffset = (cw - view.imgW) / 2;
   } else {
     view.maxOffset = 0;
     view.minOffset = cw - view.imgW;
   }
+  view.maxOffsetY = 0;
+  view.minOffsetY = ch - scaledH;
+  if (view.offsetY === 0 && view.minOffsetY !== 0) view.offsetY = view.minOffsetY / 2;
   view.offset = clamp(view.offset, view.minOffset, view.maxOffset);
-  img.style.transform = "translateX(" + view.offset + "px)";
+  view.offsetY = clamp(view.offsetY, view.minOffsetY, view.maxOffsetY);
+  img.style.transform = "translate(" + view.offset + "px," + view.offsetY + "px)";
   renderStageHotspots();
 }
 
@@ -202,6 +238,7 @@ function renderStage() {
   var hsLayer = document.getElementById("hsLayer");
   hsLayer.innerHTML = "";
   view.offset = 0;
+  view.offsetY = 0;
   if (!scene) {
     document.getElementById("editHint").textContent = "Carica almeno una scena per iniziare.";
     renderHotspotList();
@@ -256,11 +293,181 @@ async function addScene() {
   activateScene(id);
 }
 
+/* ===================== Composizione da più foto =====================
+ * Unisce 2+ panoramiche parziali in una sola immagine continua, sfumando
+ * (dissolvenza) la zona di sovrapposizione tra una foto e la successiva
+ * invece di un taglio netto -- non è un vero "stitching" con riconoscimento
+ * automatico dei punti in comune (quello ha dato risultati pessimi in
+ * passato, effetto "caleidoscopio"): qui la sovrapposizione è quella che
+ * l'utente ha fotografato apposta (ruotando con un margine tra uno scatto
+ * e l'altro) e la percentuale di sfumatura è regolabile a vista nell'anteprima,
+ * con controllo umano invece che un algoritmo automatico che può sbagliare.
+ * Se "chiudi il cerchio" è selezionato, sfuma anche l'ultima foto sulla prima,
+ * creando un giro a 360° pieno che si può ripetere all'infinito (loop:true).
+ */
+var composedCanvas = null; // canvas a piena risoluzione dell'ultima anteprima generata
+
+function loadImageFile(file) {
+  return new Promise(function (resolve, reject) {
+    var img = new Image();
+    img.onload = function () { resolve(img); };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function makeAlphaStrip(sourceCanvas, sx, sw, h, fadeIn) {
+  // ritaglia una striscia larga sw da sourceCanvas (a partire da sx) e le applica
+  // una sfumatura alpha lineare: fadeIn=true va da trasparente a opaca (sinistra->destra),
+  // fadeIn=false va da opaca a trasparente.
+  var strip = document.createElement("canvas");
+  strip.width = Math.max(1, Math.round(sw));
+  strip.height = Math.round(h);
+  var sctx = strip.getContext("2d");
+  sctx.drawImage(sourceCanvas, sx, 0, sw, h, 0, 0, strip.width, strip.height);
+  sctx.globalCompositeOperation = "destination-in";
+  var grad = sctx.createLinearGradient(0, 0, strip.width, 0);
+  if (fadeIn) {
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, "rgba(0,0,0,1)");
+  } else {
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+  }
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, 0, strip.width, strip.height);
+  return strip;
+}
+
+function composeImages(images, overlapPct, closeLoop) {
+  var H = Math.max.apply(null, images.map(function (im) { return im.naturalHeight; }));
+  var scaledW = images.map(function (im) { return H * (im.naturalWidth / im.naturalHeight); });
+
+  var canvas = document.createElement("canvas");
+  var ctx;
+  var cursor = 0;
+
+  // prima passata: calcola la larghezza totale della catena (senza il giro finale)
+  var widths = [scaledW[0]];
+  for (var i = 1; i < images.length; i++) {
+    var ov = overlapPct * Math.min(scaledW[i - 1], scaledW[i]);
+    widths.push(scaledW[i] - ov);
+  }
+  var totalW = widths.reduce(function (a, b) { return a + b; }, 0);
+
+  canvas.width = Math.round(totalW);
+  canvas.height = Math.round(H);
+  ctx = canvas.getContext("2d");
+
+  // immagine 0: piena, opaca
+  ctx.drawImage(images[0], 0, 0, scaledW[0], H);
+  cursor = scaledW[0];
+
+  for (var j = 1; j < images.length; j++) {
+    var ovPx = overlapPct * Math.min(scaledW[j - 1], scaledW[j]);
+    var xPos = cursor - ovPx;
+
+    // striscia di ingresso dell'immagine j (i suoi primi ovPx px), sfumata da 0 a 1
+    var tmpFull = document.createElement("canvas");
+    tmpFull.width = Math.round(scaledW[j]);
+    tmpFull.height = Math.round(H);
+    tmpFull.getContext("2d").drawImage(images[j], 0, 0, scaledW[j], H);
+    var edge = makeAlphaStrip(tmpFull, 0, ovPx, H, true);
+    ctx.drawImage(edge, xPos, 0);
+
+    // resto dell'immagine j, opaco
+    ctx.drawImage(tmpFull, ovPx, 0, scaledW[j] - ovPx, H, xPos + ovPx, 0, scaledW[j] - ovPx, H);
+    cursor = xPos + scaledW[j];
+  }
+
+  if (closeLoop && images.length >= 2) {
+    var ovLoop = overlapPct * Math.min(scaledW[0], scaledW[images.length - 1]);
+    ovLoop = Math.min(ovLoop, canvas.width * 0.4);
+    var headCopy = makeAlphaStrip(canvas, 0, ovLoop, H, true);
+    ctx.drawImage(headCopy, canvas.width - ovLoop, 0);
+  }
+
+  return canvas;
+}
+
+async function runComposePreview() {
+  var files = document.getElementById("composeFiles").files;
+  var status = document.getElementById("composeStatus");
+  if (files.length < 2) { status.textContent = "Seleziona almeno 2 foto."; status.style.color = "#b23"; return; }
+  status.textContent = "Composizione in corso...";
+  status.style.color = "#666";
+  try {
+    var images = [];
+    for (var i = 0; i < files.length; i++) images.push(await loadImageFile(files[i]));
+    var overlapPct = clamp(parseFloat(document.getElementById("composeOverlap").value) || 18, 5, 40) / 100;
+    var closeLoop = document.getElementById("composeLoop").checked;
+    composedCanvas = composeImages(images, overlapPct, closeLoop);
+
+    var preview = document.getElementById("composePreview");
+    preview.style.display = "block";
+    var pctx = preview.getContext("2d");
+    var scale = preview.clientHeight / composedCanvas.height || 1;
+    preview.width = composedCanvas.width * scale;
+    preview.height = preview.clientHeight;
+    pctx.drawImage(composedCanvas, 0, 0, preview.width, preview.height);
+
+    document.getElementById("composeUseBtn").disabled = false;
+    status.textContent = "Anteprima pronta (" + composedCanvas.width + "×" + composedCanvas.height + "px). Regola la sovrapposizione e rigenera se la sfumatura non ti convince.";
+    status.style.color = "#1a7a3c";
+  } catch (err) {
+    status.textContent = "Errore composizione: " + (err && err.message ? err.message : err);
+    status.style.color = "#b23";
+  }
+}
+
+async function useComposedScene() {
+  var title = document.getElementById("composeTitle").value.trim();
+  if (!title) { alert("Dai un nome alla stanza."); return; }
+  if (!composedCanvas) { alert("Genera prima l'anteprima."); return; }
+  if (!opportunityId) { alert("Manca opportunity_id nell'URL."); return; }
+  if (!supabaseClient) { alert("Impossibile connettersi a Supabase."); return; }
+
+  var status = document.getElementById("composeStatus");
+  status.textContent = "Caricamento composizione...";
+  status.style.color = "#666";
+
+  composedCanvas.toBlob(async function (blob) {
+    if (!blob) { status.textContent = "Errore: impossibile generare l'immagine."; status.style.color = "#b23"; return; }
+    var id = slugify(title) + "-" + Date.now().toString(36);
+    var path = opportunityId + "/" + id + ".jpg";
+    var upload = await supabaseClient.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg" });
+    if (upload.error) { status.textContent = "Errore upload: " + upload.error.message; status.style.color = "#b23"; return; }
+    var pub = supabaseClient.storage.from(BUCKET).getPublicUrl(path);
+
+    var scene = {
+      id: id,
+      title: title,
+      image_url: pub.data.publicUrl,
+      loop: document.getElementById("composeLoop").checked,
+      hotspots: [],
+    };
+    tour.scenes.push(scene);
+
+    document.getElementById("composeFiles").value = "";
+    document.getElementById("composeTitle").value = "";
+    document.getElementById("composePreview").style.display = "none";
+    document.getElementById("composeUseBtn").disabled = true;
+    composedCanvas = null;
+
+    status.textContent = "Scena composta aggiunta — ricordati di premere \"Salva tour su IMMONOVA\".";
+    status.style.color = "#1a7a3c";
+    activateScene(id);
+  }, "image/jpeg", 0.92);
+}
+
+document.getElementById("composePreviewBtn").onclick = runComposePreview;
+document.getElementById("composeUseBtn").onclick = useComposedScene;
+
 /* Trascinamento sullo stage: stessa logica del viewer pubblico. Un click che
    non ha trascinato (spostamento sotto una piccola soglia) apre invece la
    creazione di un hotspot nel punto cliccato. */
 var stageEl = document.getElementById("stage");
-var dragging = false, dragStartX = 0, offsetAtStart = 0, movedPx = 0;
+var dragging = false, dragStartX = 0, dragStartY = 0, offsetAtStart = 0, offsetYAtStart = 0, movedPx = 0;
 
 stageEl.addEventListener("pointerdown", function (e) {
   var scene = findScene(activeSceneId);
@@ -268,16 +475,20 @@ stageEl.addEventListener("pointerdown", function (e) {
   dragging = true;
   movedPx = 0;
   dragStartX = e.clientX;
+  dragStartY = e.clientY;
   offsetAtStart = view.offset;
+  offsetYAtStart = view.offsetY;
   if (stageEl.setPointerCapture) stageEl.setPointerCapture(e.pointerId);
 });
 stageEl.addEventListener("pointermove", function (e) {
   if (!dragging) return;
   var dx = e.clientX - dragStartX;
-  movedPx = Math.abs(dx);
+  var dy = e.clientY - dragStartY;
+  movedPx = Math.max(Math.abs(dx), Math.abs(dy));
   view.offset = clamp(offsetAtStart + dx, view.minOffset, view.maxOffset);
+  view.offsetY = clamp(offsetYAtStart + dy, view.minOffsetY, view.maxOffsetY);
   var img = stageEl.querySelector("img");
-  if (img) img.style.transform = "translateX(" + view.offset + "px)";
+  if (img) img.style.transform = "translate(" + view.offset + "px," + view.offsetY + "px)";
   renderStageHotspots();
 });
 stageEl.addEventListener("pointerup", function (e) {
