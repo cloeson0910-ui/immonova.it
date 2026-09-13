@@ -61,6 +61,10 @@
       ".it3-hotspot-label{position:absolute;bottom:120%;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:3px 8px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .15s}" +
       ".it3-hotspot:hover .it3-hotspot-label{opacity:1}" +
       ".it3-fade{position:absolute;inset:0;background:#111;opacity:0;pointer-events:none;transition:opacity 260ms ease;z-index:5}" +
+      ".it3-fullscreen-btn{position:absolute;bottom:10px;right:10px;width:34px;height:34px;border-radius:6px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.3);color:#fff;cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;font-size:15px}" +
+      ".it3-fullscreen-btn:hover{background:rgba(0,0,0,.7)}" +
+      ".it3-root:fullscreen{border-radius:0}" +
+      ".it3-root:-webkit-full-screen{border-radius:0}" +
       ".it3-empty{padding:16px;color:#888;font-size:13px}";
     document.head.appendChild(style);
   }
@@ -104,6 +108,40 @@
     var fadeOverlay = document.createElement("div");
     fadeOverlay.className = "it3-fade";
     root.appendChild(fadeOverlay);
+
+    var fsBtn = document.createElement("button");
+    fsBtn.type = "button";
+    fsBtn.className = "it3-fullscreen-btn";
+    fsBtn.innerHTML = "⛶";
+    fsBtn.title = "Schermo intero";
+    fsBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleFullscreen();
+    });
+    root.appendChild(fsBtn);
+
+    function isFullscreen() {
+      return document.fullscreenElement === root || document.webkitFullscreenElement === root;
+    }
+    function toggleFullscreen() {
+      if (isFullscreen()) {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      } else {
+        if (root.requestFullscreen) root.requestFullscreen();
+        else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+      }
+    }
+    document.addEventListener("fullscreenchange", function () {
+      fsBtn.innerHTML = isFullscreen() ? "✕" : "⛶";
+      fsBtn.title = isFullscreen() ? "Esci da schermo intero" : "Schermo intero";
+      recomputeBounds();
+    });
+    document.addEventListener("webkitfullscreenchange", function () {
+      fsBtn.innerHTML = isFullscreen() ? "✕" : "⛶";
+      fsBtn.title = isFullscreen() ? "Esci da schermo intero" : "Schermo intero";
+      recomputeBounds();
+    });
 
     var state = { sceneIndex: 0, offset: 0, minOffset: 0, maxOffset: 0, imgW: 0, loop: false, offsetY: 0, minOffsetY: 0, maxOffsetY: 0 };
 
