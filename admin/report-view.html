@@ -2984,7 +2984,13 @@ function pieChartHTML(pct, caption, note){
   return '<div class="pie-block"><div class="pie-chart">'+svg+'<div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
 }
 function renderTourismDemandPage(){
-  if(isLandCategory()||isCommercialCategory()) return "";
+  /* BUG CRITICO: qui sotto e alla riga "if(!scenarios.length)" si ritornava "" (stringa) invece
+     di [] (array vuoto). renderBook() chiama SEMPRE renderTourismDemandPage().forEach(...), mai
+     con un controllo prima -- quindi ogni volta che questa funzione usciva presto per uno di
+     questi due motivi (categoria terreno/commerciale, oppure nessun dato ADR disponibile per
+     l'immobile) l'intero dossier andava in crash con "forEach is not a function", pagina bianca
+     compresa la sezione documenti/checkbox. Ora ritorna sempre un array, mai una stringa. */
+  if(isLandCategory()||isCommercialCategory()) return [];
   var f=buildFinance();
   var units=getAssetUnits();
   var demandTotals=getTourismDemandTotals();
@@ -3007,7 +3013,7 @@ function renderTourismDemandPage(){
   }else if(adrSingle){
     scenarios.push({adr:adrSingle, label:T.scenario_adr});
   }
-  if(!scenarios.length) return "";
+  if(!scenarios.length) return []; // vedi commento in cima alla funzione: mai una stringa qui
 
   var blockList=scenarios.map(function(sc){
     var res=computeBreakEvenDemand(sc.adr, units, f.total, demandTotals);

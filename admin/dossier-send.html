@@ -739,7 +739,11 @@ function pieChartHTML(pct, caption, note){
   return '<div class="pie-block"><div class="pie-chart" style="background:conic-gradient(#c79c43 0 '+(p*3.6)+'deg,#ece3d0 '+(p*3.6)+'deg 360deg)"><div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
 }
 function renderTourismDemandPage(){
-  if(isLandCategory()||isCommercialCategory()) return "";
+  /* BUG CRITICO (stesso di report-view.html, corretto qui in coppia): ritornava "" invece di []
+     nei due casi di uscita anticipata -- renderBook() chiama sempre .forEach() sul risultato
+     senza controllare, quindi mandava in crash l'intero dossier ("forEach is not a function")
+     ogni volta che l'immobile era terreno/commerciale o senza dati ADR disponibili. */
+  if(isLandCategory()||isCommercialCategory()) return [];
   var f=buildFinance();
   var units=getAssetUnits();
   var demandTotals=getTourismDemandTotals();
@@ -762,7 +766,7 @@ function renderTourismDemandPage(){
   }else if(adrSingle){
     scenarios.push({adr:adrSingle, label:T.scenario_adr});
   }
-  if(!scenarios.length) return "";
+  if(!scenarios.length) return []; // vedi commento in cima alla funzione: mai una stringa qui
 
   var blocks=scenarios.map(function(sc){
     var res=computeBreakEvenDemand(sc.adr, units, f.total, demandTotals);
