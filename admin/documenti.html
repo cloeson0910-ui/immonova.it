@@ -76,7 +76,14 @@ button, .btn{cursor:pointer;font-family:inherit}
 .gen-doc-title{font-size:24px;color:#4a3c1f;font-weight:400;margin-bottom:22px}
 .gen-doc-body p{font-size:13.5px;line-height:1.85;color:#3f321c;margin-bottom:14px}
 .gen-doc-body h4{font-size:13px;color:#a67f34;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.06em}
-.gen-sign-row{display:flex;justify-content:space-between;margin-top:50px;font-size:12.5px;color:#4a3c1f}
+.gen-sign-footer{margin-top:60px;font-size:12.5px;color:#4a3c1f}
+.gen-sign-footer .field{margin-bottom:0}
+.gen-sign-date{margin-top:12px}
+.gen-sign-cols{display:flex;justify-content:space-between;gap:40px;margin-top:56px}
+.gen-sign-col{flex:1;text-align:center}
+.gen-sign-line{border-bottom:1px solid #4a3c1f;height:1px;margin-bottom:8px}
+.gen-sign-who{font-size:11.5px;color:#5c4a20;line-height:1.5}
+.gen-luogo-print{display:none}
 .gen-actions{margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
 .gen-form-fields{margin-bottom:22px;padding:14px;background:rgba(166,127,52,.06);border:1px solid rgba(166,127,52,.16)}
 .hist-row{padding:9px 0;border-bottom:1px solid rgba(166,127,52,.10);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -88,7 +95,8 @@ button, .btn{cursor:pointer;font-family:inherit}
   body *{visibility:hidden}
   .gen-sheet, .gen-sheet *{visibility:visible}
   .gen-sheet{position:absolute;left:0;top:0;box-shadow:none;padding:0;max-width:100%}
-  .gen-close, .gen-actions, .gen-form-fields{display:none!important}
+  .gen-close, .gen-actions, .gen-form-fields, .gen-luogo-edit{display:none!important}
+  .gen-luogo-print{display:block!important}
 }
 </style>
 </head>
@@ -120,7 +128,11 @@ button, .btn{cursor:pointer;font-family:inherit}
           <div class="field"><label>Email</label><input type="email" id="newEmail"></div>
           <div class="field"><label>Telefono</label><input type="tel" id="newPhone"></div>
           <div class="field"><label>Azienda</label><input type="text" id="newCompany"></div>
+          <div class="field"><label>Codice fiscale</label><input type="text" id="newCodiceFiscale" style="text-transform:uppercase"></div>
+          <div class="field"><label>Tipo documento d'identità</label><select id="newIdDocType"><option value="">— Seleziona —</option><option>Carta d'identità</option><option>Passaporto</option><option>Patente di guida</option></select></div>
+          <div class="field"><label>Numero documento d'identità</label><input type="text" id="newIdDocNumber"></div>
         </div>
+        <div class="field"><label>Indirizzo di residenza</label><input type="text" id="newResidenceAddress" placeholder="Via, civico, CAP, città, provincia"></div>
         <button type="button" class="btn" id="createClientBtn">Crea e seleziona</button>
       </div>
     </div>
@@ -129,6 +141,7 @@ button, .btn{cursor:pointer;font-family:inherit}
       <div>
         <div class="sc-name" id="scName"></div>
         <div class="sc-meta" id="scMeta"></div>
+        <div id="scLegalWarn" style="display:none;margin-top:6px;font-size:11.5px;color:#9c2f2f"></div>
       </div>
       <div style="display:flex;gap:10px">
         <button type="button" class="btn secondary" id="editClientBtn">Modifica dati</button>
@@ -144,7 +157,12 @@ button, .btn{cursor:pointer;font-family:inherit}
         <div class="field"><label>PEC</label><input type="email" id="editPec"></div>
         <div class="field"><label>Telefono</label><input type="tel" id="editPhone"></div>
         <div class="field"><label>Azienda</label><input type="text" id="editCompany"></div>
+        <div class="field"><label>Codice fiscale</label><input type="text" id="editCodiceFiscale" style="text-transform:uppercase"></div>
+        <div class="field"><label>Tipo documento d'identità</label><select id="editIdDocType"><option value="">— Seleziona —</option><option>Carta d'identità</option><option>Passaporto</option><option>Patente di guida</option></select></div>
+        <div class="field"><label>Numero documento d'identità</label><input type="text" id="editIdDocNumber"></div>
       </div>
+      <div class="field"><label>Indirizzo di residenza</label><input type="text" id="editResidenceAddress" placeholder="Via, civico, CAP, città, provincia"></div>
+      <p style="font-size:11px;color:#8f7643;margin:-4px 0 10px">Questi dati compaiono automaticamente nei documenti legali generati (NDA, Incarico, Onorario) — se mancano, il documento li segnala come "da compilare" invece di ometterli in silenzio.</p>
       <div style="display:flex;gap:10px;margin-top:14px">
         <button type="button" class="btn" id="saveClientEditBtn">Salva modifiche</button>
         <button type="button" class="btn secondary" id="cancelClientEditBtn">Annulla</button>
@@ -257,9 +275,23 @@ button, .btn{cursor:pointer;font-family:inherit}
     <div id="genFormFields"></div>
     <div class="gen-doc-title" id="genDocTitle"></div>
     <div class="gen-doc-body" id="genDocBody"></div>
-    <div class="gen-sign-row">
-      <div>Cliente: <span id="genSignClient"></span></div>
-      <div>Data: <span id="genSignDate"></span></div>
+    <div class="gen-sign-footer">
+      <div class="field gen-luogo-edit" style="max-width:220px">
+        <label>Luogo di sottoscrizione</label>
+        <input type="text" id="genLuogo" value="Roma">
+      </div>
+      <div class="gen-luogo-print">Luogo: <strong id="genLuogoPrint"></strong></div>
+      <div class="gen-sign-date">Data: <strong id="genSignDate"></strong></div>
+      <div class="gen-sign-cols">
+        <div class="gen-sign-col">
+          <div class="gen-sign-line"></div>
+          <div class="gen-sign-who">Il Cliente<br><strong id="genSignClient"></strong></div>
+        </div>
+        <div class="gen-sign-col">
+          <div class="gen-sign-line"></div>
+          <div class="gen-sign-who">Per IMMONOVA S.r.l.</div>
+        </div>
+      </div>
     </div>
     <div class="gen-actions">
       <button type="button" class="btn" id="genPrintBtn">Stampa / Salva PDF</button>
@@ -281,6 +313,18 @@ function updateGenSaveBtnLabel(){
   var btn = document.getElementById("genSaveBtn");
   if(btn) btn.textContent = editingDocId ? "Aggiorna documento" : "Registra documento";
 }
+/* Precompila il campo "Luogo di sottoscrizione" con quello usato l'ultima volta (se si sta
+   modificando un documento già registrato) o "Roma" di default per un documento nuovo, e tiene
+   sincronizzato il testo mostrato in stampa (.gen-luogo-print) col valore digitato — l'input in
+   sé viene nascosto in stampa (vedi @media print), altrimenti un browser lo stampa come casella
+   vuota bordata invece che come testo semplice. */
+function setupSignFooter(existingDetails){
+  var luogoInput = document.getElementById("genLuogo");
+  var luogoPrint = document.getElementById("genLuogoPrint");
+  luogoInput.value = (existingDetails && existingDetails.luogo) || "Roma";
+  luogoPrint.textContent = luogoInput.value;
+  luogoInput.oninput = function(){ luogoPrint.textContent = luogoInput.value; };
+}
 
 async function checkAuth(){
   const { data:{ session }, error } = await client.auth.getSession();
@@ -293,6 +337,19 @@ function escapeHTML(v){ return String(v??"").replaceAll("&","&amp;").replaceAll(
 function escapeHTMLAttr(v){ return (v===null||v===undefined) ? "" : escapeHTML(v); }
 function fullName(inv){ return [inv.first_name, inv.last_name].filter(Boolean).join(" "); }
 function todayIt(){ return new Date().toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }); }
+/* Dati identificativi obbligatori per la validità legale di un documento firmato: codice
+   fiscale, documento d'identità, residenza. Se un dato manca sull'anagrafica del cliente (vedi
+   "Modifica dati" nel pannello cliente) viene segnalato ESPLICITAMENTE nel testo del documento
+   invece di essere omesso in silenzio -- un documento legale con un dato mancante taciuto
+   sarebbe peggio di uno che lo segnala chiaramente come da completare. */
+function clientLegalIdentityHTML(){
+  var c = selectedClient || {};
+  var cf = c.codice_fiscale ? escapeHTML(c.codice_fiscale) : '<span style="color:#9c2f2f">[CODICE FISCALE MANCANTE]</span>';
+  var addr = c.residence_address ? escapeHTML(c.residence_address) : '<span style="color:#9c2f2f">[INDIRIZZO DI RESIDENZA MANCANTE]</span>';
+  var idType = c.id_document_type ? escapeHTML(c.id_document_type) : "documento d'identità";
+  var idNum = c.id_document_number ? escapeHTML(c.id_document_number) : '<span style="color:#9c2f2f">[NUMERO DOCUMENTO MANCANTE]</span>';
+  return ", residente in " + addr + ", codice fiscale " + cf + ", titolare di " + idType + " n. " + idNum;
+}
 
 /* ================================ Ricerca / selezione cliente ================================ */
 const searchInput = document.getElementById("clientSearchInput");
@@ -309,7 +366,7 @@ searchInput.addEventListener("input", function(){
 async function runClientSearch(q){
   var like = "%" + q.replace(/[%_]/g, "") + "%";
   var res = await client.from("investors")
-    .select("id,first_name,last_name,email,phone,company,pec")
+    .select("id,first_name,last_name,email,phone,company,pec,codice_fiscale,id_document_type,id_document_number,residence_address")
     .or("first_name.ilike." + like + ",last_name.ilike." + like + ",email.ilike." + like + ",company.ilike." + like)
     .order("created_at", { ascending:false })
     .limit(15);
@@ -351,6 +408,10 @@ document.getElementById("createClientBtn").addEventListener("click", async funct
     email: document.getElementById("newEmail").value.trim() || null,
     phone: document.getElementById("newPhone").value.trim() || null,
     company: document.getElementById("newCompany").value.trim() || null,
+    codice_fiscale: document.getElementById("newCodiceFiscale").value.trim().toUpperCase() || null,
+    id_document_type: document.getElementById("newIdDocType").value || null,
+    id_document_number: document.getElementById("newIdDocNumber").value.trim() || null,
+    residence_address: document.getElementById("newResidenceAddress").value.trim() || null,
     created_by: currentUser.id
   };
   var ins = await client.from("investors").insert(payload).select().single();
@@ -369,6 +430,15 @@ function selectClient(inv){
   document.getElementById("selectedClientBox").style.display = "flex";
   document.getElementById("scName").textContent = fullName(inv) + (inv.company ? " — " + inv.company : "");
   document.getElementById("scMeta").textContent = [inv.email, inv.pec, inv.phone].filter(Boolean).join(" · ") || "Nessun contatto registrato";
+  var missingLegal = [];
+  if(!inv.codice_fiscale) missingLegal.push("codice fiscale");
+  if(!inv.id_document_number) missingLegal.push("documento d'identità");
+  if(!inv.residence_address) missingLegal.push("indirizzo di residenza");
+  var scLegalWarn = document.getElementById("scLegalWarn");
+  if(scLegalWarn){
+    scLegalWarn.textContent = missingLegal.length ? ("⚠ Dati mancanti per documenti legali: " + missingLegal.join(", ") + " — vai su \"Modifica dati\".") : "";
+    scLegalWarn.style.display = missingLegal.length ? "block" : "none";
+  }
   document.getElementById("oppPanel").style.display = "block";
   document.getElementById("docsPanel").style.display = "block";
   document.getElementById("historyPanel").style.display = "block";
@@ -428,6 +498,10 @@ document.getElementById("editClientBtn").addEventListener("click", function(){
   document.getElementById("editPec").value = selectedClient.pec || "";
   document.getElementById("editPhone").value = selectedClient.phone || "";
   document.getElementById("editCompany").value = selectedClient.company || "";
+  document.getElementById("editCodiceFiscale").value = selectedClient.codice_fiscale || "";
+  document.getElementById("editIdDocType").value = selectedClient.id_document_type || "";
+  document.getElementById("editIdDocNumber").value = selectedClient.id_document_number || "";
+  document.getElementById("editResidenceAddress").value = selectedClient.residence_address || "";
   document.getElementById("editClientForm").style.display = "block";
 });
 
@@ -450,7 +524,11 @@ document.getElementById("saveClientEditBtn").addEventListener("click", async fun
     email: document.getElementById("editEmail").value.trim() || null,
     pec: document.getElementById("editPec").value.trim() || null,
     phone: document.getElementById("editPhone").value.trim() || null,
-    company: document.getElementById("editCompany").value.trim() || null
+    company: document.getElementById("editCompany").value.trim() || null,
+    codice_fiscale: document.getElementById("editCodiceFiscale").value.trim().toUpperCase() || null,
+    id_document_type: document.getElementById("editIdDocType").value || null,
+    id_document_number: document.getElementById("editIdDocNumber").value.trim() || null,
+    residence_address: document.getElementById("editResidenceAddress").value.trim() || null
   };
   var upd = await client.from("investors").update(payload).eq("id", selectedClient.id).select().single();
   if(upd.error){
@@ -534,6 +612,20 @@ async function loadClientHistory(investorId){
    cosi' la ristampa di un documento gia' registrato la mostra anch'essa, invece di aprire una
    pagina "nuda" senza intestazione (lo snapshot salvato contiene solo titolo+corpo, mai la
    testata: non e' un dato del singolo documento, e' sempre la stessa per tutti). */
+/* Stesso identico blocco "luogo, data e firma" mostrato dal vivo nell'overlay (vedi
+   .gen-sign-footer nell'HTML): tenuto qui come funzione perché va anche cristallizzato dentro lo
+   snapshot salvato al momento del "Registra/Aggiorna documento" (genSaveBtn), cosi' una ristampa
+   successiva mostra esattamente la stessa firma vista e approvata, non una versione ricalcolata
+   al momento della stampa con data odierna (sbagliata per un documento firmato in passato). */
+function signFooterStaticHTML(luogo, dataStr, clientName){
+  return '<div style="margin-top:60px;font-size:12.5px;color:#4a3c1f">'
+    + 'Luogo: <strong>' + escapeHTML(luogo || "Roma") + '</strong> — Data: <strong>' + escapeHTML(dataStr || todayIt()) + '</strong>'
+    + '<div style="display:flex;justify-content:space-between;gap:40px;margin-top:56px">'
+    + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #4a3c1f;height:1px;margin-bottom:8px"></div><div style="font-size:11.5px;color:#5c4a20;line-height:1.5">Il Cliente<br><strong>' + escapeHTML(clientName || "") + '</strong></div></div>'
+    + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #4a3c1f;height:1px;margin-bottom:8px"></div><div style="font-size:11.5px;color:#5c4a20;line-height:1.5">Per IMMONOVA S.r.l.</div></div>'
+    + '</div></div>';
+}
+
 function letterheadHTML(){
   return '<div class="lh-row" style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid rgba(166,127,52,.25)">'
     + '<div><svg width="150" viewBox="0 0 1120 135" xmlns="http://www.w3.org/2000/svg" aria-label="IMMONOVA">'
@@ -559,6 +651,14 @@ function printSavedDocument(docId){
   if(!d) return;
   var html = d.document_html || "";
   var isRichHtml = /^\s*</.test(html);
+  /* Documenti registrati PRIMA di questa modifica (o della precedente) non hanno il blocco firma
+     dentro lo snapshot -- lo si riconosce dall'assenza del testo "Il Cliente" scritto da
+     signFooterStaticHTML. In quel caso lo si ricostruisce qui al volo con i dati disponibili
+     (luogo salvato se c'è, altrimenti "Roma"; data della registrazione originale, non quella
+     odierna: un documento già firmato in passato non deve cambiare data solo perché lo si
+     ristampa) invece di consegnare una stampa priva della riga di firma. */
+  var hasFooter = isRichHtml && html.indexOf("Il Cliente") !== -1;
+  var footer = hasFooter ? "" : signFooterStaticHTML((d.details && d.details.luogo) || "Roma", new Date(d.created_at).toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }), fullName(selectedClient));
   var w = window.open("", "_blank");
   if(!w){ alert("Il browser ha bloccato l'apertura della finestra di stampa: consenti i popup per questo sito."); return; }
   w.document.write('<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Documento</title><style>'
@@ -566,7 +666,7 @@ function printSavedDocument(docId){
     + '.lh-body{white-space:' + (isRichHtml ? "normal" : "pre-wrap") + '}'
     + 'h4{font-size:13px;color:#a67f34;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.06em}'
     + 'p{font-size:13.5px;line-height:1.85;margin-bottom:14px}'
-    + '</style></head><body>' + letterheadHTML() + '<div class="lh-body">' + (isRichHtml ? html : escapeHTML(html)) + '</div></body></html>');
+    + '</style></head><body>' + letterheadHTML() + '<div class="lh-body">' + (isRichHtml ? html : escapeHTML(html)) + '</div>' + footer + '</body></html>');
   w.document.close();
   w.focus();
   setTimeout(function(){ w.print(); }, 300);
@@ -604,21 +704,22 @@ const genDocBody = document.getElementById("genDocBody");
 const genFormFields = document.getElementById("genFormFields");
 
 function ndaBodyHTML(){
-  return '<p>Il presente documento formalizza l\'impegno di <strong>IMMONOVA S.r.l.</strong> (di seguito "IMMONOVA") nei confronti di <strong>' + escapeHTML(fullName(selectedClient)) + '</strong> (di seguito "il Cliente") in merito al trattamento strettamente riservato dei dati e delle informazioni condivise nell\'ambito del rapporto professionale in corso.</p>'
+  return '<p>Il presente documento formalizza l\'impegno di <strong>IMMONOVA S.r.l.</strong> (di seguito "IMMONOVA") nei confronti di <strong>' + escapeHTML(fullName(selectedClient)) + '</strong>' + clientLegalIdentityHTML() + ' (di seguito "il Cliente") in merito al trattamento strettamente riservato dei dati e delle informazioni condivise nell\'ambito del rapporto professionale in corso.</p>'
     + '<h4>1. Riservatezza dei dati</h4><p>IMMONOVA garantisce che tutti i dati personali, finanziari, patrimoniali e di qualsiasi altra natura forniti dal Cliente saranno trattati con la massima riservatezza, in conformità al Regolamento (UE) 2016/679 (GDPR) e alla normativa italiana applicabile.</p>'
     + '<h4>2. Limitazione della divulgazione</h4><p>Le informazioni fornite dal Cliente non saranno in alcun modo divulgate, cedute o rese accessibili a terzi, fatta eccezione esclusivamente per: il personale interno di IMMONOVA direttamente coinvolto nella gestione della pratica, tenuto anch\'esso al medesimo obbligo di riservatezza; e investitori o controparti verificate da IMMONOVA, e solo nella misura strettamente necessaria a valutare una concreta opportunità di investimento o acquisto, previa adeguata verifica della loro affidabilità e serietà.</p>'
     + '<h4>3. Finalità del trattamento</h4><p>I dati saranno utilizzati esclusivamente per le finalità connesse all\'incarico conferito (valutazione, commercializzazione, acquisizione dell\'immobile) e non per scopi ulteriori senza il consenso esplicito del Cliente.</p>'
     + '<h4>4. Durata</h4><p>Il presente impegno di riservatezza rimane valido per tutta la durata del rapporto professionale con il Cliente e per i cinque anni successivi alla sua eventuale cessazione.</p>';
 }
 
-function openNda(existingId){
+function openNda(existing){
   currentGenType = "nda";
-  editingDocId = existingId || null;
+  editingDocId = existing ? existing.id : null;
   genFormFields.innerHTML = "";
   genDocTitle.textContent = "Accordo di Riservatezza (NDA)";
   genDocBody.innerHTML = ndaBodyHTML();
   document.getElementById("genSignClient").textContent = fullName(selectedClient);
   document.getElementById("genSignDate").textContent = todayIt();
+  setupSignFooter(existing && existing.details);
   updateGenSaveBtnLabel();
   genOverlay.classList.add("visible");
 }
@@ -626,7 +727,7 @@ document.getElementById("openNdaBtn").addEventListener("click", function(){ if(s
 
 function incaricoBodyHTML(f){
   var esclusivaText = f.esclusiva === "si" ? "in esclusiva" : "senza vincolo di esclusiva";
-  return '<p>Con il presente atto, <strong>' + escapeHTML(fullName(selectedClient)) + '</strong> (di seguito "il Proponente"), conferisce a <strong>IMMONOVA S.r.l.</strong> incarico di mediazione immobiliare ' + esclusivaText + ' per la vendita dell\'immobile di seguito descritto.</p>'
+  return '<p>Con il presente atto, <strong>' + escapeHTML(fullName(selectedClient)) + '</strong>' + clientLegalIdentityHTML() + ' (di seguito "il Proponente"), conferisce a <strong>IMMONOVA S.r.l.</strong> incarico di mediazione immobiliare ' + esclusivaText + ' per la vendita dell\'immobile di seguito descritto.</p>'
     + '<h4>1. Immobile oggetto dell\'incarico</h4><p>' + escapeHTML(f.indirizzo || "—") + (f.categoria ? " — " + escapeHTML(f.categoria) : "") + '</p>'
     + '<h4>2. Prezzo richiesto</h4><p>€ ' + (f.prezzo ? Number(f.prezzo).toLocaleString("it-IT") : "da definire") + '</p>'
     + '<h4>3. Durata dell\'incarico</h4><p>Il presente incarico ha durata di ' + escapeHTML(f.durata || "6") + ' mesi dalla data di sottoscrizione, con rinnovo tacito salvo disdetta scritta di una delle parti con almeno 15 giorni di preavviso.</p>'
@@ -671,6 +772,7 @@ function openIncarico(existing){
   });
   document.getElementById("genSignClient").textContent = fullName(selectedClient);
   document.getElementById("genSignDate").textContent = todayIt();
+  setupSignFooter(existing && existing.details);
   updateGenSaveBtnLabel();
   genOverlay.classList.add("visible");
 }
@@ -686,7 +788,7 @@ function onorarioBodyHTML(f){
   var importoText = f.importoTipo === "percentuale"
     ? (f.importoValore ? f.importoValore + "% del prezzo di vendita/acquisto definitivo" : "da definire")
     : (f.importoValore ? "€ " + Number(f.importoValore).toLocaleString("it-IT") + " (importo fisso)" : "da definire");
-  return '<p>Con il presente documento, <strong>' + escapeHTML(fullName(selectedClient)) + '</strong> (di seguito "il Cliente") riconosce e conferma quanto segue in merito all\'attività di consulenza svolta da <strong>IMMONOVA S.r.l.</strong> (di seguito "IMMONOVA") relativamente all\'opportunità di seguito indicata.</p>'
+  return '<p>Con il presente documento, <strong>' + escapeHTML(fullName(selectedClient)) + '</strong>' + clientLegalIdentityHTML() + ' (di seguito "il Cliente") riconosce e conferma quanto segue in merito all\'attività di consulenza svolta da <strong>IMMONOVA S.r.l.</strong> (di seguito "IMMONOVA") relativamente all\'opportunità di seguito indicata.</p>'
     + '<h4>1. Opportunità/immobile di riferimento</h4><p>' + escapeHTML(immobileText) + '</p>'
     + '<h4>2. Onorario di consulenza riconosciuto</h4><p>' + escapeHTML(importoText) + '.</p>'
     + '<h4>3. Origine dell\'importo</h4><p>' + (f.daMandato ? 'L\'importo sopra indicato è quello già stabilito nel mandato di vendita/ricerca sottoscritto dal Cliente con IMMONOVA, qui richiamato e confermato.' : 'In assenza, alla data odierna, di un mandato di vendita/ricerca già sottoscritto che fissi tale importo, il Cliente e IMMONOVA concordano e riconoscono qui direttamente i termini economici sopra indicati.') + '</p>'
@@ -730,6 +832,7 @@ function openOnorario(existing){
   });
   document.getElementById("genSignClient").textContent = fullName(selectedClient);
   document.getElementById("genSignDate").textContent = todayIt();
+  setupSignFooter(existing && existing.details);
   updateGenSaveBtnLabel();
   genOverlay.classList.add("visible");
 }
@@ -765,10 +868,18 @@ document.getElementById("genSaveBtn").addEventListener("click", async function()
       note: (document.getElementById("onoNote")||{}).value || null
     };
   }
+  /* Il luogo di sottoscrizione (editabile, vedi setupSignFooter) va salvato per TUTTI i tipi di
+     documento, NDA compreso -- per questo si aggiunge qui a "details" invece che nel blocco
+     if/else sopra, che per "nda" resta vuoto. */
+  details.luogo = (document.getElementById("genLuogo")||{}).value || "Roma";
   /* Salva l'HTML vero (non piu' solo il testo) cosi' un "Modifica" o una "Stampa" successivi
      ripropongono titoli/paragrafi formattati esattamente come nell'anteprima, non un unico
-     blocco di testo semplice. */
-  var snapshot = '<div class="gen-doc-title" style="font-size:20px;color:#4a3c1f;margin-bottom:18px">' + genDocTitle.innerHTML + '</div>' + genDocBody.innerHTML;
+     blocco di testo semplice -- e include anche il blocco firma (luogo/data + le due righe di
+     firma) cosi' una ristampa successiva (printSavedDocument) lo mostra identico a quello visto
+     e approvato al momento della registrazione, non una versione "nuda" senza firma. */
+  var snapshot = '<div class="gen-doc-title" style="font-size:20px;color:#4a3c1f;margin-bottom:18px">' + genDocTitle.innerHTML + '</div>'
+    + genDocBody.innerHTML
+    + signFooterStaticHTML(details.luogo, document.getElementById("genSignDate").textContent, fullName(selectedClient));
   var payload = {
     investor_id: selectedClient.id, document_type: currentGenType, sent_via:"stampa_pdf",
     details: details, document_html: snapshot, created_by: currentUser.id
@@ -805,7 +916,7 @@ document.getElementById("historyList").addEventListener("click", function(e){
   if(editBtn){
     var d = docsById[Number(editBtn.getAttribute("data-edit-doc"))];
     if(!d) return;
-    if(d.document_type === "nda") openNda(d.id);
+    if(d.document_type === "nda") openNda(d);
     else if(d.document_type === "incarico") openIncarico(d);
     else if(d.document_type === "onorario") openOnorario(d);
   }
