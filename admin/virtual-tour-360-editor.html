@@ -58,6 +58,9 @@
     <input type="text" id="newSceneTitle" placeholder="es. Cucina">
     <label>Foto panoramica (modalità "Panorama" nativa del telefono — non "Fotosfera")</label>
     <input type="file" id="newSceneFile" accept="image/*">
+    <div class="row-inline">
+      <label><input type="checkbox" id="newSceneLoop"> è già un giro a 360° pieno (nessun bordo)</label>
+    </div>
     <button class="btn" id="addSceneBtn">+ Aggiungi scena</button>
 
     <div class="hint">
@@ -190,17 +193,25 @@ function renderHotspotList() {
   });
 }
 
+function mod(a, n) { return ((a % n) + n) % n; }
+
 function recomputeBounds() {
   var stage = document.getElementById("stage");
   var img = stage.querySelector("img");
   if (!img) return;
+  var scene = findScene(activeSceneId);
+  var loop = !!(scene && scene.loop);
   var cw = stage.clientWidth, ch = stage.clientHeight;
   var natW = img.naturalWidth || 1, natH = img.naturalHeight || 1;
   var scaledH = ch * VERTICAL_OVERSCAN;
   view.imgW = scaledH * (natW / natH);
+  view.loop = loop;
   img.style.width = view.imgW + "px";
   img.style.height = scaledH + "px";
-  if (view.imgW <= cw) {
+  if (loop) {
+    view.minOffset = -Infinity;
+    view.maxOffset = Infinity;
+  } else if (view.imgW <= cw) {
     view.minOffset = view.maxOffset = (cw - view.imgW) / 2;
   } else {
     view.maxOffset = 0;
@@ -211,8 +222,31 @@ function recomputeBounds() {
   if (view.offsetY === 0 && view.minOffsetY !== 0) view.offsetY = view.minOffsetY / 2;
   view.offset = clamp(view.offset, view.minOffset, view.maxOffset);
   view.offsetY = clamp(view.offsetY, view.minOffsetY, view.maxOffsetY);
-  img.style.transform = "translate(" + view.offset + "px," + view.offsetY + "px)";
+  applyStageTransform();
   renderStageHotspots();
+}
+
+function applyStageTransform() {
+  var img = document.querySelector("#stage img");
+  if (!img) return;
+  var x = view.loop ? -mod(-view.offset, view.imgW) - view.imgW : view.offset;
+  img.style.transform = "translate(" + x + "px," + view.offsetY + "px)";
+  if (view.loop) {
+    var img2 = document.getElementById("stageImgLoop");
+    if (!img2) {
+      img2 = img.cloneNode(true);
+      img2.id = "stageImgLoop";
+      img.parentNode.insertBefore(img2, img.nextSibling);
+    }
+    img2.src = img.src;
+    img2.style.width = img.style.width;
+    img2.style.height = img.style.height;
+    img2.style.transform = "translate(" + (x + view.imgW) + "px," + view.offsetY + "px)";
+    img2.style.display = "block";
+  } else {
+    var existing = document.getElementById("stageImgLoop");
+    if (existing) existing.style.display = "none";
+  }
 }
 
 function renderStageHotspots() {
@@ -221,12 +255,16 @@ function renderStageHotspots() {
   var scene = findScene(activeSceneId);
   if (!scene) return;
   (scene.hotspots || []).forEach(function (h) {
-    var mark = document.createElement("div");
-    mark.className = "hs-mark";
-    mark.style.left = (view.offset + (h.x_pct / 100) * view.imgW) + "px";
-    mark.textContent = "→";
-    mark.title = h.text || "";
-    hsLayer.appendChild(mark);
+    var base = view.loop ? mod(view.offset + (h.x_pct / 100) * view.imgW, view.imgW) - view.imgW : (view.offset + (h.x_pct / 100) * view.imgW);
+    var copies = view.loop ? [0, view.imgW, view.imgW * 2] : [0];
+    copies.forEach(function (extra) {
+      var mark = document.createElement("div");
+      mark.className = "hs-mark";
+      mark.style.left = (base + extra) + "px";
+      mark.textContent = "→";
+      mark.title = h.text || "";
+      hsLayer.appendChild(mark);
+    });
   });
 }
 
@@ -235,10 +273,13 @@ function renderStage() {
   var scene = findScene(activeSceneId);
   var existingImg = stage.querySelector("img");
   if (existingImg) existingImg.remove();
+  var existingLoopImg = document.getElementById("stageImgLoop");
+  if (existingLoopImg) existingLoopImg.remove();
   var hsLayer = document.getElementById("hsLayer");
   hsLayer.innerHTML = "";
   view.offset = 0;
   view.offsetY = 0;
+  view.loop = !!(scene && scene.loop);
   if (!scene) {
     document.getElementById("editHint").textContent = "Carica almeno una scena per iniziare.";
     renderHotspotList();
@@ -285,10 +326,12 @@ async function addScene() {
   if (upload.error) { setStatus("Errore upload: " + upload.error.message, "err"); return; }
   var pub = supabaseClient.storage.from(BUCKET).getPublicUrl(path);
 
-  var scene = { id: id, title: title, image_url: pub.data.publicUrl, hotspots: [] };
+  var isLoop = document.getElementById("newSceneLoop").checked;
+  var scene = { id: id, title: title, image_url: pub.data.publicUrl, loop: isLoop, hotspots: [] };
   tour.scenes.push(scene);
   document.getElementById("newSceneTitle").value = "";
   document.getElementById("newSceneFile").value = "";
+  document.getElementById("newSceneLoop").checked = false;
   setStatus("Scena aggiunta — ricordati di premere \"Salva tour su IMMONOVA\".", "ok");
   activateScene(id);
 }
@@ -487,8 +530,7 @@ stageEl.addEventListener("pointermove", function (e) {
   movedPx = Math.max(Math.abs(dx), Math.abs(dy));
   view.offset = clamp(offsetAtStart + dx, view.minOffset, view.maxOffset);
   view.offsetY = clamp(offsetYAtStart + dy, view.minOffsetY, view.maxOffsetY);
-  var img = stageEl.querySelector("img");
-  if (img) img.style.transform = "translate(" + view.offset + "px," + view.offsetY + "px)";
+  applyStageTransform();
   renderStageHotspots();
 });
 stageEl.addEventListener("pointerup", function (e) {
@@ -498,8 +540,10 @@ stageEl.addEventListener("pointerup", function (e) {
   if (!scene || !scene.image_url) return;
   if (tour.scenes.length < 2) { alert("Aggiungi almeno una seconda scena prima di creare un collegamento."); return; }
   var rect = stageEl.getBoundingClientRect();
-  var clickXOnImage = (e.clientX - rect.left) - view.offset;
-  var xPct = clamp((clickXOnImage / view.imgW) * 100, 0, 100);
+  var clickXOnImage = view.loop
+    ? mod((e.clientX - rect.left) - view.offset, view.imgW)
+    : (e.clientX - rect.left) - view.offset;
+  var xPct = view.loop ? (clickXOnImage / view.imgW) * 100 : clamp((clickXOnImage / view.imgW) * 100, 0, 100);
   var others = tour.scenes.filter(function (s) { return s.id !== activeSceneId; });
   var list = others.map(function (s, i) { return (i + 1) + ") " + s.title; }).join("\n");
   var choice = prompt("A quale stanza porta questo punto?\n" + list + "\n\nScrivi il numero:");
