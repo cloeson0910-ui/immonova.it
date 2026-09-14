@@ -432,6 +432,7 @@ body::after{
 .incomplete-row a:hover{background:rgba(166,127,52,.08)}
 .incomplete-actions{display:flex;justify-content:flex-end}
 .incomplete-actions button{background:none;border:none;color:#8f7643;font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
+.pending-row .badge-lang{display:inline-block;margin-left:6px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8f7643;border:1px solid rgba(166,127,52,.3);padding:1px 6px}
 </style>
 </head>
 
@@ -949,13 +950,13 @@ var incompleteListenersBound = false;
 async function loadIncompleteInvestorsPopup(){
   try{
     const {data,error}=await client.from("investors").select("id,first_name,last_name,profile_incomplete_reason").eq("profile_incomplete",true).order("created_at",{ascending:false});
-    if(error||!data||!data.length) return;
+    if(error||!data||!data.length){ await loadPendingRequestsPopup(); return; }
     const overlay=document.getElementById("incompleteOverlay");
     const list=document.getElementById("incompleteList");
     if(overlay && !incompleteListenersBound){
       incompleteListenersBound = true;
-      document.getElementById("incompleteCloseBtn").addEventListener("click",function(){ overlay.hidden=true; });
-      overlay.addEventListener("click",function(e){ if(e.target===overlay) overlay.hidden=true; });
+      document.getElementById("incompleteCloseBtn").addEventListener("click",function(){ overlay.hidden=true; loadPendingRequestsPopup(); });
+      overlay.addEventListener("click",function(e){ if(e.target===overlay){ overlay.hidden=true; loadPendingRequestsPopup(); } });
     }
     list.innerHTML=data.map(function(inv){
       const name=((inv.first_name||"")+" "+(inv.last_name||"")).trim()||"(senza nome)";
@@ -964,6 +965,52 @@ async function loadIncompleteInvestorsPopup(){
     overlay.hidden=false;
   }catch(e){
     console.error("Popup clienti da completare non caricato:",e);
+    await loadPendingRequestsPopup();
+  }
+}
+
+/* ---- Popup "Richieste in attesa di evasione" (clienti compratori) ----
+   Stesso pattern del popup "Clienti da completare" sopra: overlay bloccante mostrato
+   all'apertura della dashboard, così l'agente non deve ricordarsi di controllare la lista
+   Richieste per accorgersi che c'è un cliente compratore in attesa del dossier. Mostrato SOLO
+   dopo che il popup "Clienti da completare" è stato chiuso (o se non ce n'era bisogno), per
+   non sovrapporre due overlay bloccanti uno sull'altro. "In attesa di evasione" = richiesta
+   non ancora rifiutata e dossier non ancora inviato (dossier_sent!==true), indipendentemente
+   dal fatto che sia già stata approvata o meno: finché il dossier non parte, il cliente è
+   ancora in attesa. */
+var pendingRequestsListenersBound = false;
+var pendingRequestsPopupShown = false;
+async function loadPendingRequestsPopup(){
+  if(pendingRequestsPopupShown) return; // non riaprirlo una seconda volta nella stessa sessione di pagina
+  try{
+    const {data,error}=await client.from("investor_requests")
+      .select("id,full_name,first_name,last_name,email,opportunity_id,opportunity_title,preferred_language,approved,dossier_sent,completion_status,status,request_status,created_at")
+      .neq("dossier_sent",true)
+      .not("completion_status","eq","rejected")
+      .not("status","eq","rejected")
+      .not("request_status","eq","rejected")
+      .order("created_at",{ascending:false});
+    if(error||!data||!data.length) return;
+    pendingRequestsPopupShown = true;
+    const overlay=document.getElementById("pendingRequestsOverlay");
+    const list=document.getElementById("pendingRequestsList");
+    if(!overlay||!list) return;
+    if(!pendingRequestsListenersBound){
+      pendingRequestsListenersBound = true;
+      document.getElementById("pendingRequestsCloseBtn").addEventListener("click",function(){ overlay.hidden=true; });
+      overlay.addEventListener("click",function(e){ if(e.target===overlay) overlay.hidden=true; });
+    }
+    list.innerHTML=data.map(function(r){
+      const name=(r.full_name||((r.first_name||"")+" "+(r.last_name||"")).trim())||"Cliente";
+      const opp=r.opportunity_title||("Opportunità ID "+(r.opportunity_id||"-"));
+      const state=r.approved===true?"Approvata, dossier da inviare":"Da approvare/inviare";
+      const lang=(r.preferred_language||"it").toUpperCase();
+      const href=r.opportunity_id?("dossier-send.html?opportunity_id="+encodeURIComponent(r.opportunity_id)+"&request_id="+encodeURIComponent(r.id)+"&lang="+encodeURIComponent(r.preferred_language||"it")):"inquiries.html";
+      return '<div class="incomplete-row pending-row"><div><div class="name">'+escapeHTML(name)+'<span class="badge-lang">'+escapeHTML(lang)+'</span></div><div class="reason">'+escapeHTML(opp)+' · '+escapeHTML(r.email||"")+' · '+escapeHTML(state)+'</div></div><a href="'+href+'" target="_blank">Apri</a></div>';
+    }).join("");
+    overlay.hidden=false;
+  }catch(e){
+    console.error("Popup richieste in attesa non caricato:",e);
   }
 }
 
@@ -976,6 +1023,15 @@ async function loadIncompleteInvestorsPopup(){
     <p class="hint">Questi contatti sono stati creati automaticamente da una proposta d'acquisto perché non erano ancora censiti: completa la scheda anagrafica quando puoi, il lead comunque non va perso anche se la proposta non va a buon fine.</p>
     <div class="incomplete-list" id="incompleteList"></div>
     <div class="incomplete-actions"><button type="button" id="incompleteCloseBtn">Chiudi</button></div>
+  </div>
+</div>
+
+<div class="incomplete-overlay" id="pendingRequestsOverlay" hidden>
+  <div class="incomplete-modal">
+    <h2>Richieste clienti in attesa di evasione</h2>
+    <p class="hint">Questi clienti compratori hanno richiesto un dossier e sono ancora in attesa: il dossier non è ancora stato inviato (o la richiesta non è stata ancora approvata/rifiutata). Apri la richiesta per approvarla e/o inviare il dossier.</p>
+    <div class="incomplete-list" id="pendingRequestsList"></div>
+    <div class="incomplete-actions"><button type="button" id="pendingRequestsCloseBtn">Chiudi</button></div>
   </div>
 </div>
 </body>
