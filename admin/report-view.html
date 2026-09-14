@@ -2964,7 +2964,11 @@ function polarPointOnCircle(cx, cy, r, angleDeg){
 }
 function pieChartHTML(pct, caption, note){
   var p = (pct==null) ? 0 : Math.max(0, Math.min(100, pct));
-  var valueLabel = (pct==null) ? T.not_available : percent(p);
+  // Vedi nota identica in dossier-send.html: un valore reale ma piccolissimo arrotondato a
+  // 1 decimale diventerebbe "0,0%", indistinguibile da "nessun dato"/zero vero -- qui
+  // mostriamo "<0,1%" quando il valore è positivo ma si arrotonderebbe a zero.
+  var roundsToZero = pct!=null && p>0 && p<0.05;
+  var valueLabel = (pct==null) ? T.not_available : (roundsToZero ? ("<0"+(CURRENT_LANG==="it"?",":".")+"1%") : percent(p));
   var size=150, strokeW=29, cx=size/2, cy=size/2, r=(size-strokeW)/2;
   var arcSvg = "";
   if(p>=99.995){

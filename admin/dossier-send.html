@@ -792,7 +792,14 @@ function computeBreakEvenDemand(adrMetric, units, totalCost, demandTotals){
 }
 function pieChartHTML(pct, caption, note){
   var p = (pct==null) ? 0 : Math.max(0, Math.min(100, pct));
-  var valueLabel = (pct==null) ? T.not_available : percent(p);
+  // Un valore reale ma piccolissimo (es. 0,012%) arrotondato a 1 decimale da percent()
+  // diventerebbe "0,0%" -- indistinguibile da "nessun dato"/"zero vero" e, affiancato ad
+  // un altro grafico con una percentuale normale, sembra un dato rotto invece di un valore
+  // reale ma minuscolo. Qui, solo per questi grafici a torta, mostriamo "<0,1%" quando il
+  // valore è positivo ma si arrotonderebbe a zero, cosi' resta chiaro che il dato c'è ed è
+  // stato calcolato, non che manca o è un errore.
+  var roundsToZero = pct!=null && p>0 && p<0.05;
+  var valueLabel = (pct==null) ? T.not_available : (roundsToZero ? ("<0"+(CURRENT_LANG==="it"?",":".")+"1%") : percent(p));
   return '<div class="pie-block"><div class="pie-chart" style="background:conic-gradient(#c79c43 0 '+(p*3.6)+'deg,#ece3d0 '+(p*3.6)+'deg 360deg)"><div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
 }
 function renderTourismDemandPage(){
