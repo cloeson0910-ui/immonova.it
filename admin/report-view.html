@@ -3858,9 +3858,24 @@ async function generateDossierLink(){
        li rigenera più da solo -- genera una volta sola, non una PDF nuova a ogni apertura. Se
        questo salvataggio fallisce non è bloccante: il link resta comunque visibile e
        funzionante per questa sessione, verrà solo rigenerato alla prossima apertura invece di
-       essere riletto. */
+       essere riletto.
+       dossier_share_url resta il singolo "ultimo generato" per compatibilità con chi già lo
+       legge; dossier_share_urls (jsonb {lang:url}) accumula invece TUTTI i link generati nelle
+       varie lingue nel tempo, così da dossier-send.html si può proporre il link già pronto
+       nella lingua del cliente senza doverlo rigenerare ogni volta. Il merge legge prima il
+       valore già in DB (non quello in memoria, che potrebbe essere stale se qualcun altro ha
+       generato un'altra lingua nel frattempo) e ci aggiunge solo la lingua appena generata. */
     if(opportunity){ opportunity.dossier_share_url = shareUrl; opportunity.dossier_pdf_url = pub.data.publicUrl; }
-    var shareSave = await client.from("opportunities").update({dossier_share_url:shareUrl, dossier_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
+    var shareUrlsMap = {};
+    try{
+      var existingRow = await client.from("opportunities").select("dossier_share_urls").eq("id",opportunityId).single();
+      if(!existingRow.error && existingRow.data && existingRow.data.dossier_share_urls && typeof existingRow.data.dossier_share_urls==="object"){
+        shareUrlsMap = Object.assign({}, existingRow.data.dossier_share_urls);
+      }
+    }catch(mapReadErr){ console.warn("Lettura dossier_share_urls esistente fallita, riparto da mappa vuota:",mapReadErr); }
+    if(shareUrl){ shareUrlsMap[CURRENT_LANG||"it"] = shareUrl; }
+    if(opportunity){ opportunity.dossier_share_urls = shareUrlsMap; }
+    var shareSave = await client.from("opportunities").update({dossier_share_url:shareUrl, dossier_pdf_url:pub.data.publicUrl, dossier_share_urls:shareUrlsMap}).eq("id",opportunityId);
     if(shareSave.error) console.warn("Salvataggio link dossier su opportunities fallito:",shareSave.error);
     setStatus(shareUrl?"Link al dossier generato, con anteprima.":"Link al dossier generato (senza anteprima: crea il bucket pubblico \"dossier-pages\" su Supabase Storage per attivarla).","success");
     setControlDone(generateDossierLinkBtn,true);

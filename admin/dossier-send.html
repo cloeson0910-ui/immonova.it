@@ -43,6 +43,24 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .extra-link-add-row .btn{padding:10px 16px}
 .extra-links-hint{font-size:12px;line-height:1.6;color:#8f7643;margin:2px 0 16px}
 .extra-links-empty{font-size:12px;color:#8f7643;font-style:italic;margin:4px 0 12px}
+.send-preview-email-frame{width:100%;height:420px;border:1px solid rgba(166,127,52,.3);background:#fff}
+.opp-picker{margin-bottom:14px}
+.opp-picker input{width:100%;padding:10px 12px;border:1px solid rgba(166,127,52,.30);background:rgba(255,255,255,.55);color:#5c4a20;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:8px}
+.opp-picker-results{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.opp-picker-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,.5);border:1px solid rgba(166,127,52,.2)}
+.opp-picker-row .opr-cover{width:40px;height:40px;object-fit:cover;flex-shrink:0;background:#ece3d0}
+.opp-picker-row .opr-text{flex:1;min-width:0}
+.opp-picker-row .opr-title{font-size:12.5px;font-weight:600;color:#5c4a20}
+.opp-picker-row .opr-meta{font-size:11px;color:#8f7643;margin-top:2px}
+.opp-picker-row .opr-link-state{font-size:10px;letter-spacing:.04em;margin-top:2px}
+.opp-picker-row .opr-link-state.ok{color:#4f7f45}
+.opp-picker-row .opr-link-state.missing{color:#9c6a2f}
+.opp-picker-row button{flex-shrink:0;background:none;border:1px solid rgba(166,127,52,.4);color:#a67f34;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px;cursor:pointer;white-space:nowrap}
+.opp-picker-row button:disabled{opacity:.4;cursor:not-allowed}
+.opp-picker-empty{font-size:12px;color:#8f7643;font-style:italic;padding:6px 2px}
+.extra-link-manual{margin-bottom:16px}
+.extra-link-manual summary{cursor:pointer;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8f7643;margin-bottom:10px}
+.extra-link-manual[open] summary{margin-bottom:14px}
 .dossier-options-title{font-size:20px;font-weight:200;letter-spacing:.06em;color:#a67f34;margin-bottom:20px;text-transform:uppercase}
 .dossier-options-box label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;margin:16px 0 7px}
 .dossier-options-box label:first-of-type{margin-top:0}
@@ -263,19 +281,30 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
     </div>
 
     <label>Link ad altre opportunità (anche non visibili al pubblico)</label>
-    <p class="extra-links-hint">Verranno aggiunti come link cliccabili in fondo all'email, oltre al dossier principale. Incolla qui il link "Copia link" già generato per l'opportunità (es. da Report/Onesheet), non l'URL pubblico del sito se l'immobile non è pubblicato.</p>
+    <p class="extra-links-hint">Cerca tra le opportunità in portafoglio e aggiungile come link cliccabili in fondo all'email. Se per quella lingua esiste già un link "Copia link" generato da Report/Anteprima, viene proposto automaticamente in quella lingua; altrimenti puoi generarlo da lì oppure incollarlo qui manualmente.</p>
     <div class="extra-links-list" id="extraLinksList"></div>
-    <div class="extra-link-add-row">
-      <div class="elar-field">
-        <label for="extraLinkTitleInput">Titolo</label>
-        <input type="text" id="extraLinkTitleInput" placeholder="Es. Villa riservata Porto Cervo">
-      </div>
-      <div class="elar-field">
-        <label for="extraLinkUrlInput">Link</label>
-        <input type="text" id="extraLinkUrlInput" placeholder="https://...">
-      </div>
-      <button type="button" class="btn secondary" id="extraLinkAddBtn">+ Aggiungi link</button>
+    <div class="opp-picker">
+      <input type="text" id="oppPickerSearch" placeholder="Cerca per titolo, località o categoria...">
+      <div class="opp-picker-results" id="oppPickerResults"></div>
     </div>
+    <details class="extra-link-manual">
+      <summary>Oppure incolla un link manualmente</summary>
+      <div class="extra-link-add-row">
+        <div class="elar-field">
+          <label for="extraLinkTitleInput">Titolo</label>
+          <input type="text" id="extraLinkTitleInput" placeholder="Es. Villa riservata Porto Cervo">
+        </div>
+        <div class="elar-field">
+          <label for="extraLinkUrlInput">Link</label>
+          <input type="text" id="extraLinkUrlInput" placeholder="https://...">
+        </div>
+        <button type="button" class="btn secondary" id="extraLinkAddBtn">+ Aggiungi link</button>
+      </div>
+    </details>
+
+    <label>Anteprima email (esattamente quella che riceverà il cliente)</label>
+    <p class="extra-links-hint">Il link di download del PDF qui sotto è un segnaposto: il PDF vero viene generato solo al momento dell'invio effettivo (per non generarlo inutilmente ad ogni apertura dell'anteprima). Testo, struttura e link extra sono invece già quelli reali.</p>
+    <iframe id="spEmailPreviewFrame" class="send-preview-email-frame" title="Anteprima email"></iframe>
 
     <div class="dossier-options-actions">
       <button type="button" class="btn secondary" id="sendPreviewCancel">Annulla</button>
@@ -3459,9 +3488,175 @@ function renderExtraLinksList(){
     btn.addEventListener("click", function(){
       extraDossierLinks.splice(Number(btn.getAttribute("data-idx")), 1);
       renderExtraLinksList();
+      renderOppPickerResults();
+      renderEmailPreviewFrame();
     });
   });
 }
+
+/* ---- Rendering client-side dell'HTML email, IDENTICO a quello prodotto dalla edge
+   function send-dossier-email (stesse stringhe, stesso markup) -- SOLO per farlo vedere
+   nell'anteprima prima dell'invio. Se cambi il testo/markup dell'email qui, cambialo anche
+   nella edge function "send-dossier-email" (e viceversa), altrimenti l'anteprima mostra
+   qualcosa di diverso da quello che arriva davvero al cliente. L'unica differenza voluta è
+   il link del PDF: qui è un segnaposto perché il PDF vero non è ancora stato generato a
+   questo punto (si genera solo alla conferma, per non generarlo ad ogni apertura
+   dell'anteprima). */
+function previewDownloadButtonHtml(pdfUrl, label){
+  return '<p style="margin:0 0 26px;text-align:center">'
+    + '<a href="'+escapeHTML(pdfUrl)+'" target="_blank" style="display:inline-block;padding:15px 26px;background:#a67f34;color:#fffaf0;text-decoration:none;text-transform:uppercase;font-size:11px;letter-spacing:.18em;">'
+    + escapeHTML(label) + '</a></p>'
+    + '<p style="margin:0 0 16px;font-size:12px;line-height:1.7;color:#8f7643;word-break:break-all">'+escapeHTML(pdfUrl)+'</p>';
+}
+function previewExtraLinksBlockHtml(links, isEnglish){
+  if(!links || !links.length) return "";
+  var pStyle="margin:0 0 10px;font-size:15px;line-height:1.7;color:#4a3c1f";
+  var heading = isEnglish ? "You may also be interested in these additional opportunities:" : "Potrebbero interessarle anche queste ulteriori opportunità:";
+  var items = links.map(function(l){
+    var title = escapeHTML(l.title || (isEnglish?"Other opportunity":"Altra opportunità"));
+    var url = escapeHTML(l.url||"");
+    if(!url) return "";
+    return '<li style="margin:0 0 8px;font-size:14px;line-height:1.6"><a href="'+url+'" target="_blank" style="color:#a67f34;text-decoration:underline">'+title+'</a></li>';
+  }).filter(Boolean).join("");
+  if(!items) return "";
+  return '<p style="'+pStyle+'">'+heading+'</p><ul style="margin:0 0 22px;padding-left:20px">'+items+'</ul>';
+}
+function previewBuildImmonovaEmailHtml(title, innerHtml){
+  return ''
+    + '<div style="background:#f4ecdf;padding:40px 20px;font-family:\'Avenir Next\',\'Helvetica Neue\',Arial,sans-serif;">'
+      + '<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid rgba(166,127,52,.25);">'
+        + '<div style="padding:36px 40px 24px;text-align:center;border-bottom:1px solid rgba(166,127,52,.15);">'
+          + '<div style="font-size:24px;font-weight:600;letter-spacing:.35em;color:#a67f34;">IMMONOVA</div>'
+          + '<div style="margin-top:8px;font-size:10px;font-weight:700;letter-spacing:.2em;color:#a58139;text-transform:uppercase;">Off Market &middot; Consulting</div>'
+        + '</div>'
+        + '<div style="padding:36px 40px;">'
+          + '<h1 style="margin:0 0 20px;font-size:19px;font-weight:400;color:#a67f34;">'+title+'</h1>'
+          + innerHtml
+        + '</div>'
+        + '<div style="padding:24px 40px;border-top:1px solid rgba(166,127,52,.15);text-align:center;">'
+          + '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;">IMMONOVA &middot; Off Market Consulting</div>'
+        + '</div>'
+      + '</div>'
+    + '</div>';
+}
+function previewEmailBody(clientName, opportunityTitle, language, pdfUrl, extraLinks){
+  var isEnglish = String(language||"it").toLowerCase().indexOf("en")===0;
+  var greetingName = clientName ? clientName : (isEnglish?"Investor":"Gentile investitore");
+  var pStyle="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f";
+  var extraBlock = previewExtraLinksBlockHtml(extraLinks, isEnglish);
+  if(isEnglish){
+    var innerHtmlEn =
+      '<p style="'+pStyle+'">Dear '+escapeHTML(greetingName)+',</p>'
+      + '<p style="'+pStyle+'">Please find below the download link to the confidential investment dossier for <strong>'+escapeHTML(opportunityTitle)+'</strong>. The file was not attached to this email due to its size: use the button below to download it directly.</p>'
+      + previewDownloadButtonHtml(pdfUrl, "Download the Dossier")
+      + extraBlock
+      + '<p style="'+pStyle+'">This document is confidential and subject to the NDA and privacy terms you accepted when requesting it. Please do not share it with third parties without written authorization from IMMONOVA Off Market Consulting.</p>'
+      + '<p style="'+pStyle+'">Should you have any questions, feel free to reply to this email.</p>'
+      + '<p style="'+pStyle+'">Best regards,<br>IMMONOVA Off Market Consulting</p>';
+    return { subject:"Your Confidential Investment Dossier — "+opportunityTitle, html: previewBuildImmonovaEmailHtml("Confidential Investment Dossier", innerHtmlEn) };
+  }
+  var innerHtmlIt =
+    '<p style="'+pStyle+'">Gentile '+escapeHTML(greetingName)+',</p>'
+    + '<p style="'+pStyle+'">Di seguito il link per scaricare il dossier riservato di investimento per <strong>'+escapeHTML(opportunityTitle)+'</strong>. Il file non è stato allegato a questa email per il suo peso: usi il pulsante qui sotto per scaricarlo direttamente.</p>'
+    + previewDownloadButtonHtml(pdfUrl, "Scarica il Dossier")
+    + extraBlock
+    + '<p style="'+pStyle+'">Il documento è confidenziale ed è soggetto ai termini di NDA e privacy accettati in fase di richiesta. La preghiamo di non condividerlo con terzi senza autorizzazione scritta di IMMONOVA Off Market Consulting.</p>'
+    + '<p style="'+pStyle+'">Per qualsiasi domanda può rispondere direttamente a questa email.</p>'
+    + '<p style="'+pStyle+'">Cordiali saluti,<br>IMMONOVA Off Market Consulting</p>';
+  return { subject:"Il tuo Dossier Riservato IMMONOVA — "+opportunityTitle, html: previewBuildImmonovaEmailHtml("Dossier Riservato IMMONOVA", innerHtmlIt) };
+}
+function renderEmailPreviewFrame(){
+  var frame = document.getElementById("spEmailPreviewFrame");
+  if(!frame || !investorRequest) return;
+  var clientName = investorRequest.full_name||[investorRequest.first_name,investorRequest.last_name].filter(Boolean).join(" ")||"";
+  var dossierLang = investorRequest.preferred_language||CURRENT_LANG||"it";
+  var placeholderPdfUrl = "https://[link-pdf-generato-al-momento-dell-invio]";
+  var built = previewEmailBody(clientName, getTitle(), dossierLang, placeholderPdfUrl, extraDossierLinks);
+  var subjectBar = '<div style="font-family:Arial,sans-serif;font-size:12px;color:#8f7643;padding:8px 14px;border-bottom:1px solid rgba(166,127,52,.25);background:#f9f4e8">'
+    + '<strong>Oggetto:</strong> ' + escapeHTML(built.subject) + '</div>';
+  frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">' + subjectBar + built.html + '</body></html>';
+}
+
+/* ---- Ricerca opportunità per i link extra nell'anteprima invio ----
+   Carica UNA sola volta (lazy, al primo apri-anteprima) l'elenco di tutte le altre
+   opportunità in portafoglio, incluse quelle non pubblicate (published=false): sono proprio
+   quelle "disponibili ma non visibili al pubblico" che l'agente vuole poter proporre. Per
+   ciascuna, se esiste già un link "Copia link" generato per la lingua del cliente
+   (opportunities.dossier_share_urls[lang], accumulato da generateDossierLink() in
+   report-view.html), lo propone in automatico; altrimenti prova l'italiano come fallback,
+   poi il vecchio dossier_share_url singolo, altrimenti segnala che va generato da quella
+   scheda -- non lo genera qui (costerebbe una chiamata PDF/traduzione per ogni risultato di
+   ricerca, troppo per una semplice lista). */
+var oppPickerList = null; // null = non ancora caricato
+var oppPickerLoading = false;
+async function ensureOppPickerLoaded(){
+  if(oppPickerList || oppPickerLoading) return;
+  oppPickerLoading = true;
+  try{
+    var res = await client.from("opportunities")
+      .select("id,title,category,location,cover_image,published,dossier_share_url,dossier_share_urls")
+      .neq("id", opportunityId)
+      .order("created_at",{ascending:false})
+      .limit(300);
+    oppPickerList = (res.error || !res.data) ? [] : res.data;
+  }catch(e){
+    console.error("Caricamento elenco opportunità per link extra fallito:",e);
+    oppPickerList = [];
+  }
+  oppPickerLoading = false;
+}
+function resolveOppShareLink(opp, preferredLang){
+  var map = (opp && opp.dossier_share_urls && typeof opp.dossier_share_urls==="object") ? opp.dossier_share_urls : {};
+  if(preferredLang && map[preferredLang]) return {url:map[preferredLang], lang:preferredLang};
+  if(map.it) return {url:map.it, lang:"it"};
+  var anyLang = Object.keys(map)[0];
+  if(anyLang) return {url:map[anyLang], lang:anyLang};
+  if(opp && opp.dossier_share_url) return {url:opp.dossier_share_url, lang:null};
+  return null;
+}
+function renderOppPickerResults(){
+  var resultsEl = document.getElementById("oppPickerResults");
+  if(!resultsEl) return;
+  if(!oppPickerList){ resultsEl.innerHTML = '<p class="opp-picker-empty">Caricamento opportunità...</p>'; return; }
+  var q = ((document.getElementById("oppPickerSearch")||{}).value||"").trim().toLowerCase();
+  var preferredLang = (investorRequest && investorRequest.preferred_language) || CURRENT_LANG || "it";
+  var already = {};
+  extraDossierLinks.forEach(function(l){ if(l.opportunityId) already[l.opportunityId]=true; });
+  var filtered = oppPickerList.filter(function(o){
+    if(already[o.id]) return false;
+    if(!q) return true;
+    var hay = ((o.title||"")+" "+(o.location||"")+" "+(o.category||"")).toLowerCase();
+    return hay.indexOf(q)>=0;
+  }).slice(0, 25);
+  if(!filtered.length){ resultsEl.innerHTML = '<p class="opp-picker-empty">'+(q?"Nessuna opportunità trovata.":"Nessun'altra opportunità in portafoglio.")+'</p>'; return; }
+  resultsEl.innerHTML = filtered.map(function(o){
+    var link = resolveOppShareLink(o, preferredLang);
+    var cover = o.cover_image ? '<img class="opr-cover" src="'+escapeHTML(o.cover_image)+'" alt="">' : '<div class="opr-cover"></div>';
+    var meta = [o.category, o.location, o.published?"pubblicata":"riservata/non pubblica"].filter(Boolean).join(" · ");
+    var stateHtml = link
+      ? '<div class="opr-link-state ok">Link pronto'+(link.lang?(" ("+link.lang.toUpperCase()+")"):"")+(link.lang && link.lang!==preferredLang ? " — non in "+preferredLang.toUpperCase() : "")+'</div>'
+      : '<div class="opr-link-state missing">Nessun link generato: apri quella scheda e genera "Copia link"</div>';
+    return '<div class="opp-picker-row" data-opp-id="'+o.id+'">'+cover
+      + '<div class="opr-text"><div class="opr-title">'+escapeHTML(o.title||("Opportunità "+o.id))+'</div><div class="opr-meta">'+escapeHTML(meta)+'</div>'+stateHtml+'</div>'
+      + '<button type="button"'+(link?'':' disabled')+'>+ Aggiungi</button></div>';
+  }).join("");
+  resultsEl.querySelectorAll(".opp-picker-row button:not(:disabled)").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var row = btn.closest(".opp-picker-row");
+      var oppId = Number(row.getAttribute("data-opp-id"));
+      var opp = oppPickerList.filter(function(o){ return o.id===oppId; })[0];
+      if(!opp) return;
+      var link = resolveOppShareLink(opp, preferredLang);
+      if(!link) return;
+      extraDossierLinks.push({ title: opp.title||("Opportunità "+opp.id), url: link.url, opportunityId: opp.id });
+      renderExtraLinksList();
+      renderOppPickerResults();
+      renderEmailPreviewFrame();
+    });
+  });
+}
+var oppPickerSearchInput = document.getElementById("oppPickerSearch");
+if(oppPickerSearchInput) oppPickerSearchInput.addEventListener("input", renderOppPickerResults);
 
 function openSendPreview(){
   if(!investorRequest){ setStatus("Richiesta cliente non collegata: apri questa pagina dal pulsante Dossier in Richieste.","error"); return; }
@@ -3472,6 +3667,11 @@ function openSendPreview(){
   document.getElementById("spTitle").textContent = getTitle();
   document.getElementById("spSections").textContent = buildIncludedSectionsSummary();
   renderExtraLinksList();
+  renderEmailPreviewFrame();
+  var oppSearchInput = document.getElementById("oppPickerSearch");
+  if(oppSearchInput) oppSearchInput.value = "";
+  renderOppPickerResults();
+  ensureOppPickerLoaded().then(renderOppPickerResults);
   overlay.classList.add("active");
 }
 function closeSendPreview(){
@@ -3499,6 +3699,7 @@ if(extraLinkAddBtn) extraLinkAddBtn.addEventListener("click", function(){
   titleInput.value = "";
   urlInput.value = "";
   renderExtraLinksList();
+  renderEmailPreviewFrame();
 });
 
 async function init(){
