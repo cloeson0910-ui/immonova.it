@@ -1126,6 +1126,17 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
    firma dentro. LIMITE NOTO: se il file caricato è un PDF (non una foto), non viene unito qui
    -- unire PDF dentro PDF richiederebbe una libreria in più (pdf-lib) non ancora inclusa nel
    progetto; quel caso resta disponibile solo come link separato (vedi offer-share.html). */
+function isImageSignedDoc(d){
+  if(!d) return false;
+  if(d.mime_type) return d.mime_type.indexOf("image/") === 0;
+  // Voci più vecchie caricate via scansione QR da smartphone (edge function "scan-upload",
+  // versioni precedenti alla v7) non salvavano mime_type -- senza questo fallback per
+  // estensione, quelle foto venivano scartate in silenzio e la scansione firmata NON finiva
+  // mai nel PDF, pur essendo una normale foto JPG (causa vera di "non c'è nessun PDF
+  // allegato"). Nessuna estensione riconosciuta -> non è un'immagine, resta un link a parte.
+  var name = String((d.file_name || d.file_url || ""));
+  return /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(name);
+}
 function fetchAsDataUrl(url){
   return fetch(url).then(function(res){
     if(!res.ok) throw new Error("Download scansione fallito (" + res.status + ")");
@@ -1160,7 +1171,7 @@ async function appendSignedScanPages(doc, signedDocuments){
   for(var i = 0; i < signedDocuments.length; i++){
     var d = signedDocuments[i];
     if(!d || !d.file_url) continue;
-    var isImage = d.mime_type && d.mime_type.indexOf("image/") === 0;
+    var isImage = isImageSignedDoc(d);
     if(!isImage) continue; // PDF caricati: non uniti automaticamente, vedi commento sopra
     try{
       var dataUrl = await fetchAsDataUrl(d.file_url);
@@ -1503,7 +1514,7 @@ function pdfLikelyIncludesScans(o){
   if(!m) return false;
   var pdfTs = Number(m[1]);
   if(!pdfTs) return false;
-  var imageDocs = (o.signed_documents || []).filter(function(d){ return d && d.mime_type && d.mime_type.indexOf("image/") === 0; });
+  var imageDocs = (o.signed_documents || []).filter(isImageSignedDoc);
   if(!imageDocs.length) return true; // nessuna scansione-immagine da allegare, non c'è nulla da perdere
   return imageDocs.every(function(d){
     var uploadedTs = d.uploaded_at ? new Date(d.uploaded_at).getTime() : 0;
