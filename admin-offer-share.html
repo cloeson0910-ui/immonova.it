@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposta d'Acquisto — IMMONOVA</title>
+
+<!-- ATTENZIONE: questa è la vecchia copia duplicata del file, tenuta qui solo come rete di
+     sicurezza per link vecchi che puntassero ancora a /admin/offer-share.html. La copia
+     "vera" e aggiornata è quella nella ROOT del sito (offer-share.html, senza /admin/): è lì
+     che ora puntano i link generati dalle email (vedi send-offer-to-seller.ts, v5). Questo
+     file è stato allineato alla stessa identica logica corretta (Edge Function pubblica
+     offer-public-actions, mai query dirette alla tabella bloccata dalle RLS) il 2026-09-14,
+     dopo che un link vecchio già inviato puntava ancora qui alla versione rotta. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="IMMONOVA">
+<meta property="og:title" content="Proposta d'Acquisto — IMMONOVA">
+<meta property="og:description" content="Documento immobiliare IMMONOVA — Off Market Consulting. Apri per visualizzare e scaricare il PDF.">
+<meta property="og:image" content="https://immonova-consulting.it/immonova-logo-share-1200x630.png">
+<meta property="og:url" content="https://immonova-consulting.it/admin/offer-share.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Proposta d'Acquisto — IMMONOVA">
+<meta name="twitter:description" content="Documento immobiliare IMMONOVA — Off Market Consulting.">
+<meta name="twitter:image" content="https://immonova-consulting.it/immonova-logo-share-1200x630.png">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.card{background:#fffdf7;border:1px solid rgba(166,127,52,.2);box-shadow:0 24px 70px rgba(127,100,48,.1);padding:48px 40px;max-width:440px;width:100%;text-align:center}
+.letterhead{font-size:20px;letter-spacing:.3em;color:#a67f34;font-weight:300;margin-bottom:6px}
+.sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:28px;border-bottom:1px solid rgba(166,127,52,.2);padding-bottom:18px}
+h1{font-size:18px;color:#4a3c1f;font-weight:400;margin-bottom:10px}
+p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin-bottom:24px}
+.btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}
+.btn.secondary{background:transparent;color:#a67f34}
+.action-stack{display:flex;flex-direction:column;gap:10px;align-items:center}
+.action-label{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;margin:14px 0 -2px}
+.action-label:first-child{margin-top:0}
+.state{font-size:12.5px;color:#8f7643}
+.state.error{color:#9c2f2f}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="letterhead">IMMONOVA</div>
+  <div class="sub">OFF MARKET · CONSULTING</div>
+  <h1 id="title">Documento immobiliare</h1>
+  <p id="desc">Caricamento…</p>
+  <div id="actionBox"></div>
+</div>
+
+<script src="../js/config.js"></script>
+<script>
+/* IMPORTANTE: questa pagina NON interroga più la tabella opportunity_offers direttamente
+   con l'anon key -- le RLS della tabella richiedono SEMPRE auth.role() = 'authenticated'
+   (verificato via query diretta sul database), quindi un visitatore anonimo (il
+   venditore/cliente che apre questo link da fuori, senza aver fatto login nel pannello
+   admin) otteneva SEMPRE result.data = null, qualunque cosa ci fosse davvero sulla proposta
+   -- causa vera e definitiva del "PDF non ancora generato" visto anche con dati presenti.
+   Il varco pubblico corretto, già esistente e usato dalla pagina di firma del proponente
+   (share/offer-<id>.html, generata da share-offer.ts), è la Edge Function pubblica
+   "offer-public-actions" (verify_jwt:false, usa la SERVICE ROLE key lato server, valida
+   SEMPRE offer_id+share_token prima di leggere qualunque riga -- le RLS restano intatte, il
+   varco è tenuto volutamente stretto). Questa pagina ora fa lo stesso identico giro, con
+   action:"view". Richiede il parametro "token" nell'URL (share_token della proposta) oltre a
+   "offer_id" -- va sempre generato/inviato insieme (vedi send-offer-to-seller.ts e
+   offer-detail.html, aggiornati in coppia con questo file). */
+(async function(){
+  var params = new URLSearchParams(window.location.search);
+  var offerId = params.get("offer_id");
+  var token = params.get("token");
+  var titleEl = document.getElementById("title");
+  var descEl = document.getElementById("desc");
+  var actionBox = document.getElementById("actionBox");
+
+  if(!offerId || !token){
+    titleEl.textContent = "Link non valido";
+    descEl.textContent = "Manca il riferimento alla proposta. Se hai ricevuto questo link prima di un aggiornamento del sistema, chiedi a IMMONOVA di rimandartelo.";
+    return;
+  }
+
+  var actionsUrl = String(SUPABASE_URL).replace(/\/+$/, "") + "/functions/v1/offer-public-actions";
+  var data = null;
+  try{
+    var res = await fetch(actionsUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "view", offer_id: offerId, token: token })
+    });
+    var body = await res.json();
+    if(res.ok && body && body.success) data = body.data;
+  }catch(fetchErr){
+    console.error("offer-public-actions non raggiungibile:", fetchErr);
+  }
+
+  if(!data){
+    titleEl.textContent = "Link non valido";
+    descEl.textContent = "Impossibile trovare questa proposta: il link potrebbe essere scaduto o errato.";
+    return;
+  }
+
+  var pdfUrl = data.pdf_url || null;
+
+  /* Foto/scansione della proposta FIRMATA (upload da PC o QR da smartphone -- vedi
+     offer-detail.html). Va mostrata SEMPRE quando esiste, non solo come ripiego quando manca
+     il PDF formale: è quella che interessa a chi deve leggerla/controfirmarla, il PDF formale
+     da solo è il documento vuoto senza firma. Si prende l'ultima caricata (signed_documents è
+     in ordine cronologico). */
+  var signedUrl = null;
+  if(Array.isArray(data.signed_documents) && data.signed_documents.length){
+    var lastSigned = data.signed_documents[data.signed_documents.length - 1];
+    if(lastSigned && lastSigned.file_url) signedUrl = lastSigned.file_url;
+  }
+
+  var propertyTitle = data.property_title || "";
+  var isCounter = data.offer_kind === "controfferta";
+  titleEl.textContent = (isCounter ? "Controfferta" : "Proposta d'Acquisto") + (propertyTitle ? " — " + propertyTitle : "");
+
+  if(signedUrl && pdfUrl){
+    /* Entrambi presenti: la firmata come azione principale (è quella da leggere/controfirmare),
+       l'originale non firmato disponibile comunque come riferimento secondario. */
+    descEl.textContent = "Documento pronto per la consultazione.";
+    actionBox.innerHTML = '<div class="action-stack">'
+      + '<a class="btn" href="' + signedUrl + '" target="_blank" rel="noopener">Apri / Scarica la proposta firmata</a>'
+      + '<a class="btn secondary" href="' + pdfUrl + '" target="_blank" rel="noopener">Documento originale (non firmato)</a>'
+      + '</div>';
+  }else if(signedUrl){
+    descEl.textContent = "Documento pronto per la consultazione.";
+    actionBox.innerHTML = '<a class="btn" href="' + signedUrl + '" target="_blank" rel="noopener">Apri / Scarica la proposta firmata</a>';
+  }else if(pdfUrl){
+    descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
+    actionBox.innerHTML = '<a class="btn" href="' + pdfUrl + '" target="_blank" rel="noopener">Apri / Scarica il PDF</a>';
+  }else{
+    descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
+    actionBox.innerHTML = '<span class="state error">PDF non ancora generato per questa proposta.</span>';
+  }
+})();
+</script>
+
+</body>
+</html>
