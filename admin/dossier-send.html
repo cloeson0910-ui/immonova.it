@@ -796,11 +796,16 @@ function pieChartHTML(pct, caption, note){
   return '<div class="pie-block"><div class="pie-chart" style="background:conic-gradient(#c79c43 0 '+(p*3.6)+'deg,#ece3d0 '+(p*3.6)+'deg 360deg)"><div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
 }
 function renderTourismDemandPage(){
-  /* BUG CRITICO (stesso di report-view.html, corretto qui in coppia): ritornava "" invece di []
-     nei due casi di uscita anticipata -- renderBook() chiama sempre .forEach() sul risultato
-     senza controllare, quindi mandava in crash l'intero dossier ("forEach is not a function")
-     ogni volta che l'immobile era terreno/commerciale o senza dati ADR disponibili. */
-  if(isLandCategory()||isCommercialCategory()) return [];
+  /* ATTENZIONE - NON allineare ciecamente a report-view.html: qui il chiamante è diverso.
+     In dossier-send.html questa funzione viene usata con push(T.chapter_financial,
+     renderTourismDemandPage()) -- push() vuole UNA stringa HTML (o "" per "nessuna pagina",
+     che push() scarta da sola con "if(!html) return"). In report-view.html invece il
+     chiamante fa .forEach() sul risultato e quindi lì la funzione DEVE restituire un array.
+     Sono due integrazioni diverse della stessa funzione gemella: qui i due casi di uscita
+     anticipata devono restituire "" (stringa vuota), MAI [] -- un array è "truthy" per
+     push(), quindi verrebbe salvato come pagina e injectFolio() poi crasha con
+     "html.replace is not a function" perché prova a chiamare .replace() su un array. */
+  if(isLandCategory()||isCommercialCategory()) return "";
   var f=buildFinance();
   var units=getAssetUnits();
   var demandTotals=getTourismDemandTotals();
@@ -823,7 +828,7 @@ function renderTourismDemandPage(){
   }else if(adrSingle){
     scenarios.push({adr:adrSingle, label:T.scenario_adr});
   }
-  if(!scenarios.length) return []; // vedi commento in cima alla funzione: mai una stringa qui
+  if(!scenarios.length) return ""; // vedi commento in cima alla funzione: qui vuole sempre una stringa
 
   var blocks=scenarios.map(function(sc){
     var res=computeBreakEvenDemand(sc.adr, units, f.total, demandTotals);
