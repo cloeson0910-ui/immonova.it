@@ -3508,18 +3508,58 @@ function previewDownloadButtonHtml(pdfUrl, label){
     + escapeHTML(label) + '</a></p>'
     + '<p style="margin:0 0 16px;font-size:12px;line-height:1.7;color:#8f7643;word-break:break-all">'+escapeHTML(pdfUrl)+'</p>';
 }
-function previewExtraLinksBlockHtml(links, isEnglish){
+function previewExtraLinksBlockHtml(links, heading, fallbackLinkLabel){
   if(!links || !links.length) return "";
   var pStyle="margin:0 0 10px;font-size:15px;line-height:1.7;color:#4a3c1f";
-  var heading = isEnglish ? "You may also be interested in these additional opportunities:" : "Potrebbero interessarle anche queste ulteriori opportunità:";
   var items = links.map(function(l){
-    var title = escapeHTML(l.title || (isEnglish?"Other opportunity":"Altra opportunità"));
+    var title = escapeHTML(l.title || fallbackLinkLabel);
     var url = escapeHTML(l.url||"");
     if(!url) return "";
     return '<li style="margin:0 0 8px;font-size:14px;line-height:1.6"><a href="'+url+'" target="_blank" style="color:#a67f34;text-decoration:underline">'+title+'</a></li>';
   }).filter(Boolean).join("");
   if(!items) return "";
-  return '<p style="'+pStyle+'">'+heading+'</p><ul style="margin:0 0 22px;padding-left:20px">'+items+'</ul>';
+  return '<p style="'+pStyle+'">'+escapeHTML(heading)+'</p><ul style="margin:0 0 22px;padding-left:20px">'+items+'</ul>';
+}
+/* ---- Traduzione stringhe email per lingue diverse da IT/EN, IDENTICA alla logica lato
+   server in send-dossier-email v21 (translateEmailStrings/IT_TEMPLATES). Se cambi le chiavi o
+   i testi qui, cambiali anche là, altrimenti l'anteprima non rispecchia più l'email vera. */
+var PREVIEW_IT_TEMPLATES = {
+  greeting: "Gentile {NAME},",
+  fallback_name: "investitore",
+  intro: "Di seguito il link per scaricare il dossier riservato di investimento per {TITLE}. Il file non è stato allegato a questa email per il suo peso: usi il pulsante qui sotto per scaricarlo direttamente.",
+  button_label: "Scarica il Dossier",
+  extra_links_heading: "Potrebbero interessarle anche queste ulteriori opportunità:",
+  extra_link_fallback_label: "Altra opportunità",
+  confidential_notice: "Il documento è confidenziale ed è soggetto ai termini di NDA e privacy accettati in fase di richiesta. La preghiamo di non condividerlo con terzi senza autorizzazione scritta di IMMONOVA Off Market Consulting.",
+  questions_notice: "Per qualsiasi domanda può rispondere direttamente a questa email.",
+  signoff: "Cordiali saluti,",
+  email_title: "Dossier Riservato IMMONOVA",
+  subject_prefix: "Il tuo Dossier Riservato IMMONOVA"
+};
+var PREVIEW_TEMPLATE_KEYS = Object.keys(PREVIEW_IT_TEMPLATES);
+var previewEmailStringsCache = {};
+async function previewTranslateEmailStrings(lang){
+  if(!lang || lang==="it") return PREVIEW_IT_TEMPLATES;
+  if(previewEmailStringsCache[lang]) return previewEmailStringsCache[lang];
+  var fallbackByKey = PREVIEW_IT_TEMPLATES;
+  var texts = PREVIEW_TEMPLATE_KEYS.map(function(k){ return PREVIEW_IT_TEMPLATES[k]; });
+  var translated;
+  try{
+    translated = await translateTextsSafe(lang, PREVIEW_TEMPLATE_KEYS, texts, fallbackByKey,
+      "IMMONOVA luxury real estate — dossier delivery email to client");
+  }catch(e){ translated = null; }
+  var out = {};
+  PREVIEW_TEMPLATE_KEYS.forEach(function(k){
+    var v = translated && translated[k];
+    out[k] = (v==null || String(v).trim()==="") ? PREVIEW_IT_TEMPLATES[k] : v;
+  });
+  previewEmailStringsCache[lang] = out;
+  return out;
+}
+function previewFillPlaceholders(template, vars){
+  var out = template;
+  Object.keys(vars).forEach(function(k){ out = out.split("{"+k+"}").join(vars[k]); });
+  return out;
 }
 function previewBuildImmonovaEmailHtml(title, innerHtml){
   return ''
@@ -3539,39 +3579,52 @@ function previewBuildImmonovaEmailHtml(title, innerHtml){
       + '</div>'
     + '</div>';
 }
-function previewEmailBody(clientName, opportunityTitle, language, pdfUrl, extraLinks){
+async function previewEmailBody(clientName, opportunityTitle, language, pdfUrl, extraLinks){
   var isEnglish = String(language||"it").toLowerCase().indexOf("en")===0;
-  var greetingName = clientName ? clientName : (isEnglish?"Investor":"Gentile investitore");
   var pStyle="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f";
-  var extraBlock = previewExtraLinksBlockHtml(extraLinks, isEnglish);
   if(isEnglish){
+    var greetingNameEn = clientName ? clientName : "Investor";
+    var extraBlockEn = previewExtraLinksBlockHtml(extraLinks, "You may also be interested in these additional opportunities:", "Other opportunity");
     var innerHtmlEn =
-      '<p style="'+pStyle+'">Dear '+escapeHTML(greetingName)+',</p>'
+      '<p style="'+pStyle+'">Dear '+escapeHTML(greetingNameEn)+',</p>'
       + '<p style="'+pStyle+'">Please find below the download link to the confidential investment dossier for <strong>'+escapeHTML(opportunityTitle)+'</strong>. The file was not attached to this email due to its size: use the button below to download it directly.</p>'
       + previewDownloadButtonHtml(pdfUrl, "Download the Dossier")
-      + extraBlock
+      + extraBlockEn
       + '<p style="'+pStyle+'">This document is confidential and subject to the NDA and privacy terms you accepted when requesting it. Please do not share it with third parties without written authorization from IMMONOVA Off Market Consulting.</p>'
       + '<p style="'+pStyle+'">Should you have any questions, feel free to reply to this email.</p>'
       + '<p style="'+pStyle+'">Best regards,<br>IMMONOVA Off Market Consulting</p>';
     return { subject:"Your Confidential Investment Dossier — "+opportunityTitle, html: previewBuildImmonovaEmailHtml("Confidential Investment Dossier", innerHtmlEn) };
   }
-  var innerHtmlIt =
-    '<p style="'+pStyle+'">Gentile '+escapeHTML(greetingName)+',</p>'
-    + '<p style="'+pStyle+'">Di seguito il link per scaricare il dossier riservato di investimento per <strong>'+escapeHTML(opportunityTitle)+'</strong>. Il file non è stato allegato a questa email per il suo peso: usi il pulsante qui sotto per scaricarlo direttamente.</p>'
-    + previewDownloadButtonHtml(pdfUrl, "Scarica il Dossier")
+  /* Italiano (identità) o qualsiasi altra lingua (tradotta, con fallback all'italiano) --
+     stessa logica di send-dossier-email v21 lato server. */
+  var S = await previewTranslateEmailStrings(language);
+  var greetingName = clientName || S.fallback_name;
+  var greetingLine = previewFillPlaceholders(S.greeting, {NAME: escapeHTML(greetingName)});
+  var introLine = previewFillPlaceholders(S.intro, {TITLE: "<strong>"+escapeHTML(opportunityTitle)+"</strong>"});
+  var extraBlock = previewExtraLinksBlockHtml(extraLinks, S.extra_links_heading, S.extra_link_fallback_label);
+  var innerHtml =
+    '<p style="'+pStyle+'">'+greetingLine+'</p>'
+    + '<p style="'+pStyle+'">'+introLine+'</p>'
+    + previewDownloadButtonHtml(pdfUrl, S.button_label)
     + extraBlock
-    + '<p style="'+pStyle+'">Il documento è confidenziale ed è soggetto ai termini di NDA e privacy accettati in fase di richiesta. La preghiamo di non condividerlo con terzi senza autorizzazione scritta di IMMONOVA Off Market Consulting.</p>'
-    + '<p style="'+pStyle+'">Per qualsiasi domanda può rispondere direttamente a questa email.</p>'
-    + '<p style="'+pStyle+'">Cordiali saluti,<br>IMMONOVA Off Market Consulting</p>';
-  return { subject:"Il tuo Dossier Riservato IMMONOVA — "+opportunityTitle, html: previewBuildImmonovaEmailHtml("Dossier Riservato IMMONOVA", innerHtmlIt) };
+    + '<p style="'+pStyle+'">'+S.confidential_notice+'</p>'
+    + '<p style="'+pStyle+'">'+S.questions_notice+'</p>'
+    + '<p style="'+pStyle+'">'+S.signoff+'<br>IMMONOVA Off Market Consulting</p>';
+  return { subject: S.subject_prefix+" — "+opportunityTitle, html: previewBuildImmonovaEmailHtml(S.email_title, innerHtml) };
 }
-function renderEmailPreviewFrame(){
+var emailPreviewRequestToken = 0;
+async function renderEmailPreviewFrame(){
   var frame = document.getElementById("spEmailPreviewFrame");
   if(!frame || !investorRequest) return;
+  var myToken = ++emailPreviewRequestToken;
   var clientName = investorRequest.full_name||[investorRequest.first_name,investorRequest.last_name].filter(Boolean).join(" ")||"";
   var dossierLang = investorRequest.preferred_language||CURRENT_LANG||"it";
   var placeholderPdfUrl = "https://[link-pdf-generato-al-momento-dell-invio]";
-  var built = previewEmailBody(clientName, getTitle(), dossierLang, placeholderPdfUrl, extraDossierLinks);
+  if(dossierLang && dossierLang!=="it" && dossierLang.toLowerCase().indexOf("en")!==0){
+    frame.srcdoc = '<!doctype html><html><body style="margin:0;padding:20px;font-family:Arial,sans-serif;font-size:13px;color:#8f7643">Traduzione anteprima in corso…</body></html>';
+  }
+  var built = await previewEmailBody(clientName, getTitle(), dossierLang, placeholderPdfUrl, extraDossierLinks);
+  if(myToken !== emailPreviewRequestToken) return; // una richiesta più recente è partita nel frattempo, scarta questa
   var subjectBar = '<div style="font-family:Arial,sans-serif;font-size:12px;color:#8f7643;padding:8px 14px;border-bottom:1px solid rgba(166,127,52,.25);background:#f9f4e8">'
     + '<strong>Oggetto:</strong> ' + escapeHTML(built.subject) + '</div>';
   frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">' + subjectBar + built.html + '</body></html>';
