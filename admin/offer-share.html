@@ -33,13 +33,9 @@ body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-se
 .sub{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#8f7643;margin-bottom:28px;border-bottom:1px solid rgba(166,127,52,.2);padding-bottom:18px}
 h1{font-size:18px;color:#4a3c1f;font-weight:400;margin-bottom:10px}
 p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin-bottom:24px}
-.btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;margin:4px}
+.btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}
 .state{font-size:12.5px;color:#8f7643}
 .state.error{color:#9c2f2f}
-.signed-section{margin-top:28px;padding-top:22px;border-top:1px solid rgba(166,127,52,.2);text-align:left}
-.signed-section h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;margin-bottom:10px;text-align:center}
-.signed-doc-row{display:block;font-size:12.5px;color:#a67f34;text-decoration:none;padding:8px 10px;border:1px solid rgba(166,127,52,.2);border-radius:2px;margin-bottom:6px}
-.signed-doc-row:hover{background:rgba(166,127,52,.08)}
 </style>
 </head>
 <body>
@@ -80,6 +76,23 @@ var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     var pub = client.storage.from("offer-documents").getPublicUrl(result.data.pdf_storage_path);
     pdfUrl = pub.data ? pub.data.publicUrl : null;
   }
+
+  /* FALLBACK: se non è mai stato generato il PDF formale (pulsante "Genera PDF" in
+     offer-detail.html mai premuto), ma è stata caricata la foto/scansione della proposta
+     firmata (upload da PC o QR da smartphone -- vedi offer-detail.html), mostra comunque
+     quella invece di lasciare la pagina vuota con un errore: chi apre il link vuole vedere
+     il documento che gli è stato inviato, non sapere quale pulsante interno non è stato
+     premuto. Si prende l'ultima caricata (signed_documents è in ordine cronologico). */
+  var signedFallbackUrl = null;
+  var isSignedFallback = false;
+  if(!pdfUrl && result.data && Array.isArray(result.data.signed_documents) && result.data.signed_documents.length){
+    var lastSigned = result.data.signed_documents[result.data.signed_documents.length - 1];
+    if(lastSigned && lastSigned.file_url){
+      signedFallbackUrl = lastSigned.file_url;
+      isSignedFallback = true;
+    }
+  }
+
   var propertyTitle = "";
   if(!result.error && result.data && result.data.opportunity_id){
     var oppResult = await client.from("opportunities").select("title").eq("id", result.data.opportunity_id).single();
@@ -88,31 +101,16 @@ var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   var isCounter = result.data && result.data.offer_kind === "controfferta";
   titleEl.textContent = (isCounter ? "Controfferta" : "Proposta d'Acquisto") + (propertyTitle ? " — " + propertyTitle : "");
-  descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
 
   if(pdfUrl){
+    descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
     actionBox.innerHTML = '<a class="btn" href="' + pdfUrl + '" target="_blank" rel="noopener">Apri / Scarica il PDF</a>';
+  }else if(isSignedFallback){
+    descEl.textContent = "Documento pronto per la consultazione.";
+    actionBox.innerHTML = '<a class="btn" href="' + signedFallbackUrl + '" target="_blank" rel="noopener">Apri / Scarica il documento</a>';
   }else{
+    descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
     actionBox.innerHTML = '<span class="state error">PDF non ancora generato per questa proposta.</span>';
-  }
-
-  var signedDocs = (result.data && Array.isArray(result.data.signed_documents)) ? result.data.signed_documents : [];
-  if(signedDocs.length){
-    var section = document.createElement("div");
-    section.className = "signed-section";
-    var heading = document.createElement("h2");
-    heading.textContent = "Proposta firmata";
-    section.appendChild(heading);
-    signedDocs.forEach(function(d){
-      var a = document.createElement("a");
-      a.className = "signed-doc-row";
-      a.href = d.file_url;
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.textContent = "📄 " + (d.file_name || "documento firmato");
-      section.appendChild(a);
-    });
-    document.querySelector(".card").appendChild(section);
   }
 })();
 </script>
