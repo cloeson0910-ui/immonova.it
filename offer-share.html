@@ -34,6 +34,10 @@ body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-se
 h1{font-size:18px;color:#4a3c1f;font-weight:400;margin-bottom:10px}
 p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin-bottom:24px}
 .btn{display:inline-flex;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}
+.btn.secondary{background:transparent;color:#a67f34}
+.action-stack{display:flex;flex-direction:column;gap:10px;align-items:center}
+.action-label{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;margin:14px 0 -2px}
+.action-label:first-child{margin-top:0}
 .state{font-size:12.5px;color:#8f7643}
 .state.error{color:#9c2f2f}
 </style>
@@ -48,47 +52,89 @@ p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin-bottom:24px}
   <div id="actionBox"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 <script>
-var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+/* IMPORTANTE: questa pagina NON interroga più la tabella opportunity_offers direttamente
+   con l'anon key -- le RLS della tabella richiedono SEMPRE auth.role() = 'authenticated'
+   (verificato via query diretta sul database), quindi un visitatore anonimo (il
+   venditore/cliente che apre questo link da fuori, senza aver fatto login nel pannello
+   admin) otteneva SEMPRE result.data = null, qualunque cosa ci fosse davvero sulla proposta
+   -- causa vera e definitiva del "PDF non ancora generato" visto anche con dati presenti.
+   Il varco pubblico corretto, già esistente e usato dalla pagina di firma del proponente
+   (share/offer-<id>.html, generata da share-offer.ts), è la Edge Function pubblica
+   "offer-public-actions" (verify_jwt:false, usa la SERVICE ROLE key lato server, valida
+   SEMPRE offer_id+share_token prima di leggere qualunque riga -- le RLS restano intatte, il
+   varco è tenuto volutamente stretto). Questa pagina ora fa lo stesso identico giro, con
+   action:"view". Richiede il parametro "token" nell'URL (share_token della proposta) oltre a
+   "offer_id" -- va sempre generato/inviato insieme (vedi send-offer-to-seller.ts e
+   offer-detail.html, aggiornati in coppia con questo file). */
 (async function(){
   var params = new URLSearchParams(window.location.search);
   var offerId = params.get("offer_id");
+  var token = params.get("token");
   var titleEl = document.getElementById("title");
   var descEl = document.getElementById("desc");
   var actionBox = document.getElementById("actionBox");
 
-  if(!offerId){
+  if(!offerId || !token){
     titleEl.textContent = "Link non valido";
-    descEl.textContent = "Manca il riferimento alla proposta.";
+    descEl.textContent = "Manca il riferimento alla proposta. Se hai ricevuto questo link prima di un aggiornamento del sistema, chiedi a IMMONOVA di rimandartelo.";
     return;
   }
 
-  var result = await client.from("opportunity_offers").select("offer_kind,offered_price,opportunity_id,pdf_storage_path").eq("id", offerId).single();
-
-  /* Il path del PDF non è più fisso (vedi offer-detail.html): ogni generazione crea un file
-     con nome nuovo per evitare che la CDN di Supabase Storage serva una versione vecchia in
-     cache. Qui si legge sempre l'ultimo path salvato sulla riga della proposta. */
-  var pdfUrl = null;
-  if(result.data && result.data.pdf_storage_path){
-    var pub = client.storage.from("offer-documents").getPublicUrl(result.data.pdf_storage_path);
-    pdfUrl = pub.data ? pub.data.publicUrl : null;
-  }
-  var propertyTitle = "";
-  if(!result.error && result.data && result.data.opportunity_id){
-    var oppResult = await client.from("opportunities").select("title").eq("id", result.data.opportunity_id).single();
-    if(oppResult.data) propertyTitle = oppResult.data.title || "";
+  var actionsUrl = String(SUPABASE_URL).replace(/\/+$/, "") + "/functions/v1/offer-public-actions";
+  var data = null;
+  try{
+    var res = await fetch(actionsUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "view", offer_id: offerId, token: token })
+    });
+    var body = await res.json();
+    if(res.ok && body && body.success) data = body.data;
+  }catch(fetchErr){
+    console.error("offer-public-actions non raggiungibile:", fetchErr);
   }
 
-  var isCounter = result.data && result.data.offer_kind === "controfferta";
+  if(!data){
+    titleEl.textContent = "Link non valido";
+    descEl.textContent = "Impossibile trovare questa proposta: il link potrebbe essere scaduto o errato.";
+    return;
+  }
+
+  var pdfUrl = data.pdf_url || null;
+
+  /* Foto/scansione della proposta FIRMATA (upload da PC o QR da smartphone -- vedi
+     offer-detail.html). Va mostrata SEMPRE quando esiste, non solo come ripiego quando manca
+     il PDF formale: è quella che interessa a chi deve leggerla/controfirmarla, il PDF formale
+     da solo è il documento vuoto senza firma. Si prende l'ultima caricata (signed_documents è
+     in ordine cronologico). */
+  var signedUrl = null;
+  if(Array.isArray(data.signed_documents) && data.signed_documents.length){
+    var lastSigned = data.signed_documents[data.signed_documents.length - 1];
+    if(lastSigned && lastSigned.file_url) signedUrl = lastSigned.file_url;
+  }
+
+  var propertyTitle = data.property_title || "";
+  var isCounter = data.offer_kind === "controfferta";
   titleEl.textContent = (isCounter ? "Controfferta" : "Proposta d'Acquisto") + (propertyTitle ? " — " + propertyTitle : "");
-  descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
 
-  if(pdfUrl){
+  if(signedUrl && pdfUrl){
+    /* Entrambi presenti: la firmata come azione principale (è quella da leggere/controfirmare),
+       l'originale non firmato disponibile comunque come riferimento secondario. */
+    descEl.textContent = "Documento pronto per la consultazione.";
+    actionBox.innerHTML = '<div class="action-stack">'
+      + '<a class="btn" href="' + signedUrl + '" target="_blank" rel="noopener">Apri / Scarica la proposta firmata</a>'
+      + '<a class="btn secondary" href="' + pdfUrl + '" target="_blank" rel="noopener">Documento originale (non firmato)</a>'
+      + '</div>';
+  }else if(signedUrl){
+    descEl.textContent = "Documento pronto per la consultazione.";
+    actionBox.innerHTML = '<a class="btn" href="' + signedUrl + '" target="_blank" rel="noopener">Apri / Scarica la proposta firmata</a>';
+  }else if(pdfUrl){
+    descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
     actionBox.innerHTML = '<a class="btn" href="' + pdfUrl + '" target="_blank" rel="noopener">Apri / Scarica il PDF</a>';
   }else{
+    descEl.textContent = "Documento IMMONOVA pronto per la consultazione.";
     actionBox.innerHTML = '<span class="state error">PDF non ancora generato per questa proposta.</span>';
   }
 })();
