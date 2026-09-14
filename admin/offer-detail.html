@@ -84,6 +84,21 @@ input[type=file].hidden-input{display:none}
 .scan-upload-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid rgba(166,127,52,.15);border-radius:3px;padding:8px 10px;font-size:12px;color:#4a3c1f}
 .scan-upload-row img{width:36px;height:36px;object-fit:cover;border-radius:3px;background:#efe6d2}
 
+.offer-preview-overlay{position:fixed;inset:0;background:rgba(74,60,31,.55);z-index:60;display:flex;align-items:center;justify-content:center;padding:20px}
+.offer-preview-overlay[hidden]{display:none}
+.offer-preview-box{background:#fffaf0;border-radius:4px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto}
+.offer-preview-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(166,127,52,.18)}
+.offer-preview-head strong{font-size:13px;color:#4a3c1f}
+.offer-preview-close{background:none;border:none;font-size:22px;line-height:1;color:#8f7643;cursor:pointer}
+.offer-preview-body{padding:20px}
+.offer-preview-field{font-size:12.5px;color:#4a3c1f;margin-bottom:10px}
+.offer-preview-field b{color:#8f7643;font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:10.5px;display:block;margin-bottom:2px}
+.offer-preview-attach{font-size:12.5px;line-height:1.6;padding:10px 12px;border-radius:3px;margin-bottom:14px}
+.offer-preview-attach.ok{background:rgba(81,122,79,.1);color:#4f7f45;border:1px solid rgba(81,122,79,.3)}
+.offer-preview-attach.warn{background:rgba(166,100,52,.1);color:#a66434;border:1px solid rgba(166,100,52,.3)}
+.offer-preview-frame{width:100%;height:380px;border:1px solid rgba(166,127,52,.3);background:#fff}
+.offer-preview-actions{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid rgba(166,127,52,.18)}
+
 @media print{
   body *{visibility:hidden}
   .panel, .panel *{visibility:visible}
@@ -145,6 +160,26 @@ input[type=file].hidden-input{display:none}
         </div>
         <div id="scanSessionStatus" class="scan-session-status"></div>
         <div id="scanUploadsList" class="scan-uploads-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="offerPreviewOverlay" class="offer-preview-overlay" hidden>
+    <div class="offer-preview-box">
+      <div class="offer-preview-head">
+        <strong id="offerPreviewTitle">Anteprima invio</strong>
+        <button type="button" class="offer-preview-close" id="offerPreviewCloseBtn">&times;</button>
+      </div>
+      <div class="offer-preview-body">
+        <div class="offer-preview-field"><b>Destinatario</b><span id="offerPreviewTo"></span></div>
+        <div class="offer-preview-field"><b>Oggetto</b><span id="offerPreviewSubject"></span></div>
+        <div id="offerPreviewAttachNote" class="offer-preview-attach"></div>
+        <div class="offer-preview-field"><b>Anteprima email (esattamente quella che riceverà)</b></div>
+        <iframe id="offerPreviewFrame" class="offer-preview-frame" title="Anteprima email"></iframe>
+      </div>
+      <div class="offer-preview-actions">
+        <button type="button" class="btn secondary" id="offerPreviewCancelBtn">Annulla</button>
+        <button type="button" class="btn" id="offerPreviewConfirmBtn">Conferma e invia</button>
       </div>
     </div>
   </div>
@@ -721,17 +756,9 @@ document.getElementById("copyScanLinkBtn").addEventListener("click", async funct
   catch(e){ input.select(); document.execCommand("copy"); }
 });
 
-document.getElementById("sendToSellerBtn").addEventListener("click", async function(){
-  var btn = this;
+async function doSendToSeller(){
+  var btn = document.getElementById("sendToSellerBtn");
   var statusEl = document.getElementById("sellerStatus");
-  if(!currentOfferId){
-    statusEl.className = "seller-status error";
-    statusEl.textContent = "Proposta non ancora caricata.";
-    return;
-  }
-  var ok = confirm("Inviare la proposta" + ((currentOfferData.signed_documents||[]).length ? " (con il documento firmato allegato)" : "") + " via email al venditore?");
-  if(!ok) return;
-
   btn.disabled = true;
   statusEl.className = "seller-status";
   statusEl.textContent = "Invio in corso...";
@@ -758,6 +785,15 @@ document.getElementById("sendToSellerBtn").addEventListener("click", async funct
   }finally{
     btn.disabled = false;
   }
+}
+
+document.getElementById("sendToSellerBtn").addEventListener("click", function(){
+  if(!currentOfferId){
+    document.getElementById("sellerStatus").className = "seller-status error";
+    document.getElementById("sellerStatus").textContent = "Proposta non ancora caricata.";
+    return;
+  }
+  openOfferSendPreview("seller");
 });
 
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
@@ -1256,21 +1292,22 @@ function normalizeItalianPhoneForWhatsapp(raw){
 }
 
 document.getElementById("sendToBuyerBtn").addEventListener("click", async function(){
-  var btn = this;
-  var statusEl = document.getElementById("buyerStatus");
   if(!currentOfferId || !currentOfferData){
-    statusEl.className = "seller-status error";
-    statusEl.textContent = "Proposta non ancora caricata.";
+    document.getElementById("buyerStatus").className = "seller-status error";
+    document.getElementById("buyerStatus").textContent = "Proposta non ancora caricata.";
     return;
   }
   if(!currentOfferData.buyer_email){
-    statusEl.className = "seller-status error";
-    statusEl.textContent = "Nessuna email del proponente compilata su questa proposta: inseriscila nel form prima di inviare.";
+    document.getElementById("buyerStatus").className = "seller-status error";
+    document.getElementById("buyerStatus").textContent = "Nessuna email del proponente compilata su questa proposta: inseriscila nel form prima di inviare.";
     return;
   }
-  var ok = confirm("Inviare al proponente il link per firmare/scaricare la proposta (email" + (currentOfferData.buyer_phone ? " + WhatsApp" : ", nessun numero di telefono compilato per WhatsApp") + ")?");
-  if(!ok) return;
+  openOfferSendPreview("buyer");
+});
 
+async function doSendToBuyer(){
+  var btn = document.getElementById("sendToBuyerBtn");
+  var statusEl = document.getElementById("buyerStatus");
   btn.disabled = true;
   statusEl.className = "seller-status";
   statusEl.textContent = "Preparazione link in corso...";
@@ -1319,6 +1356,137 @@ document.getElementById("sendToBuyerBtn").addEventListener("click", async functi
   }finally{
     btn.disabled = false;
   }
+}
+
+/* ========================= Anteprima invio (venditore/proponente) =========================
+   Prima questi due invii partivano con un semplice confirm() generico, senza far vedere
+   destinatario/testo/link reali -- da qui il "manda una mail alla cieca" lamentato. Le funzioni
+   sotto ricostruiscono lato client LO STESSO HTML che generano le edge function
+   send-offer-to-seller / send-offer-to-buyer (stesse stringhe, stesso markup): se cambi il
+   testo di una email, cambialo anche qui, altrimenti l'anteprima mostra qualcosa di diverso
+   da quello che arriva davvero. */
+function offerPreviewImmonovaEmailHtml(title, innerHtml){
+  return ''
+    + '<div style="background:#f4ecdf;padding:40px 20px;font-family:\'Avenir Next\',\'Helvetica Neue\',Arial,sans-serif;">'
+      + '<div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid rgba(166,127,52,.25);">'
+        + '<div style="padding:36px 40px 24px;text-align:center;border-bottom:1px solid rgba(166,127,52,.15);">'
+          + '<div style="font-size:24px;font-weight:600;letter-spacing:.35em;color:#a67f34;">IMMONOVA</div>'
+          + '<div style="margin-top:8px;font-size:10px;font-weight:700;letter-spacing:.2em;color:#a58139;text-transform:uppercase;">Off Market &middot; Consulting</div>'
+        + '</div>'
+        + '<div style="padding:36px 40px;">'
+          + '<h1 style="margin:0 0 20px;font-size:19px;font-weight:400;color:#a67f34;">'+title+'</h1>'
+          + innerHtml
+        + '</div>'
+        + '<div style="padding:24px 40px;border-top:1px solid rgba(166,127,52,.15);text-align:center;">'
+          + '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;">IMMONOVA &middot; Off Market Consulting</div>'
+        + '</div>'
+      + '</div>'
+    + '</div>';
+}
+function buildSellerEmailPreview(o, opportunityTitle, shareUrl){
+  var isCounter = o.offer_kind === "controfferta";
+  var priceText = o.offered_price ? "€ " + Number(o.offered_price).toLocaleString("it-IT") : "";
+  var sellerName = [o.seller_first_name, o.seller_last_name].filter(Boolean).join(" ");
+  var buyerName = [o.buyer_first_name, o.buyer_last_name].filter(Boolean).join(" ");
+  var hasSignedDoc = Array.isArray(o.signed_documents) && o.signed_documents.length > 0;
+  var emailTitle = isCounter ? "Controfferta ricevuta" : "Proposta d'acquisto ricevuta";
+  var innerHtml =
+    '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f">' + (sellerName ? "Gentile " + escapeHTML(sellerName) + "," : "Gentile Cliente,") + '</p>'
+    + '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f">Le inoltriamo la ' + (isCounter ? "controfferta" : "proposta d'acquisto") + ' ricevuta per il Suo immobile:</p>'
+    + '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f"><strong>' + escapeHTML(opportunityTitle) + '</strong>'
+      + (priceText ? "<br>Prezzo offerto: " + escapeHTML(priceText) : "")
+      + (buyerName ? "<br>Proponente: " + escapeHTML(buyerName) : "") + '</p>'
+    + (hasSignedDoc ? '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f">In allegato al link trova anche la proposta firmata dal proponente.</p>' : "")
+    + '<p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#4a3c1f">Apra il link qui sotto per consultare e scaricare il documento completo, e proceda con la firma per accettazione quando è pronto/a:</p>'
+    + '<p style="margin:0 0 8px;text-align:center"><a href="' + escapeHTML(shareUrl) + '" style="display:inline-block;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:12px;letter-spacing:.1em;text-transform:uppercase;text-decoration:none;">Apri la proposta</a></p>'
+    + '<p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#8f7643;word-break:break-all">' + escapeHTML(shareUrl) + '</p>';
+  return { subject: emailTitle + ": " + opportunityTitle, html: offerPreviewImmonovaEmailHtml(emailTitle, innerHtml) };
+}
+function buildBuyerEmailPreview(o, opportunityTitle, shareUrl){
+  var isCounter = o.offer_kind === "controfferta";
+  var priceText = o.offered_price ? "€ " + Number(o.offered_price).toLocaleString("it-IT") : "";
+  var buyerName = [o.buyer_first_name, o.buyer_last_name].filter(Boolean).join(" ");
+  var emailTitle = isCounter ? "La tua controfferta è pronta da firmare" : "La tua proposta d'acquisto è pronta da firmare";
+  var innerHtml =
+    '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f">' + (buyerName ? "Gentile " + escapeHTML(buyerName) + "," : "Gentile Cliente,") + '</p>'
+    + '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f">Le inviamo la Sua ' + (isCounter ? "controfferta" : "proposta d'acquisto") + ' per:</p>'
+    + '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f"><strong>' + escapeHTML(opportunityTitle) + '</strong>'
+      + (priceText ? "<br>Prezzo proposto: " + escapeHTML(priceText) : "") + '</p>'
+    + '<p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#4a3c1f">Apra il link qui sotto per consultare e scaricare il documento, e proceda con la firma nel modo più comodo per Lei:</p>'
+    + '<p style="margin:0 0 8px;text-align:center"><a href="' + escapeHTML(shareUrl) + '" style="display:inline-block;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:12px;letter-spacing:.1em;text-transform:uppercase;text-decoration:none;">Apri e firma la proposta</a></p>'
+    + '<p style="margin:16px 0 24px;font-size:12px;line-height:1.6;color:#8f7643;word-break:break-all">' + escapeHTML(shareUrl) + '</p>'
+    + '<p style="margin:0 0 8px;font-size:14px;line-height:1.7;color:#4a3c1f;font-weight:600">Come firmare:</p>'
+    + '<p style="margin:0 0 8px;font-size:14px;line-height:1.7;color:#4a3c1f">1) Direttamente dallo smartphone: apra il link, tocchi il riquadro della firma e segua le istruzioni a schermo (verrà chiesto di ruotare il telefono e di indicare nome, cognome e data).</p>'
+    + '<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#4a3c1f">2) Oppure stampi il documento, lo firmi a mano e poi torni sullo stesso link: nella stessa pagina trova il pulsante per ricaricare la foto o la scansione del documento firmato, così la proposta risulta comunque registrata correttamente.</p>'
+    + '<p style="margin:0;font-size:13px;line-height:1.7;color:#8f7643">Per qualsiasi domanda restiamo a disposizione.</p>';
+  return { subject: emailTitle + ": " + opportunityTitle, html: offerPreviewImmonovaEmailHtml(emailTitle, innerHtml) };
+}
+
+var offerPreviewMode = null; // "seller" | "buyer"
+
+function openOfferSendPreview(mode){
+  if(!currentOfferId || !currentOfferData) return;
+  offerPreviewMode = mode;
+  var overlay = document.getElementById("offerPreviewOverlay");
+  var titleEl = document.getElementById("offerPreviewTitle");
+  var toEl = document.getElementById("offerPreviewTo");
+  var subjectEl = document.getElementById("offerPreviewSubject");
+  var attachNoteEl = document.getElementById("offerPreviewAttachNote");
+  var frame = document.getElementById("offerPreviewFrame");
+  var confirmBtn = document.getElementById("offerPreviewConfirmBtn");
+  var o = currentOfferData;
+  var opportunityTitle = currentPropertyTitle || "Immobile";
+
+  if(mode === "seller"){
+    titleEl.textContent = "Anteprima invio al venditore";
+    toEl.textContent = o.seller_email || "(nessuna email compilata)";
+    var sellerShareUrl = new URL("offer-share.html?offer_id=" + encodeURIComponent(currentOfferId), window.location.href).href;
+    var hasPdf = !!o.pdf_storage_path;
+    var hasSigned = Array.isArray(o.signed_documents) && o.signed_documents.length > 0;
+    if(hasPdf){
+      attachNoteEl.className = "offer-preview-attach ok";
+      attachNoteEl.textContent = "Aprendo il link, il venditore vedrà il PDF formale generato (ultimo \"Genera PDF\").";
+    }else if(hasSigned){
+      attachNoteEl.className = "offer-preview-attach ok";
+      attachNoteEl.textContent = "Nessun PDF formale generato: aprendo il link, il venditore vedrà la scansione/foto della proposta firmata caricata.";
+    }else{
+      attachNoteEl.className = "offer-preview-attach warn";
+      attachNoteEl.textContent = "ATTENZIONE: nessun PDF formale generato e nessuna scansione firmata caricata — il venditore vedrà \"PDF non ancora generato\", come nello screenshot. Genera il PDF o carica la scansione firmata prima di inviare.";
+    }
+    var builtSeller = buildSellerEmailPreview(o, opportunityTitle, sellerShareUrl);
+    subjectEl.textContent = builtSeller.subject;
+    frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">' + builtSeller.html + '</body></html>';
+    confirmBtn.disabled = !o.seller_email;
+  }else{
+    titleEl.textContent = "Anteprima invio al proponente";
+    toEl.textContent = o.buyer_email || "(nessuna email compilata)";
+    var buyerShareUrl = currentShareUrl || "https://[link-pdf-e-firma-generato-al-momento-dell-invio]";
+    if(currentShareUrl){
+      attachNoteEl.className = "offer-preview-attach ok";
+      attachNoteEl.textContent = "Verrà riusato l'ultimo link/PDF già generato in questa sessione.";
+    }else{
+      attachNoteEl.className = "offer-preview-attach warn";
+      attachNoteEl.textContent = "Nessun PDF ancora generato in questa sessione: al momento dell'invio ne verrà creato uno nuovo automaticamente (stesso comportamento di \"Genera PDF\") e il link qui sotto verrà sostituito con quello vero.";
+    }
+    var builtBuyer = buildBuyerEmailPreview(o, opportunityTitle, buyerShareUrl);
+    subjectEl.textContent = builtBuyer.subject;
+    frame.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">' + builtBuyer.html + '</body></html>';
+    confirmBtn.disabled = !o.buyer_email;
+  }
+
+  overlay.hidden = false;
+}
+function closeOfferSendPreview(){
+  document.getElementById("offerPreviewOverlay").hidden = true;
+  offerPreviewMode = null;
+}
+document.getElementById("offerPreviewCloseBtn").addEventListener("click", closeOfferSendPreview);
+document.getElementById("offerPreviewCancelBtn").addEventListener("click", closeOfferSendPreview);
+document.getElementById("offerPreviewConfirmBtn").addEventListener("click", function(){
+  var mode = offerPreviewMode;
+  closeOfferSendPreview();
+  if(mode === "seller") doSendToSeller();
+  else if(mode === "buyer") doSendToBuyer();
 });
 
 (async function init(){
