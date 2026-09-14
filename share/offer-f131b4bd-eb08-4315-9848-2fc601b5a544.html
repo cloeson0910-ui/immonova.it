@@ -6,26 +6,590 @@
 <meta name="description" content="Documento immobiliare IMMONOVA - Off Market Consulting.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Proposta d&#039;Acquisto - Locale Commerciale in Piazza Garibaldi - IMMONOVA">
-<meta property="og:description" content="Documento immobiliare IMMONOVA - Off Market Consulting. Apri per visualizzare e scaricare il PDF.">
+<meta property="og:description" content="Documento immobiliare IMMONOVA - Off Market Consulting. Apri per visualizzare, firmare o caricare la proposta firmata.">
 <meta property="og:image" content="https://immonova-consulting.it/immonova-logo-share-1200x630.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Proposta d&#039;Acquisto - Locale Commerciale in Piazza Garibaldi - IMMONOVA">
 <meta name="twitter:image" content="https://immonova-consulting.it/immonova-logo-share-1200x630.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{margin:0;font-family:'Avenir Next','Helvetica Neue',Arial,sans-serif;background:#f7f1e6;color:#4a3c1d;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;box-sizing:border-box}
-  .card{max-width:440px;width:100%;background:#fffaf0;border:1px solid rgba(166,127,52,.25);border-radius:4px;overflow:hidden;box-shadow:0 24px 60px rgba(127,100,48,.12);padding:28px;text-align:center}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Avenir Next','Helvetica Neue',Arial,sans-serif;background:#f7f1e6;color:#4a3c1d;min-height:100vh;padding:24px 16px}
+  .wrap{max-width:480px;margin:0 auto}
+  .card{background:#fffaf0;border:1px solid rgba(166,127,52,.25);border-radius:4px;overflow:hidden;box-shadow:0 24px 60px rgba(127,100,48,.12);padding:28px;text-align:center;margin-bottom:16px}
   .kicker{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;font-weight:600;margin:0 0 8px}
-  h1{font-size:20px;margin:0 0 18px;line-height:1.3}
-  a.btn{display:inline-block;padding:14px 22px;background:#a67f34;color:#fffaf0;text-decoration:none;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;border-radius:2px}
-  a.btn:hover{background:#8f6d2c}
+  h1{font-size:19px;margin:0 0 18px;line-height:1.3;font-weight:600}
+  h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#a67f34;margin:0 0 14px;font-weight:600}
+  a.btn, button.btn{display:inline-block;padding:14px 22px;background:#a67f34;color:#fffaf0;text-decoration:none;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;border-radius:2px;border:none;cursor:pointer;font-family:inherit}
+  a.btn:hover, button.btn:hover{background:#8f6d2c}
+  button.btn.secondary{background:#fffaf0;color:#a67f34;border:1px solid #a67f34}
+  button.btn.secondary:hover{background:rgba(166,127,52,.08)}
+  button.btn:disabled{opacity:.5;cursor:not-allowed}
+  .section{background:#fffaf0;border:1px solid rgba(166,127,52,.25);border-radius:4px;padding:24px;text-align:left;margin-bottom:16px}
+  .signer-toggle{display:flex;gap:8px;margin-bottom:16px}
+  .signer-toggle button{flex:1;padding:10px;border:1px solid rgba(166,127,52,.35);background:#fff;color:#7f6430;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;border-radius:2px;font-family:inherit}
+  .signer-toggle button.active{background:#a67f34;color:#fff;border-color:#a67f34}
+  .sig-pad-box{border:1.5px dashed rgba(166,127,52,.5);border-radius:3px;background:#fff;margin-bottom:10px}
+  canvas.sig-canvas{width:100%;height:170px;display:block;touch-action:none;cursor:crosshair}
+  .sig-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .sig-status{font-size:12px;color:#4f7f45;min-height:16px;margin-bottom:10px}
+  .sig-status.error{color:#9c2f2f}
+  .upload-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .hidden-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  .doc-list{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+  .doc-row{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid rgba(166,127,52,.2);border-radius:2px;padding:8px 10px;font-size:12.5px}
+  .doc-row a{color:#a67f34;text-decoration:none;font-weight:600}
+  .empty-note{font-size:12.5px;color:#8f7643}
+  .upload-status{font-size:12px;color:#4f7f45;margin-top:8px}
+  .upload-status.error{color:#9c2f2f}
+  .id-doc-block{margin:14px 0;padding:12px;border:1px dashed rgba(166,127,52,.4);border-radius:2px;background:#fffaf0}
+  .id-doc-label{font-size:12px;color:#4a3c1d;margin-bottom:8px;font-weight:600}
+  .id-doc-preview{margin-top:10px;font-size:12px;color:#4f7f45}
+  .id-doc-preview img{display:block;max-width:160px;max-height:110px;margin-top:6px;border:1px solid rgba(166,127,52,.3);border-radius:2px}
+  .footer-note{font-size:11px;color:#8f7643;text-align:center;line-height:1.6}
+
+  .sig-overlay{position:fixed;inset:0;height:100dvh;background:#f7f1e6;z-index:9999;overflow-y:auto;padding:16px}
+  .sig-overlay[hidden]{display:none}
+  .sig-overlay-inner{max-width:640px;margin:0 auto}
+  .rotate-prompt{min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;color:#4a3c1d}
+  .rotate-prompt .icon{font-size:40px}
+  .rotate-prompt[hidden]{display:none}
+  .sig-form-area[hidden]{display:none}
+  .sig-field-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .sig-field-row input[type="text"], .sig-field-row input[type="date"]{flex:1;min-width:180px;padding:11px 12px;border:1px solid rgba(166,127,52,.35);background:#fff;font-size:13px;color:#4a3c1d;font-family:inherit;border-radius:2px}
+  .sig-close-row{display:flex;justify-content:flex-end;margin-bottom:10px}
+  .sig-close-row button{background:none;border:none;color:#8f7643;font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit}
+  .sig-pad-back-row{margin-bottom:10px}
+  .sig-pad-back-row button{background:none;border:none;color:#8f7643;font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0}
+
+  .success-overlay{position:fixed;inset:0;height:100dvh;background:#f7f1e6;z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px}
+  .success-overlay[hidden]{display:none}
+  .success-card{max-width:440px;width:100%;background:#fffaf0;border:1px solid rgba(166,127,52,.25);border-radius:4px;box-shadow:0 24px 60px rgba(127,100,48,.12);padding:40px 32px;text-align:center}
+  .success-icon{width:56px;height:56px;border-radius:50%;background:rgba(79,127,69,.12);color:#4f7f45;font-size:28px;line-height:56px;margin:0 auto 18px}
+  .success-card h1{font-size:19px;margin:0 0 12px;color:#4a3c1d;font-weight:600}
+  .success-card p{font-size:13.5px;line-height:1.7;color:#5a4a2a;margin:0 0 6px}
+  .success-card .success-close-note{margin-top:18px;font-size:11.5px;color:#8f7643}
+  .saving-overlay{position:fixed;inset:0;height:100dvh;background:rgba(74,60,29,.55);z-index:10500;display:flex;align-items:center;justify-content:center;padding:24px}
+  .saving-overlay[hidden]{display:none}
+  .saving-card{max-width:340px;width:100%;background:#fffaf0;border:1px solid rgba(166,127,52,.3);border-radius:4px;box-shadow:0 24px 60px rgba(0,0,0,.25);padding:32px 28px;text-align:center}
+  .saving-spinner{width:38px;height:38px;margin:0 auto 16px;border:3px solid rgba(166,127,52,.25);border-top-color:#a67f34;border-radius:50%;animation:saving-spin .8s linear infinite}
+  @keyframes saving-spin{to{transform:rotate(360deg)}}
+  .saving-card p{margin:0 0 8px;font-size:14px;color:#4a3c1d;font-weight:600}
+  .saving-card .saving-note{margin-top:6px;font-size:11.5px;color:#8f7643;font-weight:400}
 </style>
 </head>
 <body>
+<div class="wrap">
   <div class="card">
     <p class="kicker">IMMONOVA - Off Market Consulting</p>
     <h1>Proposta d&#039;Acquisto - Locale Commerciale in Piazza Garibaldi</h1>
-    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/f131b4bd-eb08-4315-9848-2fc601b5a544/proposta-1789035179267.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
+    <a class="btn" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/offer-documents/pdf/f131b4bd-eb08-4315-9848-2fc601b5a544/proposta-1789374335503.pdf" target="_blank" rel="noopener">Apri / Scarica il PDF</a>
   </div>
+
+  <div class="section">
+    <h2>Firma la proposta</h2>
+    <p style="font-size:12.5px;line-height:1.6;margin:0 0 14px;color:#5a4a2a">Si apre a schermo intero: ti verrà chiesto di ruotare il telefono in orizzontale, di indicare chi firma e la data, prima di poter disegnare la firma.</p>
+    <button type="button" class="btn" id="openSigBtn">Firma la proposta</button>
+    <div class="sig-status" id="sigOutcomeStatus"></div>
+  </div>
+
+  <div class="section">
+    <h2>Carica la proposta firmata su carta</h2>
+    <p style="font-size:12.5px;line-height:1.6;margin:0 0 12px;color:#5a4a2a">In alternativa (o in aggiunta) alla firma sopra: carica la foto o la scansione della proposta firmata a mano.</p>
+    <div class="upload-actions">
+      <button type="button" class="btn secondary" id="uploadPcBtn">Carica da PC</button>
+      <button type="button" class="btn secondary" id="uploadCameraBtn">Scatta foto</button>
+    </div>
+    <input type="file" id="pcInput" class="hidden-input" accept="image/*,.pdf">
+    <input type="file" id="cameraInput" class="hidden-input" accept="image/*" capture="environment">
+    <div class="upload-status" id="uploadStatus"></div>
+    <div class="doc-list" id="docList"><div class="empty-note">Nessun documento caricato.</div></div>
+  </div>
+
+  <p class="footer-note">Documento riservato IMMONOVA — non condividere questo link con persone estranee alla trattativa.</p>
+</div>
+
+<div class="sig-overlay" id="sigOverlay" hidden>
+  <div class="sig-overlay-inner">
+    <div class="sig-close-row"><button type="button" id="sigCancelBtn">Chiudi senza firmare</button></div>
+
+    <!-- FASE 1 — dati del firmatario: schermo verticale, si scorre normalmente (nessuna
+         rotazione richiesta qui, serve solo per il riquadro della firma vera e propria). -->
+    <div class="sig-form-area" id="sigDetailsArea">
+      <h2>Firma la proposta</h2>
+      <div class="signer-toggle" id="signerToggle">
+        <button type="button" data-signer="buyer" class="active">Acquirente</button>
+        <button type="button" data-signer="seller">Venditore</button>
+      </div>
+      <div class="sig-field-row">
+        <input type="text" id="signerNameInput" placeholder="Nome e cognome di chi firma" autocomplete="name">
+        <input type="text" id="signerPlaceInput" placeholder="Luogo (es. Milano)" autocomplete="address-level2">
+        <input type="date" id="signerDateInput">
+      </div>
+      <div class="id-doc-block">
+        <div class="id-doc-label">Documento d'identità (fronte) — obbligatorio per verificare la firma</div>
+        <div class="upload-actions">
+          <button type="button" class="btn secondary" id="idDocCameraBtn">Scatta foto documento</button>
+          <button type="button" class="btn secondary" id="idDocPcBtn">Carica da PC</button>
+        </div>
+        <input type="file" id="idDocCameraInput" class="hidden-input" accept="image/*" capture="environment">
+        <input type="file" id="idDocPcInput" class="hidden-input" accept="image/*,.pdf">
+        <div class="id-doc-preview" id="idDocPreview" hidden></div>
+      </div>
+      <div class="sig-actions">
+        <button type="button" class="btn" id="goToSigPadBtn">Avanti: disegna la firma →</button>
+      </div>
+      <div class="sig-status" id="sigDetailsStatus"></div>
+    </div>
+
+    <!-- FASE 2 — firma vera e propria: qui serve davvero più spazio in larghezza, quindi
+         SOLO a questo punto si chiede di ruotare il telefono. -->
+    <div class="rotate-prompt" id="rotatePrompt" hidden>
+      <div class="icon">📱↻</div>
+      <div><strong>Ruota il telefono in orizzontale</strong><br>per firmare serve più spazio in larghezza.</div>
+    </div>
+
+    <div class="sig-form-area" id="sigPadArea" hidden>
+      <div class="sig-pad-back-row"><button type="button" id="backToDetailsBtn">← Rivedi i dati inseriti</button></div>
+      <div class="sig-pad-box">
+        <canvas class="sig-canvas" id="sigCanvas"></canvas>
+      </div>
+      <div class="sig-actions">
+        <button type="button" class="btn secondary" id="sigClearBtn">Cancella firma</button>
+        <button type="button" class="btn" id="sigConfirmBtn">Conferma firma</button>
+      </div>
+      <div class="sig-status" id="sigStatus"></div>
+    </div>
+  </div>
+</div>
+
+<div class="success-overlay" id="successOverlay" hidden>
+  <div class="success-card">
+    <p class="kicker">IMMONOVA - Off Market Consulting</p>
+    <div class="success-icon">✓</div>
+    <h1 id="successTitle">Complimenti per la firma!</h1>
+    <p id="successBody">La tua proposta è stata registrata correttamente.</p>
+    <p class="success-close-note">Puoi chiudere questa pagina.</p>
+  </div>
+</div>
+
+<div class="saving-overlay" id="savingOverlay" hidden>
+  <div class="saving-card">
+    <div class="saving-spinner"></div>
+    <p id="savingText">Attendi, salvataggio in corso...</p>
+    <p class="saving-note">Non chiudere la pagina né tornare indietro: l'operazione può richiedere qualche secondo.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var OFFER_ID = "f131b4bd-eb08-4315-9848-2fc601b5a544";
+  var TOKEN = "164e86df-88ab-4045-a661-e19b50b0a1f9";
+  var FUNCTIONS_BASE = "https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1";
+  var ACTIONS_URL = FUNCTIONS_BASE + "/offer-public-actions";
+
+  function escapeHTML(v){ return String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
+
+  async function callActionOnce(payload){
+    var res = await fetch(ACTIONS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.assign({ offer_id: OFFER_ID, token: TOKEN }, payload))
+    });
+    var body = null;
+    try{ body = await res.json(); }catch(e){}
+    if(!res.ok || !body || !body.success){
+      throw new Error((body && body.error) || "Operazione non riuscita.");
+    }
+    return body.data;
+  }
+
+  /* Un solo ritentativo automatico su errore di RETE (non su un errore applicativo tornato
+     dal server, che non cambierebbe ritentando): serve soprattutto su connessioni mobili
+     instabili, dove Safari su iPhone mostra "Load failed" per una singola richiesta caduta
+     senza che ci sia nulla di rotto lato server (verificato: la funzione risponde
+     correttamente quando la richiesta arriva). */
+  async function callAction(payload){
+    try{
+      return await callActionOnce(payload);
+    }catch(err){
+      var isNetworkError = err instanceof TypeError || /load failed|failed to fetch|network/i.test(String(err && err.message));
+      if(!isNetworkError) throw err;
+      await new Promise(function(r){ setTimeout(r, 1200); });
+      try{
+        return await callActionOnce(payload);
+      }catch(err2){
+        throw new Error("Connessione instabile, riprova (" + (err2 && err2.message ? err2.message : "operazione non riuscita") + ").");
+      }
+    }
+  }
+
+  function renderDocs(list){
+    var box = document.getElementById("docList");
+    list = Array.isArray(list) ? list : [];
+    if(!list.length){
+      box.innerHTML = '<div class="empty-note">Nessun documento caricato.</div>';
+      return;
+    }
+    box.innerHTML = list.map(function(d){
+      return '<div class="doc-row">📄 <a href="' + escapeHTML(d.file_url) + '" target="_blank" rel="noopener">' + escapeHTML(d.file_name || "documento firmato") + '</a></div>';
+    }).join("");
+  }
+
+  // Stato iniziale (documenti già caricati in precedenza, da eventuali visite passate) —
+  // recupera anche il nome dell'immobile, usato dopo nella pagina di conferma firma.
+  var PROPERTY_TITLE = "";
+  callAction({ action: "view" }).then(function(data){
+    if(data){
+      renderDocs(data.signed_documents);
+      PROPERTY_TITLE = data.property_title || "";
+    }
+  }).catch(function(){ /* silenzioso: la pagina resta comunque utilizzabile */ });
+
+  /* ---------------- Pad firma (pointer events: mouse + touch + penna) ---------------- */
+  var canvas = document.getElementById("sigCanvas");
+  var ctx = canvas.getContext("2d");
+  var drawing = false, hasStroke = false, last = null;
+  var currentSigner = "buyer";
+  var idDocFile = null; // File scelto (fotocamera o PC), obbligatorio per confermare la firma
+
+  var overlay = document.getElementById("sigOverlay");
+  var rotatePrompt = document.getElementById("rotatePrompt");
+  var sigDetailsArea = document.getElementById("sigDetailsArea");
+  var sigPadArea = document.getElementById("sigPadArea");
+  var nameInput = document.getElementById("signerNameInput");
+  var placeInput = document.getElementById("signerPlaceInput");
+  var dateInput = document.getElementById("signerDateInput");
+  // FASE 1 (dati: nome/luogo/data/documento d'identità) resta in verticale, si scorre
+  // normalmente — nessuna richiesta di ruotare il telefono. Solo alla FASE 2 (il riquadro
+  // della firma vera e propria, dove serve più spazio in larghezza) si chiede la rotazione.
+  var inPadPhase = false;
+
+  function isLandscape(){ return window.innerWidth > window.innerHeight; }
+
+  function resizeCanvas(){
+    // Limite a 2x: su iPhone devicePixelRatio è spesso 3, che su un canvas largo (orizzontale
+    // obbligatoria) produce un PNG inutilmente pesante da inviare su rete mobile — 2x resta
+    // più che nitido per una firma.
+    var ratio = Math.min(window.devicePixelRatio || 1, 2);
+    var rect = canvas.getBoundingClientRect();
+    if(rect.width < 1 || rect.height < 1) return;
+    var prevData = hasStroke ? canvas.toDataURL() : null;
+    canvas.width = Math.max(1, Math.round(rect.width * ratio));
+    canvas.height = Math.max(1, Math.round(rect.height * ratio));
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#3f321c";
+    if(prevData){
+      var img = new Image();
+      img.onload = function(){ ctx.drawImage(img, 0, 0, rect.width, rect.height); };
+      img.src = prevData;
+    }
+  }
+
+  function updateOrientationGate(){
+    // Il vincolo di orizzontale si applica SOLO alla fase 2 (pad di firma): la fase 1
+    // (dati) resta sempre visibile in verticale, indipendentemente dall'orientazione reale
+    // del telefono in quel momento.
+    if(overlay.hidden || !inPadPhase) return;
+    if(isLandscape()){
+      rotatePrompt.hidden = true;
+      sigPadArea.hidden = false;
+      resizeCanvas();
+    }else{
+      rotatePrompt.hidden = false;
+      sigPadArea.hidden = true;
+    }
+  }
+  window.addEventListener("resize", updateOrientationGate);
+  window.addEventListener("orientationchange", updateOrientationGate);
+
+  function openSigOverlay(){
+    overlay.hidden = false;
+    inPadPhase = false;
+    sigDetailsArea.hidden = false;
+    sigPadArea.hidden = true;
+    rotatePrompt.hidden = true;
+    document.getElementById("sigDetailsStatus").textContent = "";
+    document.getElementById("sigDetailsStatus").className = "sig-status";
+    document.getElementById("sigStatus").textContent = "";
+    document.getElementById("sigStatus").className = "sig-status";
+    // Fullscreen nativo: best effort, funziona su Android/Chrome, non su iOS Safari (che
+    // non lo supporta per elementi generici) — l'overlay a tutto viewport (position:fixed,
+    // 100dvh) copre comunque tutto lo schermo su ogni dispositivo, quindi l'aspetto "a
+    // tutto schermo" è garantito anche quando la vera Fullscreen API non è disponibile.
+    // NESSUN blocco di orientazione qui: la fase 1 (dati) va bene in verticale, si chiede
+    // di ruotare solo quando si passa davvero al riquadro della firma (goToSigPad sotto).
+    if(document.documentElement.requestFullscreen){
+      document.documentElement.requestFullscreen().catch(function(){});
+    }
+  }
+
+  function goToSigPad(){
+    inPadPhase = true;
+    sigDetailsArea.hidden = true;
+    // Solo ORA si chiede di ruotare il telefono: qui serve davvero più spazio in
+    // larghezza per disegnare la firma, non per compilare i campi di testo.
+    if(screen.orientation && screen.orientation.lock){
+      screen.orientation.lock("landscape").catch(function(){});
+    }
+    updateOrientationGate();
+  }
+
+  function backToDetails(){
+    inPadPhase = false;
+    rotatePrompt.hidden = true;
+    sigPadArea.hidden = true;
+    sigDetailsArea.hidden = false;
+    if(screen.orientation && screen.orientation.unlock){
+      try{ screen.orientation.unlock(); }catch(e){}
+    }
+  }
+
+  function closeSigOverlay(){
+    overlay.hidden = true;
+    inPadPhase = false;
+    if(document.fullscreenElement && document.exitFullscreen){
+      document.exitFullscreen().catch(function(){});
+    }
+    if(screen.orientation && screen.orientation.unlock){
+      try{ screen.orientation.unlock(); }catch(e){}
+    }
+  }
+
+  document.getElementById("openSigBtn").addEventListener("click", openSigOverlay);
+  document.getElementById("sigCancelBtn").addEventListener("click", closeSigOverlay);
+  document.getElementById("backToDetailsBtn").addEventListener("click", backToDetails);
+
+  /* Banner di attesa a tutto schermo durante il salvataggio (firma o documento caricato):
+     l'operazione (upload firma + upload documento identità + email di conferma) può
+     richiedere qualche secondo su rete mobile, e senza un avviso chiaro il cliente non
+     capisce se è ancora in corso o si è bloccato — richiesto esplicitamente. */
+  function showSavingOverlay(text){
+    document.getElementById("savingText").textContent = text || "Attendi, salvataggio in corso...";
+    document.getElementById("savingOverlay").hidden = false;
+  }
+  function hideSavingOverlay(){
+    document.getElementById("savingOverlay").hidden = true;
+  }
+
+  /* Pagina di ringraziamento a tutto schermo dopo la firma, in stile IMMONOVA — il cliente
+     capisce chiaramente che è tutto fatto e può chiudere il telefono/la pagina, invece di
+     restare sul modulo firma. */
+  function showSuccessScreen(kind){
+    closeSigOverlay();
+    var titleEl = document.getElementById("successTitle");
+    var bodyEl = document.getElementById("successBody");
+    var propertyPart = PROPERTY_TITLE ? (" per l'immobile " + PROPERTY_TITLE) : "";
+    if(kind === "upload"){
+      titleEl.textContent = "Documento ricevuto" + propertyPart + "!";
+      bodyEl.textContent = "Il documento è stato caricato correttamente sulla proposta. Puoi uscire da questa pagina.";
+    } else {
+      titleEl.textContent = "Complimenti per la tua firma" + propertyPart + "!";
+      bodyEl.textContent = "La tua proposta è stata registrata correttamente. Puoi uscire da questa pagina.";
+    }
+    document.getElementById("successOverlay").hidden = false;
+  }
+
+  function pointerPos(e){
+    var rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+  canvas.addEventListener("pointerdown", function(e){
+    drawing = true; hasStroke = true; last = pointerPos(e);
+    canvas.setPointerCapture(e.pointerId);
+    document.getElementById("sigStatus").textContent = "";
+    document.getElementById("sigStatus").className = "sig-status";
+  });
+  canvas.addEventListener("pointermove", function(e){
+    if(!drawing) return;
+    var p = pointerPos(e);
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last = p;
+  });
+  function endStroke(){ drawing = false; }
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointerleave", endStroke);
+  canvas.addEventListener("pointercancel", endStroke);
+
+  document.getElementById("sigClearBtn").addEventListener("click", function(){
+    var rect = canvas.getBoundingClientRect();
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    hasStroke = false;
+    document.getElementById("sigStatus").textContent = "";
+  });
+
+  function handleIdDocFile(file){
+    if(!file) return;
+    idDocFile = file;
+    var preview = document.getElementById("idDocPreview");
+    preview.hidden = false;
+    if(/^image\//.test(file.type || "")){
+      var reader = new FileReader();
+      reader.onload = function(){
+        preview.innerHTML = "Documento selezionato: " + escapeHTML(file.name || "foto") + '<br><img src="' + reader.result + '" alt="">';
+      };
+      reader.readAsDataURL(file);
+    }else{
+      preview.textContent = "Documento selezionato: " + (file.name || "file");
+    }
+  }
+  document.getElementById("idDocCameraBtn").addEventListener("click", function(){ document.getElementById("idDocCameraInput").click(); });
+  document.getElementById("idDocPcBtn").addEventListener("click", function(){ document.getElementById("idDocPcInput").click(); });
+  document.getElementById("idDocCameraInput").addEventListener("change", function(e){ handleIdDocFile(e.target.files && e.target.files[0]); });
+  document.getElementById("idDocPcInput").addEventListener("change", function(e){ handleIdDocFile(e.target.files && e.target.files[0]); });
+
+  document.getElementById("signerToggle").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-signer]");
+    if(!btn) return;
+    currentSigner = btn.getAttribute("data-signer");
+    Array.prototype.forEach.call(document.querySelectorAll("#signerToggle button"), function(b){
+      b.classList.toggle("active", b === btn);
+    });
+  });
+
+  // FASE 1 -> FASE 2: qui si validano nome/luogo/data/documento d'identità, tutti raccolti
+  // comodamente in verticale. Solo dopo si passa al riquadro della firma (che richiede di
+  // ruotare il telefono).
+  document.getElementById("goToSigPadBtn").addEventListener("click", function(){
+    var statusEl = document.getElementById("sigDetailsStatus");
+    var signerName = nameInput.value.trim();
+    var signerPlace = placeInput.value.trim();
+    var signerDate = dateInput.value; // input type="date" -> sempre "AAAA-MM-GG" o vuoto, scritta dal firmatario, mai automatica
+
+    if(!signerName){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Inserisci nome e cognome di chi firma.";
+      nameInput.focus();
+      return;
+    }
+    if(!signerPlace){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Inserisci il luogo della firma (come su un documento cartaceo, es. \"Fatto a Milano\").";
+      placeInput.focus();
+      return;
+    }
+    if(!signerDate){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Inserisci la data della firma.";
+      dateInput.focus();
+      return;
+    }
+    if(!idDocFile){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Carica una foto del documento d'identità (fronte): è obbligatorio per la verifica della firma.";
+      document.getElementById("idDocPreview").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    statusEl.className = "sig-status";
+    statusEl.textContent = "";
+    goToSigPad();
+  });
+
+  document.getElementById("sigConfirmBtn").addEventListener("click", async function(){
+    var statusEl = document.getElementById("sigStatus");
+    var signerName = nameInput.value.trim();
+    var signerPlace = placeInput.value.trim();
+    var signerDate = dateInput.value;
+
+    // Ricontrollo di sicurezza (già validati in fase 1, ma l'utente potrebbe tornare
+    // indietro con "Rivedi i dati" e svuotare un campo): non deve mai arrivare al server
+    // una richiesta incompleta.
+    if(!signerName || !signerPlace || !signerDate || !idDocFile){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Alcuni dati sono mancanti: torna indietro con \"Rivedi i dati inseriti\".";
+      return;
+    }
+    if(!hasStroke){
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Disegna la firma prima di confermare.";
+      return;
+    }
+
+    var btn = this;
+    btn.disabled = true;
+    statusEl.className = "sig-status";
+    statusEl.textContent = "";
+    showSavingOverlay("Attendi, salvataggio della firma in corso...");
+    try{
+      var idDocBase64 = await fileToBase64(idDocFile);
+      var data = await callAction({
+        action: "sign",
+        signer: currentSigner,
+        signature_data_url: canvas.toDataURL("image/png"),
+        signer_name: signerName,
+        signer_place: signerPlace,
+        signer_date: signerDate,
+        id_document_base64: idDocBase64,
+        id_document_mime_type: idDocFile.type || "image/jpeg"
+      });
+      if(data && data.signed_documents) renderDocs(data.signed_documents);
+      statusEl.className = "sig-status";
+      statusEl.textContent = "Firma registrata correttamente ✓";
+      hideSavingOverlay();
+      showSuccessScreen("sign");
+    }catch(err){
+      hideSavingOverlay();
+      statusEl.className = "sig-status error";
+      statusEl.textContent = "Errore: " + (err && err.message ? err.message : "operazione non riuscita.");
+    }
+    btn.disabled = false;
+  });
+
+  /* ---------------- Upload documento firmato (PC o fotocamera) ---------------- */
+  function fileToBase64(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){
+        var result = String(reader.result || "");
+        var idx = result.indexOf(",");
+        resolve(idx >= 0 ? result.slice(idx + 1) : result);
+      };
+      reader.onerror = function(){ reject(new Error("Lettura del file non riuscita.")); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleUpload(file, source){
+    var statusEl = document.getElementById("uploadStatus");
+    if(!file) return;
+    statusEl.className = "upload-status";
+    statusEl.textContent = "";
+    showSavingOverlay("Attendi, caricamento del documento in corso...");
+    try{
+      var base64 = await fileToBase64(file);
+      var data = await callAction({
+        action: "upload",
+        file_base64: base64,
+        file_name: file.name || "documento.jpg",
+        mime_type: file.type || "application/octet-stream",
+        source: source
+      });
+      renderDocs(data && data.signed_documents);
+      statusEl.className = "upload-status";
+      statusEl.textContent = "Documento caricato correttamente ✓";
+      hideSavingOverlay();
+      showSuccessScreen("upload");
+    }catch(err){
+      hideSavingOverlay();
+      statusEl.className = "upload-status error";
+      statusEl.textContent = "Errore: " + (err && err.message ? err.message : "operazione non riuscita.");
+    }
+  }
+
+  document.getElementById("uploadPcBtn").addEventListener("click", function(){ document.getElementById("pcInput").click(); });
+  document.getElementById("uploadCameraBtn").addEventListener("click", function(){ document.getElementById("cameraInput").click(); });
+  document.getElementById("pcInput").addEventListener("change", function(){
+    var f = this.files && this.files[0]; this.value = "";
+    handleUpload(f, "pc");
+  });
+  document.getElementById("cameraInput").addEventListener("change", function(){
+    var f = this.files && this.files[0]; this.value = "";
+    handleUpload(f, "smartphone");
+  });
+})();
+</script>
 </body>
 </html>
