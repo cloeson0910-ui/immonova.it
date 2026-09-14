@@ -1117,6 +1117,74 @@ function buildOfferPdf(o, opp, propertyTitle, propertyAddress, isCounter){
   return doc;
 }
 
+/* ====================== Allegare la scansione firmata al PDF ufficiale ======================
+   Prima la scansione/foto caricata (signed_documents) restava SEPARATA dal PDF ufficiale a
+   colori con intestazione IMMONOVA -- chi riceveva il PDF ufficiale non vedeva mai la firma
+   vera. Ora, ogni volta che si rigenera il PDF (pulsante "Genera PDF" / "Invia al proponente"),
+   le scansioni caricate come IMMAGINE (foto da smartphone o da PC) vengono aggiunte in coda
+   come pagine extra "ALLEGATO", cosi' il PDF che parte è uno solo, completo, con la prova della
+   firma dentro. LIMITE NOTO: se il file caricato è un PDF (non una foto), non viene unito qui
+   -- unire PDF dentro PDF richiederebbe una libreria in più (pdf-lib) non ancora inclusa nel
+   progetto; quel caso resta disponibile solo come link separato (vedi offer-share.html). */
+function fetchAsDataUrl(url){
+  return fetch(url).then(function(res){
+    if(!res.ok) throw new Error("Download scansione fallito (" + res.status + ")");
+    return res.blob();
+  }).then(function(blob){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){ resolve(reader.result); };
+      reader.onerror = function(){ reject(reader.error || new Error("Lettura file fallita")); };
+      reader.readAsDataURL(blob);
+    });
+  });
+}
+function getImageDims(dataUrl){
+  return new Promise(function(resolve, reject){
+    var img = new Image();
+    img.onload = function(){ resolve({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height }); };
+    img.onerror = function(){ reject(new Error("Immagine non leggibile")); };
+    img.src = dataUrl;
+  });
+}
+async function appendSignedScanPages(doc, signedDocuments){
+  var appended = 0;
+  if(!Array.isArray(signedDocuments) || !signedDocuments.length) return appended;
+  var pageWidth = doc.internal.pageSize.getWidth();
+  var pageHeight = doc.internal.pageSize.getHeight();
+  var margin = 30;
+  var labelH = 26;
+  var maxW = pageWidth - margin * 2;
+  var maxH = pageHeight - margin * 2 - labelH;
+
+  for(var i = 0; i < signedDocuments.length; i++){
+    var d = signedDocuments[i];
+    if(!d || !d.file_url) continue;
+    var isImage = d.mime_type && d.mime_type.indexOf("image/") === 0;
+    if(!isImage) continue; // PDF caricati: non uniti automaticamente, vedi commento sopra
+    try{
+      var dataUrl = await fetchAsDataUrl(d.file_url);
+      var dims = await getImageDims(dataUrl);
+      var scale = Math.min(maxW / dims.w, maxH / dims.h, 1);
+      var drawW = dims.w * scale, drawH = dims.h * scale;
+      var format = dataUrl.indexOf("data:image/png") === 0 ? "PNG" : "JPEG";
+
+      doc.addPage();
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor.apply(doc, PDF_GOLD);
+      doc.text("ALLEGATO — PROPOSTA FIRMATA" + (d.uploaded_at ? " (caricata il " + fmtDate(d.uploaded_at) + ")" : ""), margin, margin);
+      var x = margin + (maxW - drawW) / 2;
+      var y = margin + labelH + (maxH - drawH) / 2;
+      doc.addImage(dataUrl, format, x, y, drawW, drawH);
+      appended++;
+    }catch(imgErr){
+      console.error("Impossibile allegare la scansione firmata al PDF:", d.file_name, imgErr);
+    }
+  }
+  return appended;
+}
+
 // Estratta dal click handler di "Genera PDF (con link)" cosi' anche "Invia al proponente"
 // può generare/riusare lo stesso PDF+link senza duplicare tutta la logica. Ritorna
 // { publicUrl, shareUrl } quando riesce, null se fallisce (l'errore è già mostrato nel box).
@@ -1144,6 +1212,7 @@ async function generatePdfAndShareLink(awaitPublish){
 
   try{
     var doc = buildOfferPdf(currentOfferData, null, currentPropertyTitle, currentPropertyAddress, currentIsCounter);
+    var appendedScanCount = await appendSignedScanPages(doc, currentOfferData.signed_documents);
 
     var blob = doc.output("blob");
     /* Path SEMPRE nuovo (con timestamp): la versione precedente sovrascriveva sempre lo
@@ -1199,7 +1268,8 @@ async function generatePdfAndShareLink(awaitPublish){
 
     linkBox.className = "pdf-link-box visible";
     linkBox.style.color = "#4f7f45";
-    linkBox.innerHTML = "PDF generato correttamente — logo IMMONOVA su ogni pagina.<br>" +
+    linkBox.innerHTML = "PDF generato correttamente — logo IMMONOVA su ogni pagina" +
+      (appendedScanCount ? " (+ " + appendedScanCount + " pagina" + (appendedScanCount > 1 ? "e" : "") + " allegata" + (appendedScanCount > 1 ? "e" : "") + " con la proposta firmata)." : ".") + "<br>" +
       '<a href="' + publicUrl + '" target="_blank" rel="noopener">Apri il PDF direttamente</a>' +
       ' &nbsp;·&nbsp; ' +
       '<span id="shareLinkSlot"></span>';
@@ -1422,6 +1492,25 @@ function buildBuyerEmailPreview(o, opportunityTitle, shareUrl){
   return { subject: emailTitle + ": " + opportunityTitle, html: offerPreviewImmonovaEmailHtml(emailTitle, innerHtml) };
 }
 
+/* Confronta il timestamp nel nome del file PDF (pdf/<id>/proposta-<timestamp>.pdf, vedi
+   generatePdfAndShareLink) con la data di caricamento delle scansioni immagine più recenti:
+   se il PDF è più recente di tutte, è quasi certo che sia già stato generato DOPO di esse e
+   quindi le contenga già come pagine allegate (vedi appendSignedScanPages). Solo una stima
+   lato client per l'anteprima, non una verifica del contenuto vero del PDF. */
+function pdfLikelyIncludesScans(o){
+  if(!o.pdf_storage_path) return false;
+  var m = /proposta-(\d+)\.pdf$/.exec(o.pdf_storage_path);
+  if(!m) return false;
+  var pdfTs = Number(m[1]);
+  if(!pdfTs) return false;
+  var imageDocs = (o.signed_documents || []).filter(function(d){ return d && d.mime_type && d.mime_type.indexOf("image/") === 0; });
+  if(!imageDocs.length) return true; // nessuna scansione-immagine da allegare, non c'è nulla da perdere
+  return imageDocs.every(function(d){
+    var uploadedTs = d.uploaded_at ? new Date(d.uploaded_at).getTime() : 0;
+    return uploadedTs && uploadedTs <= pdfTs;
+  });
+}
+
 var offerPreviewMode = null; // "seller" | "buyer"
 
 function openOfferSendPreview(mode){
@@ -1443,12 +1532,19 @@ function openOfferSendPreview(mode){
     var sellerShareUrl = new URL("offer-share.html?offer_id=" + encodeURIComponent(currentOfferId), window.location.href).href;
     var hasPdf = !!o.pdf_storage_path;
     var hasSigned = Array.isArray(o.signed_documents) && o.signed_documents.length > 0;
-    if(hasPdf){
+    var pdfIncludesLatestScan = hasPdf && hasSigned && pdfLikelyIncludesScans(o);
+    if(hasSigned && hasPdf && pdfIncludesLatestScan){
       attachNoteEl.className = "offer-preview-attach ok";
-      attachNoteEl.textContent = "Aprendo il link, il venditore vedrà il PDF formale generato (ultimo \"Genera PDF\").";
+      attachNoteEl.textContent = "Aprendo il link, il venditore vedrà il PDF ufficiale IMMONOVA con la scansione della firma già allegata come pagina in fondo (generato dopo l'ultimo caricamento).";
+    }else if(hasSigned && hasPdf){
+      attachNoteEl.className = "offer-preview-attach warn";
+      attachNoteEl.textContent = "Il PDF ufficiale generato è precedente all'ultima scansione caricata, quindi non la contiene ancora — il venditore vedrà comunque la scansione come azione principale (link separato), ma se vuoi un unico PDF con tutto dentro premi di nuovo \"Genera PDF\" prima di inviare.";
     }else if(hasSigned){
       attachNoteEl.className = "offer-preview-attach ok";
-      attachNoteEl.textContent = "Nessun PDF formale generato: aprendo il link, il venditore vedrà la scansione/foto della proposta firmata caricata.";
+      attachNoteEl.textContent = "Aprendo il link, il venditore vedrà la scansione/foto della proposta firmata caricata.";
+    }else if(hasPdf){
+      attachNoteEl.className = "offer-preview-attach warn";
+      attachNoteEl.textContent = "ATTENZIONE: è stato generato solo il PDF formale non firmato, nessuna scansione firmata caricata — il venditore vedrà quello, non la firma. Se il proponente ha già firmato, carica la scansione prima di inviare.";
     }else{
       attachNoteEl.className = "offer-preview-attach warn";
       attachNoteEl.textContent = "ATTENZIONE: nessun PDF formale generato e nessuna scansione firmata caricata — il venditore vedrà \"PDF non ancora generato\", come nello screenshot. Genera il PDF o carica la scansione firmata prima di inviare.";
