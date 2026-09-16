@@ -2144,7 +2144,7 @@ function renderInvestmentThesisPage(){
     }else{
       paras.push(fmt(T.thesis_roi_only_line,{roi:percent(roi)}));
     }
-    paras.push(T.thesis_tax_disclaimer);
+    paras.push(thesisTaxDisclaimerText());
 
     /* Domanda turistica: quanti pernottamenti/anno servirebbero ALL'OCCUPAZIONE GIA' DICHIARATA
        (non a un'occupazione retro-calcolata per centrare un orizzonte a piacere), e che quota
@@ -2316,11 +2316,11 @@ function renderFinancialSnapshot(){
     leftColumn = scenarioBoxHTML(projs.min,T.scenario_min) + (projs.avg?scenarioBoxHTML(projs.avg,T.scenario_avg):"") + scenarioBoxHTML(projs.max,T.scenario_max);
     var minAdrVerified = projs.min && projs.min.adrVerified;
     if(isCommercial){
-      ruleNote = fmt(minAdrVerified ? T.rule_range_note_verified_commercial : T.rule_range_note_market_commercial,{tax:T.tax_disclaimer_short});
+      ruleNote = fmt(minAdrVerified ? T.rule_range_note_verified_commercial : T.rule_range_note_market_commercial,{tax:taxDisclaimerText()});
     }else{
       var occRef=(projs.min||projs.max);
       var occTpl = minAdrVerified ? T.rule_range_note_verified : T.rule_range_note_market;
-      ruleNote = fmt(occTpl,{occ:percent((occRef?occRef.occValue:0.5)*100),occLabel:(occRef&&occRef.occVerified)?T.occupancy_verified:T.occupancy_assumed,opex:percent((projs.opexRatio!=null?projs.opexRatio:getOpexRatio(getAssetUnits()))*100),tax:T.tax_disclaimer_short});
+      ruleNote = fmt(occTpl,{occ:percent((occRef?occRef.occValue:0.5)*100),occLabel:(occRef&&occRef.occVerified)?T.occupancy_verified:T.occupancy_assumed,opex:percent((projs.opexRatio!=null?projs.opexRatio:getOpexRatio(getAssetUnits()))*100),tax:taxDisclaimerText()});
     }
   }else{
     var headline=projs?(projs.mode==="range"?(projs.min||projs.max):projs.single):null;
@@ -2333,14 +2333,14 @@ function renderFinancialSnapshot(){
       var tag;
       if(projs.mode==="real"){
         tag="";
-        ruleNote=fmt(T.rule_real_note,{tax:T.tax_disclaimer_short});
+        ruleNote=fmt(T.rule_real_note,{tax:taxDisclaimerText()});
       }else{
         tag=headline.adrVerified?(isCommercial?T.tag_verified_rent:T.tag_verified_adr):T.tag_estimated;
         if(isCommercial){
-          ruleNote = fmt(headline.adrVerified ? T.rule_single_note_verified_commercial : T.rule_single_note_market_commercial,{tax:T.tax_disclaimer_short});
+          ruleNote = fmt(headline.adrVerified ? T.rule_single_note_verified_commercial : T.rule_single_note_market_commercial,{tax:taxDisclaimerText()});
         }else{
           var singleTpl = headline.adrVerified ? T.rule_single_note_verified : T.rule_single_note_market;
-          ruleNote = fmt(singleTpl,{occ:percent((headline.occValue||0.5)*100),occLabel:headline.occVerified?T.occupancy_verified:T.occupancy_assumed,opex:percent((headline.opexRatio!=null?headline.opexRatio:getOpexRatio(getAssetUnits()))*100),tax:T.tax_disclaimer_short});
+          ruleNote = fmt(singleTpl,{occ:percent((headline.occValue||0.5)*100),occLabel:headline.occVerified?T.occupancy_verified:T.occupancy_assumed,opex:percent((headline.opexRatio!=null?headline.opexRatio:getOpexRatio(getAssetUnits()))*100),tax:taxDisclaimerText()});
         }
       }
       leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_net_income)+tag+'</div><div class="metric-value">'+escapeHTML(euro(net))+'</div><div class="metric-note">'+escapeHTML(T.note_net_income)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_roi)+tag+'</div><div class="metric-value">'+escapeHTML(percent(roi))+'</div><div class="metric-note">'+escapeHTML(T.note_roi)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_breakeven)+tag+'</div><div class="metric-value">'+(breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+escapeHTML(T.years_suffix):escapeHTML(T.not_available_long))+'</div><div class="metric-note">'+escapeHTML(T.note_breakeven)+escapeHTML(breakEvenNote||"")+'.</div></div></div>';
@@ -3104,6 +3104,25 @@ function isHospitalityCategory(){
 function isFiscalLuxuryOverride(){
   return isLuxuryProperty() || isHospitalityCategory();
 }
+/* Break-even/cashflow al NETTO delle imposte per hotel/lusso: qui la forma giuridica NON è
+   più ambigua (isFiscalLuxuryOverride() nasconde già gli scenari da persona fisica, resta solo
+   societario S.r.l./Holding, IRES 24% + IRAP 3,9% = 27,9%), quindi si può applicare quell'unica
+   aliquota al flusso netto invece di lasciarlo lordo come per le altre categorie (dove il dossier
+   non conosce la forma giuridica dell'investitore e i valori restano volutamente LORDI). */
+var CORPORATE_TAX_RATE = 0.279;
+function applyCorporateTaxIfApplicable(net){
+  return isFiscalLuxuryOverride() ? net*(1-CORPORATE_TAX_RATE) : net;
+}
+function taxDisclaimerText(){
+  return isFiscalLuxuryOverride()
+    ? ' <strong>Valori NETTI: già al netto di IRES 24% + IRAP 3,9% (27,9%), l\'unica forma applicabile a una struttura alberghiera (Società di capitali/Holding).</strong>'
+    : T.tax_disclaimer_short;
+}
+function thesisTaxDisclaimerText(){
+  return isFiscalLuxuryOverride()
+    ? '<strong>ROI, Net Income e break-even qui sopra sono valori NETTI, già al netto di IRES 24% + IRAP 3,9% (27,9%) — l\'unica forma applicabile a una struttura alberghiera (Società di capitali/Holding).</strong>'
+    : T.thesis_tax_disclaimer;
+}
 function isLuxuryProperty(){
   var units=getAssetUnits();
   var f=buildFinance();
@@ -3137,7 +3156,7 @@ function computeBreakEvenYear(rows, total, baseRevenue, opexRatio){
   for(var y=startYear+1; y<=BREAK_EVEN_EXTRAPOLATION_CAP_YEARS; y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
     var costs = revenue*ratio;
-    var net = revenue-costs;
+    var net = applyCorporateTaxIfApplicable(revenue-costs);
     cum += net;
     if(cum>=total) return {year:y, extrapolated:true};
   }
@@ -3150,7 +3169,7 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
   for(var y=1;y<=15;y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
     var costs = revenue*ratio;
-    var net = revenue-costs;
+    var net = applyCorporateTaxIfApplicable(revenue-costs);
     cum+=net;
     rows.push({year:y,revenue:revenue,costs:costs,net:net,cum:cum});
   }

@@ -3029,6 +3029,25 @@ function isHospitalityCategory(){
 function isFiscalLuxuryOverride(){
   return isLuxuryProperty() || isHospitalityCategory();
 }
+/* Break-even/cashflow al NETTO delle imposte per hotel/lusso: qui la forma giuridica NON è
+   più ambigua (isFiscalLuxuryOverride() nasconde già gli scenari da persona fisica, resta solo
+   societario S.r.l./Holding, IRES 24% + IRAP 3,9% = 27,9%), quindi si può applicare quell'unica
+   aliquota al flusso netto invece di lasciarlo lordo come per le altre categorie (dove il dossier
+   non conosce la forma giuridica dell'investitore e i valori restano volutamente LORDI). */
+var CORPORATE_TAX_RATE = 0.279;
+function applyCorporateTaxIfApplicable(net){
+  return isFiscalLuxuryOverride() ? net*(1-CORPORATE_TAX_RATE) : net;
+}
+function taxDisclaimerText(){
+  return isFiscalLuxuryOverride()
+    ? ' <strong>Valori NETTI: già al netto di IRES 24% + IRAP 3,9% (27,9%), l\'unica forma applicabile a una struttura alberghiera (Società di capitali/Holding).</strong>'
+    : T.tax_disclaimer_short;
+}
+function thesisTaxDisclaimerText(){
+  return isFiscalLuxuryOverride()
+    ? '<strong>ROI, Net Income e break-even qui sopra sono valori NETTI, già al netto di IRES 24% + IRAP 3,9% (27,9%) — l\'unica forma applicabile a una struttura alberghiera (Società di capitali/Holding).</strong>'
+    : T.thesis_tax_disclaimer;
+}
 function isLuxuryProperty(){
   var units=getAssetUnits();
   var f=buildFinance();
@@ -3062,7 +3081,7 @@ function computeBreakEvenYear(rows, total, baseRevenue, opexRatio){
   for(var y=startYear+1; y<=BREAK_EVEN_EXTRAPOLATION_CAP_YEARS; y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
     var costs = revenue*ratio;
-    var net = revenue-costs;
+    var net = applyCorporateTaxIfApplicable(revenue-costs);
     cum += net;
     if(cum>=total) return {year:y, extrapolated:true};
   }
@@ -3075,7 +3094,7 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
   for(var y=1;y<=15;y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
     var costs = revenue*ratio;
-    var net = revenue-costs;
+    var net = applyCorporateTaxIfApplicable(revenue-costs);
     cum+=net;
     rows.push({year:y,revenue:revenue,costs:costs,net:net,cum:cum});
   }
