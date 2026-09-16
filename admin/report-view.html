@@ -480,6 +480,7 @@ var UI_STRINGS = {
   breakeven_estimated:"Rientro stimato all\u2019anno {year}, evidenziato in tabella.",
   breakeven_not_reached:"Non rientrato nemmeno in una proiezione estesa a 60 anni.",
   th_year:"Anno", th_revenue:"Ricavi", th_costs:"Costi", th_profit:"Utile", th_cumulative:"Cumulato",
+  th_profit_pretax:"Utile ante imposte", th_tax_amount:"Tasse (27,9%)", th_profit_net:"Utile netto",
   adr_verified_label:"ADR verificato dall\u2019analista", adr_market_label:"ADR di mercato",
   occupancy_verified:"verificata", occupancy_assumed:"assunta",
   units_label:" unit\u00e0", adr_min_label:"ADR minimo", adr_max_label:"ADR massimo", adr_single_label:"ADR unico",
@@ -3156,7 +3157,8 @@ function computeBreakEvenYear(rows, total, baseRevenue, opexRatio){
   for(var y=startYear+1; y<=BREAK_EVEN_EXTRAPOLATION_CAP_YEARS; y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
     var costs = revenue*ratio;
-    var net = applyCorporateTaxIfApplicable(revenue-costs);
+    var grossNet = revenue-costs;
+    var net = applyCorporateTaxIfApplicable(grossNet);
     cum += net;
     if(cum>=total) return {year:y, extrapolated:true};
   }
@@ -3169,9 +3171,11 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
   for(var y=1;y<=15;y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
     var costs = revenue*ratio;
-    var net = applyCorporateTaxIfApplicable(revenue-costs);
+    var grossNet = revenue-costs;
+    var net = applyCorporateTaxIfApplicable(grossNet);
+    var taxAmount = grossNet-net;
     cum+=net;
-    rows.push({year:y,revenue:revenue,costs:costs,net:net,cum:cum});
+    rows.push({year:y,revenue:revenue,costs:costs,grossNet:grossNet,tax:taxAmount,net:net,cum:cum});
   }
   var be=computeBreakEvenYear(rows, total, baseRevenue, ratio);
   return {rows:rows, revenueSource:revenueSource, adrVerified:adrVerified, total:total, breakEvenYear:be.year, breakEvenExtrapolated:be.extrapolated, opexRatio:ratio};
@@ -3251,9 +3255,11 @@ function renderCashflowPage(){
 
   function tableBlock(proj, heading){
     if(!proj) return "";
+    var withTax = isFiscalLuxuryOverride();
     var rows=proj.rows.map(function(r){
       var isBE = proj.breakEvenYear!=null && !proj.breakEvenExtrapolated && r.year===proj.breakEvenYear;
-      return '<tr'+(isBE?' class="be-row"':'')+'><td>'+r.year+(isBE?' \u2605':'')+'</td><td>'+escapeHTML(euro(r.revenue))+'</td><td>'+escapeHTML(euro(r.costs))+'</td><td>'+escapeHTML(euro(r.net))+'</td><td>'+escapeHTML(euro(r.cum))+'</td></tr>';
+      var taxCells = withTax ? ('<td>'+escapeHTML(euro(r.grossNet))+'</td><td>'+escapeHTML(euro(r.tax))+'</td>') : '';
+      return '<tr'+(isBE?' class="be-row"':'')+'><td>'+r.year+(isBE?' \u2605':'')+'</td><td>'+escapeHTML(euro(r.revenue))+'</td><td>'+escapeHTML(euro(r.costs))+'</td>'+taxCells+'<td>'+escapeHTML(euro(r.net))+'</td><td>'+escapeHTML(euro(r.cum))+'</td></tr>';
     }).join("");
     var breakEvenSentence;
     if(proj.breakEvenYear && proj.breakEvenExtrapolated){
@@ -3263,9 +3269,12 @@ function renderCashflowPage(){
     }else{
       breakEvenSentence = T.breakeven_not_reached;
     }
+    var headerCells = withTax
+      ? ('<th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_revenue)+'</th><th>'+escapeHTML(T.th_costs)+'</th><th>'+escapeHTML(T.th_profit_pretax)+'</th><th>'+escapeHTML(T.th_tax_amount)+'</th><th>'+escapeHTML(T.th_profit_net)+'</th><th>'+escapeHTML(T.th_cumulative)+'</th>')
+      : ('<th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_revenue)+'</th><th>'+escapeHTML(T.th_costs)+'</th><th>'+escapeHTML(T.th_profit)+'</th><th>'+escapeHTML(T.th_cumulative)+'</th>');
     return '<div class="merge-block"><div class="cost-title" style="margin-bottom:10px">'+escapeHTML(heading)+'</div>'
       +'<p class="info-text" style="margin-top:0">'+escapeHTML(T.revenue_year1_prefix)+escapeHTML(proj.revenueSource)+'. '+escapeHTML(breakEvenSentence)+'</p>'
-      +'<table class="cf-table"><thead><tr><th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_revenue)+'</th><th>'+escapeHTML(T.th_costs)+'</th><th>'+escapeHTML(T.th_profit)+'</th><th>'+escapeHTML(T.th_cumulative)+'</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+      +'<table class="cf-table"><thead><tr>'+headerCells+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
 
   var intro='<p class="info-text">'+escapeHTML(fmt(T.cashflow_intro,{growth:percent(CASHFLOW_ANNUAL_GROWTH*100),opex:percent((projs.opexRatio!=null?projs.opexRatio:getOpexRatio(getAssetUnits()))*100),total:euro(projs.total)}))+'</p>';
