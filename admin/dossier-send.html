@@ -415,6 +415,15 @@ var UI_STRINGS = {
   chapter_presentation:"Presentazione",
   chapter_financial:"Analisi finanziaria", chapter_property:"Immobile", chapter_territory:"Territorio & mercato",
   chapter_ecosystem:"Ecosistema & accessibilità", chapter_evaluation:"Valutazione IMMONOVA", chapter_sources:"Fonti & note",
+  kicker_air_traffic:"Private aviation", title_air_traffic:"Traffico Aereo Privato",
+  air_traffic_intro:"Rilevazioni cumulative di arrivi di jet privati sull'aeroporto piu' vicino, raccolte nel tempo da fonti aeronautiche pubbliche.",
+  air_traffic_total_prefix:"Arrivi jet privati rilevati nel periodo osservato: ",
+  air_traffic_national_title:"Arrivi nazionali", air_traffic_international_title:"Arrivi internazionali",
+  air_traffic_national_count_prefix:"Nazionali: ", air_traffic_international_count_prefix:"Internazionali: ",
+  air_traffic_window_prefix:"Finestra di osservazione: ",
+  air_traffic_model_col:"Modello aeromobile", air_traffic_registration_col:"Matricola", air_traffic_count_col:"Arrivi rilevati",
+  air_traffic_all_arrivals_line:"Arrivi totali registrati nel periodo (tutti i voli): {total}, di cui internazionali: {intl}.",
+  air_traffic_no_data:"Nessuna rilevazione di traffico aereo privato ancora disponibile per questa zona.",
   kicker_presentation:"Editorial overview", title_presentation:"Presentazione della Proposta",
   kicker_narrative_analysis:"Narrative analysis", title_narrative_analysis:"Analisi Narrativa",
   narrative_label_location:"Attrattività della zona", narrative_label_tourism:"Contesto turistico",
@@ -2125,6 +2134,89 @@ function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestme
 
   return rows.join("");
 }
+/* ---- Traffico aereo privato: aeroporto ICAO piu' vicino tra i principali italiani, dati
+   letti da dossierData.air_traffic (scritti dal Discovery Engine o dal pulsante "Aggiorna
+   traffico aereo" in report-view.html, entrambi via discovery-air-traffic, gratuita).
+   Portata qui da report-view.html: mancava in dossiersend.html, che ha una copia indipendente
+   del motore di rendering del dossier e non era stata allineata quando la pagina fu aggiunta. */
+var NEARBY_ICAO_AIRPORTS = [
+  {icao:"LIBR",name:"Brindisi",lat:40.6576,lon:17.9470},
+  {icao:"LIBD",name:"Bari",lat:41.1389,lon:16.7606},
+  {icao:"LIRA",name:"Roma Ciampino",lat:41.7994,lon:12.5949},
+  {icao:"LIRF",name:"Roma Fiumicino",lat:41.8003,lon:12.2389},
+  {icao:"LIML",name:"Milano Linate",lat:45.4451,lon:9.2767},
+  {icao:"LIMC",name:"Milano Malpensa",lat:45.6306,lon:8.7281},
+  {icao:"LIRN",name:"Napoli",lat:40.8860,lon:14.2908},
+  {icao:"LIRP",name:"Pisa",lat:43.6839,lon:10.3927},
+  {icao:"LIPZ",name:"Venezia",lat:45.5053,lon:12.3519},
+  {icao:"LIEO",name:"Olbia",lat:40.8987,lon:9.5176},
+  {icao:"LIEE",name:"Cagliari",lat:39.2515,lon:9.0543},
+  {icao:"LICJ",name:"Palermo",lat:38.1760,lon:13.1000},
+  {icao:"LICC",name:"Catania",lat:37.4668,lon:15.0664},
+  {icao:"LIMJ",name:"Genova",lat:44.4113,lon:8.8375}
+];
+function nearestIcaoAirport(lat,lon){
+  var la=Number(lat),lo=Number(lon);
+  if(!Number.isFinite(la)||!Number.isFinite(lo))return null;
+  var best=null,bestDist=Infinity;
+  NEARBY_ICAO_AIRPORTS.forEach(function(a){
+    var d=Math.pow(a.lat-la,2)+Math.pow(a.lon-lo,2);
+    if(d<bestDist){bestDist=d;best=a;}
+  });
+  return best;
+}
+/* Icona come carattere Unicode (non <svg>): html2canvas -- usato per catturare le pagine del
+   dossier quando si genera il PDF/link -- ha supporto inaffidabile per SVG inline in elementi
+   flessibili, stesso problema gia' avuto con i grafici a torta della domanda turistica. */
+var AIR_TRAFFIC_PLANE_ICON = '<span style="color:#a67f34;margin-right:6px">✈</span>';
+function groupAirTrafficByAircraft(jets){
+  var groups={};
+  (jets||[]).forEach(function(j){
+    var reg=clean(j&&j.registration)||"-";
+    var model=clean(j&&j.model)||"-";
+    var key=reg+"|"+model;
+    if(!groups[key]) groups[key]={model:model,registration:reg,count:0,is_international:!!(j&&j.is_international_guess)};
+    groups[key].count++;
+    if(j&&j.is_international_guess) groups[key].is_international=true;
+  });
+  var all=Object.keys(groups).map(function(k){return groups[k];}).sort(function(a,b){return b.count-a.count;});
+  return {
+    national:all.filter(function(r){return !r.is_international;}),
+    international:all.filter(function(r){return r.is_international;})
+  };
+}
+function airTrafficTableHTML(rows){
+  if(!rows.length) return "";
+  var body=rows.map(function(r){
+    return '<div class="source-row"><span>'+AIR_TRAFFIC_PLANE_ICON+escapeHTML(r.model)+'</span><span>'+escapeHTML(r.registration)+'</span><span>'+r.count+'</span></div>';
+  }).join("");
+  return '<div class="source-list" style="margin-top:10px"><div class="source-row"><span><strong>'+escapeHTML(T.air_traffic_model_col)+'</strong></span><span><strong>'+escapeHTML(T.air_traffic_registration_col)+'</strong></span><span><strong>'+escapeHTML(T.air_traffic_count_col)+'</strong></span></div>'+body+'</div>';
+}
+function renderAirTrafficPage(){
+  var d=dossierData||{};
+  var at=d.air_traffic;
+  if(!at || at.mode==="no_history_yet" || !(at.private_jet_arrivals_count>0)) return "";
+  var grouped=groupAirTrafficByAircraft(at.private_jet_arrivals);
+  var windowLabel="";
+  if(at.observed_from && at.observed_to){
+    var df=new Date(at.observed_from), dtn=new Date(at.observed_to);
+    if(!isNaN(df.getTime())&&!isNaN(dtn.getTime())){
+      windowLabel=df.toLocaleDateString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG)+" – "+dtn.toLocaleDateString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG);
+    }
+  }
+  var nationalCount=grouped.national.reduce(function(s,r){return s+r.count;},0);
+  var internationalCount=grouped.international.reduce(function(s,r){return s+r.count;},0);
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_air_traffic)+'</div><h2 class="section-title">'+escapeHTML(T.title_air_traffic)+'</h2><div class="lux-rule"></div>'
+    +'<p class="info-text">'+escapeHTML(T.air_traffic_intro)+'</p>'
+    +'<p class="info-text"><strong>'+escapeHTML(T.air_traffic_total_prefix)+String(at.private_jet_arrivals_count)+'</strong> ('+escapeHTML(T.air_traffic_national_count_prefix)+nationalCount+', '+escapeHTML(T.air_traffic_international_count_prefix)+internationalCount+')</p>'
+    +(at.total_arrivals_tracked>0?('<p class="info-text">'+escapeHTML(fmt(T.air_traffic_all_arrivals_line,{total:String(at.total_arrivals_tracked),intl:(at.international_arrivals_tracked>0?String(at.international_arrivals_tracked):T.not_available)}))+'</p>'):'')
+    +(windowLabel?('<p class="info-text">'+escapeHTML(T.air_traffic_window_prefix)+escapeHTML(windowLabel)+'</p>'):'')
+    +'<h3 style="font-size:13px;color:#8f7643;text-transform:uppercase;letter-spacing:.05em;margin-top:20px">'+escapeHTML(T.air_traffic_national_title)+'</h3>'
+    +(grouped.national.length?airTrafficTableHTML(grouped.national):'<p class="info-text">'+escapeHTML(T.air_traffic_no_data)+'</p>')
+    +'<h3 style="font-size:13px;color:#8f7643;text-transform:uppercase;letter-spacing:.05em;margin-top:24px">'+escapeHTML(T.air_traffic_international_title)+'</h3>'
+    +(grouped.international.length?airTrafficTableHTML(grouped.international):'<p class="info-text">'+escapeHTML(T.air_traffic_no_data)+'</p>')
+    +'</div></article>';
+}
 function renderFiscalScenariosPage(){
   var f = buildFinance();
   var projs = buildCashflowProjections();
@@ -2898,6 +2990,7 @@ function renderBook(){
   push(T.chapter_territory, renderMarketAndADRPage());
   push(T.chapter_territory, renderTourismSeriesPage());
   push(T.chapter_territory, renderTourismForecastPage());
+  push(T.chapter_territory, renderAirTrafficPage());
   push(T.chapter_territory, renderEnvironmentPage());
   renderAdPagesForPosition("after_territory").forEach(function(p){ push(T.chapter_territory, p.html, p.divider); });
 

@@ -2225,82 +2225,113 @@ function renderFinancialSnapshot(){
 
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_financial_core)+'</div><h2 class="section-title">'+escapeHTML(T.title_roi_breakeven)+'</h2><div class="lux-rule"></div><div class="financial-layout"><div>'+leftColumn+'</div><div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.calc_rule_title)+'</div><p class="info-text">'+ruleNote+'</p></div></div></div></div></article>';
 }
-/* ---- Scenari fiscali: impatto delle imposte sul reddito operativo per forma giuridica ----
-   Aliquote italiane 2026, applicate al ricavo lordo (ricavi anno 1 dello scenario ADR) e al
-   reddito netto operativo (ricavi-opex, gia' calcolato in buildCashflowProjections). Nessun
-   dato fiscale esisteva nel dossier prima d'ora: queste sono aliquote pubbliche standard, non
-   dati specifici dell'investitore -- per questo la pagina dichiara esplicitamente che e' una
-   simulazione indicativa da verificare con un commercialista, non consulenza fiscale personalizzata.
-   Basi imponibili:
-   - Cedolare secca (libero 21% / concordato 10%): sul canone LORDO, spese non deducibili.
-   - IRPEF ordinaria: su 95% del canone lordo (deduzione forfettaria 5%), aliquota marginale
-     dichiarata + addizionali regionali/comunali tipiche (~2 punti sopra la marginale nominale).
-   - Regime forfettario: non applicabile se i ricavi lordi superano la soglia 85.000 €/anno
-     (quasi sempre il caso per ricettività di questa scala).
-   - S.r.l. / Holding immobiliare: IRES 24% + IRAP 3,9% = 27,9% sul reddito netto operativo
-     (dopo l'opex, non sul lordo -- e' l'utile societario a essere tassato).
-   Il "netto dopo imposte" parte sempre dal reddito netto operativo gia' mostrato nella pagina
-   precedente e sottrae l'imposta calcolata sulla base pertinente; il break-even netto e'
-   Total Project Cost / netto dopo imposte (divisione semplice, senza la crescita 2%/anno usata
-   nella proiezione lorda -- coerente con l'approccio "simulazione indicativa" della pagina). */
-var TAX_SCENARIOS_IT_2026 = [
-  {label:"Persona fisica – Cedolare secca, canone libero (21%)", base:"gross", rate:0.21,
-    note:"Imposta calcolata sul canone lordo annuo ({revenue}): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile."},
-  {label:"Persona fisica – Cedolare secca, canone concordato (10%)", base:"gross", rate:0.10,
-    note:"Imposta calcolata sul canone lordo annuo ({revenue}): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile."},
-  {label:"Persona fisica – IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", base:"gross95", rate:0.25,
-    note:"Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione."},
-  {label:"Persona fisica – IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", base:"gross95", rate:0.45,
-    note:"Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione."},
-  {label:"Persona fisica – Regime forfettario", base:"forfettario", threshold:85000,
-    note:"Non applicabile: i ricavi lordi ({revenue}) superano la soglia di 85.000€/anno prevista per il regime forfettario."},
-  {label:"Società di capitali (S.r.l.) – IRES 24% + IRAP 3,9%", base:"net", rate:0.279,
-    note:"Canone soggetto a IVA solo se l’immobile è strumentale/commerciale e il locatore ha esercitato l’opzione per l’imponibilità (aliquota ordinaria 22%): di norma neutra per il locatore soggetto IVA, ma incide sugli adempimenti. Locazione abitativa: sempre esente/fuori campo IVA."},
-  {label:"Holding / Società immobiliare di gestione – IRES 24% + IRAP 3,9%", base:"net", rate:0.279,
-    note:"Reddito superiore al reddito minimo presunto: test di operatività superato, nessun rischio di maggiorazione da società di comodo. Vantaggio specifico: se la società ha patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL applicato invece a una S.r.l. operativa generica. Stesso trattamento IVA della S.r.l."}
-];
-function computeTaxScenarioRow(sc, grossRevenue, netOperatingIncome, totalCost){
-  var tax, netAfterTax, applicable=true;
-  if(sc.base==="gross"){ tax=grossRevenue*sc.rate; netAfterTax=netOperatingIncome-tax; }
-  else if(sc.base==="gross95"){ tax=grossRevenue*0.95*sc.rate; netAfterTax=netOperatingIncome-tax; }
-  else if(sc.base==="net"){ tax=netOperatingIncome*sc.rate; netAfterTax=netOperatingIncome-tax; }
-  else if(sc.base==="forfettario"){
-    if(grossRevenue>sc.threshold){ applicable=false; netAfterTax=null; }
-    else { tax=grossRevenue*0.86*0.15; netAfterTax=netOperatingIncome-tax; }
+/* ---- Scenari fiscali: portata pari-pari da dossiersend.html (il file "vero", che ha una
+   copia indipendente e piu' completa di questa logica -- forfettario 40% di coefficiente di
+   redditivita' su 2 aliquote (15% ordinaria / 5% primi 5 anni), test "societa' di comodo" per
+   la Holding basato sul 2,38% del prezzo di acquisto come reddito minimo presunto. La versione
+   che avevo ricostruito da zero qui usava un coefficiente forfettario sbagliato (86% invece di
+   40%) e non aveva il test di comodo: sostituita con l'originale. ---- */
+function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestment, isResidential, purchasePriceForComodoTest){
+  var rows = [];
+  function addRow(label, netAfterTax, note){
+    var breakEvenYears = (totalInvestment > 0 && netAfterTax > 0) ? totalInvestment / netAfterTax : null;
+    rows.push('<tr><td>' + escapeHTML(label) + (note ? '<br><span style="font-size:10.5px;color:#8f7643">' + escapeHTML(note) + '</span>' : '') + '</td><td>' + escapeHTML(euro(netAfterTax)) + '</td><td>' + (breakEvenYears ? escapeHTML(String(Math.round(breakEvenYears*10)/10)) + escapeHTML(T.years_suffix||" anni") : escapeHTML(T.not_available_long||"non disponibile")) + '</td></tr>');
   }
-  var breakEven = (applicable && netAfterTax>0 && totalCost>0) ? totalCost/netAfterTax : null;
-  return {label:sc.label, note:fmt(sc.note,{revenue:euro(grossRevenue)}), applicable:applicable, netAfterTax:netAfterTax, breakEven:breakEven};
-}
-function taxScenarioTableHTML(scenarioLabel, grossRevenue, netOperatingIncome, totalCost){
-  var rows=TAX_SCENARIOS_IT_2026.map(function(sc){
-    var r=computeTaxScenarioRow(sc, grossRevenue, netOperatingIncome, totalCost);
-    var netCell = r.applicable ? escapeHTML(euro(r.netAfterTax)) : "–";
-    var beCell = (r.applicable && r.breakEven!=null) ? escapeHTML((Math.round(r.breakEven*10)/10)+T.years_suffix) : "–";
-    return '<tr><td><strong>'+escapeHTML(r.label)+'</strong><br><span style="font-size:11.5px;color:'+(r.applicable?'#6f603f':'#a33')+'">'+escapeHTML(r.note)+'</span></td><td style="text-align:right;white-space:nowrap">'+netCell+'</td><td style="text-align:right;white-space:nowrap">'+beCell+'</td></tr>';
-  }).join("");
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tax_scenarios)+'</div><h2 class="section-title">'+escapeHTML(fmt(T.title_tax_scenarios,{scenario:scenarioLabel}))+'</h2><div class="lux-rule"></div>'
-    +'<p class="info-text" style="font-style:italic">'+escapeHTML(T.tax_scenarios_intro)+'</p>'
-    +'<table class="cf-table"><thead><tr><th>'+escapeHTML(T.th_tax_hypothesis)+'</th><th style="text-align:right">'+escapeHTML(T.th_net_after_tax)+'</th><th style="text-align:right">'+escapeHTML(T.th_breakeven_net)+'</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +'</div></article>';
-}
-function renderTaxScenariosPages(){
-  if(isCommercialCategory()||isLandCategory()) return [];
-  var f=buildFinance();
-  var projs=buildCashflowProjections();
-  if(!projs || projs.mode!=="range" && projs.mode!=="single") return [];
-  var scenarios=[];
-  if(projs.mode==="range"){
-    if(projs.min) scenarios.push({label:T.scenario_min, proj:projs.min});
-    if(projs.avg) scenarios.push({label:T.scenario_avg, proj:projs.avg});
-    if(projs.max) scenarios.push({label:T.scenario_max, proj:projs.max});
-  }else if(projs.single){
-    scenarios.push({label:T.scenario_adr, proj:projs.single});
+
+  var taxBase = grossRevenueYear1;
+  if(isResidential){
+    var cedolareLiberoImposta = taxBase * 0.21;
+    var cedolareConcordatoImposta = taxBase * 0.10;
+    addRow("Persona fisica — Cedolare secca, canone libero (21%)", grossNetIncome - cedolareLiberoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
+    addRow("Persona fisica — Cedolare secca, canone concordato (10%)", grossNetIncome - cedolareConcordatoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
   }
-  return scenarios.filter(function(s){return s.proj && s.proj.rows && s.proj.rows[0];}).map(function(s){
-    var y1=s.proj.rows[0];
-    return taxScenarioTableHTML(s.label, y1.revenue, y1.net, f.total);
+  var irpefBase = taxBase * 0.95;
+  var addizionaliPct = 0.02;
+  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", grossNetIncome - irpefBase * (0.23 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
+  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", grossNetIncome - irpefBase * (0.43 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
+
+  if(grossRevenueYear1 > 0){
+    if(grossRevenueYear1 > 85000){
+      rows.push('<tr><td>Persona fisica — Regime forfettario<br><span style="font-size:10.5px;color:#8f3f2d">Non applicabile: i ricavi lordi (' + escapeHTML(euro(grossRevenueYear1)) + ') superano la soglia di 85.000€/anno prevista per il regime forfettario.</span></td><td>—</td><td>—</td></tr>');
+    }else{
+      var forfCoefficiente = 0.40;
+      var forfImponibile = grossRevenueYear1 * forfCoefficiente;
+      var forfTaxOrdinario = forfImponibile * 0.15;
+      var forfTaxStartup = forfImponibile * 0.05;
+      var forfNetOrdinario = grossNetIncome - forfTaxOrdinario;
+      var forfNetStartup = grossNetIncome - forfTaxStartup;
+      addRow("Persona fisica — Regime forfettario, aliquota 15%", forfNetOrdinario, "Applicabile SOLO se l'attività è svolta in forma d'impresa (es. locazioni brevi/turistiche gestite professionalmente — dal 2026 presunzione d'impresa oltre 2 unità locate), non ai redditi da locazione ordinaria di un privato. Base imponibile stimata: 40% dei ricavi lordi (coefficiente indicativo per attività di alloggio, verificare il codice ATECO esatto con un commercialista). Regime in franchigia IVA.");
+      addRow("Persona fisica — Regime forfettario, aliquota 5% (primi 5 anni attività)", forfNetStartup, "Stesse condizioni di applicabilità della riga precedente, aliquota agevolata valida solo nei primi 5 anni di una nuova attività.");
+    }
+  }
+
+  var iresIrapTotalPct = 0.24 + 0.039;
+  var srlNet = grossNetIncome * (1 - iresIrapTotalPct);
+  addRow("Società di capitali (S.r.l.) — IRES 24% + IRAP 3,9%", srlNet, "Canone soggetto a IVA solo se l'immobile è strumentale/commerciale e il locatore ha esercitato l'opzione per l'imponibilità (aliquota ordinaria 22%): di norma neutra per il locatore soggetto IVA, ma incide sugli adempimenti. Locazione abitativa: sempre esente/fuori campo IVA.");
+
+  var holdingNote = "Stessa aliquota IRES+IRAP della S.r.l.";
+  if(purchasePriceForComodoTest){
+    var redditoMinimoPresunto = purchasePriceForComodoTest * 0.0238;
+    if(grossNetIncome < redditoMinimoPresunto){
+      var comodoTax = redditoMinimoPresunto * 0.345;
+      holdingNote = "Attenzione: il reddito risulta inferiore al reddito minimo presunto (" + euro(redditoMinimoPresunto) + ", 2,38% del prezzo di acquisto usato come proxy del valore immobile) — rischio \"società di comodo\", con maggiorazione IRES di 10,5 punti (34,5% sul reddito minimo presunto, imposta stimata " + euro(comodoTax) + " anziché sul reddito reale). Vantaggio in compenso: se la società ha davvero patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL. Stesso trattamento IVA della S.r.l. (esente, salvo opzione per l'imponibilità sugli immobili strumentali). Verificare con un commercialista.";
+    }else{
+      holdingNote = "Reddito superiore al reddito minimo presunto: test di operatività superato, nessun rischio di maggiorazione da società di comodo. Vantaggio specifico: se la società ha patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL applicato invece a una S.r.l. operativa generica. Stesso trattamento IVA della S.r.l.";
+    }
+  }
+  addRow("Holding / Società immobiliare di gestione — IRES 24% + IRAP 3,9%", srlNet, holdingNote);
+
+  return rows.join("");
+}
+function renderFiscalScenariosPage(){
+  var f = buildFinance();
+  var projs = buildCashflowProjections();
+  var isResidential = !isCommercialCategory();
+  var purchasePrice = f.purchase;
+  var tables = [];
+
+  if(projs && projs.mode === "range" && (projs.min || projs.max)){
+    [["Scenario minimo", projs.min],["Scenario medio", projs.avg],["Scenario massimo", projs.max]].forEach(function(pair){
+      if(!pair[1]) return;
+      var net = pair[1].rows[0].net;
+      var grossRev = pair[1].rows[0].revenue;
+      if(!(net > 0)) return;
+      tables.push({label: pair[0], html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice)});
+    });
+  }else{
+    var headline = projs ? (projs.mode === "range" ? (projs.min || projs.max) : projs.single) : null;
+    var net = headline ? headline.rows[0].net : f.net;
+    var grossRev = headline ? headline.rows[0].revenue : f.revenue;
+    if(net > 0){
+      tables.push({label: null, html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice)});
+    }
+  }
+
+  var ivaBoxHTML = '<div class="cost-box" style="margin-top:18px"><div class="cost-title">Nota IVA</div><p class="info-text" style="margin-top:0">Locazione a uso abitativo: sempre esente/fuori campo IVA, indipendentemente dal locatore. Locazione di immobile strumentale/commerciale da parte di un soggetto IVA (S.r.l., holding, o persona fisica con partita IVA in regime ordinario): esente IVA salvo opzione per l\'imponibilità (aliquota 22%) esercitata in contratto — se esercitata, l\'IVA è di norma neutra per il locatore (versata e recuperata sugli acquisti) ma va gestita negli adempimenti periodici. Regime forfettario: sempre in franchigia IVA, nessuna imposta addebitata né detratta.</p></div>';
+
+  if(!tables.length){
+    return ['<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto</h2><div class="lux-rule"></div><p class="info-text">Questa pagina non inventa scenari. Senza un reddito netto operativo disponibile (vedi sezione precedente), l\'impatto fiscale e il break-even netto restano esplicitamente non disponibili.</p></div></article>'];
+  }
+
+  /* Una tabella fiscale completa (7-8 righe, alcune con note su piu' righe) non entra insieme
+     ad altre nella stessa pagina fissa da 210mm senza sovrapporsi al footer: ogni scenario
+     riceve una pagina report-page dedicata, come le altre sezioni multi-scenario del dossier. */
+  var intro = '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>';
+
+  var pages = tables.map(function(t, idx){
+    var titleSuffix = t.label ? (' — ' + escapeHTML(t.label)) : '';
+    var tableHTML = '<table class="cf-table"><thead><tr><th>Ipotesi fiscale</th><th>Netto annuo dopo imposte</th><th>Break-even</th></tr></thead><tbody>' + t.html + '</tbody></table>';
+    var isLast = idx === tables.length - 1;
+    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">Scenari Fiscali</div><h2 class="section-title">Impatto Fiscale e Break-even Netto' + titleSuffix + '</h2><div class="lux-rule"></div>'
+      + (idx === 0 ? intro : '')
+      + tableHTML
+      + (isLast ? ivaBoxHTML : '')
+      + '</div></article>';
   });
+
+  return pages;
 }
+
 function renovationRatesJs(style, level){
   var rates = {
     conservativo:{ min:400, max:700 },
@@ -3134,7 +3165,13 @@ function nearestIcaoAirport(lat,lon){
   });
   return best;
 }
-var AIR_TRAFFIC_PLANE_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px;margin-right:6px;fill:#a67f34"><path d="M21 16v-2l-8-5V3.5C13 2.67 12.33 2 11.5 2S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.8V22l4-1 4 1v-1.2L13 19v-5.5z"/></svg>';
+/* v2: era un <svg> inline dentro un flex item (.source-row). html2canvas -- usato per
+   catturare le pagine del dossier quando si genera il link/PDF condivisibile -- ha un
+   supporto inaffidabile per gli SVG inline in certi contesti (stesso problema gia' avuto e
+   documentato con i grafici a torta della domanda turistica): la pagina rischia di risultare
+   vuota/mancante nel PDF pur essendo visibile correttamente nel dossier a schermo. Un
+   carattere Unicode colorato via CSS e' innocuo per html2canvas ed e' visivamente equivalente. */
+var AIR_TRAFFIC_PLANE_ICON = '<span style="color:#a67f34;margin-right:6px">✈</span>';
 function groupAirTrafficByAircraft(jets){
   var groups={};
   (jets||[]).forEach(function(j){
@@ -3287,7 +3324,7 @@ function renderBook(){
     push(T.chapter_financial, renderTourismDemandPage());
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderFinancialSnapshot());
-    renderTaxScenariosPages().forEach(function(p){ push(T.chapter_financial, p); });
+    renderFiscalScenariosPage().forEach(function(p){ push(T.chapter_financial, p); });
   }
 
   var ecoSections=[["hospitality",T.eco_hospitality,T.eco_hospitality_kicker],["restaurants",T.eco_restaurants,T.eco_restaurants_kicker],["beaches",T.eco_beaches,T.eco_beaches_kicker],["marinas",T.eco_marinas,T.eco_marinas_kicker],["heritage",T.eco_heritage,T.eco_heritage_kicker],["shopping",T.eco_shopping,T.eco_shopping_kicker],["nightlife",T.eco_nightlife,T.eco_nightlife_kicker]];
