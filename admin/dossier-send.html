@@ -486,6 +486,8 @@ var UI_STRINGS = {
   opex_breakdown_intro:"Voce per voce, cosa comprende il {opex} di costi operativi usato nelle proiezioni: stima calibrata su {tierLabel}, in base a benchmark di settore (property management, OTA, utenze, manutenzione, assicurazioni, fondo rinnovo arredi) — non un piano dei costi analitico redatto su misura per questo immobile specifico, ma un riferimento voce-per-voce, non una percentuale indistinta.",
   th_opex_item:"Voce di costo", th_opex_pct:"% sui ricavi", th_opex_amount:"Importo anno 1",
   opex_breakdown_total_row:"Totale costi operativi", opex_breakdown_source_note:"Fonti: attivita24.com (property management locazioni brevi, caso reale Milano), corahospitality.com (costi gestione B&B), bsness.com (redditività B&B Italia 2025), HotStats \"Europe Market Spotlight FY25\" (GOP margin hotel Europa), benchmark di settore FF&E reserve (3–6% dei ricavi). Non sostituisce un piano dei costi redatto su misura da un professionista per lo specifico immobile.",
+  opex_breakdown_source_note_hospitality:"",
+  opex_breakdown_source_note_luxury:"Fonti verificabili per il segmento lusso/fascia alta — Totale costi operativi 61,4% dei ricavi: HotelData.com, \"H1 2026 Hotel Profitability Report\" (pubblicato 20 agosto 2026), GOP margin chain scale \"Luxury\" 38,6% (100% − 38,6% = 61,4% di costi). Costo del personale 23% dei ricavi: HVS, \"Managing Hotel Labor Costs Today\" (hvs.com/article/10179) — costo del lavoro 30–45% dei costi operativi totali, punto medio applicato al 61,4% reale sopra. Fondo rinnovo arredi (FF&E) 5% dei ricavi: hoteldevelopmentguide.com, benchmark di settore 3–6% dei ricavi lordi annui. La riga \"Altri costi operativi\" è una quota residua (61,4% − 23% − 5%): non è stata reperita una fonte pubblica che scomponga distribuzione/OTA, utenze, manutenzione, marketing, assicurazioni e amministrazione voce per voce per il segmento lusso — dichiarato esplicitamente come tale, invece di stimare percentuali non verificabili per ciascuna voce. Non sostituisce un piano dei costi redatto su misura da un professionista per lo specifico immobile.",
   opex_breakdown_unavailable:"Piano dei costi analitico non disponibile: manca una proiezione ricavi/costi per questo immobile.",
   revenue_year1_prefix:"Ricavo anno 1: ",
   breakeven_estimated_extrapolated:"Rientro stimato all\u2019anno {year} \u2014 oltre l\u2019orizzonte di 15 anni mostrato in tabella, stessa formula di crescita.",
@@ -1164,6 +1166,115 @@ function renderPopulationCompositionPage(){
   var incomeHTML = comp.income_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_income_distribution||"Distribuzione economica")+'</h3>'+populationBracketBarsHTML(comp.income_distribution, incomeBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(comp.income_distribution.provider_name||"MEF - Dipartimento delle Finanze"))+'</p></div>' : "";
 
   return '<div class="section-kicker">'+escapeHTML(T.kicker_population||"Popolazione")+'</div><h2 class="section-title">'+escapeHTML(T.title_population_composition||"Composizione della Popolazione")+'</h2><div class="lux-rule"></div>'+ageHTML+incomeHTML;
+}
+
+/* ---- Applica gli override manuali ("Dati Verificati") al dossier GIA' salvato, GRATIS -----
+   Replica lato client la stessa logica di matching/merge di applyManualOverrides() dentro
+   l'edge function immonova-discovery-engine (a pagamento), ma legge la tabella
+   immonova_manual_overrides direttamente (RLS: consentito a qualsiasi utente autenticato) e
+   scrive il risultato nel dossier_data già in cache con persistDossierData() — senza mai
+   richiamare il Discovery Engine. Risolve il bug per cui un valore aggiornato nella sezione
+   "Dati Verificati" non compariva mai nel dossier finché non si rilanciava (a pagamento) tutto
+   il Discovery Engine. Viene richiamata automaticamente da init() ("Ricarica dati") ogni volta,
+   anche quando il dossier è già in cache (dossierSource==="report"). ---- */
+function normManualOverride(v){return String(v||"").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");}
+function scoreManualOverrideClient(row){
+  if(row.opportunity_id){
+    return (opportunityId && String(row.opportunity_id)===String(opportunityId)) ? 1000 : -1;
+  }
+  var score=0;
+  var ctxCountry=(opportunity&&opportunity.country_code)||"";
+  var ctxRegion=(opportunity&&opportunity.region)||"";
+  var ctxProvince=(opportunity&&opportunity.province)||"";
+  var ctxCity=(opportunity&&opportunity.city)||"";
+  var ctxMunicipality=(opportunity&&opportunity.municipality)||"";
+  if(row.country_code){
+    if(normManualOverride(row.country_code)!==normManualOverride(ctxCountry)) return -1;
+    score+=10;
+  }
+  if(row.region){
+    if(normManualOverride(row.region)!==normManualOverride(ctxRegion)) return -1;
+    score+=20;
+  }
+  if(row.province){
+    if(normManualOverride(row.province)!==normManualOverride(ctxProvince)) return -1;
+    score+=30;
+  }
+  if(row.city){
+    var city=normManualOverride(ctxCity||ctxMunicipality);
+    var municipality=normManualOverride(ctxMunicipality||ctxCity);
+    if(normManualOverride(row.city)!==city && normManualOverride(row.city)!==municipality) return -1;
+    score+=40;
+  }
+  return score;
+}
+async function applyManualOverridesClient(){
+  if(!dossierData) return false;
+  try{
+    var res=await client.from("immonova_manual_overrides").select("*").eq("active",true);
+    if(res.error){ console.error("Lettura immonova_manual_overrides fallita (override manuali non applicati):",res.error); return false; }
+    var rows=res.data||[];
+    if(!rows.length) return false;
+
+    var best={};
+    for(var i=0;i<rows.length;i++){
+      var row=rows[i];
+      var score=scoreManualOverrideClient(row);
+      if(score<0) continue;
+      var key=normManualOverride(row.category)+"|"+normManualOverride(row.field_key);
+      if(!best[key] || score>best[key].score) best[key]={row:row,score:score};
+    }
+    var keys=Object.keys(best);
+    if(!keys.length) return false;
+
+    var touchedCategories={};
+    var changed=false;
+    var yearNow=new Date().getFullYear();
+    for(var k=0;k<keys.length;k++){
+      var row2=best[keys[k]].row;
+      var cat=normManualOverride(row2.category);
+      if(!dossierData[cat]) dossierData[cat]={};
+      var metric={
+        value:Number(row2.value),
+        unit:row2.unit||"",
+        observation_year:row2.year||yearNow,
+        observation_period:row2.observation_period||String(row2.year||yearNow),
+        source:{
+          provider_name:"IMMONOVA Analyst Verified",
+          source_url:null,
+          endpoint_url:null,
+          retrieved_at:row2.created_at||new Date().toISOString(),
+          verified:true
+        },
+        coverage:{
+          requested_location:(opportunity&&(opportunity.municipality||opportunity.city))||"",
+          used_level:"manual_verified",
+          used_name:row2.city||row2.province||row2.region||row2.country_code||"",
+          fallback_from_requested:false,
+          evidence_role:"manual_override",
+          used_for_rating:true
+        },
+        quality:{confidence:.97,status:"verified_final",notes:row2.source_note||null}
+      };
+      var existing=dossierData[cat][row2.field_key];
+      var alreadyIdentical = existing && existing.value===metric.value && existing.source && existing.source.retrieved_at===metric.source.retrieved_at;
+      if(!alreadyIdentical) changed=true;
+      dossierData[cat][row2.field_key]=metric;
+      touchedCategories[cat]=true;
+    }
+    if(!changed) return false;
+    for(var catKey in touchedCategories){
+      var bucket=dossierData[catKey];
+      bucket.summary=Object.assign({},bucket.summary||{},{available:true,status:"verified_final",manual_override:true});
+    }
+    if(dossierData.adr) dossierData.adr=dossierData.adr;
+    if(dossierData.real_estate_market) dossierData.real_estate_market=dossierData.real_estate_market;
+    await persistDossierData(dossierData);
+    return true;
+  }catch(e){
+    console.error("Applicazione override manuali fallita (non bloccante):",e);
+    return false;
+  }
 }
 
 async function ensureDossier(){
@@ -2097,7 +2208,7 @@ function renderFinancialSnapshot(){
 /* ---- Scenari fiscali + break-even netto -- identico a report-view.html (stessa logica,
    coppia dossier stampabile/dossier per invio email, sempre aggiornate insieme). Vedi
    report-view.html per la nota completa sul perche' e sulle aliquote 2026 usate. ---- */
-function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestment, isResidential, purchasePriceForComodoTest){
+function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestment, isResidential, purchasePriceForComodoTest, isLuxury){
   var rows = [];
   function addRow(label, netAfterTax, note){
     var breakEvenYears = (totalInvestment > 0 && netAfterTax > 0) ? totalInvestment / netAfterTax : null;
@@ -2105,29 +2216,36 @@ function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestme
   }
 
   var taxBase = grossRevenueYear1;
-  if(isResidential){
-    var cedolareLiberoImposta = taxBase * 0.21;
-    var cedolareConcordatoImposta = taxBase * 0.10;
-    addRow("Persona fisica — Cedolare secca, canone libero (21%)", grossNetIncome - cedolareLiberoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
-    addRow("Persona fisica — Cedolare secca, canone concordato (10%)", grossNetIncome - cedolareConcordatoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
-  }
-  var irpefBase = taxBase * 0.95;
-  var addizionaliPct = 0.02;
-  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", grossNetIncome - irpefBase * (0.23 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
-  addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", grossNetIncome - irpefBase * (0.43 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
+  /* Per investimenti di fascia alta (isLuxuryProperty()) gli scenari fiscali per persona fisica
+     (cedolare secca, IRPEF ordinaria, regime forfettario) non vengono mostrati: sono scenari
+     realistici solo per un piccolo proprietario privato, non per un investimento di questa
+     taglia, dove il veicolo tipico e' una societa' di capitali o una holding immobiliare. Resta
+     solo lo scenario societario qui sotto. ALLINEATO manualmente a report-view.html. */
+  if(!isLuxury){
+    if(isResidential){
+      var cedolareLiberoImposta = taxBase * 0.21;
+      var cedolareConcordatoImposta = taxBase * 0.10;
+      addRow("Persona fisica — Cedolare secca, canone libero (21%)", grossNetIncome - cedolareLiberoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
+      addRow("Persona fisica — Cedolare secca, canone concordato (10%)", grossNetIncome - cedolareConcordatoImposta, "Imposta calcolata sul canone lordo annuo (" + escapeHTML(euro(taxBase)) + "): nella cedolare secca le spese di gestione non sono deducibili dalla base imponibile.");
+    }
+    var irpefBase = taxBase * 0.95;
+    var addizionaliPct = 0.02;
+    addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 23%+addizionali", grossNetIncome - irpefBase * (0.23 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
+    addRow("Persona fisica — IRPEF ordinaria, scenario aliquota marginale 43%+addizionali", grossNetIncome - irpefBase * (0.43 + addizionaliPct), "Base imponibile: 95% del canone lordo annuo (deduzione forfettaria 5%), non del reddito netto di gestione");
 
-  if(grossRevenueYear1 > 0){
-    if(grossRevenueYear1 > 85000){
-      rows.push('<tr><td>Persona fisica — Regime forfettario<br><span style="font-size:10.5px;color:#8f3f2d">Non applicabile: i ricavi lordi (' + escapeHTML(euro(grossRevenueYear1)) + ') superano la soglia di 85.000€/anno prevista per il regime forfettario.</span></td><td>—</td><td>—</td></tr>');
-    }else{
-      var forfCoefficiente = 0.40;
-      var forfImponibile = grossRevenueYear1 * forfCoefficiente;
-      var forfTaxOrdinario = forfImponibile * 0.15;
-      var forfTaxStartup = forfImponibile * 0.05;
-      var forfNetOrdinario = grossNetIncome - forfTaxOrdinario;
-      var forfNetStartup = grossNetIncome - forfTaxStartup;
-      addRow("Persona fisica — Regime forfettario, aliquota 15%", forfNetOrdinario, "Applicabile SOLO se l'attività è svolta in forma d'impresa (es. locazioni brevi/turistiche gestite professionalmente — dal 2026 presunzione d'impresa oltre 2 unità locate), non ai redditi da locazione ordinaria di un privato. Base imponibile stimata: 40% dei ricavi lordi (coefficiente indicativo per attività di alloggio, verificare il codice ATECO esatto con un commercialista). Regime in franchigia IVA.");
-      addRow("Persona fisica — Regime forfettario, aliquota 5% (primi 5 anni attività)", forfNetStartup, "Stesse condizioni di applicabilità della riga precedente, aliquota agevolata valida solo nei primi 5 anni di una nuova attività.");
+    if(grossRevenueYear1 > 0){
+      if(grossRevenueYear1 > 85000){
+        rows.push('<tr><td>Persona fisica — Regime forfettario<br><span style="font-size:10.5px;color:#8f3f2d">Non applicabile: i ricavi lordi (' + escapeHTML(euro(grossRevenueYear1)) + ') superano la soglia di 85.000€/anno prevista per il regime forfettario.</span></td><td>—</td><td>—</td></tr>');
+      }else{
+        var forfCoefficiente = 0.40;
+        var forfImponibile = grossRevenueYear1 * forfCoefficiente;
+        var forfTaxOrdinario = forfImponibile * 0.15;
+        var forfTaxStartup = forfImponibile * 0.05;
+        var forfNetOrdinario = grossNetIncome - forfTaxOrdinario;
+        var forfNetStartup = grossNetIncome - forfTaxStartup;
+        addRow("Persona fisica — Regime forfettario, aliquota 15%", forfNetOrdinario, "Applicabile SOLO se l'attività è svolta in forma d'impresa (es. locazioni brevi/turistiche gestite professionalmente — dal 2026 presunzione d'impresa oltre 2 unità locate), non ai redditi da locazione ordinaria di un privato. Base imponibile stimata: 40% dei ricavi lordi (coefficiente indicativo per attività di alloggio, verificare il codice ATECO esatto con un commercialista). Regime in franchigia IVA.");
+        addRow("Persona fisica — Regime forfettario, aliquota 5% (primi 5 anni attività)", forfNetStartup, "Stesse condizioni di applicabilità della riga precedente, aliquota agevolata valida solo nei primi 5 anni di una nuova attività.");
+      }
     }
   }
 
@@ -2237,6 +2355,7 @@ function renderFiscalScenariosPage(){
   var projs = buildCashflowProjections();
   var isResidential = !isCommercialCategory();
   var purchasePrice = f.purchase;
+  var isLuxury = isFiscalLuxuryOverride();
   var tables = [];
 
   if(projs && projs.mode === "range" && (projs.min || projs.max)){
@@ -2245,14 +2364,14 @@ function renderFiscalScenariosPage(){
       var net = pair[1].rows[0].net;
       var grossRev = pair[1].rows[0].revenue;
       if(!(net > 0)) return;
-      tables.push({label: pair[0], html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice)});
+      tables.push({label: pair[0], html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice, isLuxury)});
     });
   }else{
     var headline = projs ? (projs.mode === "range" ? (projs.min || projs.max) : projs.single) : null;
     var net = headline ? headline.rows[0].net : f.net;
     var grossRev = headline ? headline.rows[0].revenue : f.revenue;
     if(net > 0){
-      tables.push({label: null, html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice)});
+      tables.push({label: null, html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice, isLuxury)});
     }
   }
 
@@ -2265,7 +2384,8 @@ function renderFiscalScenariosPage(){
   /* Una tabella fiscale completa (7-8 righe, alcune con note su piu' righe) non entra insieme
      ad altre nella stessa pagina fissa da 210mm senza sovrapporsi al footer: ogni scenario
      riceve una pagina report-page dedicata, come le altre sezioni multi-scenario del dossier. */
-  var intro = '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>';
+  var intro = '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>'
+    + (isLuxury ? '<p class="info-text" style="font-style:italic;margin-bottom:16px">'+(isHospitalityCategory()?'Trattandosi di una struttura alberghiera (Hotel/Resort), si mostra solo lo scenario societario (S.r.l./Holding): il veicolo tipicamente utilizzato per la gestione di un hotel, a differenza degli scenari da proprietario privato (cedolare secca, IRPEF, regime forfettario) pensati per locazioni di piccola scala e non applicabili in modo credibile a un\'attività alberghiera strutturata.':'Per un investimento di questa fascia (ADR elevato, investimento complessivo rilevante o grande dimensione) si mostra solo lo scenario societario (S.r.l./Holding): il veicolo tipicamente utilizzato per acquisizioni alberghiere di questo valore, a differenza degli scenari da proprietario privato (cedolare secca, IRPEF, regime forfettario) mostrati per investimenti di taglia minore.')+'</p>' : '');
 
   var pages = tables.map(function(t, idx){
     var titleSuffix = t.label ? (' — ' + escapeHTML(t.label)) : '';
@@ -2846,9 +2966,71 @@ var OPEX_COST_STRUCTURE = {
       {label:"Amministrazione e contabilità", pct:0.03},
       {label:"Fondo rinnovo arredi e manutenzione straordinaria (FF&E)", pct:0.05}
     ]
+  },
+  /* Taglio "lusso": non basato sul numero di camere (un boutique hotel di lusso spesso ne ha
+     poche) ma su ADR elevato, investimento rilevante o dimensione molto grande (isLuxuryProperty()
+     qui sotto). RIVISTO: la versione precedente aveva percentuali per singola voce calibrate
+     qualitativamente (non da una tabella pubblicata), giustamente contestate dall'utente. Qui
+     sotto solo numeri con una fonte pubblica reale e verificabile dietro, non stime a sensazione:
+     - TOTALE costi operativi 61,4% dei ricavi (= 100% - 38,6% di GOP margin): HotelData.com,
+       "H1 2026 Hotel Profitability Report" (hoteldata.com/reports/h1-2026-profit-report/,
+       pubblicato 20 agosto 2026) -- GOP margin per chain scale "Luxury" H1 2026 = 38,6% dei
+       ricavi (in crescita dal 34,6% di H1 2025). E' un dato USA aggregato per chain scale, non
+       specifico Italia/boutique, ma e' l'unico dato di GOP segmentato per fascia lusso reperito
+       con fonte e data verificabili.
+     - Costo del personale 23% dei ricavi: HVS, "Managing Hotel Labor Costs Today"
+       (hvs.com/article/10179) afferma che il costo del lavoro rappresenta il 30-45% dei COSTI
+       OPERATIVI TOTALI di un hotel (non specifico per il segmento lusso, non ripartito per
+       chain scale). Applicando quel range al totale reale sopra (61,4%): 30-45% x 61,4% =
+       18,4%-27,6% dei ricavi; qui si usa il punto medio (23%) come singolo valore per la tabella.
+     - Fondo rinnovo arredi (FF&E reserve) 5% dei ricavi: benchmark di settore citato da
+       hoteldevelopmentguide.com ("Hotel CapEx and FF&E Reserve"), range 3-6% dei ricavi lordi
+       annui usato nei contratti di gestione alberghiera -- qui il punto medio-alto (5%).
+     - Tutto il resto (distribuzione/OTA e canali specializzati, utenze, manutenzione,
+       consumabili/F&B, marketing, assicurazioni, sistema antincendio, software gestionale,
+       amministrazione) NON ha una fonte pubblica che lo scomponga voce per voce per il segmento
+       lusso: invece di inventare percentuali per ciascuna voce, resta come UNICA riga residua
+       (61,4% - 23% - 5% = 33,4%), dichiarata esplicitamente come tale nella tabella e nella nota
+       fonti -- non scomposta ulteriormente perche' non ho trovato dati pubblici per farlo.
+     ALLINEATO manualmente a report-view.html. */
+  luxury:{
+    tierLabel:"Hotel/struttura di fascia alta (ADR elevato, investimento rilevante o grande dimensione)", unitsMax:Infinity,
+    items:[
+      {label:"Costo del personale (punto medio del range 30–45% dei costi operativi totali, HVS — applicato al totale reale sotto)", pct:0.23},
+      {label:"Fondo rinnovo arredi e manutenzione straordinaria (FF&E reserve, benchmark di settore 3–6% dei ricavi)", pct:0.05},
+      {label:"Altri costi operativi — distribuzione/OTA e canali specializzati, utenze, manutenzione, consumabili/F&B, marketing, assicurazioni, sistema antincendio, software, amministrazione (quota residua: nessuna fonte pubblica la scompone voce per voce per il segmento lusso)", pct:0.334}
+    ]
   }
 };
+/* Rileva se la struttura rientra nel segmento "lusso/fascia alta": non solo camere (un boutique
+   hotel di lusso puo' averne poche), ma anche ADR elevato o investimento complessivo rilevante.
+   Soglie indicative, non normative: ADR >= 350€/notte, oppure Total Project Cost >= 3.000.000€,
+   oppure 30+ camere/unità. ALLINEATO manualmente a report-view.html. */
+/* Categoria dichiarata in fase di creazione dell'opportunità come "Hotel" o "Resort":
+   una struttura ricettiva di questo tipo NON può essere gestita fiscalmente come persona
+   fisica/B&B (cedolare secca, regime forfettario) — un hotel/resort con fatturato importante
+   richiede comunque una società di capitali, indipendentemente da ADR/investimento/camere.
+   Per questo motivo va SEMPRE trattata come isLuxuryProperty() ai fini SOLO fiscali, anche
+   quando non supera le soglie dimensionali che selezionano il taglio "lusso" del piano dei
+   costi (quello resta scelto solo da isLuxuryProperty()/numero camere, invariato). */
+function isHospitalityCategory(){
+  var c=String(getCategory()||"").toLowerCase();
+  return c.indexOf("hotel")>=0 || c.indexOf("resort")>=0;
+}
+function isFiscalLuxuryOverride(){
+  return isLuxuryProperty() || isHospitalityCategory();
+}
+function isLuxuryProperty(){
+  var units=getAssetUnits();
+  var f=buildFinance();
+  var adrMax=metricFromDossier("adr","average_daily_rate_max");
+  var adrSingle=metricFromDossier("adr","average_daily_rate");
+  var adrMin=metricFromDossier("adr","average_daily_rate_min");
+  var adrValue=(adrMax&&adrMax.value)||(adrSingle&&adrSingle.value)||(adrMin&&adrMin.value)||0;
+  return (adrValue>=350) || (f.total>=3000000) || (units>=30);
+}
 function getOpexTierKey(units){
+  if(isLuxuryProperty()) return "luxury";
   var u=Number(units)||1;
   if(u<=OPEX_COST_STRUCTURE.small.unitsMax) return "small";
   if(u<=OPEX_COST_STRUCTURE.mid.unitsMax) return "mid";
@@ -3023,10 +3205,11 @@ function renderOpexBreakdownPage(){
   }).join("");
   var totalRow='<tr class="be-row"><td><strong>'+escapeHTML(T.opex_breakdown_total_row)+'</strong></td><td><strong>'+escapeHTML(percent(breakdown.totalRatio*100))+'</strong></td><td><strong>'+escapeHTML(euro(revenueYear1*breakdown.totalRatio))+'</strong></td></tr>';
   var intro=fmt(T.opex_breakdown_intro,{opex:percent(breakdown.totalRatio*100),tierLabel:breakdown.tierLabel});
+  var sourceNote = breakdown.tierKey==="luxury" ? T.opex_breakdown_source_note_luxury : (isHospitalityCategory() ? T.opex_breakdown_source_note_hospitality : T.opex_breakdown_source_note);
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_opex_breakdown)+'</div><h2 class="section-title">'+escapeHTML(T.title_opex_breakdown)+'</h2><div class="lux-rule"></div>'
     +'<p class="info-text">'+escapeHTML(intro)+'</p>'
     +'<table class="cf-table"><thead><tr><th>'+escapeHTML(T.th_opex_item)+'</th><th>'+escapeHTML(T.th_opex_pct)+'</th><th>'+escapeHTML(T.th_opex_amount)+'</th></tr></thead><tbody>'+rows+totalRow+'</tbody></table>'
-    +'<p class="info-text">'+escapeHTML(T.opex_breakdown_source_note)+'</p>'
+    +(sourceNote?('<p class="info-text">'+escapeHTML(sourceNote)+'</p>'):'')
     +'</div></article>';
 }
 
@@ -4018,6 +4201,10 @@ async function init(){
     destinationPhotoIndex = 0;
     await ensureDossier();
     if(dossierCancelledByUser) return; // Annulla premuto: redirect già in corso, non disegnare nulla.
+    var manualOverridesChanged=false;
+    if(dossierData && !dossierData._no_territorial_data){
+      manualOverridesChanged=await applyManualOverridesClient();
+    }
     await ensurePopulationComposition();
     setStatus("Preparazione documenti per la stampa (rasterizzazione PDF in corso se presenti)...","");
     preparedDocumentPages = await renderDocumentsPages();
@@ -4025,10 +4212,11 @@ async function init(){
     var srcNote=dossierSource==="report"?"dati territoriali dal report salvato":dossierSource==="live"?"dati territoriali recuperati in tempo reale dal Discovery Engine":"nessun dato territoriale disponibile";
     var photoNote=destinationPhotos.length?(destinationPhotos.length+" foto destinazione trovat"+(destinationPhotos.length===1?"a":"e")+(destinationPhotos.length>1?", mostrate a rotazione tra le pagine divisorie":""))
       :"nessuna foto destinazione caricata per questa zona — pagine divisorie mostrate con il pattern grafico IMMONOVA";
+    var overrideNote=manualOverridesChanged?" Dati verificati aggiornati applicati al dossier.":"";
     if(lastPersistError){
       setStatus("ATTENZIONE: dossier generato e mostrato correttamente, MA il salvataggio su database è FALLITO — alla prossima apertura verrà richiesto di nuovo al Discovery Engine (altro costo). Causa: "+lastPersistError,"error");
     }else{
-      setStatus("Dossier generato: "+srcNote+"; "+photoNote+". Nessun rating o testo inventato: solo dati reali e calcoli espliciti.","success");
+      setStatus("Dossier generato: "+srcNote+"; "+photoNote+"."+overrideNote+" Nessun rating o testo inventato: solo dati reali e calcoli espliciti.","success");
     }
   }catch(e){
     console.error(e);
