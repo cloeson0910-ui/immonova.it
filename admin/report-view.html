@@ -398,6 +398,14 @@ var UI_STRINGS = {
   divider_evaluation_title:"Valutazione IMMONOVA", divider_evaluation_kicker:"Analytical assessment",
   divider_sources_title:"Fonti & Note", divider_sources_kicker:"Sources & disclaimer",
   kicker_internal_financial:"Internal financial base", title_internal_financial:"Dati economici interni",
+  kicker_room_kpi:"Hospitality benchmarks", title_room_kpi:"Costi & Ricavi per Camera",
+  room_kpi_intro:"Indicatori standard del settore alberghiero, calcolati dividendo i valori economici del progetto per il numero di camere — permettono un confronto immediato con i benchmark di settore.",
+  room_kpi_rooms_prefix:"Numero camere considerate: ",
+  label_cost_per_key:"Cost per Key", note_cost_per_key:"Investimento totale (Total Project Cost) diviso il numero di camere — indicatore standard per confrontare il costo di sviluppo con altri progetti alberghieri.",
+  label_opex_per_room:"OPEX / camera / anno", note_opex_per_room:"Costi operativi annui divisi il numero di camere.",
+  label_revenue_per_room:"Ricavi / camera / anno", note_revenue_per_room:"Ricavi annui lordi divisi il numero di camere.",
+  label_gop_per_room:"GOP / camera / anno", note_gop_per_room:"Gross Operating Profit (reddito netto operativo) annuo diviso il numero di camere — equivalente al GOPPAR su base annua anziché giornaliera.",
+  room_kpi_no_rooms:"Numero di camere non disponibile per questo immobile: impossibile calcolare gli indicatori per camera.",
   label_purchase_price:"Prezzo acquisto", note_purchase_price:"Dato opportunità / report interno.",
   label_total_acquisition:"Totale acquisizione", note_total_acquisition:"Prezzo + imposte + notaio + agenzia + due diligence.",
   label_total_development:"Totale sviluppo", note_total_development:"Ristrutturazione + tecnici + FF&E + marketing + contingency.",
@@ -2031,6 +2039,28 @@ function scenarioBoxHTML(proj,label){
     +'<div class="cost-row" style="border-bottom:0"><span>'+escapeHTML(T.label_breakeven)+'</span><strong>'+escapeHTML(beText)+'</strong></div>'
     +'</div>';
 }
+function renderRoomKpiPage(){
+  var o=opportunity||{};
+  var rooms=Number(o.bedrooms);
+  var f=buildFinance();
+  if(!Number.isFinite(rooms) || rooms<=0) return "";
+  var costPerKey = f.total>0 ? f.total/rooms : null;
+  var opexPerRoom = f.costs>0 ? f.costs/rooms : null;
+  var revenuePerRoom = f.revenue>0 ? f.revenue/rooms : null;
+  var gopPerRoom = f.net ? f.net/rooms : null;
+  function card(label,value,note){
+    return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+(value!=null?escapeHTML(euro(value)):escapeHTML(T.not_available))+'</div><div class="metric-note">'+escapeHTML(note)+'</div></div>';
+  }
+  var cards = card(T.label_cost_per_key,costPerKey,T.note_cost_per_key)
+    + card(T.label_opex_per_room,opexPerRoom,T.note_opex_per_room)
+    + card(T.label_revenue_per_room,revenuePerRoom,T.note_revenue_per_room)
+    + card(T.label_gop_per_room,gopPerRoom,T.note_gop_per_room);
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_room_kpi)+'</div><h2 class="section-title">'+escapeHTML(T.title_room_kpi)+'</h2><div class="lux-rule"></div>'
+    +'<p class="info-text">'+escapeHTML(T.room_kpi_intro)+'</p>'
+    +'<p class="info-text"><strong>'+escapeHTML(T.room_kpi_rooms_prefix)+String(rooms)+'</strong></p>'
+    +'<div class="metric-grid">'+cards+'</div>'
+    +'</div></article>';
+}
 function renderFinancialSnapshot(){
   var f=buildFinance();
   var projs=buildCashflowProjections();
@@ -3053,6 +3083,7 @@ function renderBook(){
     renderAdPagesForPosition("before_financial","after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider, true); });
     push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
     push(T.chapter_financial, renderInternalFacts());
+    push(T.chapter_financial, renderRoomKpiPage());
     push(T.chapter_financial, renderInvestmentStructure());
     push(T.chapter_financial, renderTourismDemandPage());
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
