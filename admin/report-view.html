@@ -2045,9 +2045,24 @@ function renderRoomKpiPage(){
   var f=buildFinance();
   if(!Number.isFinite(rooms) || rooms<=0) return "";
   var costPerKey = f.total>0 ? f.total/rooms : null;
-  var opexPerRoom = f.costs>0 ? f.costs/rooms : null;
-  var revenuePerRoom = f.revenue>0 ? f.revenue/rooms : null;
-  var gopPerRoom = f.net ? f.net/rooms : null;
+  /* Ricavi/costi/net annui: la pagina "Analisi finanziaria" (renderFinancialSnapshot) non li
+     legge da buildFinance() -- li ricava da buildCashflowProjections(), che calcola i ricavi
+     dall'ADR verificato dall'analista (o dal canone commerciale, o dal dato reale interno) e
+     proietta costi/net sull'anno 1. Qui riusiamo la stessa fonte, cosi' i valori "per camera"
+     restano coerenti con quelli gia' mostrati nel dossier invece di risultare "Non disponibile"
+     ogni volta che l'opportunity non ha annual_revenue_estimate/annual_cost_estimate popolati
+     in DB (la maggioranza dei casi: la stima passa per l'ADR, non per quei campi). */
+  var projs=buildCashflowProjections();
+  var headline=null;
+  if(projs){
+    headline = projs.mode==="range" ? (projs.avg || projs.min || projs.max) : projs.single;
+  }
+  var revenueYear1 = headline ? headline.rows[0].revenue : (f.revenue>0?f.revenue:null);
+  var costsYear1 = headline ? headline.rows[0].costs : (f.costs>0?f.costs:null);
+  var netYear1 = headline ? headline.rows[0].net : (f.net?f.net:null);
+  var opexPerRoom = costsYear1>0 ? costsYear1/rooms : null;
+  var revenuePerRoom = revenueYear1>0 ? revenueYear1/rooms : null;
+  var gopPerRoom = (netYear1!=null && netYear1!==0) ? netYear1/rooms : null;
   function card(label,value,note){
     return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+(value!=null?escapeHTML(euro(value)):escapeHTML(T.not_available))+'</div><div class="metric-note">'+escapeHTML(note)+'</div></div>';
   }
