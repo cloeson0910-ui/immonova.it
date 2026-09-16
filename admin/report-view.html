@@ -505,9 +505,10 @@ var UI_STRINGS = {
   kicker_air_traffic:"Private aviation", title_air_traffic:"Traffico Aereo Privato",
   air_traffic_intro:"Rilevazioni cumulative di arrivi di jet privati sull'aeroporto piu' vicino, raccolte nel tempo da fonti aeronautiche pubbliche.",
   air_traffic_total_prefix:"Arrivi jet privati rilevati nel periodo osservato: ",
-  air_traffic_intl_suffix:" di cui internazionali.",
+  air_traffic_national_title:"Arrivi nazionali", air_traffic_international_title:"Arrivi internazionali",
+  air_traffic_national_count_prefix:"Nazionali: ", air_traffic_international_count_prefix:"Internazionali: ",
   air_traffic_window_prefix:"Finestra di osservazione: ",
-  air_traffic_model_col:"Modello aeromobile", air_traffic_count_col:"Arrivi rilevati",
+  air_traffic_model_col:"Modello aeromobile", air_traffic_registration_col:"Matricola", air_traffic_count_col:"Arrivi rilevati",
   air_traffic_no_data:"Nessuna rilevazione di traffico aereo privato ancora disponibile per questa zona.",
   air_traffic_refresh_btn:"Aggiorna traffico aereo", air_traffic_refresh_confirm:"Aggiorna la sezione traffico aereo privato con i dati piu' recenti raccolti (operazione gratuita, non richiama il Discovery Engine a pagamento). Procedere?",
   air_traffic_refresh_done:"Traffico aereo aggiornato e salvato.", air_traffic_refresh_none:"Nessun aeroporto di riferimento trovato o nessun dato disponibile.",
@@ -2905,20 +2906,35 @@ function nearestIcaoAirport(lat,lon){
   });
   return best;
 }
-function groupAirTrafficByModel(jets){
-  var counts={};
+var AIR_TRAFFIC_PLANE_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px;margin-right:6px;fill:#a67f34"><path d="M21 16v-2l-8-5V3.5C13 2.67 12.33 2 11.5 2S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2.5 1.8V22l4-1 4 1v-1.2L13 19v-5.5z"/></svg>';
+function groupAirTrafficByAircraft(jets){
+  var groups={};
   (jets||[]).forEach(function(j){
-    var m=clean(j&&j.model)||"-";
-    counts[m]=(counts[m]||0)+1;
+    var reg=clean(j&&j.registration)||"-";
+    var model=clean(j&&j.model)||"-";
+    var key=reg+"|"+model;
+    if(!groups[key]) groups[key]={model:model,registration:reg,count:0,is_international:!!(j&&j.is_international_guess)};
+    groups[key].count++;
+    if(j&&j.is_international_guess) groups[key].is_international=true;
   });
-  return Object.keys(counts).map(function(m){return {model:m,count:counts[m]};}).sort(function(a,b){return b.count-a.count;});
+  var all=Object.keys(groups).map(function(k){return groups[k];}).sort(function(a,b){return b.count-a.count;});
+  return {
+    national:all.filter(function(r){return !r.is_international;}),
+    international:all.filter(function(r){return r.is_international;})
+  };
+}
+function airTrafficTableHTML(rows){
+  if(!rows.length) return "";
+  var body=rows.map(function(r){
+    return '<div class="source-row"><span>'+AIR_TRAFFIC_PLANE_ICON+escapeHTML(r.model)+'</span><span>'+escapeHTML(r.registration)+'</span><span>'+r.count+'</span></div>';
+  }).join("");
+  return '<div class="source-list" style="margin-top:10px"><div class="source-row"><span><strong>'+escapeHTML(T.air_traffic_model_col)+'</strong></span><span><strong>'+escapeHTML(T.air_traffic_registration_col)+'</strong></span><span><strong>'+escapeHTML(T.air_traffic_count_col)+'</strong></span></div>'+body+'</div>';
 }
 function renderAirTrafficPage(){
   var d=dossierData||{};
   var at=d.air_traffic;
   if(!at || at.mode==="no_history_yet" || !(at.private_jet_arrivals_count>0)) return "";
-  var byModel=groupAirTrafficByModel(at.private_jet_arrivals);
-  var rows=byModel.map(function(r){return '<div class="source-row"><span>'+escapeHTML(r.model)+'</span><span>'+r.count+'</span></div>';}).join("");
+  var grouped=groupAirTrafficByAircraft(at.private_jet_arrivals);
   var windowLabel="";
   if(at.observed_from && at.observed_to){
     var df=new Date(at.observed_from), dtn=new Date(at.observed_to);
@@ -2926,11 +2942,16 @@ function renderAirTrafficPage(){
       windowLabel=df.toLocaleDateString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG)+" \u2013 "+dtn.toLocaleDateString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG);
     }
   }
+  var nationalCount=grouped.national.reduce(function(s,r){return s+r.count;},0);
+  var internationalCount=grouped.international.reduce(function(s,r){return s+r.count;},0);
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_air_traffic)+'</div><h2 class="section-title">'+escapeHTML(T.title_air_traffic)+'</h2><div class="lux-rule"></div>'
     +'<p class="info-text">'+escapeHTML(T.air_traffic_intro)+'</p>'
-    +'<p class="info-text"><strong>'+escapeHTML(T.air_traffic_total_prefix)+String(at.private_jet_arrivals_count)+'</strong>'+(at.international_private_jet_arrivals_count?(' \u2014 '+String(at.international_private_jet_arrivals_count)+escapeHTML(T.air_traffic_intl_suffix)):'')+'</p>'
+    +'<p class="info-text"><strong>'+escapeHTML(T.air_traffic_total_prefix)+String(at.private_jet_arrivals_count)+'</strong> ('+escapeHTML(T.air_traffic_national_count_prefix)+nationalCount+', '+escapeHTML(T.air_traffic_international_count_prefix)+internationalCount+')</p>'
     +(windowLabel?('<p class="info-text">'+escapeHTML(T.air_traffic_window_prefix)+escapeHTML(windowLabel)+'</p>'):'')
-    +'<div class="source-list"><div class="source-row"><span><strong>'+escapeHTML(T.air_traffic_model_col)+'</strong></span><span><strong>'+escapeHTML(T.air_traffic_count_col)+'</strong></span></div>'+rows+'</div>'
+    +'<h3 style="font-size:13px;color:#8f7643;text-transform:uppercase;letter-spacing:.05em;margin-top:20px">'+escapeHTML(T.air_traffic_national_title)+'</h3>'
+    +(grouped.national.length?airTrafficTableHTML(grouped.national):'<p class="info-text">'+escapeHTML(T.air_traffic_no_data)+'</p>')
+    +'<h3 style="font-size:13px;color:#8f7643;text-transform:uppercase;letter-spacing:.05em;margin-top:24px">'+escapeHTML(T.air_traffic_international_title)+'</h3>'
+    +(grouped.international.length?airTrafficTableHTML(grouped.international):'<p class="info-text">'+escapeHTML(T.air_traffic_no_data)+'</p>')
     +'</div></article>';
 }
 function renderTourismForecastPage(){
