@@ -487,7 +487,7 @@ var UI_STRINGS = {
   th_opex_item:"Voce di costo", th_opex_pct:"% sui ricavi", th_opex_amount:"Importo anno 1",
   opex_breakdown_total_row:"Totale costi operativi", opex_breakdown_source_note:"Fonti: attivita24.com (property management locazioni brevi, caso reale Milano), corahospitality.com (costi gestione B&B), bsness.com (redditività B&B Italia 2025), HotStats \"Europe Market Spotlight FY25\" (GOP margin hotel Europa), benchmark di settore FF&E reserve (3–6% dei ricavi). Non sostituisce un piano dei costi redatto su misura da un professionista per lo specifico immobile.",
   opex_breakdown_source_note_hospitality:"",
-  opex_breakdown_source_note_luxury:"Fonti verificabili per il segmento lusso/fascia alta — Totale costi operativi 61,4% dei ricavi: HotelData.com, \"H1 2026 Hotel Profitability Report\" (pubblicato 20 agosto 2026), GOP margin chain scale \"Luxury\" 38,6% (100% − 38,6% = 61,4% di costi). Costo del personale 23% dei ricavi: HVS, \"Managing Hotel Labor Costs Today\" (hvs.com/article/10179) — costo del lavoro 30–45% dei costi operativi totali, punto medio applicato al 61,4% reale sopra. Fondo rinnovo arredi (FF&E) 5% dei ricavi: hoteldevelopmentguide.com, benchmark di settore 3–6% dei ricavi lordi annui. La riga \"Altri costi operativi\" è una quota residua (61,4% − 23% − 5%): non è stata reperita una fonte pubblica che scomponga distribuzione/OTA, utenze, manutenzione, marketing, assicurazioni e amministrazione voce per voce per il segmento lusso — dichiarato esplicitamente come tale, invece di stimare percentuali non verificabili per ciascuna voce. Non sostituisce un piano dei costi redatto su misura da un professionista per lo specifico immobile.",
+  opex_breakdown_source_note_luxury:"Fonti verificabili per il segmento lusso/fascia alta — Totale costi operativi 61,4% dei ricavi: HotelData.com, \"H1 2026 Hotel Profitability Report\" (pubblicato 20 agosto 2026), GOP margin chain scale \"Luxury\" 38,6% (100% − 38,6% = 61,4% di costi). Costo del personale 23% dei ricavi: HVS, \"Managing Hotel Labor Costs Today\" (hvs.com/article/10179) — costo del lavoro 30–45% dei costi operativi totali, punto medio applicato al 61,4% reale sopra. Fondo rinnovo arredi (FF&E) 5% dei ricavi: hoteldevelopmentguide.com, benchmark di settore 3–6% dei ricavi lordi annui. Le restanti 10 voci (pulizie, utenze, manutenzione, consumabili, OTA, marketing, assicurazione, antincendio, software, amministrazione) riprendono la stessa struttura voce-per-voce del taglio \"Hotel/boutique a servizio pieno\", riproporzionata perché la somma combaci esattamente con la quota residua reale (61,4% − 23% − 5% = 33,4%): non è stata reperita una fonte pubblica che le scomponga singolarmente per il segmento lusso, quindi la loro incidenza reciproca (non il totale, che è reale e sourced) resta quella osservata per un hotel a servizio pieno in generale. Non sostituisce un piano dei costi redatto su misura da un professionista per lo specifico immobile.",
   opex_breakdown_unavailable:"Piano dei costi analitico non disponibile: manca una proiezione ricavi/costi per questo immobile.",
   revenue_year1_prefix:"Ricavo anno 1: ",
   breakeven_estimated_extrapolated:"Rientro stimato all\u2019anno {year} \u2014 oltre l\u2019orizzonte di 15 anni mostrato in tabella, stessa formula di crescita.",
@@ -2969,36 +2969,45 @@ var OPEX_COST_STRUCTURE = {
   },
   /* Taglio "lusso": non basato sul numero di camere (un boutique hotel di lusso spesso ne ha
      poche) ma su ADR elevato, investimento rilevante o dimensione molto grande (isLuxuryProperty()
-     qui sotto). RIVISTO: la versione precedente aveva percentuali per singola voce calibrate
-     qualitativamente (non da una tabella pubblicata), giustamente contestate dall'utente. Qui
-     sotto solo numeri con una fonte pubblica reale e verificabile dietro, non stime a sensazione:
-     - TOTALE costi operativi 61,4% dei ricavi (= 100% - 38,6% di GOP margin): HotelData.com,
-       "H1 2026 Hotel Profitability Report" (hoteldata.com/reports/h1-2026-profit-report/,
-       pubblicato 20 agosto 2026) -- GOP margin per chain scale "Luxury" H1 2026 = 38,6% dei
-       ricavi (in crescita dal 34,6% di H1 2025). E' un dato USA aggregato per chain scale, non
-       specifico Italia/boutique, ma e' l'unico dato di GOP segmentato per fascia lusso reperito
-       con fonte e data verificabili.
+     qui sotto). Piano dei costi ANALITICO voce-per-voce (come gli altri tagli), non una tabella
+     a 3 righe con una riga residua enorme: le singole voci usano la STESSA struttura del taglio
+     "large" (hotel/boutique a servizio pieno, 16+ camere) -- stessi nomi di voce, stesse
+     proporzioni relative tra loro -- ma RISCALATE proporzionalmente in modo che il totale
+     combaci col dato reale e sourced per il segmento lusso (61,4% dei ricavi). Le uniche due
+     voci con una fonte pubblica indipendente e diretta (non ottenute per riscalatura) restano:
      - Costo del personale 23% dei ricavi: HVS, "Managing Hotel Labor Costs Today"
-       (hvs.com/article/10179) afferma che il costo del lavoro rappresenta il 30-45% dei COSTI
-       OPERATIVI TOTALI di un hotel (non specifico per il segmento lusso, non ripartito per
-       chain scale). Applicando quel range al totale reale sopra (61,4%): 30-45% x 61,4% =
-       18,4%-27,6% dei ricavi; qui si usa il punto medio (23%) come singolo valore per la tabella.
-     - Fondo rinnovo arredi (FF&E reserve) 5% dei ricavi: benchmark di settore citato da
-       hoteldevelopmentguide.com ("Hotel CapEx and FF&E Reserve"), range 3-6% dei ricavi lordi
-       annui usato nei contratti di gestione alberghiera -- qui il punto medio-alto (5%).
-     - Tutto il resto (distribuzione/OTA e canali specializzati, utenze, manutenzione,
-       consumabili/F&B, marketing, assicurazioni, sistema antincendio, software gestionale,
-       amministrazione) NON ha una fonte pubblica che lo scomponga voce per voce per il segmento
-       lusso: invece di inventare percentuali per ciascuna voce, resta come UNICA riga residua
-       (61,4% - 23% - 5% = 33,4%), dichiarata esplicitamente come tale nella tabella e nella nota
-       fonti -- non scomposta ulteriormente perche' non ho trovato dati pubblici per farlo.
+       (hvs.com/article/10179) -- costo del lavoro 30-45% dei COSTI OPERATIVI TOTALI di un hotel,
+       punto medio applicato al totale reale sotto (61,4%).
+     - Fondo rinnovo arredi (FF&E reserve) 5% dei ricavi: hoteldevelopmentguide.com ("Hotel CapEx
+       and FF&E Reserve"), range 3-6% dei ricavi lordi annui, punto medio-alto.
+     Il TOTALE 61,4% dei ricavi (= 100% - 38,6% di GOP margin) viene da HotelData.com, "H1 2026
+     Hotel Profitability Report" (hoteldata.com/reports/h1-2026-profit-report/, pubblicato 20
+     agosto 2026), GOP margin chain scale "Luxury" H1 2026 = 38,6% (dato USA aggregato per chain
+     scale, non specifico Italia/boutique, ma l'unico dato di GOP segmentato per fascia lusso
+     reperito con fonte e data verificabili).
+     Le restanti 10 voci (pulizie, utenze, manutenzione, consumabili, OTA, marketing,
+     assicurazione, antincendio, software, amministrazione) sommano nel taglio "large" a 37,0%
+     dei ricavi; qui vengono riscalate con un fattore 33,4/37,0 = 0,9027 in modo che la loro somma
+     combaci esattamente con la quota residua reale (61,4% - 23% - 5% = 33,4%) -- nessuna di
+     queste 10 percentuali ha una fonte pubblica che la scompone voce per voce per il segmento
+     lusso: sono una riproporzione dichiarata della struttura "large", non un dato lusso-specifico
+     indipendente. Dichiarato esplicitamente nella nota fonti della pagina.
      ALLINEATO manualmente a report-view.html. */
   luxury:{
     tierLabel:"Hotel/struttura di fascia alta (ADR elevato, investimento rilevante o grande dimensione)", unitsMax:Infinity,
     items:[
       {label:"Costo del personale (punto medio del range 30–45% dei costi operativi totali, HVS — applicato al totale reale sotto)", pct:0.23},
-      {label:"Fondo rinnovo arredi e manutenzione straordinaria (FF&E reserve, benchmark di settore 3–6% dei ricavi)", pct:0.05},
-      {label:"Altri costi operativi — distribuzione/OTA e canali specializzati, utenze, manutenzione, consumabili/F&B, marketing, assicurazioni, sistema antincendio, software, amministrazione (quota residua: nessuna fonte pubblica la scompone voce per voce per il segmento lusso)", pct:0.334}
+      {label:"Pulizie e lavanderia esterna integrativa (riproporzionata dal taglio hotel a servizio pieno)", pct:0.045},
+      {label:"Utenze (energia, gas, acqua) (riproporzionata dal taglio hotel a servizio pieno)", pct:0.054},
+      {label:"Manutenzione ordinaria e straordinaria (riproporzionata dal taglio hotel a servizio pieno)", pct:0.036},
+      {label:"Consumabili, colazione/F&B minore, amenities (riproporzionata dal taglio hotel a servizio pieno)", pct:0.027},
+      {label:"Commissioni OTA / portali di prenotazione e canali specializzati (riproporzionata dal taglio hotel a servizio pieno)", pct:0.090},
+      {label:"Marketing e promozione (riproporzionata dal taglio hotel a servizio pieno)", pct:0.018},
+      {label:"Assicurazione (RC, incendio, furto) (riproporzionata dal taglio hotel a servizio pieno)", pct:0.014},
+      {label:"Sistema antincendio e sicurezza (riproporzionata dal taglio hotel a servizio pieno)", pct:0.014},
+      {label:"Software gestionale, PMS, channel manager (riproporzionata dal taglio hotel a servizio pieno)", pct:0.009},
+      {label:"Amministrazione e contabilità (riproporzionata dal taglio hotel a servizio pieno)", pct:0.027},
+      {label:"Fondo rinnovo arredi e manutenzione straordinaria (FF&E reserve, benchmark di settore 3–6% dei ricavi)", pct:0.05}
     ]
   }
 };
