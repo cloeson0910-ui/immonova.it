@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Storico traffico aereo (AeroDataBox) — IMMONOVA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#4a3c1f;padding:40px 20px}
+.wrap{max-width:720px;margin:0 auto;background:#fffdf7;border:1px solid rgba(166,127,52,.2);padding:40px}
+h1{font-size:20px;font-weight:400;color:#a67f34;margin-bottom:6px}
+.sub{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8f7643;margin-bottom:28px;border-bottom:1px solid rgba(166,127,52,.15);padding-bottom:16px}
+label{display:block;font-size:12px;color:#8f7643;margin:16px 0 6px}
+input,select{width:100%;padding:10px 12px;border:1px solid rgba(166,127,52,.3);font-size:14px;background:#fff}
+.row{display:flex;gap:16px}
+.row > div{flex:1}
+button{margin-top:24px;padding:13px 24px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:12px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+button.secondary{background:#fff;color:#a67f34}
+button:disabled{opacity:.5;cursor:default}
+.status{margin-top:20px;font-size:13px;line-height:1.7;color:#5a4a2a;white-space:pre-wrap}
+.status.error{color:#9c2f2f}
+.status.ok{color:#3a6b3a}
+.progressbar{margin-top:14px;height:8px;background:rgba(166,127,52,.15);border-radius:4px;overflow:hidden}
+.progressbar > div{height:100%;background:#a67f34;width:0%;transition:width .3s}
+.note{margin-top:28px;font-size:11.5px;line-height:1.6;color:#8f7643;border-top:1px solid rgba(166,127,52,.15);padding-top:16px}
+table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(166,127,52,.15)}
+th{color:#8f7643;font-weight:600;text-transform:uppercase;font-size:10.5px;letter-spacing:.05em}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Importa storico traffico aereo</h1>
+  <div class="sub">IMMONOVA · Discovery Engine · AeroDataBox</div>
+
+  <p style="font-size:13px;line-height:1.7;color:#5a4a2a">
+    Scegli l'aeroporto (codice ICAO) e da quanti giorni indietro vuoi importare lo storico degli
+    arrivi. La pagina interroga AeroDataBox a blocchi di 12 ore e riprende automaticamente da
+    dove si era fermata, finché non arriva ad oggi. Il piano gratuito consente 400 richieste al
+    mese: ogni giorno di storico costa 2 richieste, quindi 180 giorni ne usano circa 360 (quasi
+    tutta la quota mensile) — puoi comunque fermarti in qualsiasi momento e riprendere più tardi,
+    il progresso resta salvato.
+  </p>
+
+  <div class="row">
+    <div>
+      <label for="icaoAirport">Codice ICAO aeroporto</label>
+      <input id="icaoAirport" value="LIBR" placeholder="es. LIBR (Brindisi)">
+    </div>
+    <div>
+      <label for="daysBack">Giorni di storico da importare</label>
+      <input id="daysBack" type="number" value="180" min="1" max="365">
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="runBtn">Avvia importazione</button>
+    <button id="stopBtn" class="secondary" disabled>Ferma</button>
+  </div>
+
+  <div class="progressbar"><div id="progressFill"></div></div>
+  <div id="status" class="status"></div>
+  <div id="resultsBox"></div>
+
+  <div class="note">
+    Aeroporti utili: LIBR = Brindisi (Gallipoli/Lecce), LIRA = Roma Ciampino, LIRF = Roma
+    Fiumicino, LIML = Milano Linate, LIMC = Milano Malpensa, LIRN = Napoli. Il codice ICAO è
+    sempre 4 lettere, diverso dal codice IATA a 3 lettere (es. non "BDS" ma "LIBR"). Una volta
+    completata l'importazione iniziale, non serve più tornare qui se non per aggiungere un nuovo
+    aeroporto o estendere ulteriormente indietro lo storico — il dossier legge automaticamente
+    tutto ciò che è stato importato.
+  </div>
+</div>
+
+<script>
+var SUPABASE_URL = "https://bpzzmitmbavcmcasswbu.supabase.co";
+var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwenptaXRtYmF2Y21jYXNzd2J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDk1ODQsImV4cCI6MjA5NzM4NTU4NH0.SkPicFpfYe69rI0JmASqm-jif-Ov3gQ0Mu20UbrYawY";
+
+var stopRequested = false;
+
+function setStatus(text, cls){
+  var el = document.getElementById("status");
+  el.textContent = text;
+  el.className = "status" + (cls ? " " + cls : "");
+}
+
+function setProgress(pct){
+  document.getElementById("progressFill").style.width = Math.max(0, Math.min(100, pct)) + "%";
+}
+
+async function callSync(icaoAirport, daysBack){
+  var res = await fetch(SUPABASE_URL + "/functions/v1/sync-aerodatabox-arrivals", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+      "apikey": SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify({ icao_airport: icaoAirport, backfill_from_days_ago: daysBack, max_windows_per_call: 20 })
+  });
+  var body = await res.json();
+  if(!res.ok || !body.success){
+    throw new Error(body.error || ("HTTP " + res.status));
+  }
+  return body;
+}
+
+document.getElementById("stopBtn").addEventListener("click", function(){
+  stopRequested = true;
+  setStatus("Fermata richiesta: mi fermo dopo il blocco in corso...", "");
+});
+
+document.getElementById("runBtn").addEventListener("click", async function(){
+  var btn = this;
+  var stopBtn = document.getElementById("stopBtn");
+  var icaoAirport = document.getElementById("icaoAirport").value.trim().toUpperCase();
+  var daysBack = parseInt(document.getElementById("daysBack").value, 10) || 180;
+
+  if(!/^[A-Z]{4}$/.test(icaoAirport)){
+    setStatus("Codice ICAO non valido: serve un codice a 4 lettere (es. LIBR), non il codice IATA.", "error");
+    return;
+  }
+
+  stopRequested = false;
+  btn.disabled = true;
+  stopBtn.disabled = false;
+  setProgress(0);
+
+  var totalWindowsExpected = daysBack * 2; // 2 blocchi da 12h per giorno
+  var windowsDoneSoFar = 0;
+
+  try{
+    var done = false;
+    var round = 0;
+    while(!done && !stopRequested){
+      round++;
+      setStatus("Blocco " + round + " in corso su " + icaoAirport + " (dal cursore salvato)...");
+      var result = await callSync(icaoAirport, daysBack);
+      windowsDoneSoFar += result.windows_processed || 0;
+      setProgress((windowsDoneSoFar / totalWindowsExpected) * 100);
+
+      if(result.error){
+        setStatus("Fermato per un errore: " + result.error + "\nProgresso salvato fino a: " + result.cursor_utc, "error");
+        break;
+      }
+      done = result.done;
+      if(done){
+        setStatus("Importazione completata per " + icaoAirport + ". Storico coperto fino ad ora.", "ok");
+        setProgress(100);
+        break;
+      }
+      if(result.windows_processed === 0){
+        // nessun progresso in questo giro: evita loop infinito
+        setStatus("Nessun ulteriore progresso possibile in questo momento (probabile quota AeroDataBox esaurita). Riprova più tardi: il progresso resta salvato.", "error");
+        break;
+      }
+      setStatus("Blocco " + round + " completato (" + windowsDoneSoFar + " finestre di 12h importate finora su " + icaoAirport + "). Continuo...");
+    }
+    if(stopRequested && !done){
+      setStatus("Fermato su richiesta. Progresso salvato: potrai riprendere da qui in qualsiasi momento riavviando l'importazione sullo stesso aeroporto.", "");
+    }
+  }catch(err){
+    setStatus("Errore: " + (err && err.message ? err.message : "operazione non riuscita"), "error");
+  }finally{
+    btn.disabled = false;
+    stopBtn.disabled = true;
+  }
+});
+</script>
+
+</body>
+</html>
