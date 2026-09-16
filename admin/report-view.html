@@ -416,11 +416,12 @@ var UI_STRINGS = {
   label_net_income:"Net Income", label_roi:"ROI", label_breakeven:"Break-even",
   note_net_income:"Reddito netto operativo annuo.", note_roi:"Net Income / Total Project Cost.",
   note_breakeven:"Total Project Cost / Net Operating Cash Flow",
-  kicker_tourism_demand:"Tourism demand vs break-even", title_tourism_demand:"Domanda Turistica Necessaria al Break-Even",
-  pie_market_share_caption:"Quota di mercato turistico necessaria", pie_occupancy_caption:"Percentuale di riempimento richiesta",
-  pie_market_share_note:"Pernottamenti annui richiesti sul totale dei pernottamenti turistici dell'area", pie_occupancy_note:"Notti vendute sul totale notti disponibili nell'anno",
-  tourism_demand_intro:"Stima di quanta domanda turistica reale (arrivi e pernottamenti registrati nell'area) l'immobile dovrebbe intercettare per raggiungere il break-even entro {years} anni, ai due scenari ADR.",
-  tourism_demand_exceeds:"Con questo ADR il break-even entro {years} anni richiederebbe più pernottamenti di quanti l'immobile possa fisicamente vendere: valori superiori al 100% indicano che il break-even, a parità di ipotesi, arriva oltre l'orizzonte considerato.",
+  kicker_tourism_demand:"Tourism demand vs break-even", title_tourism_demand:"Domanda Turistica vs Break-Even",
+  pie_market_share_caption:"Quota di mercato turistico implicita", pie_occupancy_caption:"Percentuale di riempimento utilizzata",
+  pie_market_share_note:"Pernottamenti annui, all'occupazione utilizzata nello scenario, sul totale dei pernottamenti turistici dell'area", pie_occupancy_note:"Occupazione utilizzata nello scenario (stessa ipotesi usata nell'analisi finanziaria) sul totale notti disponibili nell'anno",
+  tourism_demand_intro:"Quanta domanda turistica reale (arrivi e pernottamenti registrati nell'area) l'immobile intercetterebbe all'occupazione utilizzata nello scenario, e il break-even reale che ne risulta, ai diversi scenari ADR.",
+  tourism_demand_exceeds:"A parità di ipotesi il break-even non risulta raggiunto nell'orizzonte di proiezione considerato.",
+  tourism_demand_breakeven_line:"Break-even stimato: {breakEven} anni.",
   tourism_demand_source_prefix:"Flusso turistico di riferimento: ", tourism_demand_unavailable_note:"Dato non mostrato: mancano nel dossier arrivi/pernottamenti turistici verificati per quest'area.",
   tag_verified_adr:" (da ADR verificato)", tag_estimated:" (stimato)", tag_verified_rent:" (da canone verificato)",
   years_suffix:" anni", extrapolated_note:" (proiezione estesa oltre i 15 anni in tabella)",
@@ -466,7 +467,12 @@ var UI_STRINGS = {
   label_conservative:"Conservativo", label_normal:"Normale", label_luxury:"Lusso", label_selected:"\u2014 selezionato",
   media_dash:" \u2013 ", avg_label:"media ",
   kicker_cashflow:"Cash-flow projection", title_cashflow:"Rendita & Proiezione 15 Anni",
-  cashflow_intro:"Ipotesi dichiarate per ogni scenario: crescita ricavi {growth}/anno (prudenziale, non derivata da serie storica), costi operativi {opex} dei ricavi. Total Project Cost di riferimento: {total}.",
+  cashflow_intro:"Ipotesi dichiarate per ogni scenario: crescita ricavi {growth}/anno (prudenziale, non derivata da serie storica), costi operativi {opex} dei ricavi (piano dei costi analitico nella pagina seguente). Total Project Cost di riferimento: {total}.",
+  kicker_opex_breakdown:"Analytical cost structure", title_opex_breakdown:"Piano dei Costi Analitico",
+  opex_breakdown_intro:"Voce per voce, cosa comprende il {opex} di costi operativi usato nelle proiezioni: stima calibrata su {tierLabel}, in base a benchmark di settore (property management, OTA, utenze, manutenzione, assicurazioni, fondo rinnovo arredi) — non un piano dei costi analitico redatto su misura per questo immobile specifico, ma un riferimento voce-per-voce, non una percentuale indistinta.",
+  th_opex_item:"Voce di costo", th_opex_pct:"% sui ricavi", th_opex_amount:"Importo anno 1",
+  opex_breakdown_total_row:"Totale costi operativi", opex_breakdown_source_note:"Fonti: attivita24.com (property management locazioni brevi, caso reale Milano), corahospitality.com (costi gestione B&B), bsness.com (redditività B&B Italia 2025), HotStats \"Europe Market Spotlight FY25\" (GOP margin hotel Europa), benchmark di settore FF&E reserve (3–6% dei ricavi). Non sostituisce un piano dei costi redatto su misura da un professionista per lo specifico immobile.",
+  opex_breakdown_unavailable:"Piano dei costi analitico non disponibile: manca una proiezione ricavi/costi per questo immobile.",
   revenue_year1_prefix:"Ricavo anno 1: ",
   breakeven_estimated_extrapolated:"Rientro stimato all\u2019anno {year} \u2014 oltre l\u2019orizzonte di 15 anni mostrato in tabella, stessa formula di crescita.",
   breakeven_estimated:"Rientro stimato all\u2019anno {year}, evidenziato in tabella.",
@@ -510,6 +516,7 @@ var UI_STRINGS = {
   field_italian_arrivals:"Arrivi italiani", field_foreign_arrivals:"Arrivi stranieri",
   field_italian_overnight:"Presenze italiani", field_foreign_overnight:"Presenze stranieri",
   source_prefix:"Fonte: ",
+  immonova_source_disclaimer:" — dato di fonte IMMONOVA: stimato dal nostro team sulla base della presenza stabile e continuativa sul mercato immobiliare del territorio.",
   kicker_real_estate:"Real estate market", title_real_estate:"Valore immobiliare di riferimento",
   label_market_value_m2:"Valore di mercato al m²", label_source_card:"Fonte",
   kicker_hospitality_pricing:"Hospitality pricing", title_adr:"ADR di riferimento",
@@ -1129,8 +1136,8 @@ function renderPopulationCompositionPage(){
   var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€",
     ["oltre 120.000€", (T.label_bracket_over||"oltre")+" 120.000€"]];
 
-  var ageHTML = comp.age_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_age_distribution||"Composizione per età")+'</h3>'+populationBracketBarsHTML(comp.age_distribution, ageBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(comp.age_distribution.provider_name||"ISTAT")+'</p></div>' : "";
-  var incomeHTML = comp.income_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_income_distribution||"Distribuzione economica")+'</h3>'+populationBracketBarsHTML(comp.income_distribution, incomeBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(comp.income_distribution.provider_name||"MEF - Dipartimento delle Finanze")+'</p></div>' : "";
+  var ageHTML = comp.age_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_age_distribution||"Composizione per età")+'</h3>'+populationBracketBarsHTML(comp.age_distribution, ageBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(comp.age_distribution.provider_name||"ISTAT"))+'</p></div>' : "";
+  var incomeHTML = comp.income_distribution ? '<div class="pop-comp-block"><h3 class="pop-comp-title">'+escapeHTML(T.title_income_distribution||"Distribuzione economica")+'</h3>'+populationBracketBarsHTML(comp.income_distribution, incomeBrackets)+'<p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(comp.income_distribution.provider_name||"MEF - Dipartimento delle Finanze"))+'</p></div>' : "";
 
   return '<div class="section-kicker">'+escapeHTML(T.kicker_population||"Popolazione")+'</div><h2 class="section-title">'+escapeHTML(T.title_population_composition||"Composizione della Popolazione")+'</h2><div class="lux-rule"></div>'+ageHTML+incomeHTML;
 }
@@ -1237,6 +1244,15 @@ function metricFromDossier(section,field){
   var d=dossierData||{};var bucket=d[section];if(!bucket)return null;
   var f=bucket[field];if(!f||typeof f!=="object"||!("value" in f))return null;
   return f;
+}
+/* Quando la fonte di un dato è IMMONOVA stessa (non un ente terzo come ISTAT/OMI/analyst
+   verified esterno), la riga "Fonte: ..." riceve in coda una breve nota che spiega perché è
+   un dato affidabile: la presenza stabile e continuativa di IMMONOVA sul mercato del
+   territorio, non una fonte anonima o una stima generica senza radicamento locale. */
+function sourceProviderLabel(name){
+  var n=String(name||"-");
+  if(n.toLowerCase().indexOf("immonova")>=0) return n+T.immonova_source_disclaimer;
+  return n;
 }
 function formatMetricVal(v){var n=Number(v);return Number.isFinite(n)?n.toLocaleString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG):String(v==null?"-":v);}
 /* v10.8: i dati del Discovery Engine portano codici unità grezzi non
@@ -1403,7 +1419,7 @@ function renderTourismMetricsPage(){
   if(!found.length)return "";
   var src=found[0].metric.source||{};
   var cards=found.map(function(x){return metricCardHTML(x.label,x.metric,x.unit);}).join("");
-  return '<div class="section-kicker">'+escapeHTML(T.kicker_tourism_data)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_current)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(src.provider_name||"-")+(src.source_url?(" — "+escapeHTML(src.source_url)):"")+'</p>';
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_tourism_data)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_current)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+(src.source_url?(" — "+escapeHTML(src.source_url)):"")+'</p>';
 }
 function renderTerritorialPage(){
   var pop=metricFromDossier("demography","population");
@@ -1521,7 +1537,7 @@ function renderRealEstatePage(){
   var src=(min||max)?(min||max).source||{}:null;
   var valueBlock=(min||max)?('<div class="metric-grid" style="grid-template-columns:1fr 1fr">'
     +rangeCardHTML(T.label_market_value_m2,min,max,"eur_per_m2")
-    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>'):'';
   return '<div class="section-kicker">'+escapeHTML(T.kicker_real_estate)+'</div><h2 class="section-title">'+escapeHTML(T.title_real_estate)+'</h2><div class="lux-rule"></div>'
     +valueBlock;
@@ -1536,12 +1552,12 @@ function renderPricingPage(){
     if(!rmin&&!rmax&&rsingle){
       return '<div class="section-kicker">'+escapeHTML(T.kicker_commercial_rent)+'</div><h2 class="section-title">'+escapeHTML(T.title_commercial_rent)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
         +metricCardHTML(T.label_rent_m2_month,rsingle,"eur_per_m2_month")
-        +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(rsrc.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
+        +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(rsrc.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
         +'</div>';
     }
     return '<div class="section-kicker">'+escapeHTML(T.kicker_commercial_rent)+'</div><h2 class="section-title">'+escapeHTML(T.title_commercial_rent)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
       +rangeCardHTML(T.label_rent_m2_month,rmin,rmax,"eur_per_m2_month")
-      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(rsrc.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
+      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(rsrc.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
       +'</div>';
   }
   var min=metricFromDossier("adr","average_daily_rate_min");
@@ -1552,12 +1568,12 @@ function renderPricingPage(){
   if(!min&&!max&&single){
     return '<div class="section-kicker">'+escapeHTML(T.kicker_hospitality_pricing)+'</div><h2 class="section-title">'+escapeHTML(T.title_adr)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
       +metricCardHTML(T.label_adr_room_night,single,"eur_per_room_night")
-      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
       +'</div>';
   }
   return '<div class="section-kicker">'+escapeHTML(T.kicker_hospitality_pricing)+'</div><h2 class="section-title">'+escapeHTML(T.title_adr)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
     +rangeCardHTML(T.label_adr_room_night,min,max,"eur_per_room_night")
-    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(src.provider_name||"-")+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>';
 }
 var NEARBY_CITIES_PER_PAGE = 16;
@@ -1809,7 +1825,7 @@ function renderSourcesPage(){
       if(field==="summary"||field==="items"||field==="count")return;
       var f=bucket[field];if(!f||typeof f!=="object"||!("value" in f))return;
       var s=f.source||{};
-      rows.push({label:sec+" · "+field,provider:s.provider_name||"-",url:s.source_url||""});
+      rows.push({label:sec+" · "+field,provider:sourceProviderLabel(s.provider_name||"-"),url:s.source_url||""});
     });
   });
   // price_index_trend NON va citato qui: il grafico corrispondente e' stato rimosso dal
@@ -1849,15 +1865,15 @@ function renderNarrativePage(){
   if(mar)bits.push(pluralPick(mar,"marinas_singular","marinas_plural"));
   if(res)bits.push(pluralPick(res,"restaurants_singular","restaurants_plural"));
   var remin=metricFromDossier("real_estate_market","residential_sale_per_m2_min"),remax=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
-  if(remin||remax)bits.push(T.real_estate_value_prefix+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+T.real_estate_value_suffix+((remin||remax).source.provider_name||"-")+").");
+  if(remin||remax)bits.push(T.real_estate_value_prefix+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+T.real_estate_value_suffix+(sourceProviderLabel((remin||remax).source.provider_name||"-"))+").");
   if(isCommercialCategory()){
     var rentminT=metricFromDossier("commercial_rent","monthly_rent_per_m2_min"),rentmaxT=metricFromDossier("commercial_rent","monthly_rent_per_m2_max"),rentsingleT=metricFromDossier("commercial_rent","monthly_rent_per_m2");
-    if(rentminT||rentmaxT)bits.push(T.rent_reference_prefix+(rentminT?formatMetricVal(rentminT.value):"?")+"\u2013"+(rentmaxT?formatMetricVal(rentmaxT.value):"?")+T.rent_reference_suffix+((rentminT||rentmaxT).source.provider_name||"-")+").");
-    else if(rentsingleT)bits.push(T.rent_reference_prefix+formatMetricVal(rentsingleT.value)+T.rent_reference_suffix+(rentsingleT.source.provider_name||"-")+").");
+    if(rentminT||rentmaxT)bits.push(T.rent_reference_prefix+(rentminT?formatMetricVal(rentminT.value):"?")+"\u2013"+(rentmaxT?formatMetricVal(rentmaxT.value):"?")+T.rent_reference_suffix+(sourceProviderLabel((rentminT||rentmaxT).source.provider_name||"-"))+").");
+    else if(rentsingleT)bits.push(T.rent_reference_prefix+formatMetricVal(rentsingleT.value)+T.rent_reference_suffix+(sourceProviderLabel(rentsingleT.source.provider_name||"-"))+").");
   }else{
     var adrmin=metricFromDossier("adr","average_daily_rate_min"),adrmax=metricFromDossier("adr","average_daily_rate_max"),adrsingle=metricFromDossier("adr","average_daily_rate");
-    if(adrmin||adrmax)bits.push(T.adr_reference_prefix+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+T.adr_reference_suffix+((adrmin||adrmax).source.provider_name||"-")+").");
-    else if(adrsingle)bits.push(T.adr_reference_prefix+formatMetricVal(adrsingle.value)+T.adr_reference_suffix+(adrsingle.source.provider_name||"-")+").");
+    if(adrmin||adrmax)bits.push(T.adr_reference_prefix+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+T.adr_reference_suffix+(sourceProviderLabel((adrmin||adrmax).source.provider_name||"-"))+").");
+    else if(adrsingle)bits.push(T.adr_reference_prefix+formatMetricVal(adrsingle.value)+T.adr_reference_suffix+(sourceProviderLabel(adrsingle.source.provider_name||"-"))+").");
   }
   var pop=metricFromDossier("demography","population");
   if(pop)bits.push(T.population_prefix+formatMetricVal(pop.value)+T.population_suffix);
@@ -1997,7 +2013,7 @@ function renderInvestmentThesisPage(){
       revenue:euro(y1.revenue),
       costs:euro(y1.costs),
       net:euro(y1.net),
-      opex:percent(CASHFLOW_OPEX_RATIO*100)
+      opex:percent((headline.opexRatio!=null?headline.opexRatio:getOpexRatio(getAssetUnits()))*100)
     });
     if(!isCommercial && headline.occValue!=null){
       revLine+=" "+fmt(T.thesis_occupancy_line,{occ:percent(headline.occValue*100),occLabel:headline.occVerified?T.occupancy_verified:T.occupancy_assumed});
@@ -2193,7 +2209,7 @@ function renderFinancialSnapshot(){
     }else{
       var occRef=(projs.min||projs.max);
       var occTpl = minAdrVerified ? T.rule_range_note_verified : T.rule_range_note_market;
-      ruleNote = fmt(occTpl,{occ:percent((occRef?occRef.occValue:0.5)*100),occLabel:(occRef&&occRef.occVerified)?T.occupancy_verified:T.occupancy_assumed,opex:percent(CASHFLOW_OPEX_RATIO*100),tax:T.tax_disclaimer_short});
+      ruleNote = fmt(occTpl,{occ:percent((occRef?occRef.occValue:0.5)*100),occLabel:(occRef&&occRef.occVerified)?T.occupancy_verified:T.occupancy_assumed,opex:percent((projs.opexRatio!=null?projs.opexRatio:getOpexRatio(getAssetUnits()))*100),tax:T.tax_disclaimer_short});
     }
   }else{
     var headline=projs?(projs.mode==="range"?(projs.min||projs.max):projs.single):null;
@@ -2213,7 +2229,7 @@ function renderFinancialSnapshot(){
           ruleNote = fmt(headline.adrVerified ? T.rule_single_note_verified_commercial : T.rule_single_note_market_commercial,{tax:T.tax_disclaimer_short});
         }else{
           var singleTpl = headline.adrVerified ? T.rule_single_note_verified : T.rule_single_note_market;
-          ruleNote = fmt(singleTpl,{occ:percent((headline.occValue||0.5)*100),occLabel:headline.occVerified?T.occupancy_verified:T.occupancy_assumed,opex:percent(CASHFLOW_OPEX_RATIO*100),tax:T.tax_disclaimer_short});
+          ruleNote = fmt(singleTpl,{occ:percent((headline.occValue||0.5)*100),occLabel:headline.occVerified?T.occupancy_verified:T.occupancy_assumed,opex:percent((headline.opexRatio!=null?headline.opexRatio:getOpexRatio(getAssetUnits()))*100),tax:T.tax_disclaimer_short});
         }
       }
       leftColumn='<div class="metric-grid" style="grid-template-columns:1fr"><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_net_income)+tag+'</div><div class="metric-value">'+escapeHTML(euro(net))+'</div><div class="metric-note">'+escapeHTML(T.note_net_income)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_roi)+tag+'</div><div class="metric-value">'+escapeHTML(percent(roi))+'</div><div class="metric-note">'+escapeHTML(T.note_roi)+'</div></div><div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_breakeven)+tag+'</div><div class="metric-value">'+(breakEven?escapeHTML(String(Math.round(breakEven*10)/10))+escapeHTML(T.years_suffix):escapeHTML(T.not_available_long))+'</div><div class="metric-note">'+escapeHTML(T.note_breakeven)+escapeHTML(breakEvenNote||"")+'.</div></div></div>';
@@ -2829,34 +2845,127 @@ function getOccupancyAssumption(){
   return {value:0.5,verified:false};
 }
 var CASHFLOW_ANNUAL_GROWTH = 0.02;
-var CASHFLOW_OPEX_RATIO = 0.32;
+/* Piano dei costi ANALITICO (non piu' una percentuale unica indistinta): ogni voce di spesa
+   tipica di una struttura ricettiva/short-let e' quantificata separatamente come quota dei
+   ricavi, cosi' il lettore vede SUBITO cosa comprende il costo di gestione, voce per voce,
+   senza dover chiedere. Tre "tagli" di struttura per dimensione/complessita' gestionale
+   (getAssetUnits() sceglie il taglio in base al numero di camere/unita'), ciascuno con le sue
+   voci e la sua incidenza. Fonti (consultate settembre 2026):
+   - attivita24.com, "Property management per locazioni brevi: fee e margini" -- esempio reale
+     Milano, full management: OTA ~15%, fee property manager 18%, pulizie ~18%, biancheria ~4%,
+     utenze ~6%, manutenzione leggera ~2%, consumabili ~1,3% (margine netto risultante ~36%).
+   - corahospitality.com, "Costi Gestione B&B": OTA 15-18% (Booking/Airbnb), pulizie/lavanderia
+     30-60€ a cambio ospite.
+   - bsness.com, "Redditivita' B&B 2025 in Italia": costi variabili ~30% dei ricavi per
+     strutture piccole a conduzione diretta (3-6 camere); margine operativo lordo piu'
+     compresso (15-28%, quindi costi ~72-85%) per strutture a gestione professionale con piu'
+     camere (7-12) -- un effetto di "fascia intermedia" reale (abbastanza grandi da richiedere
+     una gestione professionale a pagamento, non abbastanza da avere le economie di scala di un
+     hotel), qui riflesso nella voce "fee di property management" del taglio intermedio.
+   - HotStats, "Europe Market Spotlight FY25" (hotstats.com): GOP margin medio Europa 37,0% dei
+     ricavi (Sud Europa 41,8%, Est Europa 39,0%, Nord Europa 37,0%, Ovest Europa 33,5%) per hotel
+     a servizio pieno => costi operativi sopra il GOP tra il 58% e il 66,5% dei ricavi.
+   - hoteldevelopmentguide.com: fondo rinnovo arredi/FF&E reserve, benchmark di settore 3-6%
+     dei ricavi lordi annui.
+   Questo NON sostituisce un piano dei costi analitico redatto su misura da un professionista
+   per lo specifico immobile: e' una stima di riferimento voce-per-voce basata su benchmark di
+   settore, dichiarata come tale nel dossier (vedi pagina "Piano dei costi analitico"). */
+var OPEX_COST_STRUCTURE = {
+  small:{
+    tierLabel:"Struttura a conduzione diretta (fino a 6 camere/unità)", unitsMax:6,
+    items:[
+      {label:"Pulizie e turnover ospiti", pct:0.15},
+      {label:"Biancheria e lavanderia", pct:0.03},
+      {label:"Utenze (energia, gas, acqua)", pct:0.05},
+      {label:"Manutenzione ordinaria", pct:0.03},
+      {label:"Consumabili, colazione e amenities", pct:0.015},
+      {label:"Commissioni OTA / portali di prenotazione", pct:0.15},
+      {label:"Marketing e promozione diretta", pct:0.01},
+      {label:"Assicurazione (RC, incendio, furto)", pct:0.015},
+      {label:"Sistema antincendio e sicurezza", pct:0.01},
+      {label:"Software gestionale, PMS, channel manager", pct:0.01},
+      {label:"Amministrazione e contabilità", pct:0.02},
+      {label:"Fondo rinnovo arredi e manutenzione straordinaria (FF&E)", pct:0.03}
+    ]
+  },
+  mid:{
+    tierLabel:"Struttura a gestione professionale (7–15 camere/unità)", unitsMax:15,
+    items:[
+      {label:"Pulizie e turnover ospiti", pct:0.16},
+      {label:"Biancheria e lavanderia", pct:0.03},
+      {label:"Utenze (energia, gas, acqua)", pct:0.06},
+      {label:"Manutenzione ordinaria", pct:0.03},
+      {label:"Consumabili, colazione e amenities", pct:0.02},
+      {label:"Commissioni OTA / portali di prenotazione", pct:0.14},
+      {label:"Marketing e promozione diretta", pct:0.02},
+      {label:"Fee di property management / coordinamento struttura", pct:0.16},
+      {label:"Assicurazione (RC, incendio, furto)", pct:0.015},
+      {label:"Sistema antincendio e sicurezza", pct:0.01},
+      {label:"Software gestionale, PMS, channel manager", pct:0.01},
+      {label:"Amministrazione e contabilità", pct:0.025},
+      {label:"Fondo rinnovo arredi e manutenzione straordinaria (FF&E)", pct:0.04}
+    ]
+  },
+  large:{
+    tierLabel:"Hotel/boutique a servizio pieno (16+ camere/unità)", unitsMax:Infinity,
+    items:[
+      {label:"Costo del personale (reception, housekeeping, manutenzione interna)", pct:0.22},
+      {label:"Pulizie e lavanderia esterna integrativa", pct:0.05},
+      {label:"Utenze (energia, gas, acqua)", pct:0.06},
+      {label:"Manutenzione ordinaria e straordinaria", pct:0.04},
+      {label:"Consumabili, colazione/F&B minore, amenities", pct:0.03},
+      {label:"Commissioni OTA / portali di prenotazione", pct:0.10},
+      {label:"Marketing e promozione", pct:0.02},
+      {label:"Assicurazione (RC, incendio, furto)", pct:0.015},
+      {label:"Sistema antincendio e sicurezza", pct:0.015},
+      {label:"Software gestionale, PMS, channel manager", pct:0.01},
+      {label:"Amministrazione e contabilità", pct:0.03},
+      {label:"Fondo rinnovo arredi e manutenzione straordinaria (FF&E)", pct:0.05}
+    ]
+  }
+};
+function getOpexTierKey(units){
+  var u=Number(units)||1;
+  if(u<=OPEX_COST_STRUCTURE.small.unitsMax) return "small";
+  if(u<=OPEX_COST_STRUCTURE.mid.unitsMax) return "mid";
+  return "large";
+}
+function getOpexBreakdown(units){
+  var tierKey=getOpexTierKey(units);
+  var tier=OPEX_COST_STRUCTURE[tierKey];
+  var total=tier.items.reduce(function(s,it){return s+it.pct;},0);
+  return {tierKey:tierKey, tierLabel:tier.tierLabel, items:tier.items, totalRatio:total};
+}
+function getOpexRatio(units){ return getOpexBreakdown(units).totalRatio; }
 var BREAK_EVEN_EXTRAPOLATION_CAP_YEARS = 60;
-function computeBreakEvenYear(rows, total, baseRevenue){
+function computeBreakEvenYear(rows, total, baseRevenue, opexRatio){
+  var ratio = (opexRatio!=null) ? opexRatio : getOpexRatio(getAssetUnits());
   for(var i=0;i<rows.length;i++){ if(rows[i].cum>=total) return {year:rows[i].year, extrapolated:false}; }
   var lastRow = rows[rows.length-1];
   var cum = lastRow ? lastRow.cum : 0;
   var startYear = lastRow ? lastRow.year : 0;
   for(var y=startYear+1; y<=BREAK_EVEN_EXTRAPOLATION_CAP_YEARS; y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
-    var costs = revenue*CASHFLOW_OPEX_RATIO;
+    var costs = revenue*ratio;
     var net = revenue-costs;
     cum += net;
     if(cum>=total) return {year:y, extrapolated:true};
   }
   return {year:null, extrapolated:true};
 }
-function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, total){
+function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, total, opexRatio){
+  var ratio = (opexRatio!=null) ? opexRatio : getOpexRatio(getAssetUnits());
   var rows=[];
   var cum=0;
   for(var y=1;y<=15;y++){
     var revenue = baseRevenue*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
-    var costs = revenue*CASHFLOW_OPEX_RATIO;
+    var costs = revenue*ratio;
     var net = revenue-costs;
     cum+=net;
     rows.push({year:y,revenue:revenue,costs:costs,net:net,cum:cum});
   }
-  var be=computeBreakEvenYear(rows, total, baseRevenue);
-  return {rows:rows, revenueSource:revenueSource, adrVerified:adrVerified, total:total, breakEvenYear:be.year, breakEvenExtrapolated:be.extrapolated};
+  var be=computeBreakEvenYear(rows, total, baseRevenue, ratio);
+  return {rows:rows, revenueSource:revenueSource, adrVerified:adrVerified, total:total, breakEvenYear:be.year, breakEvenExtrapolated:be.extrapolated, opexRatio:ratio};
 }
 function buildCashflowProjections(){
   var f=buildFinance();
@@ -2882,7 +2991,8 @@ function buildCashflowProjections(){
       return {mode:"single", single:projForRent(rentSingle, "Canone unico"), total:f.total};
     }
     if(f.revenue>0){
-      return {mode:"real", single:buildOneCashflowProjection(f.revenue, "dato reale da report interno", false, f.total), total:f.total};
+      var comRatio=getOpexRatio(getAssetUnits());
+      return {mode:"real", single:buildOneCashflowProjection(f.revenue, "dato reale da report interno", false, f.total, comRatio), total:f.total, opexRatio:comRatio};
     }
     return null;
   }
@@ -2892,13 +3002,14 @@ function buildCashflowProjections(){
   var adrSingle=metricFromDossier("adr","average_daily_rate");
   var units=getAssetUnits();
   var occ=getOccupancyAssumption();
+  var opexRatio=getOpexRatio(units);
 
   function projFor(adrMetric, label){
     if(!adrMetric) return null;
     var adrVerified=!!(adrMetric.source && String(adrMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
     var baseRevenue = adrMetric.value*occ.value*365*units;
     var revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMetric.value)+" \u20ac/notte, "+label+") \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" ("+percent(occ.value*100)+", su 365 gg/anno) \u00d7 "+units+" unit\u00e0";
-    var proj=buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, f.total);
+    var proj=buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, f.total, opexRatio);
     if(proj){ proj.occValue=occ.value; proj.occVerified=occ.verified; proj.occDays=365; }
     return proj;
   }
@@ -2915,13 +3026,13 @@ function buildCashflowProjections(){
       };
       avgProj=projFor(avgMetric, "ADR medio");
     }
-    return {mode:"range", min:projFor(adrMin || adrMax, "ADR minimo"), avg:avgProj, max:projFor(adrMax || adrMin, "ADR massimo"), total:f.total};
+    return {mode:"range", min:projFor(adrMin || adrMax, "ADR minimo"), avg:avgProj, max:projFor(adrMax || adrMin, "ADR massimo"), total:f.total, opexRatio:opexRatio};
   }
   if(adrSingle){
-    return {mode:"single", single:projFor(adrSingle, "ADR unico"), total:f.total};
+    return {mode:"single", single:projFor(adrSingle, "ADR unico"), total:f.total, opexRatio:opexRatio};
   }
   if(f.revenue>0){
-    return {mode:"real", single:buildOneCashflowProjection(f.revenue, "dato reale da report interno", false, f.total), total:f.total};
+    return {mode:"real", single:buildOneCashflowProjection(f.revenue, "dato reale da report interno", false, f.total, opexRatio), total:f.total, opexRatio:opexRatio};
   }
   return null;
 }
@@ -2948,7 +3059,7 @@ function renderCashflowPage(){
       +'<table class="cf-table"><thead><tr><th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_revenue)+'</th><th>'+escapeHTML(T.th_costs)+'</th><th>'+escapeHTML(T.th_profit)+'</th><th>'+escapeHTML(T.th_cumulative)+'</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
 
-  var intro='<p class="info-text">'+escapeHTML(fmt(T.cashflow_intro,{growth:percent(CASHFLOW_ANNUAL_GROWTH*100),opex:percent(CASHFLOW_OPEX_RATIO*100),total:euro(projs.total)}))+'</p>';
+  var intro='<p class="info-text">'+escapeHTML(fmt(T.cashflow_intro,{growth:percent(CASHFLOW_ANNUAL_GROWTH*100),opex:percent((projs.opexRatio!=null?projs.opexRatio:getOpexRatio(getAssetUnits()))*100),total:euro(projs.total)}))+'</p>';
   function page(heading,blockHtml,showIntro){
     return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_cashflow)+'</div><h2 class="section-title">'+escapeHTML(T.title_cashflow)+(heading?' \u2014 '+escapeHTML(heading):'')+'</h2><div class="lux-rule"></div>'
       +(showIntro?intro:'')
@@ -2968,6 +3079,33 @@ function renderCashflowPage(){
     pages.push(page("", tableBlock(projs.single, projs.mode==="real" ? T.scenario_real_data : T.scenario_adr), true));
   }
   return pages;
+}
+/* ---- Piano dei costi analitico: voce per voce, non una percentuale unica indistinta.
+   Risponde direttamente alla domanda "il 32%/X% cosa comprende?" mostrando la scomposizione
+   usata per calcolare i costi operativi nelle proiezioni di cashflow, con l'importo in euro
+   sul ricavo dell'anno 1 dello scenario di riferimento (medio/singolo). Vedi il commento su
+   OPEX_COST_STRUCTURE per le fonti dei benchmark usati voce per voce. ---- */
+function renderOpexBreakdownPage(){
+  if(isCommercialCategory()||isLandCategory()) return "";
+  var projs=buildCashflowProjections();
+  var headline=null;
+  if(projs){ headline = projs.mode==="range" ? (projs.avg||projs.min||projs.max) : projs.single; }
+  if(!headline || !headline.rows || !headline.rows[0]){
+    return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_opex_breakdown)+'</div><h2 class="section-title">'+escapeHTML(T.title_opex_breakdown)+'</h2><div class="lux-rule"></div><p class="info-text">'+escapeHTML(T.opex_breakdown_unavailable)+'</p></div></article>';
+  }
+  var revenueYear1=headline.rows[0].revenue;
+  var units=getAssetUnits();
+  var breakdown=getOpexBreakdown(units);
+  var rows=breakdown.items.map(function(it){
+    return '<tr><td>'+escapeHTML(it.label)+'</td><td>'+escapeHTML(percent(it.pct*100))+'</td><td>'+escapeHTML(euro(revenueYear1*it.pct))+'</td></tr>';
+  }).join("");
+  var totalRow='<tr class="be-row"><td><strong>'+escapeHTML(T.opex_breakdown_total_row)+'</strong></td><td><strong>'+escapeHTML(percent(breakdown.totalRatio*100))+'</strong></td><td><strong>'+escapeHTML(euro(revenueYear1*breakdown.totalRatio))+'</strong></td></tr>';
+  var intro=fmt(T.opex_breakdown_intro,{opex:percent(breakdown.totalRatio*100),tierLabel:breakdown.tierLabel});
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_opex_breakdown)+'</div><h2 class="section-title">'+escapeHTML(T.title_opex_breakdown)+'</h2><div class="lux-rule"></div>'
+    +'<p class="info-text">'+escapeHTML(intro)+'</p>'
+    +'<table class="cf-table"><thead><tr><th>'+escapeHTML(T.th_opex_item)+'</th><th>'+escapeHTML(T.th_opex_pct)+'</th><th>'+escapeHTML(T.th_opex_amount)+'</th></tr></thead><tbody>'+rows+totalRow+'</tbody></table>'
+    +'<p class="info-text">'+escapeHTML(T.opex_breakdown_source_note)+'</p>'
+    +'</div></article>';
 }
 
 /* ---- Presentazione narrativa: testi editoriali generati da analyze-opportunity (colonna
@@ -2996,14 +3134,12 @@ function renderNarrativeAnalysisPage(){
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_narrative_analysis)+'</div><h2 class="section-title">'+escapeHTML(T.title_narrative_analysis)+'</h2><div class="lux-rule"></div>'+blocks+'</div></article>';
 }
 
-/* ---- Domanda turistica necessaria al break-even: 2 grafici a torta per scenario ADR
-   (minimo/massimo), quindi 4 in totale. Orizzonte fisso a 5 anni (benchmark standard di
-   payback immobiliare), stesse ipotesi di crescita ricavi (2%/anno) e opex (32% sui ricavi)
-   già usate in buildCashflowProjections/computeBreakEvenYear, cosi i due calcoli restano
-   coerenti tra loro. Occupazione richiesta k risolta in forma chiusa: essendo net_y
-   proporzionale a k (revenue_y = ADR*k*365*units*growth^(y-1)), sum(net_y) = k * baseSum,
-   quindi k = TotalProjectCost / baseSum(occupazione=100%). */
-var BREAK_EVEN_DEMAND_HORIZON_YEARS = 5;
+/* ---- Domanda turistica vs break-even: 2 grafici a torta per scenario ADR (minimo/medio/
+   massimo). v2: NIENTE PIU' orizzonte fisso a 5 anni con occupazione retro-calcolata per farcela
+   rientrare -- si mostra l'occupazione REALMENTE dichiarata/usata altrove nel dossier (stessa
+   ipotesi di buildCashflowProjections/getOccupancyAssumption) e il break-even REALE che ne
+   risulta (stesso calcolo, stesso numero, di scenarioBoxHTML/renderFinancialSnapshot), invece
+   di una percentuale di riempimento inventata per centrare un traguardo arbitrario. */
 function getTourismDemandTotals(){
   var overnight=metricFromDossier("tourism","overnight_stays");
   if(overnight && overnight.value>0) return {pernottamenti:overnight.value, source:overnight.source||{}, fromArrivals:false};
@@ -3014,20 +3150,21 @@ function getTourismDemandTotals(){
   }
   return null;
 }
-function computeBreakEvenDemand(adrMetric, units, totalCost, demandTotals){
-  if(!adrMetric || !adrMetric.value || !units || !totalCost) return null;
-  var baseSumAt100=0;
-  for(var y=1;y<=BREAK_EVEN_DEMAND_HORIZON_YEARS;y++){
-    var revenueAt100=adrMetric.value*365*units*Math.pow(1+CASHFLOW_ANNUAL_GROWTH,y-1);
-    baseSumAt100 += revenueAt100*(1-CASHFLOW_OPEX_RATIO);
-  }
-  if(!baseSumAt100) return null;
-  var occupancyRequired = totalCost/baseSumAt100;
-  var exceedsHorizon = occupancyRequired>1;
-  var occupancyDisplay = Math.min(1, occupancyRequired);
-  var roomNightsRequired = occupancyDisplay*365*units;
-  var marketSharePct = demandTotals ? Math.min(100,(roomNightsRequired/demandTotals.pernottamenti)*100) : null;
-  return {occupancyPct: occupancyDisplay*100, occupancyRawPct: occupancyRequired*100, exceedsHorizon: exceedsHorizon, roomNightsRequired: roomNightsRequired, marketSharePct: marketSharePct};
+function computeBreakEvenDemand(adrMetric, occ, units, totalCost, demandTotals){
+  if(!adrMetric || !adrMetric.value || !units) return null;
+  var occValue = (occ && occ.value) || 0.5;
+  var roomNightsAtOcc = occValue*365*units;
+  var marketSharePct = demandTotals ? Math.min(100,(roomNightsAtOcc/demandTotals.pernottamenti)*100) : null;
+  var baseRevenue = adrMetric.value*occValue*365*units;
+  var proj = totalCost>0 ? buildOneCashflowProjection(baseRevenue, "", false, totalCost) : null;
+  return {
+    occupancyPct: occValue*100,
+    occVerified: !!(occ && occ.verified),
+    roomNightsRequired: roomNightsAtOcc,
+    marketSharePct: marketSharePct,
+    breakEvenYear: proj ? proj.breakEvenYear : null,
+    breakEvenExtrapolated: proj ? proj.breakEvenExtrapolated : false
+  };
 }
 /* v2: prima il grafico era un div con background:conic-gradient(...). Sullo schermo/nella
    stampa nativa funzionava perfettamente, ma html2canvas (usato per generare il PDF allegato
@@ -3094,20 +3231,23 @@ function renderTourismDemandPage(){
   }
   if(!scenarios.length) return "";
 
+  var occ=getOccupancyAssumption();
   var blocks=scenarios.map(function(sc){
-    var res=computeBreakEvenDemand(sc.adr, units, f.total, demandTotals);
+    var res=computeBreakEvenDemand(sc.adr, occ, units, f.total, demandTotals);
     if(!res) return "";
     var marketNote=demandTotals ? T.pie_market_share_note : T.tourism_demand_unavailable_note;
     var pies=pieChartHTML(res.marketSharePct, T.pie_market_share_caption, marketNote)
       + pieChartHTML(res.occupancyPct, T.pie_occupancy_caption, T.pie_occupancy_note);
-    var exceedsNote = res.exceedsHorizon ? '<p class="info-text" style="font-style:italic">'+escapeHTML(fmt(T.tourism_demand_exceeds,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>' : '';
-    return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+exceedsNote+'</div>';
+    var breakEvenNote = res.breakEvenYear!=null
+      ? '<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_breakeven_line,{breakEven:String(Math.round(res.breakEvenYear*10)/10)}))+(res.breakEvenExtrapolated?escapeHTML(T.extrapolated_note2):'')+'</p>'
+      : '<p class="info-text" style="font-style:italic">'+escapeHTML(T.tourism_demand_exceeds)+'</p>';
+    return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+breakEvenNote+'</div>';
   }).join("");
   if(!blocks) return "";
 
-  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(demandTotals.source.provider_name||"-")+'</p>' : '';
+  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(sourceProviderLabel(demandTotals.source.provider_name||"-"))+'</p>' : '';
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+'</h2><div class="lux-rule"></div>'
-    +'<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_intro,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>'
+    +'<p class="info-text">'+escapeHTML(T.tourism_demand_intro)+'</p>'
     +blocks+srcLine
     +'</div></article>';
 }
@@ -3133,7 +3273,7 @@ function renderTourismSeriesPage(){
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_history)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_history)+'</h2><div class="lux-rule"></div>'
     +barChartHTML(series.series,T.presences_arrivals_label+escapeHTML(series.geography_name||series.geography_level||"-"))
     +'<table class="trend-table"><thead><tr><th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_value)+'</th><th>'+escapeHTML(T.th_yoy)+'</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +'<p class="info-text">'+(series.cagr_pct!=null?(escapeHTML(T.cagr_calculated)+escapeHTML(percent(series.cagr_pct))+escapeHTML(T.per_year)):escapeHTML(T.cagr_insufficient))+' '+escapeHTML(T.source_prefix)+escapeHTML(src.provider_name||"-")+'.'+escapeHTML(T.no_interpolation_note)+'</p>'
+    +'<p class="info-text">'+(series.cagr_pct!=null?(escapeHTML(T.cagr_calculated)+escapeHTML(percent(series.cagr_pct))+escapeHTML(T.per_year)):escapeHTML(T.cagr_insufficient))+' '+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'.'+escapeHTML(T.no_interpolation_note)+'</p>'
     +'</div></article>';
 }
 /* ---- Traffico aereo privato: aeroporto ICAO piu' vicino tra i principali italiani,
@@ -3323,6 +3463,7 @@ function renderBook(){
     push(T.chapter_financial, renderInvestmentStructure());
     push(T.chapter_financial, renderTourismDemandPage());
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
+    push(T.chapter_financial, renderOpexBreakdownPage());
     push(T.chapter_financial, renderFinancialSnapshot());
     renderFiscalScenariosPage().forEach(function(p){ push(T.chapter_financial, p); });
   }
