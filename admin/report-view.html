@@ -446,9 +446,10 @@ var UI_STRINGS = {
   kicker_investment_thesis:"Sintesi investimento", title_investment_thesis:"Analisi della proposta",
   thesis_cost_line:"L’investimento complessivo stimato (Total Project Cost) è {total}.",
   thesis_cost_per_key_line:"Rapportato alle camere considerate ({rooms}), il costo per camera (cost per key) è {costPerKey}.",
-  thesis_revenue_line:"Nello scenario {scenario}, il ricavo lordo atteso al primo anno è {revenue}, a fronte di costi operativi stimati al {opex} dei ricavi ({costs}); il reddito netto (GOP) risultante è {net}.",
+  thesis_revenue_line:"Nello scenario {scenario}, il ricavo lordo atteso al primo anno è {revenue}, a fronte di costi operativi stimati al {opex} dei ricavi ({costs}); l’utile operativo (GOP) ante imposte risultante è {net}.",
+  thesis_revenue_line_net:"Nello scenario {scenario}, il ricavo lordo atteso al primo anno è {revenue}, a fronte di costi operativi stimati al {opex} dei ricavi ({costs}); l’utile operativo (GOP) ante imposte risultante è {grossNet}, pari a {net} di utile netto dopo IRES+IRAP (27,9%).",
   thesis_occupancy_line:"Il ricavo si basa su un’ipotesi di occupazione {occLabel} del {occ}, su base 365 giorni/anno.",
-  thesis_per_room_line:"Per singola camera: {revenuePerRoom} di ricavo e {netPerRoom} di reddito netto annuo.",
+  thesis_per_room_line:"Per singola camera: {revenuePerRoom} di ricavo e {netPerRoom} di GOP ante imposte annuo.",
   thesis_roi_breakeven_line:"Su queste basi il ROI atteso al primo anno è {roi}, con rientro dell’investimento (break-even) stimato a {breakEven} anni.",
   thesis_roi_only_line:"Su queste basi il ROI atteso al primo anno è {roi}; il break-even non risulta raggiunto nell’orizzonte di proiezione considerato.",
   thesis_tax_disclaimer:"<strong>Importante: ROI, Net Income e break-even qui sopra sono valori LORDI — non includono la pressione fiscale sul reddito operativo (IRPEF/cedolare secca per persona fisica, IRES/IRAP per società), perché il dossier non conosce la forma giuridica dell’investitore. Il rientro reale, al netto delle imposte, sarà più lungo di quanto indicato.</strong>",
@@ -513,7 +514,7 @@ var UI_STRINGS = {
   note_sea_water:"Classificazione ufficiale UE (European Environment Agency) del punto di balneazione monitorato più vicino. Disponibile solo per località europee: fuori dall\u2019Unione Europea questo dato non è disponibile da nessuna fonte pubblica equivalente.",
   no_sea_water_data:"Nessun punto di balneazione monitorato ufficialmente entro il raggio di ricerca (25 km) — normale per immobili non costieri o fuori Europa.",
   kicker_tourism_data:"Tourism data", title_tourism_current:"Turismo \u2014 Dati Attuali",
-  field_arrivals:"Arrivi turistici", unit_people:"persone",
+  field_arrivals:"Arrivi turistici", unit_people_tourism:"persone",
   field_overnight_stays:"Presenze (pernottamenti)", unit_nights:"notti",
   field_average_stay:"Permanenza media",
   field_italian_arrivals:"Arrivi italiani", field_foreign_arrivals:"Arrivi stranieri",
@@ -1519,11 +1520,11 @@ function dividerPageHTML(title,kicker){
 /* ---- Pagine di contenuto per settore ---- */
 function renderTourismMetricsPage(){
   var fields=[
-    ["arrivals",T.field_arrivals,T.unit_people],
+    ["arrivals",T.field_arrivals,T.unit_people_tourism],
     ["overnight_stays",T.field_overnight_stays,T.unit_nights],
     ["average_stay",T.field_average_stay,T.unit_nights],
-    ["italian_arrivals",T.field_italian_arrivals,T.unit_people],
-    ["foreign_arrivals",T.field_foreign_arrivals,T.unit_people],
+    ["italian_arrivals",T.field_italian_arrivals,T.unit_people_tourism],
+    ["foreign_arrivals",T.field_foreign_arrivals,T.unit_people_tourism],
     ["italian_overnight_stays",T.field_italian_overnight,T.unit_nights],
     ["foreign_overnight_stays",T.field_foreign_overnight,T.unit_nights]
   ];
@@ -2120,18 +2121,24 @@ function renderInvestmentThesisPage(){
   }
   if(headline && headline.rows && headline.rows[0]){
     var y1=headline.rows[0];
-    var revLine=fmt(T.thesis_revenue_line,{
+    /* GOP e' l'utile OPERATIVO (ante imposte): y1.grossNet, mai y1.net -- per hotel/lusso
+       y1.net e' gia' al netto di IRES+IRAP (applyCorporateTaxIfApplicable), quindi chiamarlo
+       "GOP" userebbe la parola sbagliata per il numero sbagliato. Quando le due cifre
+       differiscono (tassazione applicata) si mostrano entrambe, esplicitamente etichettate. */
+    var taxApplied = y1.grossNet!=null && y1.net!=null && Math.round(y1.grossNet)!==Math.round(y1.net);
+    var revLine=fmt(taxApplied ? T.thesis_revenue_line_net : T.thesis_revenue_line,{
       scenario:headlineLabel,
       revenue:euro(y1.revenue),
       costs:euro(y1.costs),
-      net:euro(y1.net),
+      net:euro(taxApplied ? y1.net : y1.grossNet),
+      grossNet:euro(y1.grossNet),
       opex:percent((headline.opexRatio!=null?headline.opexRatio:getOpexRatio(getAssetUnits()))*100)
     });
     if(!isCommercial && headline.occValue!=null){
       revLine+=" "+fmt(T.thesis_occupancy_line,{occ:percent(headline.occValue*100),occLabel:headline.occVerified?T.occupancy_verified:T.occupancy_assumed});
     }
     if(Number.isFinite(rooms)&&rooms>0){
-      revLine+=" "+fmt(T.thesis_per_room_line,{revenuePerRoom:euro(y1.revenue/rooms),netPerRoom:euro(y1.net/rooms)});
+      revLine+=" "+fmt(T.thesis_per_room_line,{revenuePerRoom:euro(y1.revenue/rooms),netPerRoom:euro(y1.grossNet/rooms)});
     }
     paras.push(revLine);
 
@@ -2289,10 +2296,14 @@ function renderRoomKpiPage(){
   }
   var revenueYear1 = headline ? headline.rows[0].revenue : (f.revenue>0?f.revenue:null);
   var costsYear1 = headline ? headline.rows[0].costs : (f.costs>0?f.costs:null);
-  var netYear1 = headline ? headline.rows[0].net : (f.net?f.net:null);
+  /* GOP (Gross Operating Profit) e' per definizione un utile OPERATIVO, quindi PRIMA delle
+     imposte: usa grossNet (ricavi-costi operativi), mai net (che per hotel/lusso e' gia' al
+     netto di IRES+IRAP, vedi applyCorporateTaxIfApplicable) -- altrimenti la card "GOP/camera"
+     mostrerebbe silenziosamente l'utile netto spacciandolo per GOP. */
+  var gopYear1 = headline ? headline.rows[0].grossNet : (f.net?f.net:null);
   var opexPerRoom = costsYear1>0 ? costsYear1/rooms : null;
   var revenuePerRoom = revenueYear1>0 ? revenueYear1/rooms : null;
-  var gopPerRoom = (netYear1!=null && netYear1!==0) ? netYear1/rooms : null;
+  var gopPerRoom = (gopYear1!=null && gopYear1!==0) ? gopYear1/rooms : null;
   function card(label,value,note){
     return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+(value!=null?escapeHTML(euro(value)):escapeHTML(T.not_available))+'</div><div class="metric-note">'+escapeHTML(note)+'</div></div>';
   }
@@ -2402,19 +2413,26 @@ function fiscalScenarioRowsHTML(grossNetIncome, grossRevenueYear1, totalInvestme
 
   var iresIrapTotalPct = 0.24 + 0.039;
   var srlNet = grossNetIncome * (1 - iresIrapTotalPct);
-  addRow("Società di capitali (S.r.l.) — IRES 24% + IRAP 3,9%", srlNet, "Canone soggetto a IVA solo se l'immobile è strumentale/commerciale e il locatore ha esercitato l'opzione per l'imponibilità (aliquota ordinaria 22%): di norma neutra per il locatore soggetto IVA, ma incide sugli adempimenti. Locazione abitativa: sempre esente/fuori campo IVA.");
+  var srlNote = isLuxury
+    ? "IVA ordinaria (22%) sui ricavi da gestione alberghiera (pernottamenti, servizi accessori): di norma neutra per la società (versata e recuperata sugli acquisti), ma incide sugli adempimenti periodici."
+    : "Canone soggetto a IVA solo se l'immobile è strumentale/commerciale e il locatore ha esercitato l'opzione per l'imponibilità (aliquota ordinaria 22%): di norma neutra per il locatore soggetto IVA, ma incide sugli adempimenti. Locazione abitativa: sempre esente/fuori campo IVA.";
+  addRow(isLuxury ? "Società di capitali (S.r.l.) — gestione alberghiera — IRES 24% + IRAP 3,9%" : "Società di capitali (S.r.l.) — IRES 24% + IRAP 3,9%", srlNet, srlNote);
 
-  var holdingNote = "Stessa aliquota IRES+IRAP della S.r.l.";
-  if(purchasePriceForComodoTest){
-    var redditoMinimoPresunto = purchasePriceForComodoTest * 0.0238;
-    if(grossNetIncome < redditoMinimoPresunto){
-      var comodoTax = redditoMinimoPresunto * 0.345;
-      holdingNote = "Attenzione: il reddito risulta inferiore al reddito minimo presunto (" + euro(redditoMinimoPresunto) + ", 2,38% del prezzo di acquisto usato come proxy del valore immobile) — rischio \"società di comodo\", con maggiorazione IRES di 10,5 punti (34,5% sul reddito minimo presunto, imposta stimata " + euro(comodoTax) + " anziché sul reddito reale). Vantaggio in compenso: se la società ha davvero patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL. Stesso trattamento IVA della S.r.l. (esente, salvo opzione per l'imponibilità sugli immobili strumentali). Verificare con un commercialista.";
-    }else{
-      holdingNote = "Reddito superiore al reddito minimo presunto: test di operatività superato, nessun rischio di maggiorazione da società di comodo. Vantaggio specifico: se la società ha patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL applicato invece a una S.r.l. operativa generica. Stesso trattamento IVA della S.r.l.";
+  if(!isLuxury){
+    var holdingNote = "Stessa aliquota IRES+IRAP della S.r.l.";
+    if(purchasePriceForComodoTest){
+      var redditoMinimoPresunto = purchasePriceForComodoTest * 0.0238;
+      if(grossNetIncome < redditoMinimoPresunto){
+        var comodoTax = redditoMinimoPresunto * 0.345;
+        holdingNote = "Attenzione: il reddito risulta inferiore al reddito minimo presunto (" + euro(redditoMinimoPresunto) + ", 2,38% del prezzo di acquisto usato come proxy del valore immobile) — rischio \"società di comodo\", con maggiorazione IRES di 10,5 punti (34,5% sul reddito minimo presunto, imposta stimata " + euro(comodoTax) + " anziché sul reddito reale). Vantaggio in compenso: se la società ha davvero patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL. Stesso trattamento IVA della S.r.l. (esente, salvo opzione per l'imponibilità sugli immobili strumentali). Verificare con un commercialista.";
+      }else{
+        holdingNote = "Reddito superiore al reddito minimo presunto: test di operatività superato, nessun rischio di maggiorazione da società di comodo. Vantaggio specifico: se la società ha patrimonio immobiliare locato prevalente, gli interessi su mutui ipotecari sono deducibili al 100%, fuori dal limite ROL applicato invece a una S.r.l. operativa generica. Stesso trattamento IVA della S.r.l.";
+      }
     }
+    addRow("Holding / Società immobiliare di gestione — IRES 24% + IRAP 3,9%", srlNet, holdingNote);
+  }else{
+    addRow("Holding — proprietaria dell'immobile, con gestione alberghiera affidata a una società operativa — IRES 24% + IRAP 3,9%", srlNet, "Stessa aliquota IRES+IRAP della S.r.l. operativa. Il vantaggio ROL sugli interessi da mutuo ipotecario (100% deducibili, tipico di una società con patrimonio immobiliare prevalentemente locato) NON si applica automaticamente qui: un hotel gestito direttamente è un'attività operativa, non una locazione di immobili — verificare con un commercialista la struttura societaria più adatta (proprietà e gestione nella stessa società, o separate).");
   }
-  addRow("Holding / Società immobiliare di gestione — IRES 24% + IRAP 3,9%", srlNet, holdingNote);
 
   return rows.join("");
 }
@@ -2429,17 +2447,17 @@ function renderFiscalScenariosPage(){
   if(projs && projs.mode === "range" && (projs.min || projs.max)){
     [["Scenario minimo", projs.min],["Scenario medio", projs.avg],["Scenario massimo", projs.max]].forEach(function(pair){
       if(!pair[1]) return;
-      var net = pair[1].rows[0].net;
+      var grossNetForTax = pair[1].rows[0].grossNet;
       var grossRev = pair[1].rows[0].revenue;
-      if(!(net > 0)) return;
-      tables.push({label: pair[0], html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice, isLuxury)});
+      if(!(grossNetForTax > 0)) return;
+      tables.push({label: pair[0], html: fiscalScenarioRowsHTML(grossNetForTax, grossRev, f.total, isResidential, purchasePrice, isLuxury)});
     });
   }else{
     var headline = projs ? (projs.mode === "range" ? (projs.min || projs.max) : projs.single) : null;
-    var net = headline ? headline.rows[0].net : f.net;
+    var grossNetForTax = headline ? headline.rows[0].grossNet : f.net;
     var grossRev = headline ? headline.rows[0].revenue : f.revenue;
-    if(net > 0){
-      tables.push({label: null, html: fiscalScenarioRowsHTML(net, grossRev, f.total, isResidential, purchasePrice, isLuxury)});
+    if(grossNetForTax > 0){
+      tables.push({label: null, html: fiscalScenarioRowsHTML(grossNetForTax, grossRev, f.total, isResidential, purchasePrice, isLuxury)});
     }
   }
 
@@ -2452,7 +2470,7 @@ function renderFiscalScenariosPage(){
   /* Una tabella fiscale completa (7-8 righe, alcune con note su piu' righe) non entra insieme
      ad altre nella stessa pagina fissa da 210mm senza sovrapporsi al footer: ogni scenario
      riceve una pagina report-page dedicata, come le altre sezioni multi-scenario del dossier. */
-  var intro = '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata al reddito netto operativo già mostrato nella sezione precedente. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>'
+  var intro = '<p class="info-text" style="font-style:italic;margin-bottom:16px">Simulazione a scopo indicativo, basata sulle aliquote fiscali italiane in vigore nel 2026, applicata all\'utile ante imposte (reddito operativo lordo) già mostrato nella sezione precedente — non al valore già mostrato al netto delle imposte, per evitare di tassarlo due volte. Non costituisce consulenza fiscale: la situazione reale dipende dal profilo specifico dell\'investitore e va sempre verificata con un commercialista.</p>'
     + (isLuxury ? '<p class="info-text" style="font-style:italic;margin-bottom:16px">'+(isHospitalityCategory()?'Trattandosi di una struttura alberghiera (Hotel/Resort), si mostra solo lo scenario societario (S.r.l./Holding): il veicolo tipicamente utilizzato per la gestione di un hotel, a differenza degli scenari da proprietario privato (cedolare secca, IRPEF, regime forfettario) pensati per locazioni di piccola scala e non applicabili in modo credibile a un\'attività alberghiera strutturata.':'Per un investimento di questa fascia (ADR elevato, investimento complessivo rilevante o grande dimensione) si mostra solo lo scenario societario (S.r.l./Holding): il veicolo tipicamente utilizzato per acquisizioni alberghiere di questo valore, a differenza degli scenari da proprietario privato (cedolare secca, IRPEF, regime forfettario) mostrati per investimenti di taglia minore.')+'</p>' : '');
 
   var pages = tables.map(function(t, idx){
