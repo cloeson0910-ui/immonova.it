@@ -494,6 +494,7 @@ td{
     </div>
     <div class="title-actions">
       <button class="secondary-btn" id="openAccessBtn" style="display:none">Gestione Accessi</button>
+      <button class="secondary-btn" id="exportExcelBtn">Esporta Excel</button>
       <button class="primary-btn" id="openImportBtn">Importa / Allinea da Excel</button>
     </div>
   </div>
@@ -990,6 +991,73 @@ window.deletePartner = async function(id){
   await loadPartners();
 };
 
+/* ============================================================================
+   Esportazione Excel (tutti i capital partners, tutte le colonne del DB)
+   ============================================================================ */
+const EXPORT_COLUMNS = [
+  { key:"categoria", label:"Categoria" },
+  { key:"soggetto", label:"Soggetto" },
+  { key:"soggetto_key", label:"Soggetto Key" },
+  { key:"hq_area", label:"HQ / Area" },
+  { key:"settori_fit", label:"Settori / Fit" },
+  { key:"priorita", label:"Priorità" },
+  { key:"sito_ufficiale", label:"Sito Ufficiale" },
+  { key:"email", label:"Email" },
+  { key:"tipo_contatto", label:"Tipo Contatto" },
+  { key:"note", label:"Note" },
+  { key:"fonte_verifica", label:"Fonte Verifica" },
+  { key:"data_verifica", label:"Data Verifica" },
+  { key:"italia", label:"Italia" },
+  { key:"europa", label:"Europa" },
+  { key:"porti", label:"Porti" },
+  { key:"aeroporti", label:"Aeroporti" },
+  { key:"hospitality", label:"Hospitality" },
+  { key:"real_estate", label:"Real Estate" },
+  { key:"infrastructure", label:"Infrastructure" },
+  { key:"stato", label:"Stato CRM" },
+  { key:"progetto_compatibile", label:"Progetto Compatibile" },
+  { key:"ultimo_contatto", label:"Ultimo Contatto" },
+  { key:"note_crm", label:"Note CRM" },
+  { key:"imported_at", label:"Importato Il" },
+  { key:"created_at", label:"Creato Il" },
+  { key:"updated_at", label:"Aggiornato Il" },
+  { key:"id", label:"ID" }
+];
+
+function exportPartnersToExcel(){
+  if(!allPartners.length){
+    setStatus("Nessun capital partner da esportare.", "error");
+    return;
+  }
+
+  const rows = allPartners.map(p => {
+    const row = {};
+    EXPORT_COLUMNS.forEach(col => { row[col.label] = p[col.key] ?? ""; });
+    return row;
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(rows, { header: EXPORT_COLUMNS.map(c => c.label) });
+
+  /* larghezza colonne leggibile invece del default troppo stretto */
+  worksheet["!cols"] = EXPORT_COLUMNS.map(col => {
+    const maxLen = Math.max(
+      col.label.length,
+      ...rows.map(r => String(r[col.label] ?? "").length)
+    );
+    return { wch: Math.min(Math.max(maxLen + 2, 12), 60) };
+  });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Capital Partners");
+
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(workbook, `capital-partners_${today}.xlsx`);
+
+  setStatus(`Esportati ${allPartners.length} capital partners in Excel.`, "success");
+}
+
+document.getElementById("exportExcelBtn").addEventListener("click", exportPartnersToExcel);
+
 searchInput.addEventListener("input", applyFilters);
 categoriaFilter.addEventListener("change", applyFilters);
 prioritaFilter.addEventListener("change", applyFilters);
@@ -1340,6 +1408,7 @@ async function handleFile(file){
     document.getElementById("accessDeniedBox").style.display = "block";
     document.getElementById("pageContent").style.display = "none";
     document.getElementById("openImportBtn").style.display = "none";
+    document.getElementById("exportExcelBtn").style.display = "none";
     return;
   }
 
