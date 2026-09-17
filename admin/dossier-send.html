@@ -893,7 +893,12 @@ function renderTourismDemandPage(){
      "html.replace is not a function" perché prova a chiamare .replace() su un array. */
   if(isLandCategory()||isCommercialCategory()) return "";
   var f=buildFinance();
-  var units=getAssetUnits();
+  /* Una Villa/Appartamento si affittano a corpo intero, non camera per camera -- le notti
+     vendute/anno sono occupazione×365 UNA volta sola, non moltiplicate per il numero di
+     camere/bedroom (altrimenti un appartamento con 2 stanze risulterebbe "pieno" a metà delle
+     notti reali di un singolo immobile). Solo per Hotel/Resort le camere si vendono
+     singolarmente e vanno davvero moltiplicate. */
+  var units=isHospitalityCategory()?getAssetUnits():1;
   var demandTotals=getTourismDemandTotals();
   var adrMin=metricFromDossier("adr","average_daily_rate_min");
   var adrMax=metricFromDossier("adr","average_daily_rate_max");
@@ -927,7 +932,7 @@ function renderTourismDemandPage(){
   }).join("");
   if(!blocks) return "";
 
-  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(sourceProviderLabel(demandTotals.source.provider_name||"-"))+'</p>' : '';
+  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(sourceProviderLabel(demandTotals.source.provider_name||"-",!!demandTotals.source.source_url))+'</p>' : '';
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+'</h2><div class="lux-rule"></div>'
     +'<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_intro,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>'
     +blocks+srcLine
@@ -1391,9 +1396,16 @@ function metricFromDossier(section,field){
    verified esterno), la riga "Fonte: ..." riceve in coda una breve nota che spiega perché è
    un dato affidabile: la presenza stabile e continuativa di IMMONOVA sul mercato del
    territorio, non una fonte anonima o una stima generica senza radicamento locale. */
-function sourceProviderLabel(name){
+function sourceProviderLabel(name, hasSourceUrl){
+  /* La nota "stimato dal nostro team" ha senso SOLO quando il dato è davvero una stima interna
+     IMMONOVA senza una fonte esterna citabile. Bug reale: alcuni dati (es. demografia di
+     Gallipoli, endpoint "immonova-location-profile") hanno provider_name "IMMONOVA Location
+     Profile" MA arrivano in realtà da una fonte esterna reale con tanto di source_url (es.
+     statisticheitalia.it) -- mostrare "stimato dal nostro team" insieme a quel link è una
+     contraddizione: sembra un dato inventato quando invece cita una fonte verificabile. Se è
+     presente un source_url reale, la nota interna non va aggiunta: basta il link. */
   var n=String(name||"-");
-  if(n.toLowerCase().indexOf("immonova")>=0) return n+T.immonova_source_disclaimer;
+  if(n.toLowerCase().indexOf("immonova")>=0 && !hasSourceUrl) return n+T.immonova_source_disclaimer;
   return n;
 }
 function formatMetricVal(v){var n=Number(v);return Number.isFinite(n)?n.toLocaleString(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG):String(v==null?"-":v);}
@@ -1565,7 +1577,7 @@ function renderTourismMetricsPage(){
   if(!found.length)return "";
   var src=found[0].metric.source||{};
   var cards=found.map(function(x){return metricCardHTML(x.label,x.metric,x.unit);}).join("");
-  return '<div class="section-kicker">'+escapeHTML(T.kicker_tourism_data)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_current)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+(src.source_url?(" — "+escapeHTML(src.source_url)):"")+'</p>';
+  return '<div class="section-kicker">'+escapeHTML(T.kicker_tourism_data)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_current)+'</h2><div class="lux-rule"></div><div class="metric-grid">'+cards+'</div><p class="info-text">'+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(src.provider_name||"-",!!src.source_url))+(src.source_url?(" — "+escapeHTML(src.source_url)):"")+'</p>';
 }
 function renderTerritorialPage(){
   var pop=metricFromDossier("demography","population");
@@ -1685,7 +1697,7 @@ function renderRealEstatePage(){
   var src=(min||max)?(min||max).source||{}:null;
   var valueBlock=(min||max)?('<div class="metric-grid" style="grid-template-columns:1fr 1fr">'
     +rangeCardHTML(T.label_market_value_m2,min,max,"eur_per_m2")
-    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-",!!src.source_url))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>'):'';
   return '<div class="section-kicker">'+escapeHTML(T.kicker_real_estate)+'</div><h2 class="section-title">'+escapeHTML(T.title_real_estate)+'</h2><div class="lux-rule"></div>'
     +valueBlock;
@@ -1700,12 +1712,12 @@ function renderPricingPage(){
     if(!rmin&&!rmax&&rsingle){
       return '<div class="section-kicker">'+escapeHTML(T.kicker_commercial_rent)+'</div><h2 class="section-title">'+escapeHTML(T.title_commercial_rent)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
         +metricCardHTML(T.label_rent_m2_month,rsingle,"eur_per_m2_month")
-        +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(rsrc.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
+        +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(rsrc.provider_name||"-",!!rsrc.source_url))+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
         +'</div>';
     }
     return '<div class="section-kicker">'+escapeHTML(T.kicker_commercial_rent)+'</div><h2 class="section-title">'+escapeHTML(T.title_commercial_rent)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
       +rangeCardHTML(T.label_rent_m2_month,rmin,rmax,"eur_per_m2_month")
-      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(rsrc.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
+      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(rsrc.provider_name||"-",!!rsrc.source_url))+'</div><div class="metric-note">'+escapeHTML(rsrc.source_url||"")+'</div></div>'
       +'</div>';
   }
   var min=metricFromDossier("adr","average_daily_rate_min");
@@ -1716,12 +1728,12 @@ function renderPricingPage(){
   if(!min&&!max&&single){
     return '<div class="section-kicker">'+escapeHTML(T.kicker_hospitality_pricing)+'</div><h2 class="section-title">'+escapeHTML(T.title_adr)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
       +metricCardHTML(T.label_adr_room_night,single,"eur_per_room_night")
-      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+      +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-",!!src.source_url))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
       +'</div>';
   }
   return '<div class="section-kicker">'+escapeHTML(T.kicker_hospitality_pricing)+'</div><h2 class="section-title">'+escapeHTML(T.title_adr)+'</h2><div class="lux-rule"></div><div class="metric-grid" style="grid-template-columns:1fr 1fr">'
     +rangeCardHTML(T.label_adr_room_night,min,max,"eur_per_room_night")
-    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
+    +'<div class="metric-card"><div class="metric-label">'+escapeHTML(T.label_source_card)+'</div><div class="metric-value" style="font-size:15px">'+escapeHTML(sourceProviderLabel(src.provider_name||"-",!!src.source_url))+'</div><div class="metric-note">'+escapeHTML(src.source_url||"")+'</div></div>'
     +'</div>';
 }
 /* Sincronizzato da report-view.html (file gemello): questo file aveva
@@ -1963,7 +1975,7 @@ function renderSourcesPage(){
       if(field==="summary"||field==="items"||field==="count")return;
       var f=bucket[field];if(!f||typeof f!=="object"||!("value" in f))return;
       var s=f.source||{};
-      rows.push({label:sec+" · "+field,provider:sourceProviderLabel(s.provider_name||"-"),url:s.source_url||""});
+      rows.push({label:sec+" · "+field,provider:sourceProviderLabel(s.provider_name||"-",!!s.source_url),url:s.source_url||""});
     });
   });
   // price_index_trend NON va citato qui: il grafico corrispondente e' stato rimosso dal
@@ -2003,15 +2015,15 @@ function renderNarrativePage(){
   if(mar)bits.push(pluralPick(mar,"marinas_singular","marinas_plural"));
   if(res)bits.push(pluralPick(res,"restaurants_singular","restaurants_plural"));
   var remin=metricFromDossier("real_estate_market","residential_sale_per_m2_min"),remax=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
-  if(remin||remax)bits.push(T.real_estate_value_prefix+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+T.real_estate_value_suffix+(sourceProviderLabel((remin||remax).source.provider_name||"-"))+").");
+  if(remin||remax)bits.push(T.real_estate_value_prefix+(remin?formatMetricVal(remin.value):"?")+"\u2013"+(remax?formatMetricVal(remax.value):"?")+T.real_estate_value_suffix+(sourceProviderLabel((remin||remax).source.provider_name||"-",!!(remin||remax).source.source_url))+").");
   if(isCommercialCategory()){
     var rentminT=metricFromDossier("commercial_rent","monthly_rent_per_m2_min"),rentmaxT=metricFromDossier("commercial_rent","monthly_rent_per_m2_max"),rentsingleT=metricFromDossier("commercial_rent","monthly_rent_per_m2");
-    if(rentminT||rentmaxT)bits.push(T.rent_reference_prefix+(rentminT?formatMetricVal(rentminT.value):"?")+"\u2013"+(rentmaxT?formatMetricVal(rentmaxT.value):"?")+T.rent_reference_suffix+(sourceProviderLabel((rentminT||rentmaxT).source.provider_name||"-"))+").");
-    else if(rentsingleT)bits.push(T.rent_reference_prefix+formatMetricVal(rentsingleT.value)+T.rent_reference_suffix+(sourceProviderLabel(rentsingleT.source.provider_name||"-"))+").");
+    if(rentminT||rentmaxT)bits.push(T.rent_reference_prefix+(rentminT?formatMetricVal(rentminT.value):"?")+"\u2013"+(rentmaxT?formatMetricVal(rentmaxT.value):"?")+T.rent_reference_suffix+(sourceProviderLabel((rentminT||rentmaxT).source.provider_name||"-",!!(rentminT||rentmaxT).source.source_url))+").");
+    else if(rentsingleT)bits.push(T.rent_reference_prefix+formatMetricVal(rentsingleT.value)+T.rent_reference_suffix+(sourceProviderLabel(rentsingleT.source.provider_name||"-",!!rentsingleT.source.source_url))+").");
   }else{
     var adrmin=metricFromDossier("adr","average_daily_rate_min"),adrmax=metricFromDossier("adr","average_daily_rate_max"),adrsingle=metricFromDossier("adr","average_daily_rate");
-    if(adrmin||adrmax)bits.push(T.adr_reference_prefix+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+T.adr_reference_suffix+(sourceProviderLabel((adrmin||adrmax).source.provider_name||"-"))+").");
-    else if(adrsingle)bits.push(T.adr_reference_prefix+formatMetricVal(adrsingle.value)+T.adr_reference_suffix+(sourceProviderLabel(adrsingle.source.provider_name||"-"))+").");
+    if(adrmin||adrmax)bits.push(T.adr_reference_prefix+(adrmin?formatMetricVal(adrmin.value):"?")+"\u2013"+(adrmax?formatMetricVal(adrmax.value):"?")+T.adr_reference_suffix+(sourceProviderLabel((adrmin||adrmax).source.provider_name||"-",!!(adrmin||adrmax).source.source_url))+").");
+    else if(adrsingle)bits.push(T.adr_reference_prefix+formatMetricVal(adrsingle.value)+T.adr_reference_suffix+(sourceProviderLabel(adrsingle.source.provider_name||"-",!!adrsingle.source.source_url))+").");
   }
   var pop=metricFromDossier("demography","population");
   if(pop)bits.push(T.population_prefix+formatMetricVal(pop.value)+T.population_suffix);
@@ -3355,7 +3367,7 @@ function renderTourismSeriesPage(){
   return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_history)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_history)+'</h2><div class="lux-rule"></div>'
     +barChartHTML(series.series,T.presences_arrivals_label+escapeHTML(series.geography_name||series.geography_level||"-"))
     +'<table class="trend-table"><thead><tr><th>'+escapeHTML(T.th_year)+'</th><th>'+escapeHTML(T.th_value)+'</th><th>'+escapeHTML(T.th_yoy)+'</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +'<p class="info-text">'+(series.cagr_pct!=null?(escapeHTML(T.cagr_calculated)+escapeHTML(percent(series.cagr_pct))+escapeHTML(T.per_year)):escapeHTML(T.cagr_insufficient))+' '+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(src.provider_name||"-"))+'.'+escapeHTML(T.no_interpolation_note)+'</p>'
+    +'<p class="info-text">'+(series.cagr_pct!=null?(escapeHTML(T.cagr_calculated)+escapeHTML(percent(series.cagr_pct))+escapeHTML(T.per_year)):escapeHTML(T.cagr_insufficient))+' '+escapeHTML(T.source_prefix)+escapeHTML(sourceProviderLabel(src.provider_name||"-",!!src.source_url))+'.'+escapeHTML(T.no_interpolation_note)+'</p>'
     +'</div></article>';
 }
 function renderTourismForecastPage(){
