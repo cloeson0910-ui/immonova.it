@@ -2294,6 +2294,12 @@ function scenarioBoxHTML(proj,label){
     +'</div>';
 }
 function renderRoomKpiPage(){
+  /* KPI "per camera" hanno senso SOLO per una struttura alberghiera vera (Hotel/Resort), dove
+     l'unità di conto economico è la camera. Una Villa o un Appartamento si affittano a corpo
+     intero (un solo contratto/prenotazione per l'intero immobile), non "per camera": mostrare
+     "costo per camera"/"GOP per camera" per un appartamento con 2-3 stanze è fuorviante e va
+     tolto del tutto per queste categorie, non solo rinominato. */
+  if(!isHospitalityCategory()) return "";
   var o=opportunity||{};
   var rooms=Number(o.bedrooms);
   var f=buildFinance();
@@ -3186,7 +3192,16 @@ function getOpexTierKey(units){
   if(u<=OPEX_COST_STRUCTURE.mid.unitsMax) return "mid";
   return "large";
 }
+var NON_HOSPITALITY_FLAT_OPEX_RATIO = 0.30;
 function getOpexBreakdown(units){
+  /* Il piano dei costi analitico voce-per-voce (pulizie/turnover, biancheria, OTA, PMS,
+     reception, F&B ecc.) descrive la gestione di una struttura ricettiva vera (Hotel/Resort).
+     Per Ville/Appartamenti (affittati a corpo intero, non gestiti come hotel) usiamo invece
+     una percentuale unica di costo di gestione stimato, senza scomposizione in voci: non ha
+     senso proporre voci come "reception 24h" o "PMS/channel manager" per un appartamento. */
+  if(!isHospitalityCategory()){
+    return {tierKey:"flat", tierLabel:"Stima costi di gestione (percentuale unica)", items:[], totalRatio:NON_HOSPITALITY_FLAT_OPEX_RATIO};
+  }
   var tierKey=getOpexTierKey(units);
   var tier=OPEX_COST_STRUCTURE[tierKey];
   var total=tier.items.reduce(function(s,it){return s+it.pct;},0);
@@ -3262,12 +3277,18 @@ function buildCashflowProjections(){
   var units=getAssetUnits();
   var occ=getOccupancyAssumption();
   var opexRatio=getOpexRatio(units);
+  /* Una Villa o un Appartamento si affittano a corpo intero, come un'unica unit\u00e0 -- NON come
+     N camere prenotabili singolarmente (quello \u00e8 il modello di un hotel/resort). Moltiplicare
+     l'ADR per getAssetUnits() (che conta le camere/bedroom) per queste categorie gonfiava
+     artificialmente il ricavo, come se ogni stanza si affittasse a parte. Solo per Hotel/Resort
+     il ricavo \u00e8 davvero ADR \u00d7 occupazione \u00d7 numero di camere vendibili singolarmente. */
+  var revenueUnits = isHospitalityCategory() ? units : 1;
 
   function projFor(adrMetric, label){
     if(!adrMetric) return null;
     var adrVerified=!!(adrMetric.source && String(adrMetric.source.provider_name||"").toLowerCase().indexOf("analyst verified")>=0);
-    var baseRevenue = adrMetric.value*occ.value*365*units;
-    var revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMetric.value)+" \u20ac/notte, "+label+") \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" ("+percent(occ.value*100)+", su 365 gg/anno) \u00d7 "+units+" unit\u00e0";
+    var baseRevenue = adrMetric.value*occ.value*365*revenueUnits;
+    var revenueSource=(adrVerified?"ADR verificato dall\u2019analista":"ADR di mercato")+" ("+formatMetricVal(adrMetric.value)+" \u20ac/notte, "+label+") \u00d7 occupazione "+(occ.verified?"verificata":"assunta")+" ("+percent(occ.value*100)+", su 365 gg/anno)"+(revenueUnits>1?(" \u00d7 "+revenueUnits+" unit\u00e0"):" (immobile affittato a corpo intero)");
     var proj=buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, f.total, opexRatio);
     if(proj){ proj.occValue=occ.value; proj.occVerified=occ.verified; proj.occDays=365; }
     return proj;
@@ -3350,7 +3371,11 @@ function renderCashflowPage(){
    sul ricavo dell'anno 1 dello scenario di riferimento (medio/singolo). Vedi il commento su
    OPEX_COST_STRUCTURE per le fonti dei benchmark usati voce per voce. ---- */
 function renderOpexBreakdownPage(){
-  if(isCommercialCategory()||isLandCategory()) return "";
+  /* La tabella dettagliata voce-per-voce va mostrata SOLO per Hotel/Resort: per tutto il resto
+     (Ville, Appartamenti, Commerciale, Terreni...) il costo di gestione è una percentuale unica
+     (vedi getOpexBreakdown) già visibile nella colonna "Costi" della tabella di cashflow, senza
+     bisogno di una pagina dedicata alla scomposizione. */
+  if(!isHospitalityCategory()) return "";
   var projs=buildCashflowProjections();
   var headline=null;
   if(projs){ headline = projs.mode==="range" ? (projs.avg||projs.min||projs.max) : projs.single; }
