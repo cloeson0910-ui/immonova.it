@@ -3074,15 +3074,26 @@ var OPEX_COST_STRUCTURE = {
    una struttura ricettiva di questo tipo NON può essere gestita fiscalmente come persona
    fisica/B&B (cedolare secca, regime forfettario) — un hotel/resort con fatturato importante
    richiede comunque una società di capitali, indipendentemente da ADR/investimento/camere.
-   Per questo motivo va SEMPRE trattata come isLuxuryProperty() ai fini SOLO fiscali, anche
-   quando non supera le soglie dimensionali che selezionano il taglio "lusso" del piano dei
-   costi (quello resta scelto solo da isLuxuryProperty()/numero camere, invariato). */
+   Questa è l'UNICA condizione che attiva il trattamento fiscale da struttura alberghiera
+   (vedi isFiscalLuxuryOverride() sotto) -- le soglie dimensionali di isLuxuryProperty()
+   (ADR/investimento/camere) NON lo attivano da sole: servono solo a scegliere il taglio
+   "lusso" del piano dei costi (getOpexTierKey), non la natura fiscale dell'investimento. */
 function isHospitalityCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("hotel")>=0 || c.indexOf("resort")>=0;
 }
 function isFiscalLuxuryOverride(){
-  return isLuxuryProperty() || isHospitalityCategory();
+  /* SOLO categoria Hotel/Resort attiva il trattamento fiscale da struttura alberghiera
+     (tassazione societaria 27,9%, break-even netto, note fiscali dedicate). isLuxuryProperty()
+     (ADR di zona >=350, investimento >=3M, unità >=30) NON deve MAI attivarlo da sola: sono
+     soglie dimensionali pensate solo per scegliere il taglio "lusso" del piano dei costi
+     (vedi getOpexTierKey), e l'ADR in particolare è spesso un dato TERRITORIALE di zona (es.
+     Gallipoli, area turistica) che non implica affatto che l'immobile sia gestito come un
+     hotel -- un Appartamento o una Villa normali in una zona con ADR di mercato alto NON
+     diventano una struttura alberghiera solo per questo. Bug reale: prima di questa modifica
+     un Appartamento a Gallipoli riceveva i dati fiscali di un hotel solo perché l'ADR di zona
+     superava 350€, pur essendo categoria "Appartamenti". */
+  return isHospitalityCategory();
 }
 /* Break-even/cashflow al NETTO delle imposte per hotel/lusso: qui la forma giuridica NON è
    più ambigua (isFiscalLuxuryOverride() nasconde già gli scenari da persona fisica, resta solo
