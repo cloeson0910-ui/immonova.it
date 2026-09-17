@@ -16,6 +16,8 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .container{max-width:1320px;margin:auto;padding:38px 42px 80px}.topbar{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:24px}.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:10px}.title{font-size:38px;font-weight:200;letter-spacing:.06em;color:#a67f34}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{padding:12px 18px;border:1px solid #a67f34;background:#a67f34;color:white;text-decoration:none;letter-spacing:.16em;text-transform:uppercase;font-size:10px;cursor:pointer}.btn.secondary{background:transparent;color:#a67f34}.version-badge{display:inline-flex;align-items:center;padding:6px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#8f7643;letter-spacing:.08em;text-transform:none;font-size:10px;font-family:monospace;border-radius:3px}
 .lang-switch{padding:8px 10px;border:1px solid rgba(166,127,52,.45);background:rgba(255,255,255,.35);color:#a67f34;font-size:11px;font-family:inherit;cursor:pointer;border-radius:3px}
 @media print{.lang-switch{display:none!important}}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
+#generateDossierLinkBtn.generating{background:#e8b923!important;border-color:#c79f1c!important;color:#3a2d05!important}
+#generateDossierLinkBtn.ready{background:#4f7f45!important;border-color:#3f6537!important;color:#fffaf0!important}
 .dossier-link-row{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;letter-spacing:.04em;color:#7f6430}
 .dossier-link-row .link-label{color:#a67f34;font-weight:600;white-space:nowrap}
 .dossier-link-row input{flex:1;min-width:220px;padding:9px 10px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:12px;font-family:inherit}
@@ -4218,6 +4220,9 @@ function renderDossierLinkRow(){
     "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
     "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>";
   generateShareImage(url, getCoverImage());
+  /* Link pronto e visibile: pulsante verde. Resta verde finché non si preme di nuovo
+     "Rigenera link dossier" (a quel punto torna giallo durante la nuova generazione). */
+  if(generateDossierLinkBtn){ generateDossierLinkBtn.classList.remove("generating"); generateDossierLinkBtn.classList.add("ready"); }
 }
 /* Apre WhatsApp (app se su telefono, WhatsApp Web se su desktop) con il messaggio già scritto
    -- titolo del dossier + link con anteprima. Senza numero: wa.me con solo "text" apre la
@@ -4337,6 +4342,11 @@ async function generateDossierLink(){
   generateDossierLinkBtn.disabled = true;
   var originalLabel = generateDossierLinkBtn.textContent;
   generateDossierLinkBtn.textContent = "Generazione in corso...";
+  /* Giallo = generazione in corso. Passa a verde solo dentro renderDossierLinkRow(), quando
+     il link è realmente pronto e mostrato. Se qualcosa va storto (catch sotto) torna neutro,
+     non verde: il verde deve significare "link pronto", non "tentativo concluso". */
+  generateDossierLinkBtn.classList.remove("ready");
+  generateDossierLinkBtn.classList.add("generating");
   try{
     /* Forziamo un ri-render fresco nella lingua corrente PRIMA di catturare il PDF: elimina
        qualunque possibilità che venga catturata una versione del dossier non aggiornata alla
@@ -4401,6 +4411,7 @@ async function generateDossierLink(){
   }catch(e){
     console.error(e);
     setStatus("Errore nella generazione del link: "+(e.message||e),"error");
+    generateDossierLinkBtn.classList.remove("generating");
   }
   generateDossierLinkBtn.disabled = false;
   generateDossierLinkBtn.textContent = originalLabel;

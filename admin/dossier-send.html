@@ -22,6 +22,8 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .btn.send-btn{background:#517a4f;border-color:#517a4f}
 .btn.send-btn:disabled{opacity:.55;cursor:not-allowed}
 @media print{.lang-switch{display:none!important}}.status{min-height:22px;margin:16px 0 22px;font-size:13px}.error{color:#9c2f2f}.success{color:#4f7f45}.book{background:rgba(255,255,255,.24);border:1px solid rgba(166,127,52,.18);box-shadow:0 24px 70px rgba(127,100,48,.08)}
+#generateDossierLinkBtn.generating{background:#e8b923!important;border-color:#c79f1c!important;color:#3a2d05!important}
+#generateDossierLinkBtn.ready{background:#4f7f45!important;border-color:#3f6537!important;color:#fffaf0!important}
 .dossier-options-overlay{display:none;position:fixed;inset:0;z-index:999;background:rgba(30,22,10,.45);align-items:center;justify-content:center}
 .dossier-options-overlay.active{display:flex}
 .dossier-options-box{width:420px;max-width:92vw;background:#f4ecdf;border:1px solid rgba(166,127,52,.35);box-shadow:0 30px 90px rgba(30,22,10,.35);padding:32px}
@@ -4348,6 +4350,9 @@ function renderDossierLinkRow(){
     "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
     "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>";
   generateShareImage(url, getCoverImage());
+  /* Link pronto e visibile: pulsante verde. Resta verde finché non si preme di nuovo
+     "Rigenera link dossier" (a quel punto torna giallo durante la nuova generazione). */
+  if(generateDossierLinkBtn){ generateDossierLinkBtn.classList.remove("generating"); generateDossierLinkBtn.classList.add("ready"); }
 }
 /* Apre WhatsApp (app se su telefono, WhatsApp Web se su desktop) con il messaggio già scritto
    -- titolo del dossier + link con anteprima. Senza numero: wa.me con solo "text" apre la
@@ -4466,6 +4471,11 @@ async function generateDossierLink(){
   generateDossierLinkBtn.disabled = true;
   var originalLabel = generateDossierLinkBtn.textContent;
   generateDossierLinkBtn.textContent = "Generazione in corso...";
+  /* Giallo = generazione in corso. Passa a verde solo dentro renderDossierLinkRow(), quando
+     il link è realmente pronto e mostrato. Se qualcosa va storto (catch sotto) torna neutro,
+     non verde: il verde deve significare "link pronto", non "tentativo concluso". */
+  generateDossierLinkBtn.classList.remove("ready");
+  generateDossierLinkBtn.classList.add("generating");
   try{
     /* Forziamo un ri-render fresco nella lingua corrente PRIMA di catturare il PDF: elimina
        qualunque possibilità che venga catturata una versione del dossier non aggiornata alla
@@ -4530,6 +4540,7 @@ async function generateDossierLink(){
   }catch(e){
     console.error(e);
     setStatus("Errore nella generazione del link: "+(e.message||e),"error");
+    generateDossierLinkBtn.classList.remove("generating");
   }
   generateDossierLinkBtn.disabled = false;
   generateDossierLinkBtn.textContent = originalLabel;
