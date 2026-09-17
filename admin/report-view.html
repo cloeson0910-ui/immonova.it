@@ -26,6 +26,17 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .dossier-link-progress-fill{height:100%;width:0%;background:#e8b923;transition:width .4s ease}
 .dossier-link-progress-fill.done{background:#4f7f45}
 .dossier-link-progress-fill.failed{background:#c97a2e}
+.dossier-lang-links-box{padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;color:#7f6430}
+.dossier-lang-links-title{font-weight:600;color:#a67f34;margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+.dossier-lang-link-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid rgba(166,127,52,.15)}
+.dossier-lang-link-row:first-child{border-top:none}
+.dossier-lang-link-row.current{background:rgba(166,127,52,.08)}
+.dossier-lang-link-row .lang-badge{display:inline-block;min-width:26px;padding:3px 6px;text-align:center;background:#a67f34;color:#fffaf0;font-weight:700;font-size:10px;letter-spacing:.04em;border-radius:2px;text-transform:uppercase}
+.dossier-lang-link-row.current .lang-badge{background:#4f7f45}
+.dossier-lang-link-row .lang-name{min-width:80px;color:#7f6430}
+.dossier-lang-link-row input{flex:1;min-width:180px;padding:7px 9px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:11px;font-family:inherit}
+.dossier-lang-link-row .copy-btn{padding:7px 11px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.08em;font-size:9px;cursor:pointer;white-space:nowrap}
+.dossier-lang-link-row .copy-feedback{color:#4f7f45;font-weight:600;font-size:11px}
 .dossier-link-row{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;margin-bottom:18px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.30);font-size:12px;letter-spacing:.04em;color:#7f6430}
 .dossier-link-row .link-label{color:#a67f34;font-weight:600;white-space:nowrap}
 .dossier-link-row input{flex:1;min-width:220px;padding:9px 10px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:12px;font-family:inherit}
@@ -306,6 +317,10 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
     <div class="dossier-link-progress-label" id="dossierLinkProgressLabel"></div>
     <div class="dossier-link-progress-track"><div class="dossier-link-progress-fill" id="dossierLinkProgressFill"></div></div>
   </div>
+  <div id="dossierLangLinksBox" class="dossier-lang-links-box" style="display:none">
+    <div class="dossier-lang-links-title">Link già generati per lingua (nessuna nuova traduzione/generazione necessaria):</div>
+    <div id="dossierLangLinksList"></div>
+  </div>
   <div id="status" class="status"></div>
   <section id="book" class="book"><div class="empty" data-i18n="loading_dossier">Caricamento dossier...</div></section>
 </main>
@@ -333,7 +348,12 @@ var dossierLinkRow = document.getElementById("dossierLinkRow");
 var dossierLinkProgress = document.getElementById("dossierLinkProgress");
 var dossierLinkProgressLabel = document.getElementById("dossierLinkProgressLabel");
 var dossierLinkProgressFill = document.getElementById("dossierLinkProgressFill");
+var dossierLangLinksBox = document.getElementById("dossierLangLinksBox");
+var dossierLangLinksList = document.getElementById("dossierLangLinksList");
 var generateDossierLinkBtn = document.getElementById("generateDossierLinkBtn");
+/* Nomi in chiaro delle lingue disponibili per il dossier (stesso elenco di #dossierLangSelect),
+   usati solo per l'etichetta nel box "Link già generati per lingua". */
+var DOSSIER_LANG_NAMES = {it:"Italiano",en:"English",fr:"Français",de:"Deutsch",es:"Español",ar:"العربية"};
 var isSuperUser = false; // profiles.is_super_user: non puo' fare chiamate a pagamento (Discovery Engine / Aggiorna dati)
 var currentDossierPdfUrl = null;
 /* true solo quando la pagina di share e' stata VERIFICATA raggiungibile sul sito pubblico
@@ -4048,6 +4068,7 @@ async function init(){
         await applyLanguage(chosen);
         setLangInUrl(chosen);
         renderBook();
+        renderDossierLangLinksBox();
         setStatus("Dossier mostrato in "+quickLangSwitch.options[quickLangSwitch.selectedIndex].text+". Pronto per Stampa / PDF.","success");
       });
     }
@@ -4105,6 +4126,7 @@ async function init(){
     }else{
       generateDossierLink();
     }
+    renderDossierLangLinksBox();
   }catch(e){
     console.error(e);
     book.innerHTML='<div class="empty">Errore: '+escapeHTML(e.message||e)+'</div>';
@@ -4355,6 +4377,58 @@ function hideDossierLinkProgress(){
   dossierLinkProgress.style.display = "none";
   if(dossierLinkProgressFill){ dossierLinkProgressFill.style.width="0%"; dossierLinkProgressFill.classList.remove("done","failed"); }
 }
+/* Box "Link già generati per lingua": mostra TUTTI i link già pubblicati in passato per
+   questa opportunità, uno per lingua (letti da opportunities.dossier_share_urls, la mappa
+   {lang: url} accumulata da generateDossierLink() -- vedi lì). Serve a non dover
+   ritradurre/rigenerare il PDF ogni volta solo perché si è già fatto in una sessione
+   precedente: qui il link c'è già, pronto da copiare. Il vecchio dossier_share_url singolo
+   (senza mappa, dossier generati prima di questa funzione) viene mostrato come fallback
+   sotto la lingua italiana se la mappa non ha già una voce "it" propria. */
+function renderDossierLangLinksBox(){
+  if(!dossierLangLinksBox || !dossierLangLinksList) return;
+  var map = (opportunity && opportunity.dossier_share_urls && typeof opportunity.dossier_share_urls==="object") ? Object.assign({},opportunity.dossier_share_urls) : {};
+  if(!map.it && opportunity && opportunity.dossier_share_url){ map.it = opportunity.dossier_share_url; }
+  var langs = Object.keys(map).filter(function(l){ return map[l]; });
+  if(!langs.length){ dossierLangLinksBox.style.display="none"; dossierLangLinksList.innerHTML=""; return; }
+  // Ordine stabile: prima le lingue conosciute nell'ordine del selettore, poi eventuali altre.
+  var knownOrder = Object.keys(DOSSIER_LANG_NAMES);
+  langs.sort(function(a,b){
+    var ia=knownOrder.indexOf(a), ib=knownOrder.indexOf(b);
+    if(ia<0) ia=999; if(ib<0) ib=999;
+    return ia-ib;
+  });
+  dossierLangLinksList.innerHTML = langs.map(function(lang,idx){
+    var url = map[lang];
+    var name = DOSSIER_LANG_NAMES[lang] || lang.toUpperCase();
+    var isCurrent = lang === (CURRENT_LANG||"it");
+    return "<div class=\"dossier-lang-link-row"+(isCurrent?" current":"")+"\">"+
+      "<span class=\"lang-badge\">"+escapeHTML(lang)+"</span>"+
+      "<span class=\"lang-name\">"+escapeHTML(name)+"</span>"+
+      "<input type=\"text\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\" id=\"dossierLangLinkInput"+idx+"\">"+
+      "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLangLink('dossierLangLinkInput"+idx+"','dossierLangLinkFeedback"+idx+"')\">Copia</button>"+
+      "<a class=\"copy-btn\" style=\"text-decoration:none;display:inline-block\" href=\""+escapeHTML(url)+"\" target=\"_blank\" rel=\"noopener\">Apri</a>"+
+      "<span class=\"copy-feedback\" id=\"dossierLangLinkFeedback"+idx+"\"></span>"+
+      "</div>";
+  }).join("");
+  dossierLangLinksBox.style.display = "block";
+}
+async function copyDossierLangLink(inputId, feedbackId){
+  var input = document.getElementById(inputId);
+  var feedback = document.getElementById(feedbackId);
+  if(!input) return;
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(input.value);
+    }else{
+      input.select();
+      document.execCommand("copy");
+    }
+    if(feedback){ feedback.textContent="Copiato ✓"; setTimeout(function(){ feedback.textContent=""; },2500); }
+  }catch(e){
+    input.select();
+    if(feedback) feedback.textContent="Seleziona e copia manualmente (Ctrl/Cmd+C)";
+  }
+}
 function waitForDossierPageLive(url, onProgress){
   var MAX_ATTEMPTS = 24, INTERVAL_MS = 5000;
   return new Promise(function(resolve){
@@ -4475,9 +4549,17 @@ async function generateDossierLink(){
        questo salvataggio fallisce non è bloccante: il link resta comunque visibile e
        funzionante per questa sessione, verrà solo rigenerato alla prossima apertura invece di
        essere riletto. */
-    if(opportunity){ opportunity.dossier_share_url = shareUrl; opportunity.dossier_pdf_url = pub.data.publicUrl; }
-    var shareSave = await client.from("opportunities").update({dossier_share_url:shareUrl, dossier_pdf_url:pub.data.publicUrl}).eq("id",opportunityId);
+    /* Accumuliamo (non sovrascriviamo) la mappa {lingua: link} sull'opportunità: ogni lingua
+       già generata in passato resta disponibile anche dopo aver generato quella nuova -- è
+       esattamente la mappa che il box "Link già generati per lingua" legge per mostrarli
+       tutti senza dover ritradurre/rigenerare da capo. */
+    var langKey = CURRENT_LANG || "it";
+    var updatedLangMap = Object.assign({}, (opportunity && opportunity.dossier_share_urls && typeof opportunity.dossier_share_urls==="object") ? opportunity.dossier_share_urls : {});
+    if(shareUrl) updatedLangMap[langKey] = shareUrl;
+    if(opportunity){ opportunity.dossier_share_url = shareUrl; opportunity.dossier_pdf_url = pub.data.publicUrl; opportunity.dossier_share_urls = updatedLangMap; }
+    var shareSave = await client.from("opportunities").update({dossier_share_url:shareUrl, dossier_pdf_url:pub.data.publicUrl, dossier_share_urls:updatedLangMap}).eq("id",opportunityId);
     if(shareSave.error) console.warn("Salvataggio link dossier su opportunities fallito:",shareSave.error);
+    renderDossierLangLinksBox();
     if(shareUrl){
       setStatus("Link generato: verifica pubblicazione su GitHub Pages in corso...","");
       showDossierLinkProgress("Pubblicazione su GitHub Pages in corso: verifica del link in corso...",0,false);
