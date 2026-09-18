@@ -3068,6 +3068,12 @@ function renderZESFiscalPage(){
   var tarantoArea=isTarantoArea();
   var tarantoBlock=tarantoArea?('<p style="margin-top:10px;font-size:12px;color:#8f7643">'+escapeHTML(T.zes_taranto_note)+'</p>'):'';
 
+  /* v3: anche la pagina educativa iniziale (intro+parametri+intensita'+requisiti tutti insieme)
+     sforava l'altezza fissa della pagina, con le ultime righe (requisiti) che finivano
+     sovrapposte al folio in fondo -- stesso identico problema gia' risolto sulla pagina di
+     simulazione, qui non ancora applicato alla prima meta'. Divisa quindi anch'essa in due:
+     la 1a con intro+parametri di spesa, la 2a con intensita' dell'agevolazione (+ nota Taranto)
+     e requisiti essenziali. */
   var page1='<article class="report-page"><div class="page-inner">'
     +'<div class="section-kicker">'+escapeHTML(T.kicker_zes)+'</div>'
     +'<h2 class="section-title">'+escapeHTML(T.title_zes)+'</h2>'
@@ -3076,7 +3082,12 @@ function renderZESFiscalPage(){
     +'<p style="font-size:12px;color:#8f7643;margin-bottom:18px"><strong>'+escapeHTML(T.zes_region_line)+regionLabel+'</strong> — '+escapeHTML(T.zes_eligible_label)+'</p>'
     +'<h3 style="margin-bottom:8px">'+escapeHTML(T.zes_params_title)+'</h3>'
     +'<ul style="margin-bottom:16px">'+li(T.zes_param_1)+li(T.zes_param_2)+li(T.zes_param_3)+'</ul>'
-    +'<h3 style="margin-bottom:8px">'+escapeHTML(T.zes_intensity_title)+'</h3>'
+    +'</div></article>';
+
+  var page1b='<article class="report-page"><div class="page-inner">'
+    +'<div class="section-kicker">'+escapeHTML(T.kicker_zes)+'</div>'
+    +'<h2 class="section-title">'+escapeHTML(T.zes_intensity_title)+'</h2>'
+    +'<div class="lux-rule"></div>'
     +'<p style="margin-bottom:8px">'+escapeHTML(T.zes_intensity_intro)+'</p>'
     +intensityTable
     +'<p style="margin-top:8px;font-size:12px;color:#8f7643">'+escapeHTML(T.zes_intensity_note)+'</p>'
@@ -3158,7 +3169,7 @@ function renderZESFiscalPage(){
     +'<p style="margin-top:16px;font-size:12px;color:#8f7643"><strong>'+escapeHTML(T.zes_advice_title)+':</strong> '+escapeHTML(T.zes_advice_body)+'</p>'
     +'</div></article>';
 
-  return [page1,page2,page3];
+  return [page1,page1b,page2,page3];
 }
 function isLandCategory(){
   var c=String(getCategory()||"").toLowerCase();
@@ -4618,6 +4629,22 @@ async function init(){
     setStatus(String(e.message||e),"error");
   }
 }
+/* Estrae l'istante esatto di generazione dal link stesso (il parametro ?v=<timestamp ms> che
+   aggiungiamo ad ogni rigenerazione, o in fallback il timestamp nel nome del file PDF su
+   Storage) e lo mostra in chiaro accanto al link, cosi' non serve piu' fidarsi "a occhio" di
+   quale versione si sta guardando: la data/ora di generazione e' scritta li', verificabile
+   da chiunque in un secondo. */
+function formatDossierLinkTimestamp(url){
+  if(!url) return "";
+  var m = /[?&]v=(\d{10,})/.exec(url) || /\/(\d{10,})_dossier_/.exec(url);
+  if(!m) return "";
+  var ts = Number(m[1]);
+  if(!ts || isNaN(ts)) return "";
+  var d = new Date(ts);
+  if(isNaN(d.getTime())) return "";
+  function pad(n){ return String(n).length<2 ? "0"+n : String(n); }
+  return pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
+}
 function renderDossierLinkRow(){
   if(!dossierLinkRow) return;
   var url = currentDossierPdfUrl;
@@ -4627,6 +4654,7 @@ function renderDossierLinkRow(){
     hideDossierLinkProgress();
     return;
   }
+  var genStamp = formatDossierLinkTimestamp(url);
   dossierLinkRow.style.display="flex";
   dossierLinkRow.innerHTML =
     "<span class=\"link-label\">Link diretto al dossier:</span>"+
@@ -4634,6 +4662,7 @@ function renderDossierLinkRow(){
     "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">Copia link</button>"+
     "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
     "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>"+
+    (genStamp?("<span class=\"link-warning\" style=\"color:#4f7f45;font-weight:600\">Generato il "+escapeHTML(genStamp)+"</span>"):"")+
     (dossierLinkVerified?"":"<span class=\"link-warning\">⚠ pubblicazione su GitHub Pages ancora in corso: il link potrebbe non essere online per qualche minuto. NON inviarlo finché non diventa verde.</span>");
   /* Verde SOLO quando il link e' stato verificato davvero raggiungibile online (vedi
      waitForDossierPageLive/dossierLinkVerified) -- non basta che il commit su GitHub sia
@@ -4720,10 +4749,12 @@ function renderDossierLangLinksBox(){
     var url = map[lang];
     var name = DOSSIER_LANG_NAMES[lang] || lang.toUpperCase();
     var isCurrent = lang === (CURRENT_LANG||"it");
+    var genStamp = formatDossierLinkTimestamp(url);
     return "<div class=\"dossier-lang-link-row"+(isCurrent?" current":"")+"\">"+
       "<span class=\"lang-badge\">"+escapeHTML(lang)+"</span>"+
       "<span class=\"lang-name\">"+escapeHTML(name)+"</span>"+
       "<input type=\"text\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\" id=\"dossierLangLinkInput"+idx+"\">"+
+      (genStamp?("<span style=\"font-size:11px;color:#4f7f45;font-weight:600;white-space:nowrap\">Generato il "+escapeHTML(genStamp)+"</span>"):"")+
       "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLangLink('dossierLangLinkInput"+idx+"','dossierLangLinkFeedback"+idx+"')\">Copia</button>"+
       "<a class=\"copy-btn\" style=\"text-decoration:none;display:inline-block\" href=\""+escapeHTML(url)+"\" target=\"_blank\" rel=\"noopener\">Apri</a>"+
       "<span class=\"copy-feedback\" id=\"dossierLangLinkFeedback"+idx+"\"></span>"+
