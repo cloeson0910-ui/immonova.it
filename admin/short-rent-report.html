@@ -148,6 +148,9 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 .photo-grid img{ width:100%; height:220px; object-fit:cover; border:1px solid rgba(166,127,52,.2); display:block; }
 .photo-grid.single img{ height:400px; }
 
+.cover-photo{ width:100%; margin-top:8px; overflow:hidden; border:1px solid rgba(166,127,52,.2); }
+.cover-photo img{ width:100%; height:420px; object-fit:cover; object-position:center; display:block; }
+
 .share-note{ font-size:10px; color:#8f7643; margin-top:6px; }
 
 .link-row{ display:none; max-width:1200px; margin:0 auto; padding:0 40px; align-items:center; gap:10px; }
@@ -175,6 +178,7 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
   .page-folio{ left:18mm; right:18mm; bottom:9mm; }
   .photo-grid img{ height:48mm; }
   .photo-grid.single img{ height:96mm; }
+  .cover-photo img{ height:110mm; }
   .metric-grid{ margin:10mm 0 8mm; gap:6mm; }
   .metric-card{ padding:5mm; }
   .metric-value{ font-size:16pt; }
@@ -196,17 +200,18 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 .book.pdf-capture .cover-flex{ height:170mm; }
 .book.pdf-capture .cover-title{ font-size:30pt; }
 .book.pdf-capture .brand{ font-size:19pt; }
-.book.pdf-capture table.rep-table{ font-size:7.3pt; }
+.book.pdf-capture table.rep-table{ font-size:7.3pt; margin-bottom:3mm; }
 .book.pdf-capture table.rep-table th,.book.pdf-capture table.rep-table td{ padding:1.4mm 2mm; }
 .book.pdf-capture .page-folio{ left:18mm; right:18mm; bottom:9mm; }
 .book.pdf-capture .photo-grid img{ height:48mm; }
 .book.pdf-capture .photo-grid.single img{ height:96mm; }
-.book.pdf-capture .metric-grid{ margin:10mm 0 8mm; gap:6mm; }
+.book.pdf-capture .cover-photo img{ height:110mm; }
+.book.pdf-capture .metric-grid{ margin:6mm 0 4mm; gap:6mm; }
 .book.pdf-capture .metric-card{ padding:5mm; }
 .book.pdf-capture .metric-value{ font-size:16pt; }
 .book.pdf-capture .metric-label{ font-size:7pt; margin-top:1.5mm; }
-.book.pdf-capture .note-box{ padding:4mm 5mm; font-size:9pt; line-height:1.4; margin:5mm 0 6mm; }
-.book.pdf-capture .source-row{ font-size:8pt; margin-bottom:6mm; }
+.book.pdf-capture .note-box{ padding:3mm 4mm; font-size:8.5pt; line-height:1.3; margin:2mm 0 3mm; }
+.book.pdf-capture .source-row{ font-size:8pt; margin-bottom:3mm; }
 .book.pdf-capture .info-text{ font-size:9.5pt; line-height:1.4; margin-bottom:6mm; }
 </style>
 </head>
@@ -268,7 +273,7 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 <script>
 // Cambia questa stringa ogni volta che questo file viene modificato: serve solo a far
 // riconoscere alla pagina la propria versione (vedi verifyPageIsCurrent piu' sotto).
-const PAGE_BUILD_VERSION = "2026-09-19.03";
+const PAGE_BUILD_VERSION = "2026-09-19.05";
 
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -342,7 +347,7 @@ function extractTourismRows(tourismData){
     foreign_overnight_stays: "Presenze straniere (provincia)",
     accommodation_structures: "Strutture ricettive (comune)",
     accommodation_beds: "Posti letto (comune)",
-    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti (comune)",
+    tourism_index_per_100_residents: "Indice di turisticità per 100 residenti (comune)",
   };
   const rows = [];
   Object.keys(labels).forEach(key => {
@@ -414,7 +419,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     features.bedrooms ? features.bedrooms + " camere" : null,
     features.bathrooms ? features.bathrooms + " bagni" : null,
     features.max_guests ? "fino a " + features.max_guests + " ospiti" : null,
-  ].filter(Boolean).join(" &middot; ");
+  ].filter(Boolean).join(" · ");
   const amenitiesLine = Array.isArray(features.amenities) ? features.amenities.join(", ") : "";
 
   const comparables = Array.isArray(a.comparables) ? a.comparables : [];
@@ -464,9 +469,10 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
   }
 
   const photos = Array.isArray(a.photos) ? a.photos : [];
-  const photoGridClass = photos.length <= 1 ? "photo-grid single" : "photo-grid";
+  // Solo la foto di copertina (la prima), grande e con proporzioni fisse (object-fit:cover
+  // ritaglia, non deforma mai): niente piu' griglia 2x2 con foto piccole e sproporzionate.
   const photosHtml = photos.length
-    ? `<div class="${photoGridClass}">` + photos.slice(0,6).map(url => '<img src="'+esc(url)+'" alt="Foto immobile">').join("") + `</div>`
+    ? `<div class="cover-photo"><img src="${esc(photos[0])}" alt="Foto immobile"></div>`
     : `<div class="note-box">Nessuna foto caricata su questa scheda.</div>`;
 
   const html = `
