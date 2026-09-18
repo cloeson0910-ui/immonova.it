@@ -150,6 +150,15 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 
 .share-note{ font-size:10px; color:#8f7643; margin-top:6px; }
 
+.link-row{ display:none; max-width:1200px; margin:0 auto; padding:0 40px; align-items:center; gap:10px; }
+.link-row.visible{ display:flex; margin-top:14px; }
+.link-row input{ flex:1; padding:10px 12px; border:1px solid rgba(166,127,52,.3); background:rgba(255,255,255,.6); color:#5a4520; font-size:12px; font-family:inherit; }
+.link-row .copy-btn{ padding:10px 18px; border:1px solid rgba(166,127,52,.25); background:#a67f34; color:#fffaf0; cursor:pointer; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-family:inherit; }
+.link-row .copy-btn:hover{ background:#8f6a29; }
+.link-row .copy-feedback{ font-size:11px; color:#4f7f45; }
+#generateLinkBtn.btn-busy{ opacity:.6; cursor:wait; }
+#generateLinkBtn.btn-success{ background:#4f7f45!important; color:#fff!important; border-color:#4f7f45!important; }
+
 @media print{
   @page{ size:A4 landscape; margin:0; }
   html,body{ width:297mm; min-height:210mm; background:white!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -180,10 +189,12 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
   <div class="header-actions">
     <a href="short-rent.html">&larr; Torna a Short Rent</a>
     <button id="waBtn" type="button">Condividi su WhatsApp</button>
-    <button id="copyLinkBtn" type="button">Copia link</button>
+    <button id="generateLinkBtn" type="button">Genera link</button>
     <button class="primary" id="printBtn" type="button">Stampa / PDF</button>
   </div>
 </header>
+
+<div id="linkRow" class="link-row"></div>
 
 <div class="controls">
   <div class="controls-panel">
@@ -219,6 +230,8 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="../js/config.js"></script>
 <script>
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -551,21 +564,197 @@ document.getElementById("printBtn").addEventListener("click", () => window.print
 
 document.getElementById("waBtn").addEventListener("click", () => {
   const title = analysis ? (analysis.title || "Analisi Short Rent") : "Analisi Short Rent";
-  const text = "Proiezione ricavi Short Rent IMMONOVA — " + title + ": " + window.location.href;
+  const shareUrl = (analysis && analysis.report_share_url) || window.location.href;
+  const text = "Proiezione ricavi Short Rent IMMONOVA — " + title + ": " + shareUrl;
   window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
 });
 
-document.getElementById("copyLinkBtn").addEventListener("click", async () => {
-  try{
-    await navigator.clipboard.writeText(window.location.href);
-    const status = document.getElementById("pageStatus");
-    status.className = "status success";
-    status.textContent = "Link copiato negli appunti.";
-    setTimeout(() => { status.textContent = ""; }, 2500);
-  }catch(e){
-    window.prompt("Copia il link:", window.location.href);
+function slugify(s){
+  return String(s||"analisi").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,60) || "analisi";
+}
+
+/* Estrae il path interno dello Storage bucket "dossier-pdfs" da un URL pubblico, per poter
+   cancellare il PDF precedente prima di caricare quello nuovo (senza questo, ogni "Genera
+   link" lascerebbe il vecchio file abbandonato nel bucket, occupando spazio inutilmente). */
+function extractDossierPdfsStoragePath(publicUrl){
+  const marker = "/dossier-pdfs/";
+  const idx = String(publicUrl||"").indexOf(marker);
+  if(idx === -1) return null;
+  let path = publicUrl.slice(idx + marker.length).split("?")[0];
+  try{ path = decodeURIComponent(path); }catch(e){}
+  return path || null;
+}
+
+function waitForImagesToLoad(root, timeoutMs){
+  timeoutMs = timeoutMs || 8000;
+  const imgs = Array.prototype.slice.call((root||document).querySelectorAll("img"));
+  return Promise.all(imgs.map(img => {
+    if(img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      let done = false;
+      function finish(){ if(!done){ done = true; resolve(); } }
+      img.addEventListener("load", finish);
+      img.addEventListener("error", finish);
+      setTimeout(finish, timeoutMs);
+    });
+  }));
+}
+
+async function generateReportPdfBlob(){
+  const el = document.getElementById("reportBook");
+  if(!el) throw new Error("Documento non trovato da esportare.");
+  await waitForImagesToLoad(el, 8000);
+  const canvas = await html2canvas(el, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+  const imgData = canvas.toDataURL("image/jpeg", 0.94);
+  // Documento in landscape A4 su piu' pagine, replicando l'impaginazione di stampa
+  // (.report-page e' gia' dimensionata per A4 landscape via CSS @media print).
+  const pdf = new window.jspdf.jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
+  const pageWidthMM = 297;
+  const ratio = canvas.height / canvas.width;
+  const totalHeightMM = pageWidthMM * ratio;
+  const pageHeightMM = 210;
+  const pages = Math.max(1, Math.ceil(totalHeightMM / pageHeightMM));
+  for(let i=0;i<pages;i++){
+    if(i>0) pdf.addPage();
+    pdf.addImage(imgData, "JPEG", 0, -(i*pageHeightMM), pageWidthMM, totalHeightMM);
   }
-});
+  return pdf.output("blob");
+}
+
+function renderLinkRow(url){
+  const linkRow = document.getElementById("linkRow");
+  if(!url){ linkRow.className = "link-row"; linkRow.innerHTML = ""; return; }
+  linkRow.className = "link-row visible";
+  linkRow.innerHTML =
+    '<span>Link condivisibile:</span>'+
+    '<input type="text" id="shareLinkInput" readonly value="'+esc(url)+'" onclick="this.select()">'+
+    '<button type="button" class="copy-btn" id="copyGeneratedLinkBtn">Copia link</button>'+
+    '<span class="copy-feedback" id="copyFeedback"></span>';
+  document.getElementById("copyGeneratedLinkBtn").addEventListener("click", async () => {
+    const fb = document.getElementById("copyFeedback");
+    try{ await navigator.clipboard.writeText(url); fb.textContent = "Copiato ✓"; }
+    catch(e){ window.prompt("Copia manualmente il link:", url); }
+    setTimeout(() => { if(fb) fb.textContent = ""; }, 2500);
+  });
+}
+
+async function generateReportLink(){
+  const btn = document.getElementById("generateLinkBtn");
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.classList.add("btn-busy");
+  btn.classList.remove("btn-success");
+  btn.textContent = "Generazione in corso...";
+  const status = document.getElementById("pageStatus");
+  try{
+    status.className = "status";
+    status.textContent = "Generazione PDF in corso...";
+    const previousPdfUrl = (analysis && analysis.report_pdf_url) || null;
+    const pdfBlob = await generateReportPdfBlob();
+    const filename = "short_rent_report_IMMONOVA_"+slugify(analysis && analysis.title)+".pdf";
+    const path = "short-rent/analysis-"+(analysis.id||"na")+"/"+Date.now()+"_"+filename;
+    const upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
+    if(upload.error) throw upload.error;
+    const pub = client.storage.from("dossier-pdfs").getPublicUrl(path);
+    const pdfUrl = pub.data.publicUrl;
+
+    if(previousPdfUrl && previousPdfUrl !== pdfUrl){
+      const previousPath = extractDossierPdfsStoragePath(previousPdfUrl);
+      if(previousPath){
+        try{
+          const removeRes = await client.storage.from("dossier-pdfs").remove([previousPath]);
+          if(removeRes.error) console.warn("Cancellazione PDF precedente fallita:", removeRes.error);
+        }catch(removeErr){ console.warn("Cancellazione PDF precedente fallita:", removeErr); }
+      }
+    }
+
+    renderLinkRow(null);
+    btn.classList.remove("btn-busy");
+    btn.classList.add("btn-success");
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    setTimeout(() => { btn.classList.remove("btn-success"); }, 3000);
+    status.textContent = "PDF pronto. Pubblicazione del link con anteprima in corso...";
+
+    await publishAndFinalizeReportLink(pdfUrl);
+  }catch(e){
+    console.error(e);
+    status.className = "status error";
+    status.textContent = "Errore nella generazione: "+(e.message||e);
+    btn.classList.remove("btn-busy");
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+async function publishAndFinalizeReportLink(pdfUrl){
+  const status = document.getElementById("pageStatus");
+  let shareUrl = null;
+  const location = [analysis.municipality, analysis.province].filter(Boolean).join(" (") + (analysis.province ? ")" : "");
+  const coverUrl = (Array.isArray(analysis.photos) && analysis.photos.length) ? analysis.photos[0] : "";
+  try{
+    const publishResp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/publish-shortrent-report-page",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
+      body:JSON.stringify({
+        analysisId: analysis.id,
+        title: analysis.title || "Analisi Short Rent",
+        location: location,
+        coverUrl: coverUrl,
+        pdfUrl: pdfUrl
+      })
+    });
+    const publishData = await publishResp.json();
+    if(publishResp.ok && publishData && publishData.url){ shareUrl = publishData.url; }
+    else console.warn("Pubblicazione pagina su GitHub fallita:", publishData);
+  }catch(publishErr){
+    console.warn("Pubblicazione pagina su GitHub fallita:", publishErr);
+  }
+
+  const versionedShareUrl = shareUrl ? (shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "v=" + Date.now()) : null;
+
+  if(!shareUrl){
+    status.className = "status error";
+    status.textContent = "PDF generato, ma la pubblicazione del link con anteprima non e' riuscita: nessun link disponibile. Controlla la console e riprova.";
+    return;
+  }
+
+  const attempts_max = 60;
+  let attempts = 0, confirmed = false;
+  const cacheBustUrl = shareUrl + (shareUrl.indexOf("?")===-1 ? "?" : "&") + "_cb=" + Date.now();
+  while(attempts < attempts_max){
+    attempts++;
+    try{
+      const check = await fetch(cacheBustUrl, {method:"GET", cache:"no-store"});
+      if(check.ok){
+        const checkText = await check.text();
+        if(checkText.indexOf(pdfUrl) !== -1){ confirmed = true; break; }
+      }
+    }catch(e){}
+    await new Promise(r => setTimeout(r, 3000));
+  }
+
+  if(confirmed){
+    try{
+      await client.from("short_rent_analyses").update({
+        report_pdf_url: pdfUrl,
+        report_share_url: versionedShareUrl,
+        report_link_generated_at: new Date().toISOString()
+      }).eq("id", analysis.id);
+      analysis.report_pdf_url = pdfUrl;
+      analysis.report_share_url = versionedShareUrl;
+    }catch(saveErr){ console.warn("Salvataggio link fallito:", saveErr); }
+    renderLinkRow(versionedShareUrl);
+    status.className = "status success";
+    status.textContent = "Link generato, con anteprima.";
+  }else{
+    renderLinkRow(null);
+    status.className = "status error";
+    status.textContent = "PDF pubblicato, ma non e' stato possibile confermare che l'anteprima sia gia' aggiornata sulla CDN: riprova tra qualche minuto prima di copiare il link.";
+  }
+}
+
+document.getElementById("generateLinkBtn").addEventListener("click", generateReportLink);
 
 async function init(){
   const { data:{ session } } = await client.auth.getSession();
@@ -593,6 +782,7 @@ async function init(){
   const avgPrice = computeAvgPrice(data.comparables);
   document.getElementById("cPrice").value = avgPrice ? Math.round(avgPrice) : "";
   recalcAndRender();
+  if(data.report_share_url) renderLinkRow(data.report_share_url);
 }
 init();
 </script>
