@@ -262,6 +262,15 @@ function esc(v){
 function eur(n){ return "&euro; " + Math.round(n).toLocaleString("it-IT"); }
 function todayIt(){ return new Date().toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }); }
 
+// Timbro di versione: valorizzato SOLO durante "Genera link" (vedi generateReportLink), con
+// data/ora esatta al minuto. Stampato su ogni pagina del PDF cosi' due generazioni diverse
+// dello stesso documento non sono mai visivamente indistinguibili: chi lo guarda vede subito,
+// a occhio, se e' l'ultima versione o una vecchia, senza doversi fidare a scatola chiusa.
+let GENERATION_STAMP = null;
+function generationFolioText(){
+  return "IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente" + (GENERATION_STAMP ? " &middot; " + esc(GENERATION_STAMP) : "");
+}
+
 // Curva prezzo mensile richiesta dal cliente (moltiplicatore sul prezzo medio comparabili):
 // gennaio-maggio -10%, giugno e luglio nella media, agosto +20% (settimana di Ferragosto
 // +30%, poi torna a +20%), settembre +10%, ottobre nella media, novembre-dicembre -10%.
@@ -450,12 +459,12 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       <div class="cover-meta">
         ${featuresLine ? esc(featuresLine)+"<br>" : ""}
         ${amenitiesLine ? esc(amenitiesLine)+"<br><br>" : "<br>"}
-        Documento generato il ${todayIt()}<br>
+        Documento generato il ${GENERATION_STAMP ? esc(GENERATION_STAMP) : todayIt()}<br>
         Metodologia: comparabili reali di mercato + stagionalit&agrave; turistica stimata
       </div>
       <div class="cover-badge">Prezzo medio: ${eur(price)} / notte</div>
     </div>
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 1</span></div>
+    <div class="page-folio"><span>${generationFolioText()}</span><span>Pagina 1</span></div>
   </article>
 
   <article class="report-page">
@@ -467,7 +476,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     <div class="section-title">L'immobile</div>
     <div class="lux-rule"></div>
     ${photosHtml}
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 2</span></div>
+    <div class="page-folio"><span>${generationFolioText()}</span><span>Pagina 2</span></div>
   </article>
 
   <article class="report-page">
@@ -481,7 +490,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     ${tourismRowsHtml ? `<table class="rep-table"><tr><th>Indicatore</th><th>Valore</th></tr>${tourismRowsHtml}</table>` : `<div class="note-box">Nessun dato turistico salvato su questa scheda.</div>`}
     ${(tourism.sources && tourism.sources.length) ? tourism.sources.map(s => `<div class="source-row">Fonte: ${esc(s.provider_name)}${s.source_url ? ' &mdash; '+esc(s.source_url) : ''}</div>`).join("") : ''}
     ${marketShareHtml}
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 3</span></div>
+    <div class="page-folio"><span>${generationFolioText()}</span><span>Pagina 3</span></div>
   </article>
 
   <article class="report-page">
@@ -507,7 +516,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       <br><br>
       <strong>Curva prezzo mensile applicata</strong> (moltiplicatore sul prezzo medio comparabili di ${eur(price)}/notte): gennaio&ndash;maggio &minus;10%, giugno e luglio nella media, agosto +20% (settimana di Ferragosto, 10&ndash;17 agosto, +30%), settembre +10%, ottobre nella media, novembre e dicembre &minus;10%. Curva commerciale impostata su indicazione del cliente, non un dato di mercato verificato.
     </div>
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 4</span></div>
+    <div class="page-folio"><span>${generationFolioText()}</span><span>Pagina 4</span></div>
   </article>
 
   <article class="report-page">
@@ -525,7 +534,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       <tr class="total"><td>TOTALE ANNO</td><td>${avgOcc}%</td><td>${totals.nights}</td><td>&mdash;</td><td>${eur(totals.gross)}</td><td>${eur(totals.feeMinEur)}</td><td>${eur(totals.feeMaxEur)}</td><td>${eur(totals.cedEur)}</td><td>${eur(totals.netMax)}</td><td>${eur(totals.netMin)}</td></tr>
     </table>
     <div class="source-row">* Riempimento giu&ndash;set impostato manualmente. Restanti mesi: stima stagionale (vedi pag. 4). Prezzo/notte variabile per mese secondo la stagionalit&agrave; commerciale impostata (vedi pag. 4).</div>
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 5</span></div>
+    <div class="page-folio"><span>${generationFolioText()}</span><span>Pagina 5</span></div>
   </article>
 
   <article class="report-page">
@@ -554,7 +563,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     <div class="disclaimer-text">
       Documento a fini di proiezione indicativa, non previsione garantita di ricavo. Prezzo comparabili e dato turistico derivano da fonti verificate al momento della raccolta; la distribuzione mensile fuori da giugno&ndash;settembre &egrave; una stima, non un dato ufficiale. L'aliquota di cedolare secca indicata si applica di norma alla prima unit&agrave; locata nell'anno solare dallo stesso proprietario; dalla seconda unit&agrave; in poi la normativa italiana prevede il 26% &mdash; verificare con un commercialista prima di ogni decisione fiscale. Occupazione, prezzi e normativa possono variare nel tempo.
     </div>
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 6</span></div>
+    <div class="page-folio"><span>${generationFolioText()}</span><span>Pagina 6</span></div>
   </article>
   `;
   document.getElementById("reportBook").innerHTML = html;
@@ -577,7 +586,13 @@ function recalcAndRender(){
   renderReport(analysis, price, occHigh, feeMin, feeMax, ced);
 }
 
-document.getElementById("recalcBtn").addEventListener("click", recalcAndRender);
+document.getElementById("recalcBtn").addEventListener("click", () => {
+  // Cambiando i valori il documento non corrisponde piu' all'ultimo PDF generato: lo stamp
+  // di versione va tolto, altrimenti resterebbe visibile un orario di generazione riferito
+  // a numeri ormai superati.
+  GENERATION_STAMP = null;
+  recalcAndRender();
+});
 document.getElementById("printBtn").addEventListener("click", () => window.print());
 
 document.getElementById("waBtn").addEventListener("click", () => {
@@ -645,12 +660,20 @@ async function generateReportPdfBlob(){
   return pdf.output("blob");
 }
 
-function renderLinkRow(url){
+function renderLinkRow(url, generatedAt){
   const linkRow = document.getElementById("linkRow");
   if(!url){ linkRow.className = "link-row"; linkRow.innerHTML = ""; return; }
   linkRow.className = "link-row visible";
+  // Data/ora di generazione mostrata accanto al link: cosi' prima di copiarlo e mandarlo a
+  // un cliente si vede subito, senza doversi fidare, quando quel PDF e' stato prodotto —
+  // se sono passate settimane dall'ultima modifica dei prezzi, salta all'occhio che va
+  // rigenerato.
+  let dateLabel = "";
+  if(generatedAt){
+    try{ dateLabel = new Date(generatedAt).toLocaleString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }catch(e){}
+  }
   linkRow.innerHTML =
-    '<span>Link condivisibile:</span>'+
+    '<span>Link condivisibile'+(dateLabel ? ' (generato il '+esc(dateLabel)+')' : '')+':</span>'+
     '<input type="text" id="shareLinkInput" readonly value="'+esc(url)+'" onclick="this.select()">'+
     '<button type="button" class="copy-btn" id="copyGeneratedLinkBtn">Copia link</button>'+
     '<span class="copy-feedback" id="copyFeedback"></span>';
@@ -674,6 +697,13 @@ async function generateReportLink(){
     status.className = "status";
     status.textContent = "Generazione PDF in corso...";
     const previousPdfUrl = (analysis && analysis.report_pdf_url) || null;
+    // Timbro visibile con data/ora esatta al minuto, stampato su ogni pagina del PDF (footer
+    // + copertina): serve a NON avere mai due generazioni indistinguibili a occhio. Va
+    // impresso nel documento PRIMA di catturarlo, quindi si ri-renderizza la pagina con lo
+    // stamp attivo e si aspetta un frame prima di passare a html2canvas.
+    GENERATION_STAMP = "Generato il " + new Date().toLocaleString("it-IT", {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+    recalcAndRender();
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const pdfBlob = await generateReportPdfBlob();
     // Il nome del file scaricato e' l'ultimo pezzo del path pubblico: il timestamp di
     // versione va nella CARTELLA, non incollato al nome del file, altrimenti chi scarica
@@ -763,16 +793,18 @@ async function publishAndFinalizeReportLink(pdfUrl){
   }
 
   if(confirmed){
+    const generatedAt = new Date().toISOString();
     try{
       await client.from("short_rent_analyses").update({
         report_pdf_url: pdfUrl,
         report_share_url: versionedShareUrl,
-        report_link_generated_at: new Date().toISOString()
+        report_link_generated_at: generatedAt
       }).eq("id", analysis.id);
       analysis.report_pdf_url = pdfUrl;
       analysis.report_share_url = versionedShareUrl;
+      analysis.report_link_generated_at = generatedAt;
     }catch(saveErr){ console.warn("Salvataggio link fallito:", saveErr); }
-    renderLinkRow(versionedShareUrl);
+    renderLinkRow(versionedShareUrl, generatedAt);
     status.className = "status success";
     status.textContent = "Link generato, con anteprima.";
   }else{
@@ -810,7 +842,7 @@ async function init(){
   const avgPrice = computeAvgPrice(data.comparables);
   document.getElementById("cPrice").value = avgPrice ? Math.round(avgPrice) : "";
   recalcAndRender();
-  if(data.report_share_url) renderLinkRow(data.report_share_url);
+  if(data.report_share_url) renderLinkRow(data.report_share_url, data.report_link_generated_at);
 }
 init();
 </script>
