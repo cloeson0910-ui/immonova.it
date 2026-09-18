@@ -534,12 +534,24 @@ var UI_STRINGS = {
   zes_req_1:"Progetto di investimento iniziale: l'intervento deve rientrare nella creazione di un nuovo stabilimento, ampliamento della capacità, diversificazione o cambiamento fondamentale del processo produttivo — nel caso ricettivo, apertura oppure rebranding/potenziamento profondo della struttura.",
   zes_req_2:"Beni nuovi: i beni mobili strumentali, gli impianti e le attrezzature devono essere nuovi di fabbrica.",
   zes_req_3:"Mantenimento dell'attività nel sito agevolato per almeno 5 anni dal completamento dell'investimento.",
-  zes_example_title:"Esempio di bilanciamento voci di spesa (a titolo puramente illustrativo)",
+  zes_example_title:"Simulazione sull'investimento di questa scheda",
+  zes_example_subtitle:"Calcolo basato sui costi reali stimati per questo immobile (Total Project Cost), non su un esempio generico.",
   zes_ex_col_voice:"Voce di spesa", zes_ex_col_amount:"Importo", zes_ex_col_share:"Incidenza", zes_ex_col_elig:"Ammissibilità ZES",
-  zes_ex_row1:"Acquisto immobile + ristrutturazione edile", zes_ex_row2:"Impianti tecnologici, cucine, arredi nuovi", zes_ex_row3:"Totale progetto",
-  zes_ex_note:"Piena capienza del limite 50%",
+  zes_ex_row1:"Acquisto immobile + ristrutturazione edile + spese tecniche", zes_ex_row2:"Beni strumentali nuovi (arredi, impianti, attrezzature — FF&E)", zes_ex_row3:"Totale investimento potenzialmente agevolabile",
+  zes_ex_note:"Entro il limite 50%",
+  zes_cap_ok_note:"La componente immobiliare rientra nel limite del 50% previsto dalla norma: il piano, nella sua composizione attuale, è coerente con i parametri ZES Unica.",
+  zes_cap_warning_note:"Attenzione: la componente immobiliare supera il limite del 50% previsto dalla norma. Così come strutturato, il piano NON sarebbe ammissibile al credito d'imposta ZES Unica.",
+  zes_cap_fix_note:"Per rientrare nel limite occorre integrare il piano con almeno un ulteriore importo indicato di seguito in beni strumentali nuovi (impianti, cucine professionali, domotica, arredi), portando la quota immobiliare esattamente al 50% del nuovo totale agevolabile.",
+  zes_needed_investment_label:"Ulteriore investimento in beni strumentali necessario per rientrare nel limite",
+  zes_balanced_total_label:"Totale investimento agevolabile una volta riequilibrato",
+  zes_threshold_min_warning:"Attenzione: l'investimento agevolabile stimato è inferiore alla soglia minima di € 200.000 prevista per l'accesso al credito — il progetto, così configurato, non sarebbe ammissibile.",
+  zes_threshold_max_warning:"Attenzione: l'investimento agevolabile stimato supera il tetto massimo di € 100.000.000 per progetto — la parte eccedente non sarebbe agevolabile.",
+  zes_credit_title:"Credito d'imposta stimato sull'investimento agevolabile",
+  zes_credit_intro:"Applicando le aliquote ZES Unica per dimensione d'impresa all'investimento agevolabile stimato (riequilibrato, se necessario, secondo quanto sopra):",
+  zes_credit_col_size:"Dimensione impresa", zes_credit_col_rate:"Aliquota", zes_credit_col_amount:"Credito d'imposta stimato",
+  zes_taranto_credit_note:"Con le aliquote maggiorate dell'area di Taranto (70% / 60% / 50%), il credito stimato salirebbe rispettivamente a:",
   zes_advice_title:"Consiglio operativo",
-  zes_advice_body:"Far separare nettamente, nei preventivi e nelle fatture di fornitori e tecnici, le voci edili/immobiliari da quelle impiantistiche/strumentali, e far certificare il tutto da un revisore legale prima della comunicazione integrativa all'Agenzia delle Entrate.",
+  zes_advice_body:"Far separare nettamente, nei preventivi e nelle fatture di fornitori e tecnici, le voci edili/immobiliari da quelle impiantistiche/strumentali, e far certificare il tutto da un revisore legale prima della comunicazione integrativa all'Agenzia delle Entrate. I valori qui riportati sono stime basate sui costi presenti in questa scheda: vanno sempre verificati sui preventivi reali prima di qualunque comunicazione all'Agenzia delle Entrate.",
   cost_acquisition_title:"Costi acquisizione", cost_development_title:"Costi sviluppo",
   row_purchase_price:"Prezzo acquisto", row_taxes:"Imposte / tasse", row_notary:"Notaio",
   row_agency:"Agenzia / brokerage", row_due_diligence:"Due diligence tecnica / legale", row_total_acquisition:"Totale acquisizione",
@@ -3091,24 +3103,35 @@ function isTarantoArea(){
 function showZESPage(){
   return isHospitalityCategory() && isZESUnicaRegion();
 }
+/* ---- Simulazione ZES basata sui costi REALI della scheda (buildFinance), non su un
+   esempio a numeri tondi. Perimetro applicato (richiesto dall'utente il 18/09/2026,
+   "numeri alla mano e previsionale sensato", non un esempio a caso):
+   - bucket "immobiliare" (soggetto al tetto del 50%): acquisto + ristrutturazione edile
+     + spese tecniche di cantiere (f.purchase + f.renovation + f.tech) -- le spese tecniche
+     sono tipicamente capitalizzate insieme al fabbricato, non sono beni strumentali;
+   - bucket "beni strumentali nuovi" (arredi/impianti/attrezzature): f.ffe -- è l'unica voce
+     di buildFinance che rappresenta davvero FF&E/attrezzature nuove: marketing, contingency,
+     notaio, agenzia e due diligence sono costi di transazione/gestione, non investimento
+     agevolabile ZES in senso stretto, e vengono volutamente ESCLUSI dal perimetro qui sotto;
+   - se la quota immobiliare supera il 50% (caso tipico, essendo ffe solo il 10% della
+     ristrutturazione), calcoliamo quanto andrebbe aggiunto in beni strumentali per
+     riportare esattamente il rapporto a 50/50, e il credito d'imposta stimato è calcolato
+     sul totale RIEQUILIBRATO (altrimenti il piano, così com'è, non sarebbe nemmeno
+     ammissibile) -- coerente col "consiglio operativo" già presente nel testo. ---- */
 function renderZESFiscalPage(){
-  if(!showZESPage()) return "";
+  if(!showZESPage()) return [];
+  var f=buildFinance();
   var region=getOpportunityRegion();
   var regionLabel=region ? (region.charAt(0).toUpperCase()+region.slice(1)) : "";
-  function row(a,b,c,d,cls){
-    return '<tr class="'+(cls||'')+'"><td>'+escapeHTML(a)+'</td><td>'+escapeHTML(b)+'</td><td>'+escapeHTML(c)+'</td><td>'+escapeHTML(d)+'</td></tr>';
-  }
-  var table='<table class="trend-table"><thead><tr><th>'+escapeHTML(T.zes_ex_col_voice)+'</th><th>'+escapeHTML(T.zes_ex_col_amount)+'</th><th>'+escapeHTML(T.zes_ex_col_share)+'</th><th>'+escapeHTML(T.zes_ex_col_elig)+'</th></tr></thead><tbody>'
-    +row(T.zes_ex_row1,'€ 300.000','50%',T.zes_ex_note)
-    +row(T.zes_ex_row2,'€ 300.000','50%','€ 300.000')
-    +row(T.zes_ex_row3,'€ 600.000','100%','€ 600.000','total')
-    +'</tbody></table>';
+  function li(t){ return '<li>'+escapeHTML(t)+'</li>'; }
+
   var intensityTable='<table class="trend-table"><thead><tr><th></th><th>'+escapeHTML(T.zes_small)+'</th><th>'+escapeHTML(T.zes_medium)+'</th><th>'+escapeHTML(T.zes_large)+'</th></tr></thead><tbody>'
     +'<tr><td>%</td><td>60%</td><td>50%</td><td>40%</td></tr>'
     +'</tbody></table>';
-  var tarantoBlock=isTarantoArea()?('<p style="margin-top:10px;font-size:12px;color:#8f7643">'+escapeHTML(T.zes_taranto_note)+'</p>'):'';
-  function li(t){ return '<li>'+escapeHTML(t)+'</li>'; }
-  return '<article class="report-page"><div class="page-inner">'
+  var tarantoArea=isTarantoArea();
+  var tarantoBlock=tarantoArea?('<p style="margin-top:10px;font-size:12px;color:#8f7643">'+escapeHTML(T.zes_taranto_note)+'</p>'):'';
+
+  var page1='<article class="report-page"><div class="page-inner">'
     +'<div class="section-kicker">'+escapeHTML(T.kicker_zes)+'</div>'
     +'<h2 class="section-title">'+escapeHTML(T.title_zes)+'</h2>'
     +'<div class="lux-rule"></div>'
@@ -3123,10 +3146,72 @@ function renderZESFiscalPage(){
     +tarantoBlock
     +'<h3 style="margin:18px 0 8px">'+escapeHTML(T.zes_requisiti_title)+'</h3>'
     +'<ul style="margin-bottom:16px">'+li(T.zes_req_1)+li(T.zes_req_2)+li(T.zes_req_3)+'</ul>'
-    +'<h3 style="margin-bottom:8px">'+escapeHTML(T.zes_example_title)+'</h3>'
-    +table
+    +'</div></article>';
+
+  // ---- Calcolo reale sui numeri della scheda ----
+  var immobiliare=(f.purchase||0)+(f.renovation||0)+(f.tech||0);
+  var strumentale=f.ffe||0;
+  var agevolabile=immobiliare+strumentale;
+  var immobiliarePct=agevolabile>0 ? Math.round((immobiliare/agevolabile)*1000)/10 : 0;
+  var strumentalePct=agevolabile>0 ? Math.round((strumentale/agevolabile)*1000)/10 : 0;
+  var overCap=agevolabile>0 && immobiliare > agevolabile*0.5;
+  var neededExtra=overCap ? Math.max(0, immobiliare-strumentale) : 0;
+  var balancedTotal=overCap ? immobiliare*2 : agevolabile;
+  var minOk=balancedTotal >= 200000;
+  var maxOk=balancedTotal <= 100000000;
+
+  function row(a,b,c,d,cls){
+    return '<tr class="'+(cls||'')+'"><td>'+escapeHTML(a)+'</td><td>'+escapeHTML(b)+'</td><td>'+escapeHTML(c)+'</td><td>'+escapeHTML(d)+'</td></tr>';
+  }
+  var breakdownTable='<table class="trend-table"><thead><tr><th>'+escapeHTML(T.zes_ex_col_voice)+'</th><th>'+escapeHTML(T.zes_ex_col_amount)+'</th><th>'+escapeHTML(T.zes_ex_col_share)+'</th></tr></thead><tbody>'
+    +'<tr><td>'+escapeHTML(T.zes_ex_row1)+'</td><td>'+escapeHTML(euro(immobiliare))+'</td><td>'+immobiliarePct+'%</td></tr>'
+    +'<tr><td>'+escapeHTML(T.zes_ex_row2)+'</td><td>'+escapeHTML(euro(strumentale))+'</td><td>'+strumentalePct+'%</td></tr>'
+    +'<tr class="total"><td>'+escapeHTML(T.zes_ex_row3)+'</td><td>'+escapeHTML(euro(agevolabile))+'</td><td>100%</td></tr>'
+    +'</tbody></table>';
+
+  var capNote = overCap
+    ? '<p style="margin-top:10px;color:#9c4a2f"><strong>'+escapeHTML(T.zes_cap_warning_note)+'</strong></p>'
+      +'<p style="margin-top:6px">'+escapeHTML(T.zes_cap_fix_note)+'</p>'
+      +'<div class="cost-box" style="margin-top:10px"><div class="cost-row"><span>'+escapeHTML(T.zes_needed_investment_label)+'</span><strong>'+escapeHTML(euro(neededExtra))+'</strong></div>'
+      +'<div class="cost-row total"><span>'+escapeHTML(T.zes_balanced_total_label)+'</span><strong>'+escapeHTML(euro(balancedTotal))+'</strong></div></div>'
+    : '<p style="margin-top:10px;color:#4f7f45">'+escapeHTML(T.zes_cap_ok_note)+'</p>';
+
+  var thresholdNotes='';
+  if(!minOk) thresholdNotes+='<p style="margin-top:10px;color:#9c4a2f">'+escapeHTML(T.zes_threshold_min_warning)+'</p>';
+  if(!maxOk) thresholdNotes+='<p style="margin-top:10px;color:#9c4a2f">'+escapeHTML(T.zes_threshold_max_warning)+'</p>';
+
+  var rates={small:0.60,medium:0.50,large:0.40};
+  var ratesTaranto={small:0.70,medium:0.60,large:0.50};
+  var creditTable='<table class="trend-table"><thead><tr><th>'+escapeHTML(T.zes_credit_col_size)+'</th><th>'+escapeHTML(T.zes_credit_col_rate)+'</th><th>'+escapeHTML(T.zes_credit_col_amount)+'</th></tr></thead><tbody>'
+    +'<tr><td>'+escapeHTML(T.zes_small)+'</td><td>'+(rates.small*100)+'%</td><td>'+escapeHTML(euro(balancedTotal*rates.small))+'</td></tr>'
+    +'<tr><td>'+escapeHTML(T.zes_medium)+'</td><td>'+(rates.medium*100)+'%</td><td>'+escapeHTML(euro(balancedTotal*rates.medium))+'</td></tr>'
+    +'<tr><td>'+escapeHTML(T.zes_large)+'</td><td>'+(rates.large*100)+'%</td><td>'+escapeHTML(euro(balancedTotal*rates.large))+'</td></tr>'
+    +'</tbody></table>';
+  var tarantoCreditBlock=tarantoArea
+    ? '<p style="margin-top:14px;font-size:12px;color:#8f7643">'+escapeHTML(T.zes_taranto_credit_note)+'</p>'
+      +'<table class="trend-table" style="margin-top:6px"><thead><tr><th>'+escapeHTML(T.zes_credit_col_size)+'</th><th>'+escapeHTML(T.zes_credit_col_rate)+'</th><th>'+escapeHTML(T.zes_credit_col_amount)+'</th></tr></thead><tbody>'
+      +'<tr><td>'+escapeHTML(T.zes_small)+'</td><td>'+(ratesTaranto.small*100)+'%</td><td>'+escapeHTML(euro(balancedTotal*ratesTaranto.small))+'</td></tr>'
+      +'<tr><td>'+escapeHTML(T.zes_medium)+'</td><td>'+(ratesTaranto.medium*100)+'%</td><td>'+escapeHTML(euro(balancedTotal*ratesTaranto.medium))+'</td></tr>'
+      +'<tr><td>'+escapeHTML(T.zes_large)+'</td><td>'+(ratesTaranto.large*100)+'%</td><td>'+escapeHTML(euro(balancedTotal*ratesTaranto.large))+'</td></tr>'
+      +'</tbody></table>'
+    : '';
+
+  var page2='<article class="report-page"><div class="page-inner">'
+    +'<div class="section-kicker">'+escapeHTML(T.kicker_zes)+'</div>'
+    +'<h2 class="section-title">'+escapeHTML(T.zes_example_title)+'</h2>'
+    +'<div class="lux-rule"></div>'
+    +'<p style="margin-bottom:14px;font-style:italic;color:#8f7643">'+escapeHTML(T.zes_example_subtitle)+'</p>'
+    +breakdownTable
+    +capNote
+    +thresholdNotes
+    +'<h3 style="margin:20px 0 8px">'+escapeHTML(T.zes_credit_title)+'</h3>'
+    +'<p style="margin-bottom:8px">'+escapeHTML(T.zes_credit_intro)+'</p>'
+    +creditTable
+    +tarantoCreditBlock
     +'<p style="margin-top:16px;font-size:12px;color:#8f7643"><strong>'+escapeHTML(T.zes_advice_title)+':</strong> '+escapeHTML(T.zes_advice_body)+'</p>'
     +'</div></article>';
+
+  return [page1,page2];
 }
 function isLandCategory(){
   var c=String(getCategory()||"").toLowerCase();
@@ -3905,10 +3990,10 @@ function renderBook(){
     push(T.chapter_financial, renderInternalFacts());
     push(T.chapter_financial, renderRoomKpiPage());
     push(T.chapter_financial, renderInvestmentStructure());
-    push(T.chapter_financial, renderZESFiscalPage());
     push(T.chapter_financial, renderTourismDemandPage());
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderOpexBreakdownPage());
+    renderZESFiscalPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderFinancialSnapshot());
     renderFiscalScenariosPage().forEach(function(p){ push(T.chapter_financial, p); });
   }
