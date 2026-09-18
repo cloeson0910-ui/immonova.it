@@ -695,6 +695,9 @@ function renderTourismResult(data){
     foreign_arrivals: "Arrivi stranieri",
     italian_overnight_stays: "Presenze italiane",
     foreign_overnight_stays: "Presenze straniere",
+    accommodation_structures: "Strutture ricettive (comune) &mdash; Cruscotto Italia",
+    accommodation_beds: "Posti letto (comune) &mdash; Cruscotto Italia",
+    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti &mdash; Cruscotto Italia",
     seasonality: "Stagionalit&agrave; mensile"
   };
   const rows = [];
@@ -713,9 +716,22 @@ function renderTourismResult(data){
     return;
   }
   let html = '<table>' + rows.map(r => '<tr><td>'+esc(r[0])+'</td><td>'+r[1]+'</td></tr>').join("") + '</table>';
-  const firstSource = Object.values(t).find(e => e && e.source && e.source.provider_name);
-  if(firstSource){
-    html += '<div class="info-box" style="margin-top:8px;font-size:.85em;">Fonte: ' + esc(firstSource.source.provider_name) + (firstSource.source.source_url ? ' &mdash; <a href="'+esc(firstSource.source.source_url)+'" target="_blank" rel="noopener">link</a>' : '') + '</div>';
+  // Multi-fonte: citiamo TUTTE le fonti verificate che hanno contribuito dati a questa
+  // scheda (es. open data provinciale + Cruscotto Italia AgID), non solo la prima trovata.
+  const seenProviders = {};
+  const sources = [];
+  Object.values(t).forEach(function(entry){
+    const src = entry && entry.source;
+    if(!src || !src.provider_name) return;
+    const key = src.provider_name + "|" + (src.source_url || "");
+    if(seenProviders[key]) return;
+    seenProviders[key] = true;
+    sources.push(src);
+  });
+  if(sources.length){
+    html += '<div class="info-box" style="margin-top:8px;font-size:.85em;">' + sources.map(function(s){
+      return 'Fonte: ' + esc(s.provider_name) + (s.source_url ? ' &mdash; <a href="'+esc(s.source_url)+'" target="_blank" rel="noopener">link</a>' : '');
+    }).join('<br>') + '</div>';
   }
   el.innerHTML = html;
 }

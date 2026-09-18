@@ -262,6 +262,9 @@ function extractTourismRows(tourismData){
     foreign_arrivals: "Arrivi stranieri",
     italian_overnight_stays: "Presenze italiane",
     foreign_overnight_stays: "Presenze straniere",
+    accommodation_structures: "Strutture ricettive (comune)",
+    accommodation_beds: "Posti letto (comune)",
+    tourism_index_per_100_residents: "Indice di turisticit&agrave; (per 100 residenti)",
   };
   const rows = [];
   Object.keys(labels).forEach(key => {
@@ -269,12 +272,25 @@ function extractTourismRows(tourismData){
     if(!entry || entry.value == null) return;
     let valueStr = entry.value;
     if(key === "average_stay") valueStr = entry.value + " notti";
+    else if(key === "tourism_index_per_100_residents") valueStr = entry.value;
     else if(typeof entry.value === "number") valueStr = Math.round(entry.value).toLocaleString("it-IT");
     const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
     rows.push({ label: labels[key], value: valueStr + yearStr, key, raw: entry.value, year: entry.observation_year });
   });
-  const firstSource = Object.values(t).find(e => e && e.source && e.source.provider_name);
-  return { rows, arrivals: t.arrivals ? t.arrivals.value : null, averageStay: t.average_stay ? t.average_stay.value : null, source: firstSource ? firstSource.source : null };
+  // Multi-fonte: piu' fonti verificate possono contribuire dati diversi alla stessa scheda
+  // (es. open data provinciale per arrivi/presenze comunali + Cruscotto Italia AgID per
+  // capacita' ricettiva comunale). Le citiamo tutte, non solo la prima trovata.
+  const seenProviders = new Set();
+  const sources = [];
+  Object.values(t).forEach(entry => {
+    const src = entry && entry.source;
+    if(!src || !src.provider_name) return;
+    const key = src.provider_name + "|" + (src.source_url || "");
+    if(seenProviders.has(key)) return;
+    seenProviders.add(key);
+    sources.push(src);
+  });
+  return { rows, arrivals: t.arrivals ? t.arrivals.value : null, averageStay: t.average_stay ? t.average_stay.value : null, source: sources[0] || null, sources };
 }
 
 function computeAvgPrice(comparables){
@@ -412,7 +428,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     <div class="section-title">Dati turistici reali e quota di mercato</div>
     <div class="lux-rule"></div>
     ${tourismRowsHtml ? `<table class="rep-table"><tr><th>Indicatore</th><th>Valore</th></tr>${tourismRowsHtml}</table>` : `<div class="note-box">Nessun dato turistico salvato su questa scheda.</div>`}
-    ${tourism.source ? `<div class="source-row">Fonte: ${esc(tourism.source.provider_name)}${tourism.source.source_url ? ' &mdash; '+esc(tourism.source.source_url) : ''}</div>` : ''}
+    ${(tourism.sources && tourism.sources.length) ? tourism.sources.map(s => `<div class="source-row">Fonte: ${esc(s.provider_name)}${s.source_url ? ' &mdash; '+esc(s.source_url) : ''}</div>`).join("") : ''}
     ${marketShareHtml}
     <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 3</span></div>
   </article>
