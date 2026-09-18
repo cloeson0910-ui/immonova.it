@@ -256,11 +256,21 @@ function extractTourismRows(tourismData){
   const t = (tourismData && tourismData.tourism) || {};
   // SOLO Cruscotto Italia (AgID): richiesto esplicitamente dal cliente -- niente dati
   // dell'altra fonte verificata (open data provinciale xlsx, provider_name "Brindisi").
+  // Cruscotto Italia pubblica arrivi/presenze/permanenza media SOLO a livello provinciale
+  // (il comune non ha una serie propria su Cruscotto), quindi li mostriamo comunque ma
+  // etichettati esplicitamente "(provincia)" per non farli passare per dati del comune.
   const CRUSCOTTO_PROVIDER = "Cruscotto Italia (AgID) - ISTAT/MEF";
   const labels = {
+    arrivals: "Arrivi (provincia)",
+    overnight_stays: "Presenze/pernottamenti (provincia)",
+    average_stay: "Permanenza media (provincia)",
+    italian_arrivals: "Arrivi italiani (provincia)",
+    foreign_arrivals: "Arrivi stranieri (provincia)",
+    italian_overnight_stays: "Presenze italiane (provincia)",
+    foreign_overnight_stays: "Presenze straniere (provincia)",
     accommodation_structures: "Strutture ricettive (comune)",
     accommodation_beds: "Posti letto (comune)",
-    tourism_index_per_100_residents: "Indice di turisticit&agrave; (per 100 residenti)",
+    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti (comune)",
   };
   const rows = [];
   Object.keys(labels).forEach(key => {
@@ -268,6 +278,8 @@ function extractTourismRows(tourismData){
     if(!entry || entry.value == null) return;
     if(!entry.source || entry.source.provider_name !== CRUSCOTTO_PROVIDER) return;
     let valueStr = entry.value;
+    if(key === "average_stay") valueStr = entry.value + " notti";
+    else if(typeof entry.value === "number" && key !== "tourism_index_per_100_residents") valueStr = Math.round(entry.value).toLocaleString("it-IT");
     const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
     rows.push({ label: labels[key], value: valueStr + yearStr, key, raw: entry.value, year: entry.observation_year });
   });
@@ -281,10 +293,11 @@ function extractTourismRows(tourismData){
     seenProviders.add(key);
     sources.push(src);
   });
-  // arrivals/averageStay per il calcolo quota di mercato non sono forniti da Cruscotto
-  // Italia a livello comunale (solo strutture/posti letto/indice) -- restano null finche'
-  // non e' disponibile una fonte Cruscotto Italia con questi campi.
-  return { rows, arrivals: null, averageStay: null, source: sources[0] || null, sources };
+  // arrivals/averageStay per il calcolo quota di mercato: presi dai dati Cruscotto Italia
+  // (provinciali, non c'e' una serie comunale su Cruscotto per Ostuni).
+  const arrivalsEntry = t.arrivals && t.arrivals.source && t.arrivals.source.provider_name === CRUSCOTTO_PROVIDER ? t.arrivals : null;
+  const avgStayEntry = t.average_stay && t.average_stay.source && t.average_stay.source.provider_name === CRUSCOTTO_PROVIDER ? t.average_stay : null;
+  return { rows, arrivals: arrivalsEntry ? arrivalsEntry.value : null, averageStay: avgStayEntry ? avgStayEntry.value : null, source: sources[0] || null, sources };
 }
 
 function computeAvgPrice(comparables){
@@ -370,7 +383,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       <div class="metric-card"><div class="metric-value">${totals.nights}</div><div class="metric-label">Notti occupate obiettivo</div></div>
     </div>
     <div class="note-box">
-      Per raggiungere le <strong>${totals.nights} notti occupate/anno</strong> previste da questa proiezione (permanenza media ${tourism.averageStay} notti), servono circa <strong>${Math.round(bookingsNeeded)} prenotazioni/anno</strong> &mdash; pari a solo lo <strong>${sharePctStr}%</strong> degli arrivi turistici totali registrati nel comune (${Math.round(tourism.arrivals).toLocaleString("it-IT")} arrivi${tourism.rows[0]&&tourism.rows[0].year?" nel "+tourism.rows[0].year:""}). Un indicatore di fattibilit&agrave; commerciale: quota molto bassa rispetto al bacino turistico reale della zona.
+      Per raggiungere le <strong>${totals.nights} notti occupate/anno</strong> previste da questa proiezione (permanenza media ${tourism.averageStay} notti, dato provinciale Cruscotto Italia), servono circa <strong>${Math.round(bookingsNeeded)} prenotazioni/anno</strong> &mdash; pari a solo lo <strong>${sharePctStr}%</strong> degli arrivi turistici totali registrati nella provincia (${Math.round(tourism.arrivals).toLocaleString("it-IT")} arrivi${tourism.rows[0]&&tourism.rows[0].year?" nel "+tourism.rows[0].year:""}). Un indicatore di fattibilit&agrave; commerciale: quota molto bassa rispetto al bacino turistico reale della zona (dato provinciale, non comunale: il comune non ha una serie propria su Cruscotto Italia).
     </div>`;
   }else{
     marketShareHtml = `<div class="note-box">Dati turistici non disponibili per questa scheda: premi "Recupera dati turistici" nella scheda Short Rent prima di generare il report, per calcolare anche la quota di mercato necessaria.</div>`;

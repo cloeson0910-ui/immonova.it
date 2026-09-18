@@ -689,21 +689,32 @@ function renderTourismResult(data){
   const t = data.tourism || {};
   // SOLO Cruscotto Italia (AgID): l'utente non vuole i dati dell'altra fonte verificata
   // (open data provinciale in formato xlsx, provider_name "Brindisi"), solo quelli
-  // ufficiali di Cruscotto Italia -- accolto esplicitamente, tabella ristretta a queste
-  // sole 3 metriche.
+  // ufficiali di Cruscotto Italia. Cruscotto Italia pubblica arrivi/presenze/permanenza
+  // media SOLO a livello provinciale (per Ostuni: provincia di Brindisi -- il comune non
+  // ha una serie propria su Cruscotto), quindi li mostriamo comunque ma etichettati
+  // esplicitamente come dato provinciale, per non farli passare per dati del comune.
   const CRUSCOTTO_PROVIDER = "Cruscotto Italia (AgID) - ISTAT/MEF";
   const fieldLabels = {
+    arrivals: "Arrivi (provincia)",
+    overnight_stays: "Presenze/pernottamenti (provincia)",
+    average_stay: "Permanenza media (provincia)",
+    italian_arrivals: "Arrivi italiani (provincia)",
+    foreign_arrivals: "Arrivi stranieri (provincia)",
+    italian_overnight_stays: "Presenze italiane (provincia)",
+    foreign_overnight_stays: "Presenze straniere (provincia)",
     accommodation_structures: "Strutture ricettive (comune)",
     accommodation_beds: "Posti letto (comune)",
-    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti"
+    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti (comune)"
   };
   const rows = [];
   Object.keys(fieldLabels).forEach(function(key){
     const entry = t[key];
     if(!entry || entry.value == null) return;
     if(!entry.source || entry.source.provider_name !== CRUSCOTTO_PROVIDER) return;
+    let valueStr = entry.value;
+    if(key === "average_stay") valueStr = entry.value + " notti";
     const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
-    rows.push([fieldLabels[key], entry.value + yearStr]);
+    rows.push([fieldLabels[key], valueStr + yearStr]);
   });
 
   if(!rows.length){
