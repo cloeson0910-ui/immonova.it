@@ -176,6 +176,24 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
   .photo-grid img{ height:75mm; }
   .photo-grid.single img{ height:150mm; }
 }
+
+/* Stessa identica gabbia usata da @media print, applicata come classe: serve per catturare
+   il PDF pagina per pagina con html2canvas usando esattamente le proporzioni A4 orizzontale
+   verificate in stampa, invece del layout a scorrimento libero della pagina a schermo. Prima
+   il PDF veniva generato affettando un unico screenshot lunghissimo ogni 210mm "a caso": non
+   combaciando con i veri confini delle pagine, tagliava testi/intestazioni a meta' e lasciava
+   un'ultima pagina vuota. Catturando UNA .report-page alla volta, gia' vincolata a queste
+   identiche dimensioni fisse, ogni pagina del documento diventa esattamente una pagina PDF. */
+.book.pdf-capture{ width:297mm; }
+.book.pdf-capture .report-page{ width:297mm; height:210mm; min-height:210mm; max-height:210mm; overflow:hidden; border-bottom:0; padding:18mm; }
+.book.pdf-capture .cover-flex{ height:170mm; }
+.book.pdf-capture .cover-title{ font-size:30pt; }
+.book.pdf-capture .brand{ font-size:19pt; }
+.book.pdf-capture table.rep-table{ font-size:8pt; }
+.book.pdf-capture table.rep-table th,.book.pdf-capture table.rep-table td{ padding:2.2mm 2mm; }
+.book.pdf-capture .page-folio{ left:18mm; right:18mm; bottom:9mm; }
+.book.pdf-capture .photo-grid img{ height:75mm; }
+.book.pdf-capture .photo-grid.single img{ height:150mm; }
 </style>
 </head>
 
@@ -601,22 +619,28 @@ function waitForImagesToLoad(root, timeoutMs){
 }
 
 async function generateReportPdfBlob(){
-  const el = document.getElementById("reportBook");
-  if(!el) throw new Error("Documento non trovato da esportare.");
-  await waitForImagesToLoad(el, 8000);
-  const canvas = await html2canvas(el, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
-  const imgData = canvas.toDataURL("image/jpeg", 0.94);
-  // Documento in landscape A4 su piu' pagine, replicando l'impaginazione di stampa
-  // (.report-page e' gia' dimensionata per A4 landscape via CSS @media print).
+  const book = document.getElementById("reportBook");
+  if(!book) throw new Error("Documento non trovato da esportare.");
+  const pageEls = Array.prototype.slice.call(book.querySelectorAll(".report-page"));
+  if(!pageEls.length) throw new Error("Nessuna pagina da esportare.");
+  await waitForImagesToLoad(book, 8000);
+  // Cattura UNA .report-page alla volta, vincolata dalla classe "pdf-capture" alle stesse
+  // identiche proporzioni A4 orizzontale gia' verificate in stampa (vedi CSS .pdf-capture):
+  // cosi' ogni pagina del documento diventa esattamente una pagina PDF, senza affettare un
+  // unico screenshot lunghissimo a intervalli fissi che non combaciano con i veri confini
+  // di pagina (causa di testi tagliati a meta' e di un'ultima pagina vuota).
+  book.classList.add("pdf-capture");
+  await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
   const pdf = new window.jspdf.jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
-  const pageWidthMM = 297;
-  const ratio = canvas.height / canvas.width;
-  const totalHeightMM = pageWidthMM * ratio;
-  const pageHeightMM = 210;
-  const pages = Math.max(1, Math.ceil(totalHeightMM / pageHeightMM));
-  for(let i=0;i<pages;i++){
-    if(i>0) pdf.addPage();
-    pdf.addImage(imgData, "JPEG", 0, -(i*pageHeightMM), pageWidthMM, totalHeightMM);
+  try{
+    for(let i=0;i<pageEls.length;i++){
+      const canvas = await html2canvas(pageEls[i], {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+      const imgData = canvas.toDataURL("image/jpeg", 0.94);
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, 0, 297, 210);
+    }
+  }finally{
+    book.classList.remove("pdf-capture");
   }
   return pdf.output("blob");
 }
@@ -651,8 +675,12 @@ async function generateReportLink(){
     status.textContent = "Generazione PDF in corso...";
     const previousPdfUrl = (analysis && analysis.report_pdf_url) || null;
     const pdfBlob = await generateReportPdfBlob();
-    const filename = "short_rent_report_IMMONOVA_"+slugify(analysis && analysis.title)+".pdf";
-    const path = "short-rent/analysis-"+(analysis.id||"na")+"/"+Date.now()+"_"+filename;
+    // Il nome del file scaricato e' l'ultimo pezzo del path pubblico: il timestamp di
+    // versione va nella CARTELLA, non incollato al nome del file, altrimenti chi scarica
+    // il PDF dal link pubblico si ritrova un nome tipo "1789769385763_short_rent_report_...
+    // .pdf" invece di un nome leggibile.
+    const filename = "Valutazione_IMMONOVA_"+slugify(analysis && analysis.title)+".pdf";
+    const path = "short-rent/analysis-"+(analysis.id||"na")+"/"+Date.now()+"/"+filename;
     const upload = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
     if(upload.error) throw upload.error;
     const pub = client.storage.from("dossier-pdfs").getPublicUrl(path);
