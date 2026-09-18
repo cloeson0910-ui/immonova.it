@@ -676,27 +676,42 @@ async function deleteAnalysis(){
 }
 document.getElementById("deleteAnalysisBtn").addEventListener("click", deleteAnalysis);
 
-/* ---- Dati turistici reali (riusa immonova-tourism-intelligence, stesso motore del dossier) ---- */
+/* ---- Dati turistici reali (immonova-tourism-verified-free: solo fonti verificate cruscotto Italia, GRATUITO) ---- */
 function renderTourismResult(data){
   const el = document.getElementById("tourismResult");
   if(!data){ el.innerHTML = ""; return; }
-  const t = data.tourism || data;
-  const rows = [
-    ["ADR stimato", t.adr_estimate != null ? "&euro; " + t.adr_estimate : null],
-    ["Tasso di occupazione", t.occupancy_rate_percent != null ? t.occupancy_rate_percent + "%" : null],
-    ["RevPAR stimato", t.revpar_estimate != null ? "&euro; " + t.revpar_estimate : null],
-    ["Arrivi (anno corrente)", t.arrivals_current != null ? t.arrivals_current : null],
-    ["Presenze (anno corrente)", t.presences_current != null ? t.presences_current : null],
-    ["Permanenza media", t.average_stay != null ? t.average_stay + " notti" : null],
-    ["Quota internazionale", t.international_share_percent != null ? t.international_share_percent + "%" : null],
-    ["Crescita anno su anno", t.growth_1y_percent != null ? t.growth_1y_percent + "%" : null],
-  ].filter(r => r[1] != null);
+  const t = data.tourism || {};
+  const fieldLabels = {
+    arrivals: "Arrivi",
+    overnight_stays: "Presenze (pernottamenti)",
+    average_stay: "Permanenza media",
+    italian_arrivals: "Arrivi italiani",
+    foreign_arrivals: "Arrivi stranieri",
+    italian_overnight_stays: "Presenze italiane",
+    foreign_overnight_stays: "Presenze straniere",
+    seasonality: "Stagionalit&agrave; mensile"
+  };
+  const rows = [];
+  Object.keys(fieldLabels).forEach(function(key){
+    const entry = t[key];
+    if(!entry || entry.value == null) return;
+    if(key === "seasonality") return; // reso a parte sotto, non come riga singola
+    let valueStr = entry.value;
+    if(key === "average_stay") valueStr = entry.value + " notti";
+    const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
+    rows.push([fieldLabels[key], valueStr + yearStr]);
+  });
 
   if(!rows.length){
-    el.innerHTML = '<div class="info-box">Nessun dato turistico strutturato trovato per questa zona. Il Discovery Engine non ha prodotto risultati verificabili.</div>';
+    el.innerHTML = '<div class="info-box">Nessun dato turistico strutturato trovato per questa zona tra le fonti verificate del cruscotto Italia.</div>';
     return;
   }
-  el.innerHTML = '<table>' + rows.map(r => '<tr><td>'+esc(r[0])+'</td><td>'+r[1]+'</td></tr>').join("") + '</table>';
+  let html = '<table>' + rows.map(r => '<tr><td>'+esc(r[0])+'</td><td>'+r[1]+'</td></tr>').join("") + '</table>';
+  const firstSource = Object.values(t).find(e => e && e.source && e.source.provider_name);
+  if(firstSource){
+    html += '<div class="info-box" style="margin-top:8px;font-size:.85em;">Fonte: ' + esc(firstSource.source.provider_name) + (firstSource.source.source_url ? ' &mdash; <a href="'+esc(firstSource.source.source_url)+'" target="_blank" rel="noopener">link</a>' : '') + '</div>';
+  }
+  el.innerHTML = html;
 }
 
 async function fetchTourism(){
@@ -711,7 +726,7 @@ async function fetchTourism(){
   }
   setStatus(document.getElementById("tourismStatus"), "Recupero dati turistici in corso (pu&ograve; richiedere qualche secondo)...", "");
   try{
-    const resp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/immonova-discovery-engine", {
+    const resp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/immonova-tourism-verified-free", {
       method:"POST",
       headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
       body: JSON.stringify({
@@ -723,8 +738,8 @@ async function fetchTourism(){
       })
     });
     const data = await resp.json().catch(()=>({}));
-    if(!resp.ok){
-      setStatus(document.getElementById("tourismStatus"), "Errore Discovery Engine: HTTP " + resp.status, "error");
+    if(!resp.ok || data.ok === false){
+      setStatus(document.getElementById("tourismStatus"), "Errore motore turistico gratuito: " + (data.error || ("HTTP " + resp.status)), "error");
       return;
     }
     await client.from("short_rent_analyses").update({
