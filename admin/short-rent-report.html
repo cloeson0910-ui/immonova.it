@@ -252,6 +252,10 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="../js/config.js"></script>
 <script>
+// Cambia questa stringa ogni volta che questo file viene modificato: serve solo a far
+// riconoscere alla pagina la propria versione (vedi verifyPageIsCurrent piu' sotto).
+const PAGE_BUILD_VERSION = "2026-09-19.01";
+
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function esc(v){
@@ -688,14 +692,45 @@ function renderLinkRow(url, generatedAt){
   });
 }
 
+// Prima di generare qualunque link, controlla che QUESTA pagina (quella gia' caricata nel
+// browser, magari in una tab aperta da prima dell'ultimo aggiornamento) sia davvero la
+// versione piu' recente del file, ri-scaricandolo con cache disattivata e confrontando
+// PAGE_BUILD_VERSION. Se non combaciano (tab vecchia rimasta aperta, o cache non ancora
+// aggiornata), NON genera nulla: costringe a ricaricare, invece di produrre in silenzio un
+// PDF con codice superato.
+async function verifyPageIsCurrent(){
+  try{
+    const resp = await fetch(window.location.pathname + "?_v=" + Date.now(), { cache: "no-store" });
+    if(!resp.ok) return { ok:false, reason:"network" };
+    const text = await resp.text();
+    const m = text.match(/PAGE_BUILD_VERSION\s*=\s*"([^"]+)"/);
+    if(!m) return { ok:false, reason:"network" };
+    return { ok: m[1] === PAGE_BUILD_VERSION, reason: m[1] === PAGE_BUILD_VERSION ? null : "stale" };
+  }catch(e){
+    return { ok:false, reason:"network" };
+  }
+}
+
 async function generateReportLink(){
   const btn = document.getElementById("generateLinkBtn");
   const originalLabel = btn.textContent;
+  const status = document.getElementById("pageStatus");
+
+  status.className = "status";
+  status.textContent = "Verifica che la pagina sia aggiornata...";
+  const check = await verifyPageIsCurrent();
+  if(!check.ok){
+    status.className = "status error";
+    status.textContent = check.reason === "stale"
+      ? "Questa scheda non e' aggiornata all'ultima versione (probabilmente e' rimasta aperta in una tab da prima di un aggiornamento). Ricarica la pagina (F5) e riprova: nessun link e' stato generato."
+      : "Impossibile verificare se la pagina e' aggiornata (problema di rete). Ricarica la pagina e riprova: nessun link e' stato generato, per sicurezza.";
+    return;
+  }
+
   btn.disabled = true;
   btn.classList.add("btn-busy");
   btn.classList.remove("btn-success");
   btn.textContent = "Generazione in corso...";
-  const status = document.getElementById("pageStatus");
   try{
     status.className = "status";
     status.textContent = "Generazione PDF in corso...";
