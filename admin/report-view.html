@@ -4697,7 +4697,13 @@ async function generateDossierLink(){
       });
       var publishData = await publishResp.json();
       if(publishResp.ok && publishData && publishData.url){
-        shareUrl = publishData.url;
+        /* Il file su GitHub viene sempre sovrascritto correttamente (upsert via sha), MA
+           l'URL è sempre lo stesso -> GitHub Pages/Fastly (e la cache di anteprima di
+           WhatsApp/Facebook) tengono in cache la vecchia versione su quello stesso URL anche
+           dopo la rigenerazione, quindi chi apre un link già condiviso in precedenza continua
+           a vedere il contenuto vecchio. Aggiungendo un parametro di versione diverso ad ogni
+           rigenerazione, l'URL cambia e forza tutte queste cache a scaricare la pagina fresca. */
+        shareUrl = publishData.url + (publishData.url.indexOf("?")>=0?"&":"?") + "v=" + Date.now();
       }else{
         console.warn("Pubblicazione pagina share su GitHub fallita:",publishData);
       }
