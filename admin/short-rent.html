@@ -687,42 +687,35 @@ function renderTourismResult(data){
   const el = document.getElementById("tourismResult");
   if(!data){ el.innerHTML = ""; return; }
   const t = data.tourism || {};
+  // SOLO Cruscotto Italia (AgID): l'utente non vuole i dati dell'altra fonte verificata
+  // (open data provinciale in formato xlsx, provider_name "Brindisi"), solo quelli
+  // ufficiali di Cruscotto Italia -- accolto esplicitamente, tabella ristretta a queste
+  // sole 3 metriche.
+  const CRUSCOTTO_PROVIDER = "Cruscotto Italia (AgID) - ISTAT/MEF";
   const fieldLabels = {
-    arrivals: "Arrivi",
-    overnight_stays: "Presenze (pernottamenti)",
-    average_stay: "Permanenza media",
-    italian_arrivals: "Arrivi italiani",
-    foreign_arrivals: "Arrivi stranieri",
-    italian_overnight_stays: "Presenze italiane",
-    foreign_overnight_stays: "Presenze straniere",
-    accommodation_structures: "Strutture ricettive (comune) &mdash; Cruscotto Italia",
-    accommodation_beds: "Posti letto (comune) &mdash; Cruscotto Italia",
-    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti &mdash; Cruscotto Italia",
-    seasonality: "Stagionalit&agrave; mensile"
+    accommodation_structures: "Strutture ricettive (comune)",
+    accommodation_beds: "Posti letto (comune)",
+    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti"
   };
   const rows = [];
   Object.keys(fieldLabels).forEach(function(key){
     const entry = t[key];
     if(!entry || entry.value == null) return;
-    if(key === "seasonality") return; // reso a parte sotto, non come riga singola
-    let valueStr = entry.value;
-    if(key === "average_stay") valueStr = entry.value + " notti";
+    if(!entry.source || entry.source.provider_name !== CRUSCOTTO_PROVIDER) return;
     const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
-    rows.push([fieldLabels[key], valueStr + yearStr]);
+    rows.push([fieldLabels[key], entry.value + yearStr]);
   });
 
   if(!rows.length){
-    el.innerHTML = '<div class="info-box">Nessun dato turistico strutturato trovato per questa zona tra le fonti verificate del cruscotto Italia.</div>';
+    el.innerHTML = '<div class="info-box">Nessun dato Cruscotto Italia trovato per questo comune.</div>';
     return;
   }
   let html = '<table>' + rows.map(r => '<tr><td>'+esc(r[0])+'</td><td>'+r[1]+'</td></tr>').join("") + '</table>';
-  // Multi-fonte: citiamo TUTTE le fonti verificate che hanno contribuito dati a questa
-  // scheda (es. open data provinciale + Cruscotto Italia AgID), non solo la prima trovata.
   const seenProviders = {};
   const sources = [];
   Object.values(t).forEach(function(entry){
     const src = entry && entry.source;
-    if(!src || !src.provider_name) return;
+    if(!src || !src.provider_name || src.provider_name !== CRUSCOTTO_PROVIDER) return;
     const key = src.provider_name + "|" + (src.source_url || "");
     if(seenProviders[key]) return;
     seenProviders[key] = true;

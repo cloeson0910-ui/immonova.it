@@ -254,14 +254,10 @@ function getParam(name){
 
 function extractTourismRows(tourismData){
   const t = (tourismData && tourismData.tourism) || {};
+  // SOLO Cruscotto Italia (AgID): richiesto esplicitamente dal cliente -- niente dati
+  // dell'altra fonte verificata (open data provinciale xlsx, provider_name "Brindisi").
+  const CRUSCOTTO_PROVIDER = "Cruscotto Italia (AgID) - ISTAT/MEF";
   const labels = {
-    arrivals: "Arrivi",
-    overnight_stays: "Presenze (pernottamenti)",
-    average_stay: "Permanenza media",
-    italian_arrivals: "Arrivi italiani",
-    foreign_arrivals: "Arrivi stranieri",
-    italian_overnight_stays: "Presenze italiane",
-    foreign_overnight_stays: "Presenze straniere",
     accommodation_structures: "Strutture ricettive (comune)",
     accommodation_beds: "Posti letto (comune)",
     tourism_index_per_100_residents: "Indice di turisticit&agrave; (per 100 residenti)",
@@ -270,27 +266,25 @@ function extractTourismRows(tourismData){
   Object.keys(labels).forEach(key => {
     const entry = t[key];
     if(!entry || entry.value == null) return;
+    if(!entry.source || entry.source.provider_name !== CRUSCOTTO_PROVIDER) return;
     let valueStr = entry.value;
-    if(key === "average_stay") valueStr = entry.value + " notti";
-    else if(key === "tourism_index_per_100_residents") valueStr = entry.value;
-    else if(typeof entry.value === "number") valueStr = Math.round(entry.value).toLocaleString("it-IT");
     const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
     rows.push({ label: labels[key], value: valueStr + yearStr, key, raw: entry.value, year: entry.observation_year });
   });
-  // Multi-fonte: piu' fonti verificate possono contribuire dati diversi alla stessa scheda
-  // (es. open data provinciale per arrivi/presenze comunali + Cruscotto Italia AgID per
-  // capacita' ricettiva comunale). Le citiamo tutte, non solo la prima trovata.
   const seenProviders = new Set();
   const sources = [];
   Object.values(t).forEach(entry => {
     const src = entry && entry.source;
-    if(!src || !src.provider_name) return;
+    if(!src || !src.provider_name || src.provider_name !== CRUSCOTTO_PROVIDER) return;
     const key = src.provider_name + "|" + (src.source_url || "");
     if(seenProviders.has(key)) return;
     seenProviders.add(key);
     sources.push(src);
   });
-  return { rows, arrivals: t.arrivals ? t.arrivals.value : null, averageStay: t.average_stay ? t.average_stay.value : null, source: sources[0] || null, sources };
+  // arrivals/averageStay per il calcolo quota di mercato non sono forniti da Cruscotto
+  // Italia a livello comunale (solo strutture/posti letto/indice) -- restano null finche'
+  // non e' disponibile una fonte Cruscotto Italia con questi campi.
+  return { rows, arrivals: null, averageStay: null, source: sources[0] || null, sources };
 }
 
 function computeAvgPrice(comparables){
