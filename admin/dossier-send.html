@@ -93,6 +93,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .dossier-link-row .link-label{color:#a67f34;font-weight:600;white-space:nowrap}
 .dossier-link-row input{flex:1;min-width:220px;padding:9px 10px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.6);color:#7f6430;font-size:12px;font-family:inherit}
 .dossier-link-row .copy-btn{padding:9px 14px;border:1px solid rgba(166,127,52,.4);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:10px;cursor:pointer}
+.copy-btn:disabled,.copy-btn[disabled]{opacity:.35;cursor:not-allowed;filter:grayscale(.4)}
 .dossier-link-row .copy-btn:hover{background:#8f6d2c}
 .dossier-link-row .copy-feedback{color:#4f7f45;font-weight:600}
 .customize-sections-box{width:560px;max-height:84vh;display:flex;flex-direction:column}
@@ -418,6 +419,13 @@ var currentDossierPdfUrl = null;
    (non solo "commit riuscito su GitHub" -- il deploy di GitHub Pages ha un ritardo separato,
    a volte diversi minuti, durante il quale il link non e' ancora davvero online). */
 var dossierLinkVerified = false;
+/* Lingua del link appena generato e non ancora confermato online (vedi generateDossierLink):
+   finche' non e' verificato, "Copia"/"Apri"/"Invia su WhatsApp" per QUELLA lingua devono
+   restare bloccati per davvero (disabled), non solo avvisati con una scritta -- prima si
+   poteva copiare/aprire il link anche durante il deploy GitHub Pages ancora in corso, e in
+   quella finestra il sito serviva ancora la pagina precedente: il link "sembrava" generato
+   ma portava al dossier vecchio. */
+var pendingUnverifiedLang = null;
 var currentUser = null;
 var opportunity = null;
 var report = null;
@@ -4655,12 +4663,13 @@ function renderDossierLinkRow(){
     return;
   }
   var genStamp = formatDossierLinkTimestamp(url);
+  var lockedAttrs = dossierLinkVerified ? "" : " disabled title=\"In attesa di conferma pubblicazione: non ancora utilizzabile\"";
   dossierLinkRow.style.display="flex";
   dossierLinkRow.innerHTML =
     "<span class=\"link-label\">Link diretto al dossier:</span>"+
     "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\">"+
-    "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLink()\">Copia link</button>"+
-    "<button type=\"button\" class=\"copy-btn\" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
+    "<button type=\"button\" class=\"copy-btn\""+lockedAttrs+" onclick=\"copyDossierLink()\">Copia link</button>"+
+    "<button type=\"button\" class=\"copy-btn\""+lockedAttrs+" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
     "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>"+
     (genStamp?("<span class=\"link-warning\" style=\"color:#4f7f45;font-weight:600\">Generato il "+escapeHTML(genStamp)+"</span>"):"")+
     (dossierLinkVerified?"":"<span class=\"link-warning\">⚠ pubblicazione su GitHub Pages ancora in corso: il link potrebbe non essere online per qualche minuto. NON inviarlo finché non diventa verde.</span>");
@@ -4687,7 +4696,16 @@ function renderDossierLinkRow(){
    separato e asincrono che a volte impiega diversi minuti, durante i quali la pagina
    continua a dare 404 anche se il file e' gia' nel repository. Interroga l'URL a intervalli,
    con un parametro anti-cache, per un massimo di ~2 minuti; ritorna true/false. */
-function waitForDossierPageLive(url, onProgress){
+/* v2 -- BUG TROVATO: la versione precedente considerava il link "verificato online" al primo
+   200 OK ricevuto. Ma il file a quel path esiste GIA' da prima (stesso file, sovrascritto in
+   git, solo il parametro ?v= e' nuovo): quindi risponde 200 SUBITO, anche se il deploy di
+   GitHub Pages/Fastly del contenuto appena committato non e' ancora finito -- il "verificato,
+   pronto da inviare" diventava verde mentre il body scaricato era ancora quello VECCHIO. Non
+   basta controllare che risponda: bisogna controllare che il body scaricato contenga
+   davvero il nuovo PDF appena pubblicato (expectedSubstring, il publicUrl del PDF appena
+   caricato su Storage, univoco per timestamp) -- solo quello prova che il deploy nuovo e'
+   effettivamente andato in produzione, non solo che il vecchio file e' ancora raggiungibile. */
+function waitForDossierPageLive(url, expectedSubstring, onProgress){
   var MAX_ATTEMPTS = 24, INTERVAL_MS = 5000;
   return new Promise(function(resolve){
     var attempt = 0;
@@ -4696,8 +4714,12 @@ function waitForDossierPageLive(url, onProgress){
       if(onProgress) onProgress(attempt, MAX_ATTEMPTS);
       var bustUrl = url + (url.indexOf("?")>=0?"&":"?") + "_cachebust=" + Date.now();
       fetch(bustUrl, {method:"GET", cache:"no-store"}).then(function(resp){
-        if(resp.ok){ resolve(true); return; }
-        scheduleNext();
+        if(!resp.ok){ scheduleNext(); return; }
+        return resp.text().then(function(body){
+          if(!expectedSubstring || body.indexOf(expectedSubstring) >= 0){ resolve(true); return; }
+          console.warn("[dossier-link] pagina raggiungibile ma contenuto ancora vecchio (deploy GitHub Pages non concluso), ritento...");
+          scheduleNext();
+        });
       }).catch(function(){ scheduleNext(); });
     }
     function scheduleNext(){
@@ -4750,13 +4772,17 @@ function renderDossierLangLinksBox(){
     var name = DOSSIER_LANG_NAMES[lang] || lang.toUpperCase();
     var isCurrent = lang === (CURRENT_LANG||"it");
     var genStamp = formatDossierLinkTimestamp(url);
+    var isPending = (lang === pendingUnverifiedLang);
+    var lockedAttrs = isPending ? " disabled title=\"In attesa di conferma pubblicazione: non ancora utilizzabile\"" : "";
+    var openHref = isPending ? "javascript:void(0)" : escapeHTML(url);
+    var openAttrs = isPending ? " aria-disabled=\"true\" style=\"text-decoration:none;display:inline-block;pointer-events:none;opacity:.35\"" : " style=\"text-decoration:none;display:inline-block\" target=\"_blank\" rel=\"noopener\"";
     return "<div class=\"dossier-lang-link-row"+(isCurrent?" current":"")+"\">"+
       "<span class=\"lang-badge\">"+escapeHTML(lang)+"</span>"+
       "<span class=\"lang-name\">"+escapeHTML(name)+"</span>"+
       "<input type=\"text\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\" id=\"dossierLangLinkInput"+idx+"\">"+
-      (genStamp?("<span style=\"font-size:11px;color:#4f7f45;font-weight:600;white-space:nowrap\">Generato il "+escapeHTML(genStamp)+"</span>"):"")+
-      "<button type=\"button\" class=\"copy-btn\" onclick=\"copyDossierLangLink('dossierLangLinkInput"+idx+"','dossierLangLinkFeedback"+idx+"')\">Copia</button>"+
-      "<a class=\"copy-btn\" style=\"text-decoration:none;display:inline-block\" href=\""+escapeHTML(url)+"\" target=\"_blank\" rel=\"noopener\">Apri</a>"+
+      (isPending?"<span style=\"font-size:11px;color:#c97a2e;font-weight:600;white-space:nowrap\">Pubblicazione in corso...</span>":(genStamp?("<span style=\"font-size:11px;color:#4f7f45;font-weight:600;white-space:nowrap\">Generato il "+escapeHTML(genStamp)+"</span>"):""))+
+      "<button type=\"button\" class=\"copy-btn\""+lockedAttrs+" onclick=\"copyDossierLangLink('dossierLangLinkInput"+idx+"','dossierLangLinkFeedback"+idx+"')\">Copia</button>"+
+      "<a class=\"copy-btn\""+openAttrs+" href=\""+openHref+"\">Apri</a>"+
       "<span class=\"copy-feedback\" id=\"dossierLangLinkFeedback"+idx+"\"></span>"+
       "</div>";
   }).join("");
@@ -4877,6 +4903,7 @@ async function generateDossierLink(){
        asincrono (vedi waitForDossierPageLive) e va confermata prima di segnare il link come
        davvero pronto/verde. */
     dossierLinkVerified = !shareUrl;
+    pendingUnverifiedLang = shareUrl ? (CURRENT_LANG||"it") : null;
     renderDossierLinkRow();
     /* Salviamo sia il PDF grezzo che il link alla pagina share (se generata) sull'opportunità
        stessa: alla prossima apertura di questa pagina li trova già pronti (vedi init()) e non
@@ -4898,11 +4925,13 @@ async function generateDossierLink(){
     if(shareUrl){
       setStatus("Link generato: verifica pubblicazione su GitHub Pages in corso...","");
       showDossierLinkProgress("Pubblicazione su GitHub Pages in corso: verifica del link in corso...",0,false);
-      var live = await waitForDossierPageLive(shareUrl, function(attempt,max){
+      var live = await waitForDossierPageLive(shareUrl, pub.data.publicUrl, function(attempt,max){
         showDossierLinkProgress("Pubblicazione su GitHub Pages in corso: tentativo "+attempt+"/"+max+" (può richiedere fino a 2 minuti)...", Math.round(attempt/max*100), false);
       });
       dossierLinkVerified = live;
+      pendingUnverifiedLang = live ? null : pendingUnverifiedLang;
       renderDossierLinkRow();
+      renderDossierLangLinksBox();
       if(live){
         showDossierLinkProgress("Link verificato online.",100,"done");
         setTimeout(hideDossierLinkProgress,3000);
