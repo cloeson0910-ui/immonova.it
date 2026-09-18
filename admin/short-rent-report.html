@@ -88,6 +88,7 @@ body::after{
 .controls-panel .hint{ font-size:11px; color:#8f7643; max-width:260px; }
 .status{ margin:14px 40px 0; font-size:13px; }
 .status.error{ color:#9c2f2f; }
+.status.success{ color:#4f7f45; }
 
 .container{ max-width:1200px; margin:26px auto 60px; padding:0 40px; }
 .book{
@@ -142,6 +143,13 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 .disclaimer-text{ font-size:10px; line-height:1.65; color:#8f7643; margin-top:10px; }
 .page-folio{ position:absolute; left:54px; right:54px; bottom:22px; display:flex; justify-content:space-between; font-size:9px; color:#a89876; border-top:1px solid rgba(166,127,52,.15); padding-top:8px; }
 
+.photo-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-top:8px; }
+.photo-grid.single{ grid-template-columns:1fr; }
+.photo-grid img{ width:100%; height:220px; object-fit:cover; border:1px solid rgba(166,127,52,.2); display:block; }
+.photo-grid.single img{ height:400px; }
+
+.share-note{ font-size:10px; color:#8f7643; margin-top:6px; }
+
 @media print{
   @page{ size:A4 landscape; margin:0; }
   html,body{ width:297mm; min-height:210mm; background:white!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -156,6 +164,8 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
   table.rep-table{ font-size:8pt; }
   table.rep-table th,table.rep-table td{ padding:2.2mm 2mm; }
   .page-folio{ left:18mm; right:18mm; bottom:9mm; }
+  .photo-grid img{ height:75mm; }
+  .photo-grid.single img{ height:150mm; }
 }
 </style>
 </head>
@@ -169,6 +179,8 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
   </a>
   <div class="header-actions">
     <a href="short-rent.html">&larr; Torna a Short Rent</a>
+    <button id="waBtn" type="button">Condividi su WhatsApp</button>
+    <button id="copyLinkBtn" type="button">Copia link</button>
     <button class="primary" id="printBtn" type="button">Stampa / PDF</button>
   </div>
 </header>
@@ -240,6 +252,31 @@ function getParam(name){
   return new URLSearchParams(window.location.search).get(name);
 }
 
+function extractTourismRows(tourismData){
+  const t = (tourismData && tourismData.tourism) || {};
+  const labels = {
+    arrivals: "Arrivi",
+    overnight_stays: "Presenze (pernottamenti)",
+    average_stay: "Permanenza media",
+    italian_arrivals: "Arrivi italiani",
+    foreign_arrivals: "Arrivi stranieri",
+    italian_overnight_stays: "Presenze italiane",
+    foreign_overnight_stays: "Presenze straniere",
+  };
+  const rows = [];
+  Object.keys(labels).forEach(key => {
+    const entry = t[key];
+    if(!entry || entry.value == null) return;
+    let valueStr = entry.value;
+    if(key === "average_stay") valueStr = entry.value + " notti";
+    else if(typeof entry.value === "number") valueStr = Math.round(entry.value).toLocaleString("it-IT");
+    const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
+    rows.push({ label: labels[key], value: valueStr + yearStr, key, raw: entry.value, year: entry.observation_year });
+  });
+  const firstSource = Object.values(t).find(e => e && e.source && e.source.provider_name);
+  return { rows, arrivals: t.arrivals ? t.arrivals.value : null, averageStay: t.average_stay ? t.average_stay.value : null, source: firstSource ? firstSource.source : null };
+}
+
 function computeAvgPrice(comparables){
   const prices = (Array.isArray(comparables) ? comparables : [])
     .map(c => Number(c.price_per_night))
@@ -305,6 +342,36 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
 
   const avgOcc = Math.round((totals.nights/365)*100);
 
+  const tourism = extractTourismRows(a.tourism_data);
+  const tourismRowsHtml = tourism.rows.map(r => '<tr><td>'+esc(r.label)+'</td><td>'+r.value+'</td></tr>').join("");
+
+  // Quota di mercato turistico necessaria: quante "prenotazioni" (arrivi) servono per
+  // raggiungere l'obiettivo di notti occupate impostato, e che percentuale rappresentano
+  // sugli arrivi turistici totali annui del comune (dato reale, fonte verificata).
+  let marketShareHtml = "";
+  if(tourism.arrivals && tourism.averageStay){
+    const bookingsNeeded = totals.nights / tourism.averageStay;
+    const sharePct = (bookingsNeeded / tourism.arrivals) * 100;
+    const sharePctStr = sharePct < 0.01 ? sharePct.toFixed(4) : (sharePct < 1 ? sharePct.toFixed(3) : sharePct.toFixed(2));
+    marketShareHtml = `
+    <div class="metric-grid">
+      <div class="metric-card"><div class="metric-value">${Math.round(bookingsNeeded)}</div><div class="metric-label">Prenotazioni/anno necessarie</div></div>
+      <div class="metric-card"><div class="metric-value">${sharePctStr}%</div><div class="metric-label">Quota su arrivi totali comune</div></div>
+      <div class="metric-card"><div class="metric-value">${totals.nights}</div><div class="metric-label">Notti occupate obiettivo</div></div>
+    </div>
+    <div class="note-box">
+      Per raggiungere le <strong>${totals.nights} notti occupate/anno</strong> previste da questa proiezione (permanenza media ${tourism.averageStay} notti), servono circa <strong>${Math.round(bookingsNeeded)} prenotazioni/anno</strong> &mdash; pari a solo lo <strong>${sharePctStr}%</strong> degli arrivi turistici totali registrati nel comune (${Math.round(tourism.arrivals).toLocaleString("it-IT")} arrivi${tourism.rows[0]&&tourism.rows[0].year?" nel "+tourism.rows[0].year:""}). Un indicatore di fattibilit&agrave; commerciale: quota molto bassa rispetto al bacino turistico reale della zona.
+    </div>`;
+  }else{
+    marketShareHtml = `<div class="note-box">Dati turistici non disponibili per questa scheda: premi "Recupera dati turistici" nella scheda Short Rent prima di generare il report, per calcolare anche la quota di mercato necessaria.</div>`;
+  }
+
+  const photos = Array.isArray(a.photos) ? a.photos : [];
+  const photoGridClass = photos.length <= 1 ? "photo-grid single" : "photo-grid";
+  const photosHtml = photos.length
+    ? `<div class="${photoGridClass}">` + photos.slice(0,6).map(url => '<img src="'+esc(url)+'" alt="Foto immobile">').join("") + `</div>`
+    : `<div class="note-box">Nessuna foto caricata su questa scheda.</div>`;
+
   const html = `
   <article class="report-page">
     <div class="cover-flex">
@@ -330,6 +397,32 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       <div class="doc-meta">Proiezione Ricavi Short Rent<br>${esc(a.title||"")}</div>
     </div>
     <div class="section-kicker">01</div>
+    <div class="section-title">L'immobile</div>
+    <div class="lux-rule"></div>
+    ${photosHtml}
+    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 2</span></div>
+  </article>
+
+  <article class="report-page">
+    <div class="page-header">
+      <div><div class="brand" style="font-size:18px">IMMONOVA</div><div class="brand-sub">OFF MARKET &bull; CONSULTING</div></div>
+      <div class="doc-meta">Proiezione Ricavi Short Rent<br>${esc(a.title||"")}</div>
+    </div>
+    <div class="section-kicker">02</div>
+    <div class="section-title">Dati turistici reali e quota di mercato</div>
+    <div class="lux-rule"></div>
+    ${tourismRowsHtml ? `<table class="rep-table"><tr><th>Indicatore</th><th>Valore</th></tr>${tourismRowsHtml}</table>` : `<div class="note-box">Nessun dato turistico salvato su questa scheda.</div>`}
+    ${tourism.source ? `<div class="source-row">Fonte: ${esc(tourism.source.provider_name)}${tourism.source.source_url ? ' &mdash; '+esc(tourism.source.source_url) : ''}</div>` : ''}
+    ${marketShareHtml}
+    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 3</span></div>
+  </article>
+
+  <article class="report-page">
+    <div class="page-header">
+      <div><div class="brand" style="font-size:18px">IMMONOVA</div><div class="brand-sub">OFF MARKET &bull; CONSULTING</div></div>
+      <div class="doc-meta">Proiezione Ricavi Short Rent<br>${esc(a.title||"")}</div>
+    </div>
+    <div class="section-kicker">03</div>
     <div class="section-title">Metodologia e comparabili di mercato</div>
     <div class="lux-rule"></div>
     <p class="info-text">La proiezione si basa sul prezzo medio a notte calcolato sui comparabili reali individuati sul mercato per immobili dello stesso segmento, e su un tasso di riempimento stagionale.</p>
@@ -345,6 +438,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     <div class="assumption-box">
       <strong>Nota metodologica sulla stagionalit&agrave;.</strong> Il riempimento del ${occHighPct}% per giugno&ndash;settembre &egrave; il valore impostato nel pannello di controllo. Per i restanti mesi non esiste, ad oggi, un dato ufficiale con dettaglio mensile per singolo comune: la curva riportata &egrave; una stima prudenziale standard per il mercato costiero, segnalata come tale e non spacciata per dato verificato.
     </div>
+    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 4</span></div>
   </article>
 
   <article class="report-page">
@@ -352,7 +446,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       <div><div class="brand" style="font-size:18px">IMMONOVA</div><div class="brand-sub">OFF MARKET &bull; CONSULTING</div></div>
       <div class="doc-meta">Proiezione Ricavi Short Rent<br>${esc(a.title||"")}</div>
     </div>
-    <div class="section-kicker">02</div>
+    <div class="section-kicker">04</div>
     <div class="section-title">Proiezione mensile: dal lordo al netto</div>
     <div class="lux-rule"></div>
     <p class="info-text" style="margin-bottom:12px">Prezzo applicato: <strong>${eur(price)}/notte</strong>. La cedolare secca (${cedolarePct}%) si calcola sul canone <strong>lordo</strong>: le spese di gestione non sono deducibili in questo regime.</p>
@@ -361,8 +455,8 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       ${monthRows}
       <tr class="total"><td>TOTALE ANNO</td><td>${avgOcc}%</td><td>${totals.nights}</td><td>${eur(totals.gross)}</td><td>${eur(totals.feeMinEur)}</td><td>${eur(totals.feeMaxEur)}</td><td>${eur(totals.cedEur)}</td><td>${eur(totals.netMax)}</td><td>${eur(totals.netMin)}</td></tr>
     </table>
-    <div class="source-row">* Riempimento giu&ndash;set impostato manualmente. Restanti mesi: stima stagionale (vedi pag. 2).</div>
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 3</span></div>
+    <div class="source-row">* Riempimento giu&ndash;set impostato manualmente. Restanti mesi: stima stagionale (vedi pag. 4).</div>
+    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 5</span></div>
   </article>
 
   <article class="report-page">
@@ -370,7 +464,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
       <div><div class="brand" style="font-size:18px">IMMONOVA</div><div class="brand-sub">OFF MARKET &bull; CONSULTING</div></div>
       <div class="doc-meta">Proiezione Ricavi Short Rent<br>${esc(a.title||"")}</div>
     </div>
-    <div class="section-kicker">03</div>
+    <div class="section-kicker">05</div>
     <div class="section-title">Sintesi annuale</div>
     <div class="lux-rule"></div>
     <div class="metric-grid">
@@ -391,7 +485,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     <div class="disclaimer-text">
       Documento a fini di proiezione indicativa, non previsione garantita di ricavo. Prezzo comparabili e dato turistico derivano da fonti verificate al momento della raccolta; la distribuzione mensile fuori da giugno&ndash;settembre &egrave; una stima, non un dato ufficiale. L'aliquota di cedolare secca indicata si applica di norma alla prima unit&agrave; locata nell'anno solare dallo stesso proprietario; dalla seconda unit&agrave; in poi la normativa italiana prevede il 26% &mdash; verificare con un commercialista prima di ogni decisione fiscale. Occupazione, prezzi e normativa possono variare nel tempo.
     </div>
-    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 4</span></div>
+    <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 6</span></div>
   </article>
   `;
   document.getElementById("reportBook").innerHTML = html;
@@ -416,6 +510,24 @@ function recalcAndRender(){
 
 document.getElementById("recalcBtn").addEventListener("click", recalcAndRender);
 document.getElementById("printBtn").addEventListener("click", () => window.print());
+
+document.getElementById("waBtn").addEventListener("click", () => {
+  const title = analysis ? (analysis.title || "Analisi Short Rent") : "Analisi Short Rent";
+  const text = "Proiezione ricavi Short Rent IMMONOVA — " + title + ": " + window.location.href;
+  window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
+});
+
+document.getElementById("copyLinkBtn").addEventListener("click", async () => {
+  try{
+    await navigator.clipboard.writeText(window.location.href);
+    const status = document.getElementById("pageStatus");
+    status.className = "status success";
+    status.textContent = "Link copiato negli appunti.";
+    setTimeout(() => { status.textContent = ""; }, 2500);
+  }catch(e){
+    window.prompt("Copia il link:", window.location.href);
+  }
+});
 
 async function init(){
   const { data:{ session } } = await client.auth.getSession();
