@@ -3129,6 +3129,15 @@ function renderZESFiscalPage(){
       +'</tbody></table>'
     : '';
 
+  /* v2: la pagina di simulazione era UNA sola e col contenuto reale (tabella ripartizione +
+     nota cap + eventuali soglie + titolo credito + intro + tabella credito + eventuale blocco
+     Taranto + consiglio finale) sforava sistematicamente l'altezza fissa di una pagina
+     (.report-page e' 210mm/max-height:210mm, overflow:hidden in stampa/PDF -- in schermo
+     normale invece cresce oltre il bordo e si sovrappone al folio in basso, esattamente il
+     difetto di impaginazione segnalato). Divisa quindi in DUE pagine reali, sullo stesso
+     schema (array di pagine) gia' usato da renderCashflowPage/renderMediaGalleryPage: la 2a
+     ha solo la ripartizione reale + verifica del vincolo 50%, la 3a il credito d'imposta
+     stimato + eventuale maggiorazione Taranto + consiglio operativo. */
   var page2='<article class="report-page"><div class="page-inner">'
     +'<div class="section-kicker">'+escapeHTML(T.kicker_zes)+'</div>'
     +'<h2 class="section-title">'+escapeHTML(T.zes_example_title)+'</h2>'
@@ -3137,14 +3146,19 @@ function renderZESFiscalPage(){
     +breakdownTable
     +capNote
     +thresholdNotes
-    +'<h3 style="margin:20px 0 8px">'+escapeHTML(T.zes_credit_title)+'</h3>'
+    +'</div></article>';
+
+  var page3='<article class="report-page"><div class="page-inner">'
+    +'<div class="section-kicker">'+escapeHTML(T.kicker_zes)+'</div>'
+    +'<h2 class="section-title">'+escapeHTML(T.zes_credit_title)+'</h2>'
+    +'<div class="lux-rule"></div>'
     +'<p style="margin-bottom:8px">'+escapeHTML(T.zes_credit_intro)+'</p>'
     +creditTable
     +tarantoCreditBlock
     +'<p style="margin-top:16px;font-size:12px;color:#8f7643"><strong>'+escapeHTML(T.zes_advice_title)+':</strong> '+escapeHTML(T.zes_advice_body)+'</p>'
     +'</div></article>';
 
-  return [page1,page2];
+  return [page1,page2,page3];
 }
 function isLandCategory(){
   var c=String(getCategory()||"").toLowerCase();
