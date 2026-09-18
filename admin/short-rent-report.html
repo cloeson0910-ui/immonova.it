@@ -231,19 +231,26 @@ function esc(v){
 function eur(n){ return "&euro; " + Math.round(n).toLocaleString("it-IT"); }
 function todayIt(){ return new Date().toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" }); }
 
+// Curva prezzo mensile richiesta dal cliente (moltiplicatore sul prezzo medio comparabili):
+// gennaio-maggio -10%, giugno e luglio nella media, agosto +20% (settimana di Ferragosto
+// +30%, poi torna a +20%), settembre +10%, ottobre nella media, novembre-dicembre -10%.
+// Agosto e' diviso in due righe per isolare la settimana di Ferragosto (10-17 agosto, 8
+// giorni) dal resto del mese (23 giorni), entrambe con lo stesso riempimento giu-set
+// impostato nel pannello di controllo.
 const MONTHS = [
-  {name:"Gennaio", days:31, occ:0.10},
-  {name:"Febbraio", days:28, occ:0.10},
-  {name:"Marzo", days:31, occ:0.20},
-  {name:"Aprile", days:30, occ:0.35},
-  {name:"Maggio", days:31, occ:0.50},
-  {name:"Giugno", days:30, occ:"HIGH"},
-  {name:"Luglio", days:31, occ:"HIGH"},
-  {name:"Agosto", days:31, occ:"HIGH"},
-  {name:"Settembre", days:30, occ:"HIGH"},
-  {name:"Ottobre", days:31, occ:0.40},
-  {name:"Novembre", days:30, occ:0.15},
-  {name:"Dicembre", days:31, occ:0.15},
+  {name:"Gennaio", days:31, occ:0.10, priceMult:0.90},
+  {name:"Febbraio", days:28, occ:0.10, priceMult:0.90},
+  {name:"Marzo", days:31, occ:0.20, priceMult:0.90},
+  {name:"Aprile", days:30, occ:0.35, priceMult:0.90},
+  {name:"Maggio", days:31, occ:0.50, priceMult:0.90},
+  {name:"Giugno", days:30, occ:"HIGH", priceMult:1.00},
+  {name:"Luglio", days:31, occ:"HIGH", priceMult:1.00},
+  {name:"Agosto (esclusa settimana Ferragosto)", days:23, occ:"HIGH", priceMult:1.20},
+  {name:"Settimana di Ferragosto (10–17 ago)", days:8, occ:"HIGH", priceMult:1.30},
+  {name:"Settembre", days:30, occ:"HIGH", priceMult:1.10},
+  {name:"Ottobre", days:31, occ:0.40, priceMult:1.00},
+  {name:"Novembre", days:30, occ:0.15, priceMult:0.90},
+  {name:"Dicembre", days:31, occ:0.15, priceMult:0.90},
 ];
 
 let analysis = null;
@@ -320,13 +327,14 @@ function buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
   const rows = MONTHS.map(m => {
     const occ = m.occ === "HIGH" ? occHigh : m.occ;
     const nights = Math.round(m.days * occ);
-    const gross = nights * price;
+    const monthPrice = price * (m.priceMult ?? 1);
+    const gross = nights * monthPrice;
     const feeMinEur = gross * feeMin;
     const feeMaxEur = gross * feeMax;
     const cedEur = gross * ced;
     const netMin = gross - feeMaxEur - cedEur; // gestione max -> netto minore
     const netMax = gross - feeMinEur - cedEur; // gestione min -> netto maggiore
-    return { name:m.name, isHigh:m.occ==="HIGH", occPct: Math.round(occ*100), nights, gross, feeMinEur, feeMaxEur, cedEur, netMin, netMax };
+    return { name:m.name, isHigh:m.occ==="HIGH", occPct: Math.round(occ*100), nights, price:monthPrice, priceMult:m.priceMult ?? 1, gross, feeMinEur, feeMaxEur, cedEur, netMin, netMax };
   });
   const totals = rows.reduce((acc,r) => {
     acc.nights += r.nights; acc.gross += r.gross; acc.feeMinEur += r.feeMinEur;
@@ -358,6 +366,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     + '<td>'+(r.isHigh?'<strong>':'')+esc(r.name)+(r.isHigh?'</strong>':'')+'</td>'
     + '<td>'+r.occPct+'%'+(r.isHigh?'*':'')+'</td>'
     + '<td>'+r.nights+'</td>'
+    + '<td>'+eur(r.price)+(r.priceMult!==1?' ('+(r.priceMult>1?'+':'')+Math.round((r.priceMult-1)*100)+'%)':'')+'</td>'
     + '<td>'+eur(r.gross)+'</td>'
     + '<td>'+eur(r.feeMinEur)+'</td>'
     + '<td>'+eur(r.feeMaxEur)+'</td>'
@@ -464,6 +473,8 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
 
     <div class="assumption-box">
       <strong>Nota metodologica sulla stagionalit&agrave;.</strong> Il riempimento del ${occHighPct}% per giugno&ndash;settembre &egrave; il valore impostato nel pannello di controllo. Per i restanti mesi non esiste, ad oggi, un dato ufficiale con dettaglio mensile per singolo comune: la curva riportata &egrave; una stima prudenziale standard per il mercato costiero, segnalata come tale e non spacciata per dato verificato.
+      <br><br>
+      <strong>Curva prezzo mensile applicata</strong> (moltiplicatore sul prezzo medio comparabili di ${eur(price)}/notte): gennaio&ndash;maggio &minus;10%, giugno e luglio nella media, agosto +20% (settimana di Ferragosto, 10&ndash;17 agosto, +30%), settembre +10%, ottobre nella media, novembre e dicembre &minus;10%. Curva commerciale impostata su indicazione del cliente, non un dato di mercato verificato.
     </div>
     <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 4</span></div>
   </article>
@@ -478,11 +489,11 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
     <div class="lux-rule"></div>
     <p class="info-text" style="margin-bottom:12px">Prezzo applicato: <strong>${eur(price)}/notte</strong>. La cedolare secca (${cedolarePct}%) si calcola sul canone <strong>lordo</strong>: le spese di gestione non sono deducibili in questo regime.</p>
     <table class="rep-table">
-      <tr><th>Mese</th><th>Riemp.</th><th>Notti</th><th>Lordo</th><th>Gest. ${feeMinPct}%</th><th>Gest. ${feeMaxPct}%</th><th>Cedolare ${cedolarePct}%</th><th>Netto (gest.${feeMinPct}%)</th><th>Netto (gest.${feeMaxPct}%)</th></tr>
+      <tr><th>Mese</th><th>Riemp.</th><th>Notti</th><th>Prezzo/notte</th><th>Lordo</th><th>Gest. ${feeMinPct}%</th><th>Gest. ${feeMaxPct}%</th><th>Cedolare ${cedolarePct}%</th><th>Netto (gest.${feeMinPct}%)</th><th>Netto (gest.${feeMaxPct}%)</th></tr>
       ${monthRows}
-      <tr class="total"><td>TOTALE ANNO</td><td>${avgOcc}%</td><td>${totals.nights}</td><td>${eur(totals.gross)}</td><td>${eur(totals.feeMinEur)}</td><td>${eur(totals.feeMaxEur)}</td><td>${eur(totals.cedEur)}</td><td>${eur(totals.netMax)}</td><td>${eur(totals.netMin)}</td></tr>
+      <tr class="total"><td>TOTALE ANNO</td><td>${avgOcc}%</td><td>${totals.nights}</td><td>&mdash;</td><td>${eur(totals.gross)}</td><td>${eur(totals.feeMinEur)}</td><td>${eur(totals.feeMaxEur)}</td><td>${eur(totals.cedEur)}</td><td>${eur(totals.netMax)}</td><td>${eur(totals.netMin)}</td></tr>
     </table>
-    <div class="source-row">* Riempimento giu&ndash;set impostato manualmente. Restanti mesi: stima stagionale (vedi pag. 4).</div>
+    <div class="source-row">* Riempimento giu&ndash;set impostato manualmente. Restanti mesi: stima stagionale (vedi pag. 4). Prezzo/notte variabile per mese secondo la stagionalit&agrave; commerciale impostata (vedi pag. 4).</div>
     <div class="page-folio"><span>IMMONOVA S.R.L. &mdash; Documento riservato, uso interno/cliente</span><span>Pagina 5</span></div>
   </article>
 
