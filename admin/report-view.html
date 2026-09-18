@@ -517,6 +517,29 @@ var UI_STRINGS = {
   fiscal_iva_box_title:"Nota IVA",
   fiscal_iva_box_text:"Locazione a uso abitativo: sempre esente/fuori campo IVA, indipendentemente dal locatore. Locazione di immobile strumentale/commerciale da parte di un soggetto IVA (S.r.l., holding, o persona fisica con partita IVA in regime ordinario): esente IVA salvo opzione per l'imponibilità (aliquota 22%) esercitata in contratto — se esercitata, l'IVA è di norma neutra per il locatore (versata e recuperata sugli acquisti) ma va gestita negli adempimenti periodici. Regime forfettario: sempre in franchigia IVA, nessuna imposta addebitata né detratta.",
   kicker_investment_structure:"Investment structure", title_total_project_cost:"Total Project Cost",
+  kicker_zes:"Agevolazioni fiscali", title_zes:"Conseguenze e Valutazioni Fiscali — ZES Unica",
+  zes_intro:"L'immobile oggetto del presente dossier è situato in una regione ricompresa nella ZES Unica per il Mezzogiorno. In caso di acquisizione da destinare a struttura turistico-alberghiera, con relativa ristrutturazione, l'operazione può potenzialmente accedere al credito d'imposta ZES Unica, secondo i parametri sintetizzati di seguito. Le informazioni non costituiscono consulenza fiscale: la verifica di ammissibilità e il calcolo definitivo restano di competenza di un professionista abilitato.",
+  zes_region_line:"Regione dell'immobile: ",
+  zes_eligible_label:"Regione ammessa alla ZES Unica",
+  zes_params_title:"Parametri e limiti di spesa sugli immobili",
+  zes_param_1:"Vincolo del 50%: il valore complessivo di terreni e fabbricati (acquisto dell'immobile e opere edili/strutturali di ristrutturazione o realizzazione) non può superare il 50% dell'importo complessivo dell'investimento agevolato.",
+  zes_param_2:"Leva progettuale (impianti e arredi): poiché le opere edili pesano spesso più del 50%, per massimizzare il credito è necessario affiancare all'acquisto/ristrutturazione investimenti rilevanti in beni strumentali nuovi (impianti di climatizzazione, termoidraulica, cucine professionali, domotica, arredi alberghieri) che occupano l'altra metà del budget.",
+  zes_param_3:"Soglie di progetto: investimento minimo € 200.000 (progetti inferiori esclusi), investimento massimo € 100.000.000 per progetto.",
+  zes_intensity_title:"Intensità dell'agevolazione (credito d'imposta)",
+  zes_intensity_intro:"Il credito d'imposta è commisurato alla quota di costo ammissibile in base alla dimensione dell'impresa (parametri Carta degli aiuti a finalità regionale):",
+  zes_small:"Piccole imprese", zes_medium:"Medie imprese", zes_large:"Grandi imprese",
+  zes_intensity_note:"La percentuale effettiva fruibile dipende dal riparto del plafond nazionale disponibile.",
+  zes_taranto_note:"Per l'area di Taranto sono previste aliquote maggiorate: 70% piccole imprese, 60% medie imprese, 50% grandi imprese.",
+  zes_requisiti_title:"Requisiti essenziali del progetto",
+  zes_req_1:"Progetto di investimento iniziale: l'intervento deve rientrare nella creazione di un nuovo stabilimento, ampliamento della capacità, diversificazione o cambiamento fondamentale del processo produttivo — nel caso ricettivo, apertura oppure rebranding/potenziamento profondo della struttura.",
+  zes_req_2:"Beni nuovi: i beni mobili strumentali, gli impianti e le attrezzature devono essere nuovi di fabbrica.",
+  zes_req_3:"Mantenimento dell'attività nel sito agevolato per almeno 5 anni dal completamento dell'investimento.",
+  zes_example_title:"Esempio di bilanciamento voci di spesa (a titolo puramente illustrativo)",
+  zes_ex_col_voice:"Voce di spesa", zes_ex_col_amount:"Importo", zes_ex_col_share:"Incidenza", zes_ex_col_elig:"Ammissibilità ZES",
+  zes_ex_row1:"Acquisto immobile + ristrutturazione edile", zes_ex_row2:"Impianti tecnologici, cucine, arredi nuovi", zes_ex_row3:"Totale progetto",
+  zes_ex_note:"Piena capienza del limite 50%",
+  zes_advice_title:"Consiglio operativo",
+  zes_advice_body:"Far separare nettamente, nei preventivi e nelle fatture di fornitori e tecnici, le voci edili/immobiliari da quelle impiantistiche/strumentali, e far certificare il tutto da un revisore legale prima della comunicazione integrativa all'Agenzia delle Entrate.",
   cost_acquisition_title:"Costi acquisizione", cost_development_title:"Costi sviluppo",
   row_purchase_price:"Prezzo acquisto", row_taxes:"Imposte / tasse", row_notary:"Notaio",
   row_agency:"Agenzia / brokerage", row_due_diligence:"Due diligence tecnica / legale", row_total_acquisition:"Totale acquisizione",
@@ -3045,6 +3068,66 @@ function isCommercialCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("commercial")>=0; // copre sia "Commerciale" (IT) che "Commercial" (EN)
 }
+/* ---- Agevolazione ZES Unica: mostrata solo per strutture turistico-alberghiere
+   (isHospitalityCategory(), definita più sotto: categoria Hotel/Resort in scheda)
+   situate in una delle regioni del Mezzogiorno ammesse alla ZES Unica. Richiesta
+   esplicita dell'utente del 18/09/2026: incrociare la disponibilità del beneficio
+   con la regione reale dell'immobile, non mostrarlo sempre a prescindere. ---- */
+var ZES_UNICA_REGIONS=["abruzzo","basilicata","calabria","campania","molise","puglia","sardegna","sicilia"];
+function getOpportunityRegion(){
+  var a=(report&&report.address_full)||{};
+  return clean(opportunity&&opportunity.region)||clean(a.region)||"";
+}
+function isZESUnicaRegion(){
+  var r=getOpportunityRegion().toLowerCase();
+  return ZES_UNICA_REGIONS.indexOf(r)>=0;
+}
+function isTarantoArea(){
+  var a=(report&&report.address_full)||{};
+  var prov=String((opportunity&&opportunity.province)||a.province||"").toLowerCase();
+  var city=String((opportunity&&opportunity.city)||a.city||"").toLowerCase();
+  return prov.indexOf("taranto")>=0 || prov==="ta" || city.indexOf("taranto")>=0;
+}
+function showZESPage(){
+  return isHospitalityCategory() && isZESUnicaRegion();
+}
+function renderZESFiscalPage(){
+  if(!showZESPage()) return "";
+  var region=getOpportunityRegion();
+  var regionLabel=region ? (region.charAt(0).toUpperCase()+region.slice(1)) : "";
+  function row(a,b,c,d,cls){
+    return '<tr class="'+(cls||'')+'"><td>'+escapeHTML(a)+'</td><td>'+escapeHTML(b)+'</td><td>'+escapeHTML(c)+'</td><td>'+escapeHTML(d)+'</td></tr>';
+  }
+  var table='<table class="trend-table"><thead><tr><th>'+escapeHTML(T.zes_ex_col_voice)+'</th><th>'+escapeHTML(T.zes_ex_col_amount)+'</th><th>'+escapeHTML(T.zes_ex_col_share)+'</th><th>'+escapeHTML(T.zes_ex_col_elig)+'</th></tr></thead><tbody>'
+    +row(T.zes_ex_row1,'€ 300.000','50%',T.zes_ex_note)
+    +row(T.zes_ex_row2,'€ 300.000','50%','€ 300.000')
+    +row(T.zes_ex_row3,'€ 600.000','100%','€ 600.000','total')
+    +'</tbody></table>';
+  var intensityTable='<table class="trend-table"><thead><tr><th></th><th>'+escapeHTML(T.zes_small)+'</th><th>'+escapeHTML(T.zes_medium)+'</th><th>'+escapeHTML(T.zes_large)+'</th></tr></thead><tbody>'
+    +'<tr><td>%</td><td>60%</td><td>50%</td><td>40%</td></tr>'
+    +'</tbody></table>';
+  var tarantoBlock=isTarantoArea()?('<p style="margin-top:10px;font-size:12px;color:#8f7643">'+escapeHTML(T.zes_taranto_note)+'</p>'):'';
+  function li(t){ return '<li>'+escapeHTML(t)+'</li>'; }
+  return '<article class="report-page"><div class="page-inner">'
+    +'<div class="section-kicker">'+escapeHTML(T.kicker_zes)+'</div>'
+    +'<h2 class="section-title">'+escapeHTML(T.title_zes)+'</h2>'
+    +'<div class="lux-rule"></div>'
+    +'<p style="margin-bottom:6px">'+escapeHTML(T.zes_intro)+'</p>'
+    +'<p style="font-size:12px;color:#8f7643;margin-bottom:18px"><strong>'+escapeHTML(T.zes_region_line)+regionLabel+'</strong> — '+escapeHTML(T.zes_eligible_label)+'</p>'
+    +'<h3 style="margin-bottom:8px">'+escapeHTML(T.zes_params_title)+'</h3>'
+    +'<ul style="margin-bottom:16px">'+li(T.zes_param_1)+li(T.zes_param_2)+li(T.zes_param_3)+'</ul>'
+    +'<h3 style="margin-bottom:8px">'+escapeHTML(T.zes_intensity_title)+'</h3>'
+    +'<p style="margin-bottom:8px">'+escapeHTML(T.zes_intensity_intro)+'</p>'
+    +intensityTable
+    +'<p style="margin-top:8px;font-size:12px;color:#8f7643">'+escapeHTML(T.zes_intensity_note)+'</p>'
+    +tarantoBlock
+    +'<h3 style="margin:18px 0 8px">'+escapeHTML(T.zes_requisiti_title)+'</h3>'
+    +'<ul style="margin-bottom:16px">'+li(T.zes_req_1)+li(T.zes_req_2)+li(T.zes_req_3)+'</ul>'
+    +'<h3 style="margin-bottom:8px">'+escapeHTML(T.zes_example_title)+'</h3>'
+    +table
+    +'<p style="margin-top:16px;font-size:12px;color:#8f7643"><strong>'+escapeHTML(T.zes_advice_title)+':</strong> '+escapeHTML(T.zes_advice_body)+'</p>'
+    +'</div></article>';
+}
 function isLandCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("terreni")>=0 || c.indexOf("terreno")>=0 || c.indexOf("land")>=0; // un terreno non ha una proiezione di rendita: niente ADR/ROI/cashflow per questa categoria
@@ -3822,6 +3905,7 @@ function renderBook(){
     push(T.chapter_financial, renderInternalFacts());
     push(T.chapter_financial, renderRoomKpiPage());
     push(T.chapter_financial, renderInvestmentStructure());
+    push(T.chapter_financial, renderZESFiscalPage());
     push(T.chapter_financial, renderTourismDemandPage());
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderOpexBreakdownPage());
