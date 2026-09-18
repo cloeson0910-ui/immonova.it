@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Short Rent | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:#7f6430;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+.header{
+  padding:30px 40px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{ text-decoration:none; color:#a67f34; }
+.logo-main{ font-size:24px; font-weight:600; letter-spacing:.35em; }
+.logo-sub{ margin-top:6px; font-size:9px; font-weight:700; letter-spacing:.18em; color:#a58139; }
+.header-actions{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.header-actions a,.logout{
+  padding:10px 20px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.25);
+  cursor:pointer;
+  color:#a67f34;
+  text-decoration:none;
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.header-actions a:hover,.logout:hover{ background:#a67f34; color:#fff; }
+.container{ max-width:1400px; margin:auto; padding:40px; }
+.kicker{ font-size:11px; letter-spacing:.32em; text-transform:uppercase; color:#9a793c; margin-bottom:12px; }
+.title-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:22px; flex-wrap:wrap; margin-bottom:24px; }
+.title{ font-size:42px; font-weight:200; letter-spacing:.05em; color:#a67f34; }
+.subtitle{ font-size:15px; color:#8f7643; margin-top:8px; max-width:640px; }
+.primary-btn,.secondary-btn{
+  padding:12px 22px;
+  border:1px solid rgba(166,127,52,.35);
+  background:#a67f34;
+  color:#fffaf0;
+  text-transform:uppercase;
+  letter-spacing:.1em;
+  font-size:11px;
+  cursor:pointer;
+  font-family:inherit;
+}
+.secondary-btn{ background:rgba(255,255,255,.3); color:#a67f34; }
+.primary-btn:hover{ background:#8f6a29; }
+.secondary-btn:hover{ background:rgba(255,255,255,.55); }
+.status{ min-height:20px; margin-bottom:16px; font-size:13px; }
+.status.error{ color:#9c2f2f; }
+.status.success{ color:#4f7f45; }
+.panel{
+  border:1px solid rgba(166,127,52,.18);
+  background:rgba(255,255,255,.28);
+  padding:26px;
+  margin-bottom:24px;
+}
+.panel-title{ font-size:18px; color:#a67f34; margin-bottom:16px; font-weight:600; letter-spacing:.02em; }
+.list-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  padding:16px 18px;
+  border-bottom:1px solid rgba(166,127,52,.12);
+  cursor:pointer;
+}
+.list-row:hover{ background:rgba(255,255,255,.35); }
+.list-row:last-child{ border-bottom:0; }
+.list-name{ font-size:15px; color:#5a4520; font-weight:600; }
+.list-meta{ font-size:12px; color:#8f7643; margin-top:4px; }
+.list-badge{
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding:4px 10px;
+  border:1px solid rgba(166,127,52,.3);
+  color:#a67f34;
+  white-space:nowrap;
+}
+.empty{ padding:30px; text-align:center; color:#8f7643; font-size:13px; }
+.form-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-bottom:18px; }
+.form-grid.full{ grid-template-columns:1fr; }
+.form-grid.quad{ grid-template-columns:repeat(4,1fr); }
+.amenities-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px 16px; margin-bottom:4px; }
+.amenity-check{ display:flex; align-items:center; gap:8px; font-size:.92rem; color:#4a3c22; }
+.amenity-check input{ width:17px; height:17px; accent-color:#a67f34; cursor:pointer; }
+.amenity-check label{ cursor:pointer; margin:0; font-weight:500; }
+@media (max-width:720px){ .form-grid.quad{ grid-template-columns:repeat(2,1fr); } .amenities-grid{ grid-template-columns:repeat(2,1fr); } }
+.photos-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-top:12px; }
+.photo-card{ position:relative; border-radius:10px; overflow:hidden; border:1px solid rgba(166,127,52,.25); background:#f4ecdf; }
+.photo-card img{ width:100%; height:110px; object-fit:cover; display:block; }
+.photo-card button{ position:absolute; top:4px; right:4px; background:rgba(0,0,0,.55); color:#fff; border:none; border-radius:6px; width:24px; height:24px; cursor:pointer; font-size:.9rem; line-height:1; }
+.photo-card button:hover{ background:rgba(180,30,30,.85); }
+label{ display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#9a793c; margin-bottom:6px; }
+input,select,textarea{
+  width:100%;
+  padding:11px 12px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.5);
+  color:#5a4520;
+  font-size:13px;
+  font-family:inherit;
+  outline:none;
+}
+textarea{ min-height:80px; resize:vertical; }
+.actions-row{ display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; }
+table{ width:100%; border-collapse:collapse; font-size:13px; }
+th{ text-align:left; padding:10px 12px; color:#9a793c; font-size:10px; letter-spacing:.08em; text-transform:uppercase; border-bottom:1px solid rgba(166,127,52,.2); }
+td{ padding:10px 12px; border-bottom:1px solid rgba(166,127,52,.1); color:#5a4520; }
+td a{ color:#a67f34; }
+.info-box{
+  border-left:3px solid #a67f34;
+  background:rgba(255,255,255,.35);
+  padding:16px 18px;
+  margin-bottom:14px;
+  font-size:13px;
+  line-height:1.6;
+}
+.info-box h4{ font-size:13px; color:#a67f34; margin-bottom:8px; text-transform:uppercase; letter-spacing:.06em; }
+.strategy-table td:first-child{ font-weight:600; color:#a67f34; }
+.back-link{ display:inline-block; margin-bottom:18px; font-size:12px; color:#a67f34; text-decoration:none; letter-spacing:.06em; text-transform:uppercase; }
+.hidden{ display:none !important; }
+@media(max-width:800px){
+  .form-grid{ grid-template-columns:1fr; }
+  .container{ padding:24px 18px; }
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET &bull; CONSULTING</div>
+  </a>
+  <div class="header-actions">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="opportunities.html">Opportunit&agrave;</a>
+    <a href="short-rent.html" style="background:#a67f34;color:#fff">Short Rent</a>
+    <button class="logout" id="logoutBtn">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ==================== VISTA LISTA ==================== -->
+  <div id="listView">
+    <div class="kicker">Attivit&agrave; &bull; Analisi indipendente, slegata dai dossier di investimento</div>
+    <div class="title-row">
+      <div>
+        <h1 class="title">Short Rent</h1>
+        <p class="subtitle">Analisi affitti brevi: normativa e fiscalit&agrave;, confronto strategie di gestione, dati turistici reali e strutture comparative trovate sul web.</p>
+      </div>
+      <div class="actions-row">
+        <button class="primary-btn" id="newAnalysisBtn">+ Nuova Analisi</button>
+      </div>
+    </div>
+
+    <div id="listStatus" class="status"></div>
+
+    <div class="panel" style="padding:0">
+      <div id="analysesList"></div>
+    </div>
+  </div>
+
+  <!-- ==================== VISTA DETTAGLIO/FORM ==================== -->
+  <div id="detailView" class="hidden">
+    <a href="#" class="back-link" id="backToListBtn">&larr; Torna all'elenco</a>
+    <div class="kicker">Short Rent &bull; Scheda di analisi</div>
+    <div class="title-row">
+      <div>
+        <h1 class="title" id="detailTitle">Nuova Analisi</h1>
+      </div>
+      <div class="actions-row">
+        <button class="secondary-btn hidden" id="deleteAnalysisBtn">Elimina</button>
+        <button class="primary-btn" id="saveAnalysisBtn">Salva</button>
+      </div>
+    </div>
+
+    <div id="detailStatus" class="status"></div>
+
+    <div class="panel">
+      <div class="panel-title">Dati identificativi</div>
+      <div class="form-grid">
+        <div>
+          <label>Titolo / Nome scheda</label>
+          <input type="text" id="fTitle" placeholder="Es. Trilocale Ostuni centro">
+        </div>
+        <div>
+          <label>Categoria</label>
+          <select id="fCategory">
+            <option value="Appartamenti">Appartamenti</option>
+            <option value="Ville">Ville</option>
+          </select>
+        </div>
+        <div>
+          <label>Comune</label>
+          <input type="text" id="fMunicipality" placeholder="Es. Ostuni">
+        </div>
+        <div>
+          <label>Provincia</label>
+          <input type="text" id="fProvince" placeholder="Es. Brindisi">
+        </div>
+        <div>
+          <label>Regione</label>
+          <input type="text" id="fRegion" placeholder="Es. Puglia">
+        </div>
+        <div>
+          <label>Indirizzo (opzionale)</label>
+          <input type="text" id="fAddress" placeholder="Via/zona specifica">
+        </div>
+      </div>
+      <div class="form-grid full">
+        <div>
+          <label>Note interne</label>
+          <textarea id="fNotes" placeholder="Note libere..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Caratteristiche dell'immobile</div>
+      <div class="form-grid quad">
+        <div>
+          <label>Camere da letto</label>
+          <input type="number" min="0" step="1" id="fBedrooms" placeholder="Es. 3">
+        </div>
+        <div>
+          <label>Bagni</label>
+          <input type="number" min="0" step="1" id="fBathrooms" placeholder="Es. 2">
+        </div>
+        <div>
+          <label>Ospiti max</label>
+          <input type="number" min="0" step="1" id="fMaxGuests" placeholder="Es. 6">
+        </div>
+        <div>
+          <label>Superficie (mq)</label>
+          <input type="number" min="0" step="1" id="fSqm" placeholder="Es. 90">
+        </div>
+      </div>
+      <div class="form-grid full">
+        <div>
+          <label>Servizi e dotazioni</label>
+          <div class="amenities-grid">
+            <div class="amenity-check"><input type="checkbox" id="amPiscina"><label for="amPiscina">Piscina</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amAriaCondizionata"><label for="amAriaCondizionata">Aria condizionata</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amVistaMare"><label for="amVistaMare">Vista mare</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amWifi"><label for="amWifi">Wi-Fi</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amParcheggio"><label for="amParcheggio">Parcheggio privato</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amGiardino"><label for="amGiardino">Giardino / terrazza</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amAscensore"><label for="amAscensore">Ascensore</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amAnimali"><label for="amAnimali">Animali ammessi</label></div>
+            <div class="amenity-check"><input type="checkbox" id="amClimatizzazioneCentr"><label for="amClimatizzazioneCentr">Riscaldamento centralizzato</label></div>
+          </div>
+        </div>
+      </div>
+      <div class="form-grid full">
+        <div>
+          <label>Foto dell'immobile</label>
+          <input type="file" id="fPhotos" accept="image/*" multiple>
+          <div style="font-size:.82rem;color:#7f6430;margin-top:4px;">Salva prima la scheda (Titolo + Comune) per poter caricare le foto.</div>
+          <div id="photosStatus" class="status"></div>
+          <div id="photosGrid" class="photos-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Normativa e fiscalit&agrave; affitti brevi</div>
+      <div class="info-box">
+        <h4>CIN &mdash; Codice Identificativo Nazionale</h4>
+        Dal 2024 ogni unit&agrave; destinata a locazione breve o turistica deve essere registrata sulla Banca Dati Nazionale delle Strutture Ricettive (BDSR) del Ministero del Turismo, ottenendo un CIN da esporre obbligatoriamente in ogni annuncio online (Airbnb, Booking, ecc.) e all'esterno dell'immobile. La mancata esposizione comporta sanzioni amministrative.
+      </div>
+      <div class="info-box">
+        <h4>Regime fiscale &mdash; Cedolare secca</h4>
+        Per i redditi da locazione breve (contratti fino a 30 giorni) il proprietario persona fisica pu&ograve; optare per la cedolare secca: aliquota 21% sulla prima unit&agrave; locata nell'anno, 26% dalle unit&agrave; successive (a partire dalla seconda, se gestite dallo stesso locatore, anche tramite intermediari). In alternativa resta possibile la tassazione ordinaria IRPEF. Oltre le 4 unit&agrave; immobiliari locate, l'attivit&agrave; si presume esercitata in forma imprenditoriale e richiede l'apertura di partita IVA.
+      </div>
+      <div class="info-box">
+        <h4>Obblighi SCIA e Questura</h4>
+        L'attivazione di una locazione turistica richiede in molti comuni una SCIA (Segnalazione Certificata di Inizio Attivit&agrave;) allo sportello attivit&agrave; produttive comunale. &Egrave; inoltre obbligatoria la comunicazione degli ospiti alla Questura territorialmente competente (Alloggiati Web) entro 24 ore dall'arrivo, indipendentemente dalla durata del soggiorno.
+      </div>
+      <div class="info-box">
+        <h4>Normativa comunale/regionale</h4>
+        Regolamenti su durata minima del soggiorno, numero massimo di unit&agrave; per proprietario, contributo di soggiorno (tassa di soggiorno) e limitazioni in centri storici variano sensibilmente da comune a comune (es. regolamentazioni pi&ugrave; stringenti in citt&agrave; come Firenze, Venezia, Milano). Verificare sempre il regolamento comunale specifico prima di avviare l'attivit&agrave; &mdash; queste informazioni sono un quadro generale, non consulenza legale/fiscale per il caso specifico.
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Confronto strategie di gestione</div>
+      <table class="strategy-table">
+        <thead><tr><th>Strategia</th><th>Costo/commissione tipica</th><th>Pro</th><th>Contro</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Gestione diretta</td>
+            <td>Nessuna fee di gestione, solo costi vivi (pulizie, OTA ~15-18%)</td>
+            <td>Massimo margine netto; controllo diretto su prezzo e ospiti</td>
+            <td>Richiede tempo quotidiano (check-in, comunicazioni, manutenzione); nessuna copertura in caso di assenza del proprietario</td>
+          </tr>
+          <tr>
+            <td>Property manager</td>
+            <td>Fee di gestione 16-20% dei ricavi lordi, oltre a OTA ~15%</td>
+            <td>Nessun impegno operativo; ottimizzazione prezzi (revenue management); copertura h24</td>
+            <td>Riduce il margine netto di 15-20 punti percentuali; qualit&agrave; variabile in base al gestore scelto</td>
+          </tr>
+          <tr>
+            <td>Locazione tradizionale (lungo termine)</td>
+            <td>Nessuna commissione ricorrente (solo agenzia una tantum, tipicamente 1 mensilit&agrave;)</td>
+            <td>Reddito stabile e prevedibile; zero gestione operativa quotidiana; nessuna stagionalit&agrave;</td>
+            <td>Rendimento lordo tipicamente inferiore rispetto a un affitto breve ben gestito in zone turistiche ad alta domanda</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="margin-top:14px;font-size:12px;color:#8f7643">Le percentuali indicate sono valori di mercato tipici in Italia; vanno sempre verificate con il gestore/agenzia specifico prima di ogni decisione.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Dati turistici reali della zona</div>
+      <div id="tourismStatus" class="status"></div>
+      <button class="secondary-btn" id="fetchTourismBtn">Recupera dati turistici (fonti verificate, gratuito)</button>
+      <div id="tourismResult" style="margin-top:16px"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Strutture comparative (ricerca web)</div>
+      <div id="comparablesStatus" class="status"></div>
+      <button class="secondary-btn" id="searchComparablesBtn">Cerca comparabili sul web</button>
+      <div id="comparablesResult" style="margin-top:16px"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Proiezione ricavi (stagionalit&agrave;, gestione, cedolare)</div>
+      <p style="font-size:13px;color:#8f7643;margin-bottom:14px;">Genera il documento IMMONOVA con proiezione mensile dei ricavi, basata sui comparabili trovati sopra e sul riempimento stagionale, fino al netto dopo spese di gestione e cedolare secca.</p>
+      <button class="primary-btn" id="openProjectionBtn">Genera proiezione ricavi</button>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let currentProfile = null;
+let allAnalyses = [];
+let currentAnalysisId = null;
+let currentPhotos = [];
+
+const listView = document.getElementById("listView");
+const detailView = document.getElementById("detailView");
+const listStatus = document.getElementById("listStatus");
+const detailStatus = document.getElementById("detailStatus");
+
+function esc(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function setStatus(el, message, type){
+  el.className = "status " + (type || "");
+  el.textContent = message || "";
+}
+
+async function checkAuth(){
+  const { data:{ session }, error } = await client.auth.getSession();
+  if(error || !session){
+    window.location.href = "login.html";
+    return false;
+  }
+  currentUser = session.user;
+  return true;
+}
+
+async function loadProfile(){
+  const { data, error } = await client
+    .from("profiles")
+    .select("id,email,full_name,role")
+    .eq("id", currentUser.id)
+    .single();
+
+  if(error || !data || data.role !== "admin"){
+    setStatus(listStatus, "Accesso riservato agli admin.", "error");
+    listView.innerHTML = '<p class="empty">Accesso non autorizzato.</p>';
+    return false;
+  }
+  currentProfile = data;
+  return true;
+}
+
+/* ---- Lista ---- */
+async function loadAnalyses(){
+  setStatus(listStatus, "", "");
+  const { data, error } = await client
+    .from("short_rent_analyses")
+    .select("*")
+    .order("updated_at", { ascending:false });
+
+  if(error){
+    console.error(error);
+    setStatus(listStatus, "Errore caricamento: " + error.message, "error");
+    return;
+  }
+  allAnalyses = data || [];
+  renderList();
+}
+
+function renderList(){
+  const listEl = document.getElementById("analysesList");
+  if(!allAnalyses.length){
+    listEl.innerHTML = '<div class="empty">Nessuna analisi ancora creata. Premi "+ Nuova Analisi" per iniziare.</div>';
+    return;
+  }
+  listEl.innerHTML = allAnalyses.map(a => {
+    const meta = [a.category, [a.municipality, a.province, a.region].filter(Boolean).join(", ")].filter(Boolean).join(" &middot; ");
+    const compCount = Array.isArray(a.comparables) ? a.comparables.length : 0;
+    return '<div class="list-row" data-id="'+esc(a.id)+'">'
+      + '<div><div class="list-name">'+esc(a.title)+'</div><div class="list-meta">'+meta+'</div></div>'
+      + '<div class="list-badge">'+compCount+' comparabili</div>'
+      + '</div>';
+  }).join("");
+
+  listEl.querySelectorAll(".list-row").forEach(row => {
+    row.addEventListener("click", () => openDetail(row.getAttribute("data-id")));
+  });
+}
+
+/* ---- Caratteristiche immobile ---- */
+const AMENITY_IDS = ["amPiscina","amAriaCondizionata","amVistaMare","amWifi","amParcheggio","amGiardino","amAscensore","amAnimali","amClimatizzazioneCentr"];
+const AMENITY_LABELS = {
+  amPiscina: "Piscina",
+  amAriaCondizionata: "Aria condizionata",
+  amVistaMare: "Vista mare",
+  amWifi: "Wi-Fi",
+  amParcheggio: "Parcheggio privato",
+  amGiardino: "Giardino / terrazza",
+  amAscensore: "Ascensore",
+  amAnimali: "Animali ammessi",
+  amClimatizzazioneCentr: "Riscaldamento centralizzato",
+};
+
+function getFeaturesFromForm(){
+  const numOrNull = (v) => { const n = Number(v); return v !== "" && Number.isFinite(n) ? n : null; };
+  const amenities = AMENITY_IDS.filter(id => document.getElementById(id).checked).map(id => AMENITY_LABELS[id]);
+  return {
+    bedrooms: numOrNull(document.getElementById("fBedrooms").value),
+    bathrooms: numOrNull(document.getElementById("fBathrooms").value),
+    max_guests: numOrNull(document.getElementById("fMaxGuests").value),
+    sqm: numOrNull(document.getElementById("fSqm").value),
+    amenities,
+  };
+}
+
+function setFeaturesInForm(features){
+  const f = features || {};
+  document.getElementById("fBedrooms").value = (f.bedrooms ?? "") === null ? "" : (f.bedrooms ?? "");
+  document.getElementById("fBathrooms").value = (f.bathrooms ?? "") === null ? "" : (f.bathrooms ?? "");
+  document.getElementById("fMaxGuests").value = (f.max_guests ?? "") === null ? "" : (f.max_guests ?? "");
+  document.getElementById("fSqm").value = (f.sqm ?? "") === null ? "" : (f.sqm ?? "");
+  const amenities = Array.isArray(f.amenities) ? f.amenities : [];
+  AMENITY_IDS.forEach(id => {
+    document.getElementById(id).checked = amenities.indexOf(AMENITY_LABELS[id]) >= 0;
+  });
+}
+
+/* ---- Foto ---- */
+function renderPhotos(){
+  const grid = document.getElementById("photosGrid");
+  if(!currentPhotos.length){ grid.innerHTML = ""; return; }
+  grid.innerHTML = currentPhotos.map((url, idx) =>
+    '<div class="photo-card"><img src="'+esc(url)+'" loading="lazy" alt="Foto immobile">'
+    + '<button type="button" data-idx="'+idx+'" title="Rimuovi foto">&times;</button></div>'
+  ).join("");
+  grid.querySelectorAll("button[data-idx]").forEach(btn => {
+    btn.addEventListener("click", () => removePhoto(parseInt(btn.getAttribute("data-idx"), 10)));
+  });
+}
+
+async function removePhoto(idx){
+  const url = currentPhotos[idx];
+  if(!url) return;
+  currentPhotos.splice(idx, 1);
+  renderPhotos();
+  if(currentAnalysisId){
+    await client.from("short_rent_analyses").update({ photos: currentPhotos, updated_at: new Date().toISOString() }).eq("id", currentAnalysisId);
+  }
+  try{
+    const marker = "/object/public/shortrent-photos/";
+    const i = url.indexOf(marker);
+    if(i >= 0){
+      const path = url.slice(i + marker.length);
+      await client.storage.from("shortrent-photos").remove([path]);
+    }
+  }catch(e){ console.warn("Impossibile rimuovere il file dallo storage:", e); }
+}
+
+async function uploadPhotos(fileList){
+  const status = document.getElementById("photosStatus");
+  if(!currentAnalysisId){
+    setStatus(status, "Salva prima la scheda (Titolo + Comune), poi carica le foto.", "error");
+    document.getElementById("fPhotos").value = "";
+    return;
+  }
+  const files = Array.from(fileList || []);
+  if(!files.length) return;
+  setStatus(status, "Caricamento foto in corso...", "");
+  for(const file of files){
+    const safeName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const path = currentAnalysisId + "/" + Date.now() + "_" + safeName;
+    const { error: upErr } = await client.storage.from("shortrent-photos").upload(path, file, { cacheControl: "3600", upsert: false });
+    if(upErr){
+      console.error(upErr);
+      setStatus(status, "Errore caricamento " + file.name + ": " + upErr.message, "error");
+      continue;
+    }
+    const { data: pub } = client.storage.from("shortrent-photos").getPublicUrl(path);
+    if(pub && pub.publicUrl) currentPhotos.push(pub.publicUrl);
+  }
+  renderPhotos();
+  await client.from("short_rent_analyses").update({ photos: currentPhotos, updated_at: new Date().toISOString() }).eq("id", currentAnalysisId);
+  setStatus(status, "Foto caricate.", "success");
+  document.getElementById("fPhotos").value = "";
+}
+
+document.getElementById("fPhotos").addEventListener("change", (e) => uploadPhotos(e.target.files));
+
+/* ---- Dettaglio / form ---- */
+function clearForm(){
+  document.getElementById("fTitle").value = "";
+  document.getElementById("fCategory").value = "Appartamenti";
+  document.getElementById("fMunicipality").value = "";
+  document.getElementById("fProvince").value = "";
+  document.getElementById("fRegion").value = "";
+  document.getElementById("fAddress").value = "";
+  document.getElementById("fNotes").value = "";
+  setFeaturesInForm(null);
+  currentPhotos = [];
+  renderPhotos();
+  document.getElementById("fPhotos").value = "";
+  document.getElementById("tourismResult").innerHTML = "";
+  document.getElementById("comparablesResult").innerHTML = "";
+  setStatus(document.getElementById("tourismStatus"), "", "");
+  setStatus(document.getElementById("comparablesStatus"), "", "");
+}
+
+function openNew(){
+  currentAnalysisId = null;
+  clearForm();
+  document.getElementById("detailTitle").textContent = "Nuova Analisi";
+  document.getElementById("deleteAnalysisBtn").classList.add("hidden");
+  showDetail();
+}
+
+function openDetail(id){
+  const a = allAnalyses.find(x => x.id === id);
+  if(!a) return;
+  currentAnalysisId = id;
+  document.getElementById("fTitle").value = a.title || "";
+  document.getElementById("fCategory").value = a.category || "Appartamenti";
+  document.getElementById("fMunicipality").value = a.municipality || "";
+  document.getElementById("fProvince").value = a.province || "";
+  document.getElementById("fRegion").value = a.region || "";
+  document.getElementById("fAddress").value = a.address || "";
+  document.getElementById("fNotes").value = a.notes || "";
+  setFeaturesInForm(a.features);
+  currentPhotos = Array.isArray(a.photos) ? a.photos.slice() : [];
+  renderPhotos();
+  document.getElementById("detailTitle").textContent = a.title || "Analisi";
+  document.getElementById("deleteAnalysisBtn").classList.remove("hidden");
+  renderTourismResult(a.tourism_data);
+  renderComparablesResult(a.comparables, a.comparables_status, a.comparables_error);
+  showDetail();
+}
+
+function showDetail(){
+  listView.classList.add("hidden");
+  detailView.classList.remove("hidden");
+  setStatus(detailStatus, "", "");
+}
+function showList(){
+  detailView.classList.add("hidden");
+  listView.classList.remove("hidden");
+}
+
+document.getElementById("newAnalysisBtn").addEventListener("click", openNew);
+document.getElementById("backToListBtn").addEventListener("click", (e) => { e.preventDefault(); showList(); loadAnalyses(); });
+
+async function saveAnalysis(){
+  const title = document.getElementById("fTitle").value.trim();
+  const municipality = document.getElementById("fMunicipality").value.trim();
+  if(!title || !municipality){
+    setStatus(detailStatus, "Titolo e Comune sono obbligatori.", "error");
+    return;
+  }
+  const payload = {
+    title,
+    category: document.getElementById("fCategory").value,
+    municipality,
+    province: document.getElementById("fProvince").value.trim() || null,
+    region: document.getElementById("fRegion").value.trim() || null,
+    address: document.getElementById("fAddress").value.trim() || null,
+    notes: document.getElementById("fNotes").value.trim() || null,
+    features: getFeaturesFromForm(),
+    photos: currentPhotos,
+    updated_at: new Date().toISOString(),
+  };
+
+  setStatus(detailStatus, "Salvataggio in corso...", "");
+  let result;
+  if(currentAnalysisId){
+    result = await client.from("short_rent_analyses").update(payload).eq("id", currentAnalysisId).select().single();
+  }else{
+    payload.created_by = currentUser.id;
+    result = await client.from("short_rent_analyses").insert(payload).select().single();
+  }
+  if(result.error){
+    console.error(result.error);
+    setStatus(detailStatus, "Errore salvataggio: " + result.error.message, "error");
+    return;
+  }
+  currentAnalysisId = result.data.id;
+  document.getElementById("deleteAnalysisBtn").classList.remove("hidden");
+  document.getElementById("detailTitle").textContent = result.data.title;
+  setStatus(detailStatus, "Salvato correttamente.", "success");
+  await loadAnalyses();
+}
+document.getElementById("saveAnalysisBtn").addEventListener("click", saveAnalysis);
+
+async function deleteAnalysis(){
+  if(!currentAnalysisId) return;
+  if(!confirm("Eliminare definitivamente questa analisi?")) return;
+  const { error } = await client.from("short_rent_analyses").delete().eq("id", currentAnalysisId);
+  if(error){
+    setStatus(detailStatus, "Errore eliminazione: " + error.message, "error");
+    return;
+  }
+  showList();
+  await loadAnalyses();
+}
+document.getElementById("deleteAnalysisBtn").addEventListener("click", deleteAnalysis);
+
+/* ---- Dati turistici reali (immonova-tourism-verified-free: solo fonti verificate cruscotto Italia, GRATUITO) ---- */
+function renderTourismResult(data){
+  const el = document.getElementById("tourismResult");
+  if(!data){ el.innerHTML = ""; return; }
+  const t = data.tourism || {};
+  // SOLO Cruscotto Italia (AgID): l'utente non vuole i dati dell'altra fonte verificata
+  // (open data provinciale in formato xlsx, provider_name "Brindisi"), solo quelli
+  // ufficiali di Cruscotto Italia -- accolto esplicitamente, tabella ristretta a queste
+  // sole 3 metriche.
+  const CRUSCOTTO_PROVIDER = "Cruscotto Italia (AgID) - ISTAT/MEF";
+  const fieldLabels = {
+    accommodation_structures: "Strutture ricettive (comune)",
+    accommodation_beds: "Posti letto (comune)",
+    tourism_index_per_100_residents: "Indice di turisticit&agrave; per 100 residenti"
+  };
+  const rows = [];
+  Object.keys(fieldLabels).forEach(function(key){
+    const entry = t[key];
+    if(!entry || entry.value == null) return;
+    if(!entry.source || entry.source.provider_name !== CRUSCOTTO_PROVIDER) return;
+    const yearStr = entry.observation_year ? " (" + entry.observation_year + ")" : "";
+    rows.push([fieldLabels[key], entry.value + yearStr]);
+  });
+
+  if(!rows.length){
+    el.innerHTML = '<div class="info-box">Nessun dato Cruscotto Italia trovato per questo comune.</div>';
+    return;
+  }
+  let html = '<table>' + rows.map(r => '<tr><td>'+esc(r[0])+'</td><td>'+r[1]+'</td></tr>').join("") + '</table>';
+  const seenProviders = {};
+  const sources = [];
+  Object.values(t).forEach(function(entry){
+    const src = entry && entry.source;
+    if(!src || !src.provider_name || src.provider_name !== CRUSCOTTO_PROVIDER) return;
+    const key = src.provider_name + "|" + (src.source_url || "");
+    if(seenProviders[key]) return;
+    seenProviders[key] = true;
+    sources.push(src);
+  });
+  if(sources.length){
+    html += '<div class="info-box" style="margin-top:8px;font-size:.85em;">' + sources.map(function(s){
+      return 'Fonte: ' + esc(s.provider_name) + (s.source_url ? ' &mdash; <a href="'+esc(s.source_url)+'" target="_blank" rel="noopener">link</a>' : '');
+    }).join('<br>') + '</div>';
+  }
+  el.innerHTML = html;
+}
+
+async function fetchTourism(){
+  const municipality = document.getElementById("fMunicipality").value.trim();
+  if(!municipality){
+    setStatus(document.getElementById("tourismStatus"), "Compila prima il Comune.", "error");
+    return;
+  }
+  if(!currentAnalysisId){
+    setStatus(document.getElementById("tourismStatus"), "Salva prima la scheda.", "error");
+    return;
+  }
+  setStatus(document.getElementById("tourismStatus"), "Recupero dati turistici in corso (pu&ograve; richiedere qualche secondo)...", "");
+  try{
+    const resp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/immonova-tourism-verified-free", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
+      body: JSON.stringify({
+        municipality,
+        province: document.getElementById("fProvince").value.trim(),
+        region: document.getElementById("fRegion").value.trim(),
+        country: "Italia",
+        country_code: "IT"
+      })
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok || data.ok === false){
+      setStatus(document.getElementById("tourismStatus"), "Errore motore turistico gratuito: " + (data.error || ("HTTP " + resp.status)), "error");
+      return;
+    }
+    await client.from("short_rent_analyses").update({
+      tourism_data: data,
+      tourism_fetched_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq("id", currentAnalysisId);
+    renderTourismResult(data);
+    setStatus(document.getElementById("tourismStatus"), "Dati turistici aggiornati.", "success");
+  }catch(e){
+    console.error(e);
+    setStatus(document.getElementById("tourismStatus"), "Errore: " + (e.message||e), "error");
+  }
+}
+document.getElementById("fetchTourismBtn").addEventListener("click", fetchTourism);
+
+/* ---- Comparabili via ricerca web AI (search-shortrent-comparables) ---- */
+function renderComparablesResult(comparables, status, errorMsg){
+  const el = document.getElementById("comparablesResult");
+  comparables = Array.isArray(comparables) ? comparables : [];
+  if(status === "not_searched" || (!comparables.length && !status)){
+    el.innerHTML = "";
+    return;
+  }
+  if(!comparables.length){
+    el.innerHTML = '<div class="info-box">Nessun comparabile reale trovato dalla ricerca web' + (errorMsg ? " (" + esc(errorMsg) + ")" : "") + '. Puoi riprovare pi&ugrave; tardi o restringere/allargare la zona.</div>';
+    return;
+  }
+  el.innerHTML = '<table><thead><tr><th>Struttura</th><th>Portale</th><th>&euro;/notte</th><th>Camere/Ospiti</th><th>Rating</th><th>Link</th></tr></thead><tbody>'
+    + comparables.map(c => '<tr>'
+      + '<td>'+esc(c.title)+'</td>'
+      + '<td>'+esc(c.source)+'</td>'
+      + '<td>&euro; '+esc(c.price_per_night)+'</td>'
+      + '<td>'+esc(c.rooms_or_guests || "-")+'</td>'
+      + '<td>'+(c.rating != null ? esc(c.rating) + (c.reviews_count != null ? " ("+esc(c.reviews_count)+")" : "") : "-")+'</td>'
+      + '<td>'+(c.url ? '<a href="'+esc(c.url)+'" target="_blank" rel="noopener">Apri</a>' : "-")+'</td>'
+      + '</tr>').join("")
+    + '</tbody></table>';
+}
+
+async function searchComparables(){
+  const municipality = document.getElementById("fMunicipality").value.trim();
+  if(!municipality){
+    setStatus(document.getElementById("comparablesStatus"), "Compila prima il Comune.", "error");
+    return;
+  }
+  if(!currentAnalysisId){
+    setStatus(document.getElementById("comparablesStatus"), "Salva prima la scheda.", "error");
+    return;
+  }
+  setStatus(document.getElementById("comparablesStatus"), "Ricerca comparabili sul web in corso (pu&ograve; richiedere fino a 1 minuto)...", "");
+  try{
+    const resp = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/search-shortrent-comparables", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},
+      body: JSON.stringify({
+        category: document.getElementById("fCategory").value,
+        municipality,
+        province: document.getElementById("fProvince").value.trim(),
+        region: document.getElementById("fRegion").value.trim(),
+        country: "Italia"
+      })
+    });
+    const data = await resp.json().catch(()=>({}));
+    if(!resp.ok || !data.ok){
+      setStatus(document.getElementById("comparablesStatus"), "Errore ricerca: " + (data.error || ("HTTP " + resp.status)), "error");
+      return;
+    }
+    const status = data.comparables && data.comparables.length ? "found" : "no_results";
+    await client.from("short_rent_analyses").update({
+      comparables: data.comparables || [],
+      comparables_status: status,
+      comparables_error: data.ai_error || null,
+      comparables_searched_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq("id", currentAnalysisId);
+    renderComparablesResult(data.comparables, status, data.ai_error);
+    setStatus(document.getElementById("comparablesStatus"), data.ai_disclaimer || "Ricerca completata.", data.comparables && data.comparables.length ? "success" : "");
+    await loadAnalyses();
+  }catch(e){
+    console.error(e);
+    setStatus(document.getElementById("comparablesStatus"), "Errore: " + (e.message||e), "error");
+  }
+}
+document.getElementById("searchComparablesBtn").addEventListener("click", searchComparables);
+
+document.getElementById("openProjectionBtn").addEventListener("click", () => {
+  if(!currentAnalysisId){
+    setStatus(detailStatus, "Salva prima la scheda per poter generare la proiezione.", "error");
+    return;
+  }
+  window.open("short-rent-report.html?id=" + encodeURIComponent(currentAnalysisId), "_blank");
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  window.location.href = "login.html";
+});
+
+(async function init(){
+  if(!(await checkAuth())) return;
+  if(!(await loadProfile())) return;
+  await loadAnalyses();
+})();
+</script>
+
+</body>
+</html>
