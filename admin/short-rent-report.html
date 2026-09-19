@@ -305,7 +305,7 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 <script>
 // Cambia questa stringa ogni volta che questo file viene modificato: serve solo a far
 // riconoscere alla pagina la propria versione (vedi verifyPageIsCurrent piu' sotto).
-const PAGE_BUILD_VERSION = "2026-09-19.06";
+const PAGE_BUILD_VERSION = "2026-09-19.07";
 
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -485,7 +485,7 @@ function buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, m
   return { rows, totals };
 }
 
-function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, manualMonthPct){
+function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, manualMonthPct, avgPrice){
   const proj = buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, manualMonthPct);
   const { rows, totals } = proj;
   const location = [a.municipality, a.province].filter(Boolean).join(" (") + (a.province ? ")" : "");
@@ -608,7 +608,7 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, m
     <table class="rep-table">
       <tr><th>Annuncio</th><th>Tipologia</th><th>Prezzo/notte</th></tr>
       ${compRows}
-      <tr class="total"><td>Media comparabili</td><td></td><td>${eur(price)} / notte</td></tr>
+      <tr class="total"><td>Media comparabili</td><td></td><td>${eur(avgPrice != null ? avgPrice : price)} / notte</td></tr>
     </table>
     <div class="source-row">Fonte: comparabili reali raccolti dal motore Short Rent IMMONOVA${a.comparables_searched_at ? " il "+esc(new Date(a.comparables_searched_at).toLocaleDateString("it-IT")) : ""}.</div>
     ` : `<div class="note-box">Nessun comparabile salvato su questa scheda: il prezzo medio &egrave; stato inserito manualmente nel pannello di controllo qui sopra.</div>`}
@@ -690,7 +690,7 @@ function recalcAndRender(){
     return;
   }
   document.getElementById("pageStatus").textContent = "";
-  renderReport(analysis, price, occHigh, feeMin, feeMax, ced, manualMonthPct);
+  renderReport(analysis, price, occHigh, feeMin, feeMax, ced, manualMonthPct, avgPrice > 0 ? avgPrice : null);
 }
 
 async function saveManualOverrides(){
