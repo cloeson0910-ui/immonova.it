@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitle">Articolo | IMMONOVA</title>
+<meta name="description" id="pageDesc" content="Analisi e approfondimenti a cura di IMMONOVA.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="IMMONOVA">
+<meta property="og:title" id="ogTitle" content="Articolo | IMMONOVA">
+<meta property="og:description" id="ogDesc" content="Analisi e approfondimenti a cura di IMMONOVA.">
+<meta name="twitter:card" content="summary">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#4a3c1d}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+.header{padding:40px 60px;display:flex;justify-content:space-between;align-items:center}
+.logo{font-size:22px;font-weight:300;letter-spacing:.32em;color:#a67f34;text-decoration:none}
+.back{text-decoration:none;color:#a67f34;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.article{max-width:760px;margin:20px auto 100px;padding:0 24px}
+.article-date{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;margin-bottom:16px}
+.article-title{font-size:clamp(26px,4vw,38px);font-weight:300;line-height:1.25;margin-bottom:36px}
+.article-body p{font-size:16px;line-height:1.75;color:#4a3c1d;margin-bottom:22px}
+.disclaimer{margin-top:40px;padding:22px 26px;border-left:3px solid #a67f34;background:#fffaf0;font-size:14px;font-style:italic;color:#6b5a35}
+.sources{margin-top:36px;padding-top:22px;border-top:1px solid rgba(166,127,52,.2)}
+.sources-title{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;margin-bottom:10px}
+.sources a{display:block;font-size:13px;color:#a67f34;margin-bottom:6px;word-break:break-word}
+.empty{text-align:center;color:#8f7643;padding:80px 0;font-size:14px}
+@media(max-width:640px){.header{padding:26px 24px}.logo{font-size:18px}}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a href="index.html" class="logo">IMMONOVA</a>
+  <a href="articoli.html" class="back">&larr; Notizie</a>
+</header>
+
+<div class="article" id="articleRoot">
+  <div class="empty">Caricamento...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/js/config.js"></script>
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function esc(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+function fmtDate(iso){
+  if(!iso) return "";
+  return new Date(iso).toLocaleDateString("it-IT", { day:"2-digit", month:"long", year:"numeric" });
+}
+function getParam(name){
+  return new URLSearchParams(window.location.search).get(name);
+}
+function bodyToParagraphs(body){
+  return String(body||"").split(/\n\s*\n/).map(p => p.trim()).filter(Boolean)
+    .map(p => `<p>${esc(p)}</p>`).join("");
+}
+
+async function load(){
+  const root = document.getElementById("articleRoot");
+  const slug = getParam("slug");
+  if(!slug){
+    root.innerHTML = '<div class="empty">Articolo non specificato.</div>';
+    return;
+  }
+  const { data, error } = await client.from("blog_posts")
+    .select("title,excerpt,body,sources,published_at")
+    .eq("slug", slug).eq("published", true).maybeSingle();
+  if(error || !data){
+    root.innerHTML = '<div class="empty">Articolo non trovato.</div>';
+    return;
+  }
+  document.title = data.title + " | IMMONOVA";
+  document.getElementById("pageTitle").textContent = data.title + " | IMMONOVA";
+  document.getElementById("ogTitle").setAttribute("content", data.title + " | IMMONOVA");
+  if(data.excerpt){
+    document.getElementById("pageDesc").setAttribute("content", data.excerpt);
+    document.getElementById("ogDesc").setAttribute("content", data.excerpt);
+  }
+  const sources = Array.isArray(data.sources) ? data.sources : [];
+  root.innerHTML = `
+    <div class="article-date">${esc(fmtDate(data.published_at))}</div>
+    <h1 class="article-title">${esc(data.title)}</h1>
+    <div class="article-body">${bodyToParagraphs(data.body)}</div>
+    <div class="disclaimer">IMMONOVA affianca il cliente in ogni fase: dalla ricerca della soluzione più adatta alle sue esigenze.</div>
+    ${sources.length ? `
+    <div class="sources">
+      <div class="sources-title">Fonti</div>
+      ${sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join("")}
+    </div>` : ""}
+  `;
+}
+load();
+</script>
+
+</body>
+</html>
