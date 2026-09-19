@@ -127,6 +127,28 @@ button:disabled{opacity:.45; cursor:not-allowed}
 .fb-mock .fb-body{padding:4px 14px 10px;font-size:13.5px;color:#1a1a1a;white-space:pre-wrap}
 .fb-mock .fb-link{border-top:1px solid #e4e6eb; background:#f0f2f5; padding:8px 14px; font-size:11.5px; color:#65676b; text-transform:uppercase; letter-spacing:.02em}
 .no-dest{color:#5a4a2a;font-size:13px;padding:20px;text-align:center}
+
+.sticker-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(72px,1fr)); gap:8px}
+.sticker-tile{
+  border:2px solid var(--border); border-radius:10px; background:#faf7f1; cursor:pointer;
+  padding:6px 4px 5px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:4px; min-height:64px; text-align:center; transition:border-color .12s ease, background .12s ease;
+}
+.sticker-tile:hover{border-color:rgba(166,127,52,.6)}
+.sticker-tile.selected{border-color:var(--gold); background:rgba(166,127,52,.1)}
+.sticker-tile .stk-emoji{font-size:24px; line-height:1}
+.sticker-tile .stk-badge-preview{
+  font-size:8.5px; font-weight:700; letter-spacing:.02em; padding:4px 6px; border-radius:4px; white-space:nowrap;
+}
+.sticker-tile .stk-label{font-size:9px; color:var(--dark2); line-height:1.2}
+.sticker-tile.stk-none .stk-emoji{font-size:18px; color:var(--dark2)}
+.sticker-drag{
+  position:absolute; cursor:grab; user-select:none; touch-action:none;
+  transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));
+}
+.sticker-drag:active{cursor:grabbing}
+.sticker-drag .stk-badge-preview{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -244,7 +266,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
         <label><input type="checkbox" id="fTextBold" checked> Grassetto</label>
         <label><input type="checkbox" id="fTextUnderline"> Sottolineato</label>
       </div>
-      <div class="field" style="margin-bottom:10px">
+      <div class="field" style="margin-bottom:0">
         <label>Effetto immagine</label>
         <select id="fImageFilter">
           <option value="none">Nessuno (originale)</option>
@@ -255,21 +277,22 @@ button:disabled{opacity:.45; cursor:not-allowed}
           <option value="vivid">Colori vivaci</option>
         </select>
       </div>
-      <div class="field" style="margin-bottom:8px">
-        <label>Sticker (originale in stile IMMONOVA — non è uno sticker ufficiale Instagram, che è un asset protetto da copyright e non riutilizzabile)</label>
-        <select id="fStorySticker">
-          <option value="none">Nessuno</option>
-          <option value="cta_arrow">Freccia + "Scopri di più"</option>
-          <option value="new_badge">Badge "Nuovo annuncio"</option>
-          <option value="price_tag">Tag prezzo</option>
-        </select>
-      </div>
-      <div class="field" id="fStorySickerTextWrap" style="margin-bottom:10px;display:none">
+    </div>
+
+    <div id="stickerBlock" style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;display:none">
+      <div style="font-size:12.5px;font-weight:700;color:var(--dark2);margin-bottom:4px">Sticker (facoltativo — valido per Facebook, Instagram e LinkedIn)</div>
+      <div style="font-size:11px;color:var(--dark2);margin-bottom:10px">Clicca uno sticker per selezionarlo, poi trascinalo sull'anteprima qui sotto per posizionarlo sulla foto.</div>
+      <div class="sticker-grid" id="stickerGrid"></div>
+      <div class="field" id="fStorySickerTextWrap" style="margin:10px 0 0;display:none">
         <label>Testo personalizzato per lo sticker (facoltativo)</label>
         <input type="text" id="fStorySickerText" placeholder="Es. € 450.000 oppure NUOVO ANNUNCIO">
       </div>
-      <div style="font-size:10.5px;color:var(--dark2);margin-bottom:8px">Anteprima live (aggiornata mentre modifichi — non pixel-perfect rispetto al risultato reale, ma vicina):</div>
-      <div id="liveStoryPreview" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:220px;margin:0 auto"></div>
+      <input type="hidden" id="fStorySticker" value="none">
+      <input type="hidden" id="fStickerEmoji" value="">
+      <input type="hidden" id="fStickerX" value="50">
+      <input type="hidden" id="fStickerY" value="78">
+      <div style="font-size:10.5px;color:var(--dark2);margin:12px 0 8px">Anteprima live — trascina lo sticker per posizionarlo:</div>
+      <div id="liveStoryPreview" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:220px;margin:0 auto;position:relative"></div>
     </div>
 
     <div class="checkbox-row">
@@ -554,12 +577,16 @@ function openEditModal(id){
   document.getElementById("fImageFilter").value = p ? (p.image_filter || "none") : "none";
   document.getElementById("fStorySticker").value = p ? (p.story_sticker || "none") : "none";
   document.getElementById("fStorySickerText").value = p ? (p.story_sticker_text || "") : "";
+  document.getElementById("fStickerEmoji").value = p ? (p.sticker_emoji || "") : "";
+  document.getElementById("fStickerX").value = p && typeof p.sticker_x === "number" ? p.sticker_x : 50;
+  document.getElementById("fStickerY").value = p && typeof p.sticker_y === "number" ? p.sticker_y : 78;
   document.getElementById("fStatus").value = p && p.status !== "scheduled" ? p.status : "draft";
   document.getElementById("fScheduleEnabled").checked = !!(p && p.scheduled_publish_at && p.status === "scheduled");
   document.getElementById("fScheduledAt").value = p ? isoToLocalDatetime(p.scheduled_publish_at) : "";
   toggleScheduleBlock();
   toggleStoryStyleBlock();
   toggleStickerTextField();
+  renderStickerGrid();
   document.getElementById("editModal").classList.add("open");
 }
 
@@ -571,13 +598,163 @@ function toggleScheduleBlock(){
 
 function toggleStickerTextField(){
   const sticker = document.getElementById("fStorySticker").value;
-  document.getElementById("fStorySickerTextWrap").style.display = (sticker === "new_badge" || sticker === "price_tag") ? "block" : "none";
+  document.getElementById("fStorySickerTextWrap").style.display = (sticker === "new_badge" || sticker === "price_tag" || sticker === "exclusive_badge" || sticker === "sold_badge") ? "block" : "none";
 }
 
 function toggleStoryStyleBlock(){
   const isStory = document.getElementById("fType").value === "story";
   document.getElementById("storyStyleBlock").style.display = isStory ? "block" : "none";
-  if(isStory) renderLiveStoryPreview();
+  toggleStickerBlock();
+}
+
+// Lo sticker è disponibile per qualunque post a immagine singola (Feed o
+// Storia), su Facebook, Instagram e LinkedIn — non solo per le Storie
+// come in precedenza. Video e carousel non supportano lo sticker.
+function toggleStickerBlock(){
+  const isImage = document.getElementById("fMediaType").value === "image";
+  document.getElementById("stickerBlock").style.display = isImage ? "block" : "none";
+  if(isImage) renderLiveStoryPreview();
+}
+
+// ---- Catalogo sticker: badge in stile IMMONOVA + un set di sticker
+// "faccina/emoji" divertenti (facce, frecce, ecc.) — mostrati come tile
+// visive cliccabili nel box, non come voci di una tendina testuale.
+const STICKER_BADGE_STYLE = {
+  cta_arrow:      {bg:"#d6ab4b", color:"#3c2d15", arrow:true,  defaultText:"SCOPRI DI PIÙ"},
+  new_badge:      {bg:"#3c2d15", color:"#ffffff", arrow:false, defaultText:"NUOVO ANNUNCIO"},
+  price_tag:      {bg:"#d6ab4b", color:"#3c2d15", arrow:false, defaultText:"PREZZO SU RICHIESTA"},
+  exclusive_badge:{bg:"#d6ab4b", color:"#3c2d15", arrow:false, defaultText:"IN ESCLUSIVA"},
+  sold_badge:     {bg:"#b3452f", color:"#ffffff", arrow:false, defaultText:"RISERVATO"},
+  logo_watermark: {bg:"rgba(60,45,21,.87)", color:"#d6ab4b", arrow:false, defaultText:"IMMONOVA"},
+};
+const STICKER_CATALOG = [
+  {key:"none", type:"none", label:"Nessuno"},
+  {key:"cta_arrow", type:"cta_arrow", label:"Freccia CTA"},
+  {key:"new_badge", type:"new_badge", label:"Nuovo annuncio"},
+  {key:"price_tag", type:"price_tag", label:"Tag prezzo"},
+  {key:"exclusive_badge", type:"exclusive_badge", label:"In esclusiva"},
+  {key:"sold_badge", type:"sold_badge", label:"Riservato"},
+  {key:"logo_watermark", type:"logo_watermark", label:"Logo IMMONOVA"},
+  {key:"emoji_star", type:"emoji", emoji:"⭐", label:"Stella"},
+  {key:"emoji_heart", type:"emoji", emoji:"❤️", label:"Cuore"},
+  {key:"emoji_fire", type:"emoji", emoji:"🔥", label:"Fuoco"},
+  {key:"emoji_love", type:"emoji", emoji:"😍", label:"Innamorato"},
+  {key:"emoji_smile", type:"emoji", emoji:"😊", label:"Sorriso"},
+  {key:"emoji_wow", type:"emoji", emoji:"😮", label:"Wow"},
+  {key:"emoji_thumbsup", type:"emoji", emoji:"👍", label:"Mi piace"},
+  {key:"emoji_clap", type:"emoji", emoji:"👏", label:"Applauso"},
+  {key:"emoji_party", type:"emoji", emoji:"🎉", label:"Festa"},
+  {key:"emoji_sparkles", type:"emoji", emoji:"✨", label:"Scintille"},
+  {key:"emoji_arrow_right", type:"emoji", emoji:"➡️", label:"Freccia dx"},
+  {key:"emoji_arrow_up", type:"emoji", emoji:"⬆️", label:"Freccia su"},
+  {key:"emoji_arrow_upright", type:"emoji", emoji:"↗️", label:"Freccia diag."},
+  {key:"emoji_house", type:"emoji", emoji:"🏡", label:"Casa"},
+  {key:"emoji_key", type:"emoji", emoji:"🔑", label:"Chiave"},
+  {key:"emoji_pin", type:"emoji", emoji:"📍", label:"Posizione"},
+  {key:"emoji_check", type:"emoji", emoji:"✅", label:"Spunta"},
+];
+
+function currentStickerKey(){
+  const type = document.getElementById("fStorySticker").value || "none";
+  if(type === "emoji"){
+    const emoji = document.getElementById("fStickerEmoji").value || "";
+    const entry = STICKER_CATALOG.find(s => s.type === "emoji" && s.emoji === emoji);
+    return entry ? entry.key : "none";
+  }
+  const entry = STICKER_CATALOG.find(s => s.type === type);
+  return entry ? entry.key : "none";
+}
+
+function badgeTileHTML(type, customText, big){
+  const style = STICKER_BADGE_STYLE[type];
+  if(!style) return "";
+  const label = escapeHTML((customText && customText.trim()) || style.defaultText);
+  const arrowHTML = style.arrow ? `<div style="width:0;height:0;margin:0 auto 2px;border-left:${big?9:6}px solid transparent;border-right:${big?9:6}px solid transparent;border-bottom:${big?11:7}px solid ${style.bg}"></div>` : "";
+  return `<div style="text-align:center">${arrowHTML}<div class="stk-badge-preview" style="background:${style.bg};color:${style.color};font-family:'Lato',sans-serif;font-size:${big?12:8.5}px;padding:${big?"8px 14px":"4px 6px"}">${label}</div></div>`;
+}
+
+function stickerContentHTML(entry, customText, big){
+  if(entry.type === "none") return "";
+  if(entry.type === "emoji") return `<div class="stk-emoji" style="font-size:${big?40:24}px;line-height:1">${entry.emoji}</div>`;
+  return badgeTileHTML(entry.type, customText, big);
+}
+
+function renderStickerGrid(){
+  const grid = document.getElementById("stickerGrid");
+  if(!grid) return;
+  const selectedKey = currentStickerKey();
+  grid.innerHTML = STICKER_CATALOG.map(entry => {
+    const inner = entry.type === "none"
+      ? `<div class="stk-emoji">✕</div>`
+      : stickerContentHTML(entry, document.getElementById("fStorySickerText").value, false);
+    return `<div class="sticker-tile${entry.key === selectedKey ? " selected" : ""}${entry.type === "none" ? " stk-none" : ""}" data-key="${entry.key}" title="${escapeHTML(entry.label)}">
+      ${inner}
+      <div class="stk-label">${escapeHTML(entry.label)}</div>
+    </div>`;
+  }).join("");
+  grid.querySelectorAll(".sticker-tile").forEach(tile => {
+    tile.addEventListener("click", () => {
+      const entry = STICKER_CATALOG.find(s => s.key === tile.dataset.key);
+      if(!entry) return;
+      document.getElementById("fStorySticker").value = entry.type;
+      document.getElementById("fStickerEmoji").value = entry.type === "emoji" ? entry.emoji : "";
+      toggleStickerTextField();
+      renderStickerGrid();
+      renderLiveStoryPreview();
+    });
+  });
+}
+
+// ---- Posizionamento drag & drop dello sticker sull'anteprima: solo
+// spostamento (niente resize/rotate), coordinate salvate come percentuale
+// (0-100) del centro dello sticker rispetto a larghezza/altezza
+// dell'immagine — stesso sistema usato lato backend (sticker_x/sticker_y).
+function attachStickerOverlay(container){
+  const type = document.getElementById("fStorySticker").value;
+  if(!container || type === "none") return;
+  const entry = type === "emoji"
+    ? STICKER_CATALOG.find(s => s.type === "emoji" && s.emoji === document.getElementById("fStickerEmoji").value)
+    : STICKER_CATALOG.find(s => s.type === type);
+  if(!entry) return;
+
+  container.style.position = container.style.position || "relative";
+  const x = parseFloat(document.getElementById("fStickerX").value) || 50;
+  const y = parseFloat(document.getElementById("fStickerY").value) || 78;
+
+  const drag = document.createElement("div");
+  drag.className = "sticker-drag";
+  drag.style.left = x + "%";
+  drag.style.top = y + "%";
+  drag.innerHTML = stickerContentHTML(entry, document.getElementById("fStorySickerText").value, true);
+  container.appendChild(drag);
+
+  let dragging = false;
+  const onMove = (clientX, clientY) => {
+    const rect = container.getBoundingClientRect();
+    if(!rect.width || !rect.height) return;
+    let px = ((clientX - rect.left) / rect.width) * 100;
+    let py = ((clientY - rect.top) / rect.height) * 100;
+    px = Math.max(0, Math.min(100, px));
+    py = Math.max(0, Math.min(100, py));
+    drag.style.left = px + "%";
+    drag.style.top = py + "%";
+    document.getElementById("fStickerX").value = px.toFixed(1);
+    document.getElementById("fStickerY").value = py.toFixed(1);
+  };
+  drag.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    drag.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  drag.addEventListener("pointermove", (e) => {
+    if(!dragging) return;
+    onMove(e.clientX, e.clientY);
+  });
+  drag.addEventListener("pointerup", (e) => {
+    dragging = false;
+    try{ drag.releasePointerCapture(e.pointerId); }catch(err){}
+  });
+  drag.addEventListener("pointercancel", () => { dragging = false; });
 }
 
 // Anteprima live dentro al form stesso: si aggiorna ad ogni modifica di
@@ -588,19 +765,33 @@ function toggleStoryStyleBlock(){
 function renderLiveStoryPreview(){
   const wrap = document.getElementById("liveStoryPreview");
   if(!wrap) return;
-  const fakePost = {
-    post_type: "story",
-    caption: document.getElementById("fCaption").value,
-    image_url: document.getElementById("fImage").value.trim(),
-    text_font: document.getElementById("fTextFont").value,
-    text_color: document.getElementById("fTextColor").value,
-    text_bold: document.getElementById("fTextBold").checked,
-    text_underline: document.getElementById("fTextUnderline").checked,
-    image_filter: document.getElementById("fImageFilter").value,
-    story_sticker: document.getElementById("fStorySticker").value,
-    story_sticker_text: document.getElementById("fStorySickerText").value,
-  };
-  wrap.innerHTML = buildInstagramPreview(fakePost);
+  const isStory = document.getElementById("fType").value === "story";
+  const imageUrl = document.getElementById("fImage").value.trim();
+
+  if(isStory){
+    const fakePost = {
+      post_type: "story",
+      caption: document.getElementById("fCaption").value,
+      image_url: imageUrl,
+      text_font: document.getElementById("fTextFont").value,
+      text_color: document.getElementById("fTextColor").value,
+      text_bold: document.getElementById("fTextBold").checked,
+      text_underline: document.getElementById("fTextUnderline").checked,
+      image_filter: document.getElementById("fImageFilter").value,
+      // Lo sticker viene disegnato dal layer trascinabile qui sotto, non
+      // dalla logica statica di buildInstagramPreview (che resterebbe
+      // comunque fedele nella modale "Anteprima" a tutto schermo).
+      story_sticker: "none",
+    };
+    wrap.innerHTML = buildInstagramPreview(fakePost);
+    const target = wrap.querySelector(".ig-mock") || wrap;
+    attachStickerOverlay(target);
+  } else {
+    wrap.innerHTML = imageUrl
+      ? `<img src="${escapeHTML(imageUrl)}" style="width:100%;display:block">`
+      : `<div style="aspect-ratio:1/1;background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px">Carica un'immagine per vedere l'anteprima</div>`;
+    attachStickerOverlay(wrap);
+  }
 }
 
 function closeEditModal(){
@@ -665,6 +856,9 @@ async function savePost(){
     image_filter: document.getElementById("fImageFilter").value,
     story_sticker: document.getElementById("fStorySticker").value,
     story_sticker_text: document.getElementById("fStorySickerText").value.trim() || null,
+    sticker_emoji: document.getElementById("fStickerEmoji").value.trim() || null,
+    sticker_x: parseFloat(document.getElementById("fStickerX").value) || 50,
+    sticker_y: parseFloat(document.getElementById("fStickerY").value) || 78,
     status: scheduleEnabled ? "scheduled" : document.getElementById("fStatus").value,
     scheduled_publish_at: scheduledAtISO,
   };
@@ -722,6 +916,22 @@ function feedCaptionText(p){
 // Anteprima del blocco media (immagine/video/carosello) condivisa dai tre
 // build*Preview() — rispecchia i tre rami di publishToFacebook()/
 // publishToInstagram() nell'Edge Function (image/video/carousel).
+// Overlay statico (non trascinabile) dello sticker per la modale "Anteprima"
+// a tutto schermo — usa la posizione salvata (sticker_x/sticker_y) e lo
+// stesso catalogo/stile della tile picker, per Facebook/Instagram/LinkedIn.
+function buildStaticStickerOverlayHTML(p){
+  const type = p.story_sticker;
+  if(!type || type === "none") return "";
+  const entry = type === "emoji"
+    ? STICKER_CATALOG.find(s => s.type === "emoji" && s.emoji === p.sticker_emoji)
+    : STICKER_CATALOG.find(s => s.type === type);
+  if(!entry) return "";
+  const x = typeof p.sticker_x === "number" ? p.sticker_x : 50;
+  const y = typeof p.sticker_y === "number" ? p.sticker_y : 78;
+  const inner = stickerContentHTML(entry, p.story_sticker_text, true);
+  return `<div style="position:absolute;left:${x}%;top:${y}%;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))">${inner}</div>`;
+}
+
 function buildMediaBlockHTML(p, opts){
   opts = opts || {};
   const aspect = opts.aspect || "1/1";
@@ -753,7 +963,9 @@ function buildMediaBlockHTML(p, opts){
 }
 
 function buildFacebookPreview(p){
-  const img = (p.media_type === "video" || p.media_type === "carousel") ? buildMediaBlockHTML(p, {aspect:"4/3"}) : (p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "");
+  const mediaType = p.media_type || "image";
+  const img = mediaType !== "image" ? buildMediaBlockHTML(p, {aspect:"4/3"}) : (p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover;display:block">` : "");
+  const sticker = mediaType === "image" ? buildStaticStickerOverlayHTML(p) : "";
   let domain = "";
   if(p.link_url){ try{ domain = new URL(p.link_url).hostname.replace(/^www\./,""); }catch(e){ domain = p.link_url; } }
   return `
@@ -766,7 +978,7 @@ function buildFacebookPreview(p){
         </div>
       </div>
       <div class="fb-body">${escapeHTML(feedCaptionText(p) || "(nessun testo)")}</div>
-      ${img}
+      <div style="position:relative">${img}${sticker}</div>
       ${p.link_url ? `<div class="fb-link">${escapeHTML(domain)}</div>` : ""}
     </div>`;
 }
@@ -813,23 +1025,9 @@ function buildInstagramPreview(p){
 
     // Sticker ORIGINALE in stile IMMONOVA (non uno sticker ufficiale
     // Instagram) — stessa posizione/logica del rendering reale lato
-    // backend (vedi renderSticker() nell'Edge Function).
-    let stickerHtml = "";
-    if(p.story_sticker === "cta_arrow"){
-      stickerHtml = `
-        <div style="position:absolute;left:50%;top:58%;transform:translate(-50%,0);text-align:center">
-          <div style="width:0;height:0;margin:0 auto 4px;border-left:17px solid transparent;border-right:17px solid transparent;border-bottom:20px solid #d6ab4b"></div>
-          <div style="background:#d6ab4b;color:#3c2d15;font-weight:700;font-size:13px;letter-spacing:.04em;padding:10px 20px;font-family:'Lato',sans-serif">SCOPRI DI PIÙ</div>
-        </div>`;
-    } else if(p.story_sticker === "new_badge"){
-      const label = (p.story_sticker_text && p.story_sticker_text.trim()) || "NUOVO ANNUNCIO";
-      stickerHtml = `
-        <div style="position:absolute;left:16px;top:64px;background:#3c2d15;color:#fff;font-weight:700;font-size:12px;letter-spacing:.03em;padding:8px 14px;font-family:'Lato',sans-serif">${escapeHTML(label)}</div>`;
-    } else if(p.story_sticker === "price_tag"){
-      const label = (p.story_sticker_text && p.story_sticker_text.trim()) || "PREZZO SU RICHIESTA";
-      stickerHtml = `
-        <div style="position:absolute;left:50%;top:68px;transform:translateX(-50%);background:#d6ab4b;color:#3c2d15;font-weight:700;font-size:13px;letter-spacing:.03em;padding:9px 18px;font-family:'Lato',sans-serif;white-space:nowrap">${escapeHTML(label)}</div>`;
-    }
+    // backend (vedi renderSticker() nell'Edge Function), posizionato
+    // secondo sticker_x/sticker_y salvati.
+    const stickerHtml = buildStaticStickerOverlayHTML(p);
 
     return `
       <div class="ig-mock" style="position:relative;aspect-ratio:9/16;max-height:520px;${bg};display:flex;align-items:flex-end">
@@ -848,19 +1046,21 @@ function buildInstagramPreview(p){
   }
 
   const img = buildMediaBlockHTML(p, {aspect:"1/1"}) || `<div style="width:100%;aspect-ratio:1/1;background:#f0f0f0;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px">Instagram richiede un'immagine</div>`;
+  const feedSticker = (p.media_type || "image") === "image" ? buildStaticStickerOverlayHTML(p) : "";
   return `
     <div class="ig-mock">
       <div class="ig-head">
         <div class="ig-avatar"></div>
         <div class="ig-name">immonova</div>
       </div>
-      ${img}
+      <div style="position:relative">${img}${feedSticker}</div>
       <div class="ig-body"><b>immonova</b> ${escapeHTML(feedCaptionText(p) || "(nessun testo)")}</div>
     </div>`;
 }
 
 function buildLinkedinPreview(p){
-  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover">` : "";
+  const img = p.image_url ? `<img src="${escapeHTML(p.image_url)}" style="width:100%;max-height:320px;object-fit:cover;display:block">` : "";
+  const sticker = p.image_url ? buildStaticStickerOverlayHTML(p) : "";
   // Nota: video/carosello non sono supportati su LinkedIn con questo sistema
   // (vedi publishToLinkedIn nell'Edge Function) — la checkbox LinkedIn viene
   // disattivata automaticamente per questi formati, quindi qui p.image_url
@@ -875,7 +1075,7 @@ function buildLinkedinPreview(p){
         </div>
       </div>
       <div class="li-body">${escapeHTML(feedCaptionText(p) || "(nessun testo)")}</div>
-      ${img}
+      <div style="position:relative">${img}${sticker}</div>
       ${(!p.image_url && p.link_url) ? `<div style="border-top:1px solid #e7e7e7;padding:8px 14px;font-size:12px;color:#666">${escapeHTML(p.link_url)}</div>` : ""}
     </div>`;
 }
@@ -942,7 +1142,7 @@ async function publishPost(id, btn){
 }
 
 document.getElementById("fScheduleEnabled").addEventListener("change", toggleScheduleBlock);
-document.getElementById("fMediaType").addEventListener("change", toggleMediaTypeBlocks);
+document.getElementById("fMediaType").addEventListener("change", () => { toggleMediaTypeBlocks(); toggleStickerBlock(); });
 document.getElementById("fVideoFile").addEventListener("change", (e) => {
   const file = e.target.files[0];
   if(file) uploadVideoFile(file);
@@ -963,8 +1163,7 @@ document.getElementById("fTextColor").addEventListener("input", renderLiveStoryP
 document.getElementById("fTextBold").addEventListener("change", renderLiveStoryPreview);
 document.getElementById("fTextUnderline").addEventListener("change", renderLiveStoryPreview);
 document.getElementById("fImageFilter").addEventListener("change", renderLiveStoryPreview);
-document.getElementById("fStorySticker").addEventListener("change", () => { toggleStickerTextField(); renderLiveStoryPreview(); });
-document.getElementById("fStorySickerText").addEventListener("input", renderLiveStoryPreview);
+document.getElementById("fStorySickerText").addEventListener("input", () => { renderStickerGrid(); renderLiveStoryPreview(); });
 document.getElementById("newPostBtn").addEventListener("click", () => openEditModal(null));
 document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
 document.getElementById("saveEditBtn").addEventListener("click", savePost);
