@@ -149,6 +149,21 @@ button:disabled{opacity:.45; cursor:not-allowed}
 }
 .sticker-drag:active{cursor:grabbing}
 .sticker-drag .stk-badge-preview{white-space:nowrap}
+.sticker-drag .sticker-remove-btn{
+  position:absolute; top:-9px; right:-9px; width:18px; height:18px; border-radius:50%;
+  background:#b3452f; color:#fff; font-size:11px; line-height:18px; text-align:center;
+  cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.4);
+}
+.sticker-placed-row{
+  display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:8px;
+  padding:6px 8px; font-size:12px; background:#faf7f1;
+}
+.sticker-placed-row .stk-tag{font-size:18px; width:22px; text-align:center}
+.sticker-placed-row input[type=text]{flex:1; padding:5px 8px; font-size:12px; border:1px solid var(--border); border-radius:6px}
+.sticker-placed-row .sticker-remove-btn{
+  width:20px; height:20px; border-radius:50%; background:#b3452f; color:#fff; font-size:12px;
+  line-height:20px; text-align:center; cursor:pointer; flex-shrink:0;
+}
 </style>
 </head>
 <body>
@@ -280,18 +295,11 @@ button:disabled{opacity:.45; cursor:not-allowed}
     </div>
 
     <div id="stickerBlock" style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;display:none">
-      <div style="font-size:12.5px;font-weight:700;color:var(--dark2);margin-bottom:4px">Sticker (facoltativo — valido per Facebook, Instagram e LinkedIn)</div>
-      <div style="font-size:11px;color:var(--dark2);margin-bottom:10px">Clicca uno sticker per selezionarlo, poi trascinalo sull'anteprima qui sotto per posizionarlo sulla foto.</div>
+      <div style="font-size:12.5px;font-weight:700;color:var(--dark2);margin-bottom:4px">Sticker (facoltativi — validi per Facebook, Instagram e LinkedIn)</div>
+      <div style="font-size:11px;color:var(--dark2);margin-bottom:10px">Clicca uno o più sticker per aggiungerli, poi trascina ciascuno sull'anteprima qui sotto per posizionarlo (la ✕ lo rimuove).</div>
       <div class="sticker-grid" id="stickerGrid"></div>
-      <div class="field" id="fStorySickerTextWrap" style="margin:10px 0 0;display:none">
-        <label>Testo personalizzato per lo sticker (facoltativo)</label>
-        <input type="text" id="fStorySickerText" placeholder="Es. € 450.000 oppure NUOVO ANNUNCIO">
-      </div>
-      <input type="hidden" id="fStorySticker" value="none">
-      <input type="hidden" id="fStickerEmoji" value="">
-      <input type="hidden" id="fStickerX" value="50">
-      <input type="hidden" id="fStickerY" value="78">
-      <div style="font-size:10.5px;color:var(--dark2);margin:12px 0 8px">Anteprima live — trascina lo sticker per posizionarlo:</div>
+      <div id="placedStickerList" style="margin-top:12px;display:flex;flex-direction:column;gap:6px"></div>
+      <div style="font-size:10.5px;color:var(--dark2);margin:12px 0 8px">Anteprima live — trascina ogni sticker per posizionarlo:</div>
       <div id="liveStoryPreview" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:220px;margin:0 auto;position:relative"></div>
     </div>
 
@@ -575,11 +583,31 @@ function openEditModal(id){
   document.getElementById("fTextBold").checked = p ? (p.text_bold !== false) : true;
   document.getElementById("fTextUnderline").checked = p ? !!p.text_underline : false;
   document.getElementById("fImageFilter").value = p ? (p.image_filter || "none") : "none";
-  document.getElementById("fStorySticker").value = p ? (p.story_sticker || "none") : "none";
-  document.getElementById("fStorySickerText").value = p ? (p.story_sticker_text || "") : "";
-  document.getElementById("fStickerEmoji").value = p ? (p.sticker_emoji || "") : "";
-  document.getElementById("fStickerX").value = p && typeof p.sticker_x === "number" ? p.sticker_x : 50;
-  document.getElementById("fStickerY").value = p && typeof p.sticker_y === "number" ? p.sticker_y : 78;
+  // Carica gli sticker già salvati sul post (array `stickers`), con fallback
+  // ai vecchi campi singoli (story_sticker/sticker_x/y) per i post creati
+  // prima di questo aggiornamento.
+  stickerUidCounter = 0;
+  if(p && Array.isArray(p.stickers) && p.stickers.length){
+    placedStickers = p.stickers.map(s => ({
+      uid: ++stickerUidCounter,
+      type: s.type || "none",
+      emoji: s.emoji || "",
+      text: s.text || "",
+      x: typeof s.x === "number" ? s.x : 50,
+      y: typeof s.y === "number" ? s.y : 78,
+    }));
+  } else if(p && p.story_sticker && p.story_sticker !== "none"){
+    placedStickers = [{
+      uid: ++stickerUidCounter,
+      type: p.story_sticker,
+      emoji: p.sticker_emoji || "",
+      text: p.story_sticker_text || "",
+      x: typeof p.sticker_x === "number" ? p.sticker_x : 50,
+      y: typeof p.sticker_y === "number" ? p.sticker_y : 78,
+    }];
+  } else {
+    placedStickers = [];
+  }
   // Il menu "Stato" ha solo 3 opzioni editabili (draft/ready_to_review/
   // approved) — se il post è già pubblicato, archiviato o programmato,
   // assegnare direttamente p.status lascerebbe il <select> senza nessuna
@@ -591,8 +619,8 @@ function openEditModal(id){
   document.getElementById("fScheduledAt").value = p ? isoToLocalDatetime(p.scheduled_publish_at) : "";
   toggleScheduleBlock();
   toggleStoryStyleBlock();
-  toggleStickerTextField();
   renderStickerGrid();
+  renderPlacedStickerList();
   document.getElementById("editModal").classList.add("open");
 }
 
@@ -600,11 +628,6 @@ function toggleScheduleBlock(){
   const on = document.getElementById("fScheduleEnabled").checked;
   document.getElementById("fScheduleWrap").style.display = on ? "block" : "none";
   document.getElementById("fStatus").disabled = on;
-}
-
-function toggleStickerTextField(){
-  const sticker = document.getElementById("fStorySticker").value;
-  document.getElementById("fStorySickerTextWrap").style.display = (sticker === "new_badge" || sticker === "price_tag" || sticker === "exclusive_badge" || sticker === "sold_badge") ? "block" : "none";
 }
 
 function toggleStoryStyleBlock(){
@@ -660,16 +683,12 @@ const STICKER_CATALOG = [
   {key:"emoji_check", type:"emoji", emoji:"✅", label:"Spunta"},
 ];
 
-function currentStickerKey(){
-  const type = document.getElementById("fStorySticker").value || "none";
-  if(type === "emoji"){
-    const emoji = document.getElementById("fStickerEmoji").value || "";
-    const entry = STICKER_CATALOG.find(s => s.type === "emoji" && s.emoji === emoji);
-    return entry ? entry.key : "none";
-  }
-  const entry = STICKER_CATALOG.find(s => s.type === type);
-  return entry ? entry.key : "none";
-}
+// ---- Sticker PIAZZATI sul post corrente: un array in memoria, non più
+// un singolo sticker — ogni voce è un oggetto indipendente con la propria
+// posizione, così se ne possono aggiungere quanti se ne vogliono (badge +
+// più faccine insieme, ecc.). Ogni voce: {uid, type, emoji, text, x, y}.
+let placedStickers = [];
+let stickerUidCounter = 0;
 
 function badgeTileHTML(type, customText, big){
   const style = STICKER_BADGE_STYLE[type];
@@ -685,15 +704,15 @@ function stickerContentHTML(entry, customText, big){
   return badgeTileHTML(entry.type, customText, big);
 }
 
+// La griglia catalogo NON tiene più uno stato "selezionato": ogni click
+// AGGIUNGE subito un nuovo sticker alla lista di quelli piazzati (si può
+// cliccare la stessa tile più volte per aggiungerne più copie).
 function renderStickerGrid(){
   const grid = document.getElementById("stickerGrid");
   if(!grid) return;
-  const selectedKey = currentStickerKey();
-  grid.innerHTML = STICKER_CATALOG.map(entry => {
-    const inner = entry.type === "none"
-      ? `<div class="stk-emoji">✕</div>`
-      : stickerContentHTML(entry, document.getElementById("fStorySickerText").value, false);
-    return `<div class="sticker-tile${entry.key === selectedKey ? " selected" : ""}${entry.type === "none" ? " stk-none" : ""}" data-key="${entry.key}" title="${escapeHTML(entry.label)}">
+  grid.innerHTML = STICKER_CATALOG.filter(e => e.type !== "none").map(entry => {
+    const inner = stickerContentHTML(entry, null, false);
+    return `<div class="sticker-tile" data-key="${entry.key}" title="Aggiungi: ${escapeHTML(entry.label)}">
       ${inner}
       <div class="stk-label">${escapeHTML(entry.label)}</div>
     </div>`;
@@ -702,65 +721,128 @@ function renderStickerGrid(){
     tile.addEventListener("click", () => {
       const entry = STICKER_CATALOG.find(s => s.key === tile.dataset.key);
       if(!entry) return;
-      document.getElementById("fStorySticker").value = entry.type;
-      document.getElementById("fStickerEmoji").value = entry.type === "emoji" ? entry.emoji : "";
-      toggleStickerTextField();
-      renderStickerGrid();
-      renderLiveStoryPreview();
+      addPlacedSticker(entry);
     });
   });
 }
 
-// ---- Posizionamento drag & drop dello sticker sull'anteprima: solo
+// Aggiunge un nuovo sticker piazzato, con una posizione di partenza
+// leggermente sfalsata rispetto agli altri già presenti così non finiscono
+// tutti esattamente sovrapposti al centro.
+function addPlacedSticker(entry){
+  const count = placedStickers.length;
+  const offsetX = 40 + (count % 4) * 8;
+  const offsetY = 30 + (count % 3) * 14;
+  placedStickers.push({
+    uid: ++stickerUidCounter,
+    type: entry.type,
+    emoji: entry.type === "emoji" ? entry.emoji : "",
+    text: "",
+    x: Math.min(85, offsetX),
+    y: Math.min(90, offsetY),
+  });
+  renderPlacedStickerList();
+  renderLiveStoryPreview();
+}
+
+function removePlacedSticker(uid){
+  placedStickers = placedStickers.filter(s => s.uid !== uid);
+  renderPlacedStickerList();
+  renderLiveStoryPreview();
+}
+
+// Elenco degli sticker piazzati sotto la griglia — mostra un'etichetta,
+// un campo di testo personalizzato per i badge che lo supportano, e il
+// pulsante per rimuoverlo. Il posizionamento vero e proprio si fa invece
+// trascinando lo sticker direttamente sull'anteprima qui sotto.
+function renderPlacedStickerList(){
+  const list = document.getElementById("placedStickerList");
+  if(!list) return;
+  if(!placedStickers.length){
+    list.innerHTML = `<div style="font-size:11px;color:var(--dark2);font-style:italic">Nessuno sticker aggiunto — clicca una tile qui sopra per iniziare.</div>`;
+    return;
+  }
+  list.innerHTML = placedStickers.map(s => {
+    const entry = s.type === "emoji"
+      ? STICKER_CATALOG.find(e => e.type === "emoji" && e.emoji === s.emoji)
+      : STICKER_CATALOG.find(e => e.type === s.type);
+    const tag = entry ? (entry.type === "emoji" ? entry.emoji : "🏷️") : "❔";
+    const showText = STICKER_BADGE_STYLE[s.type];
+    return `<div class="sticker-placed-row" data-uid="${s.uid}">
+      <div class="stk-tag">${tag}</div>
+      <div style="min-width:110px;font-weight:600">${escapeHTML(entry ? entry.label : s.type)}</div>
+      ${showText ? `<input type="text" class="sticker-text-input" data-uid="${s.uid}" placeholder="Testo personalizzato (facoltativo)" value="${escapeHTML(s.text || "")}">` : `<div style="flex:1"></div>`}
+      <div class="sticker-remove-btn" data-uid="${s.uid}" title="Rimuovi">✕</div>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".sticker-remove-btn").forEach(btn => {
+    btn.addEventListener("click", () => removePlacedSticker(Number(btn.dataset.uid)));
+  });
+  list.querySelectorAll(".sticker-text-input").forEach(input => {
+    input.addEventListener("input", () => {
+      const s = placedStickers.find(x => x.uid === Number(input.dataset.uid));
+      if(s){ s.text = input.value; renderLiveStoryPreview(); }
+    });
+  });
+}
+
+// ---- Posizionamento drag & drop degli sticker sull'anteprima: solo
 // spostamento (niente resize/rotate), coordinate salvate come percentuale
-// (0-100) del centro dello sticker rispetto a larghezza/altezza
-// dell'immagine — stesso sistema usato lato backend (sticker_x/sticker_y).
+// (0-100) del centro di ciascuno sticker rispetto a larghezza/altezza
+// dell'immagine — stesso sistema usato lato backend (stickers[].x/.y).
 function attachStickerOverlay(container){
-  const type = document.getElementById("fStorySticker").value;
-  if(!container || type === "none") return;
-  const entry = type === "emoji"
-    ? STICKER_CATALOG.find(s => s.type === "emoji" && s.emoji === document.getElementById("fStickerEmoji").value)
-    : STICKER_CATALOG.find(s => s.type === type);
-  if(!entry) return;
-
+  if(!container || !placedStickers.length) return;
   container.style.position = container.style.position || "relative";
-  const x = parseFloat(document.getElementById("fStickerX").value) || 50;
-  const y = parseFloat(document.getElementById("fStickerY").value) || 78;
 
-  const drag = document.createElement("div");
-  drag.className = "sticker-drag";
-  drag.style.left = x + "%";
-  drag.style.top = y + "%";
-  drag.innerHTML = stickerContentHTML(entry, document.getElementById("fStorySickerText").value, true);
-  container.appendChild(drag);
+  placedStickers.forEach(s => {
+    const entry = s.type === "emoji"
+      ? STICKER_CATALOG.find(e => e.type === "emoji" && e.emoji === s.emoji)
+      : STICKER_CATALOG.find(e => e.type === s.type);
+    if(!entry) return;
 
-  let dragging = false;
-  const onMove = (clientX, clientY) => {
-    const rect = container.getBoundingClientRect();
-    if(!rect.width || !rect.height) return;
-    let px = ((clientX - rect.left) / rect.width) * 100;
-    let py = ((clientY - rect.top) / rect.height) * 100;
-    px = Math.max(0, Math.min(100, px));
-    py = Math.max(0, Math.min(100, py));
-    drag.style.left = px + "%";
-    drag.style.top = py + "%";
-    document.getElementById("fStickerX").value = px.toFixed(1);
-    document.getElementById("fStickerY").value = py.toFixed(1);
-  };
-  drag.addEventListener("pointerdown", (e) => {
-    dragging = true;
-    drag.setPointerCapture(e.pointerId);
-    e.preventDefault();
+    const drag = document.createElement("div");
+    drag.className = "sticker-drag";
+    drag.style.left = s.x + "%";
+    drag.style.top = s.y + "%";
+    drag.innerHTML = stickerContentHTML(entry, s.text, true) + `<div class="sticker-remove-btn" title="Rimuovi">✕</div>`;
+    container.appendChild(drag);
+
+    const removeBtn = drag.querySelector(".sticker-remove-btn");
+    removeBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    removeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      removePlacedSticker(s.uid);
+    });
+
+    let dragging = false;
+    const onMove = (clientX, clientY) => {
+      const rect = container.getBoundingClientRect();
+      if(!rect.width || !rect.height) return;
+      let px = ((clientX - rect.left) / rect.width) * 100;
+      let py = ((clientY - rect.top) / rect.height) * 100;
+      px = Math.max(0, Math.min(100, px));
+      py = Math.max(0, Math.min(100, py));
+      drag.style.left = px + "%";
+      drag.style.top = py + "%";
+      s.x = Math.round(px * 10) / 10;
+      s.y = Math.round(py * 10) / 10;
+    };
+    drag.addEventListener("pointerdown", (e) => {
+      if(e.target === removeBtn) return;
+      dragging = true;
+      drag.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    drag.addEventListener("pointermove", (e) => {
+      if(!dragging) return;
+      onMove(e.clientX, e.clientY);
+    });
+    drag.addEventListener("pointerup", (e) => {
+      dragging = false;
+      try{ drag.releasePointerCapture(e.pointerId); }catch(err){}
+    });
+    drag.addEventListener("pointercancel", () => { dragging = false; });
   });
-  drag.addEventListener("pointermove", (e) => {
-    if(!dragging) return;
-    onMove(e.clientX, e.clientY);
-  });
-  drag.addEventListener("pointerup", (e) => {
-    dragging = false;
-    try{ drag.releasePointerCapture(e.pointerId); }catch(err){}
-  });
-  drag.addEventListener("pointercancel", () => { dragging = false; });
 }
 
 // Anteprima live dentro al form stesso: si aggiorna ad ogni modifica di
@@ -860,11 +942,22 @@ async function savePost(){
     text_bold: document.getElementById("fTextBold").checked,
     text_underline: document.getElementById("fTextUnderline").checked,
     image_filter: document.getElementById("fImageFilter").value,
-    story_sticker: document.getElementById("fStorySticker").value,
-    story_sticker_text: document.getElementById("fStorySickerText").value.trim() || null,
-    sticker_emoji: document.getElementById("fStickerEmoji").value.trim() || null,
-    sticker_x: parseFloat(document.getElementById("fStickerX").value) || 50,
-    sticker_y: parseFloat(document.getElementById("fStickerY").value) || 78,
+    // Array di sticker piazzati (0, 1 o più) — sostituisce i vecchi campi
+    // singoli story_sticker/sticker_x/y, che restano nella tabella solo
+    // per compatibilità con i post creati prima di questo aggiornamento
+    // e non vengono più scritti da qui.
+    stickers: placedStickers.map(s => ({
+      type: s.type,
+      emoji: s.type === "emoji" ? s.emoji : null,
+      text: s.text ? s.text.trim() : null,
+      x: s.x,
+      y: s.y,
+    })),
+    story_sticker: placedStickers.length ? placedStickers[0].type : "none",
+    story_sticker_text: placedStickers.length && placedStickers[0].text ? placedStickers[0].text.trim() : null,
+    sticker_emoji: placedStickers.length && placedStickers[0].type === "emoji" ? placedStickers[0].emoji : null,
+    sticker_x: placedStickers.length ? placedStickers[0].x : 50,
+    sticker_y: placedStickers.length ? placedStickers[0].y : 78,
     status: scheduleEnabled ? "scheduled" : document.getElementById("fStatus").value,
     scheduled_publish_at: scheduledAtISO,
   };
@@ -922,20 +1015,29 @@ function feedCaptionText(p){
 // Anteprima del blocco media (immagine/video/carosello) condivisa dai tre
 // build*Preview() — rispecchia i tre rami di publishToFacebook()/
 // publishToInstagram() nell'Edge Function (image/video/carousel).
-// Overlay statico (non trascinabile) dello sticker per la modale "Anteprima"
-// a tutto schermo — usa la posizione salvata (sticker_x/sticker_y) e lo
-// stesso catalogo/stile della tile picker, per Facebook/Instagram/LinkedIn.
+// Overlay statico (non trascinabile) degli sticker per la modale "Anteprima"
+// a tutto schermo — usa l'array `stickers` salvato (uno o più), con le
+// posizioni scelte nel composer, e lo stesso catalogo/stile della tile
+// picker, per Facebook/Instagram/LinkedIn. Rimane compatibile con i vecchi
+// post salvati con un solo sticker nei campi story_sticker/sticker_x/y.
 function buildStaticStickerOverlayHTML(p){
-  const type = p.story_sticker;
-  if(!type || type === "none") return "";
-  const entry = type === "emoji"
-    ? STICKER_CATALOG.find(s => s.type === "emoji" && s.emoji === p.sticker_emoji)
-    : STICKER_CATALOG.find(s => s.type === type);
-  if(!entry) return "";
-  const x = typeof p.sticker_x === "number" ? p.sticker_x : 50;
-  const y = typeof p.sticker_y === "number" ? p.sticker_y : 78;
-  const inner = stickerContentHTML(entry, p.story_sticker_text, true);
-  return `<div style="position:absolute;left:${x}%;top:${y}%;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))">${inner}</div>`;
+  const items = Array.isArray(p.stickers) && p.stickers.length
+    ? p.stickers
+    : (p.story_sticker && p.story_sticker !== "none"
+        ? [{type: p.story_sticker, emoji: p.sticker_emoji, text: p.story_sticker_text, x: p.sticker_x, y: p.sticker_y}]
+        : []);
+  return items.map(s => {
+    const type = s.type;
+    if(!type || type === "none") return "";
+    const entry = type === "emoji"
+      ? STICKER_CATALOG.find(e => e.type === "emoji" && e.emoji === s.emoji)
+      : STICKER_CATALOG.find(e => e.type === type);
+    if(!entry) return "";
+    const x = typeof s.x === "number" ? s.x : 50;
+    const y = typeof s.y === "number" ? s.y : 78;
+    const inner = stickerContentHTML(entry, s.text, true);
+    return `<div style="position:absolute;left:${x}%;top:${y}%;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))">${inner}</div>`;
+  }).join("");
 }
 
 function buildMediaBlockHTML(p, opts){
@@ -1169,7 +1271,6 @@ document.getElementById("fTextColor").addEventListener("input", renderLiveStoryP
 document.getElementById("fTextBold").addEventListener("change", renderLiveStoryPreview);
 document.getElementById("fTextUnderline").addEventListener("change", renderLiveStoryPreview);
 document.getElementById("fImageFilter").addEventListener("change", renderLiveStoryPreview);
-document.getElementById("fStorySickerText").addEventListener("input", () => { renderStickerGrid(); renderLiveStoryPreview(); });
 document.getElementById("newPostBtn").addEventListener("click", () => openEditModal(null));
 document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
 document.getElementById("saveEditBtn").addEventListener("click", savePost);
