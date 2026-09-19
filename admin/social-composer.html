@@ -580,7 +580,13 @@ function openEditModal(id){
   document.getElementById("fStickerEmoji").value = p ? (p.sticker_emoji || "") : "";
   document.getElementById("fStickerX").value = p && typeof p.sticker_x === "number" ? p.sticker_x : 50;
   document.getElementById("fStickerY").value = p && typeof p.sticker_y === "number" ? p.sticker_y : 78;
-  document.getElementById("fStatus").value = p && p.status !== "scheduled" ? p.status : "draft";
+  // Il menu "Stato" ha solo 3 opzioni editabili (draft/ready_to_review/
+  // approved) — se il post è già pubblicato, archiviato o programmato,
+  // assegnare direttamente p.status lascerebbe il <select> senza nessuna
+  // opzione corrispondente selezionata (valore vuoto), che poi il database
+  // rifiuta al salvataggio. In quei casi ripieghiamo su "draft".
+  const EDITABLE_STATUSES = ["draft", "ready_to_review", "approved"];
+  document.getElementById("fStatus").value = (p && EDITABLE_STATUSES.includes(p.status)) ? p.status : "draft";
   document.getElementById("fScheduleEnabled").checked = !!(p && p.scheduled_publish_at && p.status === "scheduled");
   document.getElementById("fScheduledAt").value = p ? isoToLocalDatetime(p.scheduled_publish_at) : "";
   toggleScheduleBlock();
