@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notizie / Articoli | Admin IMMONOVA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;background:#f4ecdf;color:#4a3c1d}
+.header{padding:26px 40px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.2);background:#fffaf0}
+.logo{font-size:18px;font-weight:300;letter-spacing:.3em;color:#a67f34;text-decoration:none}
+.logo-sub{font-size:9px;letter-spacing:.14em;color:#8f7643;text-transform:uppercase}
+.header-actions{display:flex;gap:18px;align-items:center}
+.header-actions a{color:#a67f34;text-decoration:none;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.container{max-width:1000px;margin:0 auto;padding:40px 24px 100px}
+.status{margin-bottom:18px;font-size:13px}
+.status.error{color:#a33}
+.status.ok{color:#4a7a3f}
+.panel{background:#fffaf0;border:1px solid rgba(166,127,52,.2);padding:26px;margin-bottom:30px}
+.panel h2{font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;margin-bottom:18px;font-weight:600}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8f7643;margin-bottom:6px}
+.field input[type="text"],.field textarea{width:100%;padding:10px 12px;border:1px solid rgba(166,127,52,.3);background:#fff;font-family:inherit;font-size:14px;color:#4a3c1d}
+.field textarea{min-height:220px;line-height:1.6;resize:vertical}
+.field .hint{font-size:11px;color:#8f7643;margin-top:6px}
+.field-row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:13px}
+.actions{display:flex;gap:12px;margin-top:20px}
+button{padding:11px 24px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:11px;cursor:pointer;font-family:inherit}
+button.secondary{background:transparent;color:#a67f34}
+button.danger{background:transparent;color:#a33;border-color:rgba(170,51,51,.4)}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid rgba(166,127,52,.15);font-size:13px}
+th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643}
+.badge{display:inline-block;padding:3px 9px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;border:1px solid rgba(166,127,52,.3)}
+.badge.published{background:rgba(120,160,90,.15);color:#4a7a3f;border-color:rgba(120,160,90,.4)}
+.badge.draft{background:rgba(166,127,52,.08);color:#8f7643}
+.row-actions{display:flex;gap:10px}
+.row-actions a{color:#a67f34;font-size:11px;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;text-decoration:underline}
+.row-actions a.danger{color:#a33}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="logo">IMMONOVA<div class="logo-sub">Admin</div></a>
+  <div class="header-actions">
+    <a href="dashboard.html">&larr; Dashboard</a>
+  </div>
+</header>
+
+<div class="container">
+  <div id="pageStatus" class="status"></div>
+
+  <div class="panel">
+    <h2 id="formTitle">Nuovo articolo</h2>
+    <input type="hidden" id="editId">
+    <div class="field">
+      <label>Titolo</label>
+      <input type="text" id="fTitle" maxlength="200">
+    </div>
+    <div class="field">
+      <label>Slug (usato nell'URL pubblico: articolo.html?slug=...)</label>
+      <input type="text" id="fSlug" maxlength="120" placeholder="si genera automaticamente dal titolo, modificabile">
+    </div>
+    <div class="field">
+      <label>Riassunto (mostrato nell'elenco pubblico)</label>
+      <textarea id="fExcerpt" style="min-height:70px"></textarea>
+    </div>
+    <div class="field">
+      <label>Testo dell'articolo</label>
+      <textarea id="fBody" placeholder="Un paragrafo per riga vuota tra un blocco e l'altro."></textarea>
+      <div class="hint">Ogni riga vuota separa un nuovo paragrafo nella pagina pubblica. Non serve HTML.</div>
+    </div>
+    <div class="field">
+      <label>Fonti (una per riga, formato: Titolo | URL)</label>
+      <textarea id="fSources" style="min-height:90px" placeholder="Idealista | https://www.idealista.it/..."></textarea>
+    </div>
+    <div class="field checkbox-row">
+      <input type="checkbox" id="fPublished">
+      <label for="fPublished" style="margin:0;text-transform:none;font-size:13px;letter-spacing:0">Pubblicato (visibile sul sito pubblico)</label>
+    </div>
+    <div class="actions">
+      <button id="saveBtn" type="button">Salva</button>
+      <button id="resetBtn" type="button" class="secondary">Nuovo (svuota form)</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Articoli</h2>
+    <table>
+      <thead><tr><th>Titolo</th><th>Stato</th><th>Data</th><th></th></tr></thead>
+      <tbody id="postsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let allPosts = [];
+
+function esc(v){
+  return String(v ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+function setStatus(msg, type){
+  const el = document.getElementById("pageStatus");
+  el.className = "status" + (type ? " " + type : "");
+  el.textContent = msg || "";
+}
+function slugify(s){
+  return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,120) || "articolo";
+}
+function fmtDate(iso){
+  if(!iso) return "-";
+  return new Date(iso).toLocaleDateString("it-IT", { day:"2-digit", month:"short", year:"numeric" });
+}
+
+document.getElementById("fTitle").addEventListener("input", () => {
+  // Autogenera lo slug SOLO se il campo slug non e' stato ancora toccato a mano per questo
+  // articolo (editId vuoto = nuovo articolo, slug ancora coerente col titolo precedente).
+  if(!document.getElementById("editId").value){
+    document.getElementById("fSlug").value = slugify(document.getElementById("fTitle").value);
+  }
+});
+
+function parseSources(raw){
+  return String(raw||"").split("\n").map(l => l.trim()).filter(Boolean).map(line => {
+    const idx = line.indexOf("|");
+    if(idx === -1) return { title: line, url: "" };
+    return { title: line.slice(0, idx).trim(), url: line.slice(idx+1).trim() };
+  });
+}
+function sourcesToText(sources){
+  return (Array.isArray(sources) ? sources : []).map(s => s.title + (s.url ? " | " + s.url : "")).join("\n");
+}
+
+function resetForm(){
+  document.getElementById("editId").value = "";
+  document.getElementById("formTitle").textContent = "Nuovo articolo";
+  document.getElementById("fTitle").value = "";
+  document.getElementById("fSlug").value = "";
+  document.getElementById("fExcerpt").value = "";
+  document.getElementById("fBody").value = "";
+  document.getElementById("fSources").value = "";
+  document.getElementById("fPublished").checked = false;
+}
+document.getElementById("resetBtn").addEventListener("click", resetForm);
+
+function editPost(id){
+  const p = allPosts.find(x => x.id === id);
+  if(!p) return;
+  document.getElementById("editId").value = p.id;
+  document.getElementById("formTitle").textContent = "Modifica: " + p.title;
+  document.getElementById("fTitle").value = p.title || "";
+  document.getElementById("fSlug").value = p.slug || "";
+  document.getElementById("fExcerpt").value = p.excerpt || "";
+  document.getElementById("fBody").value = p.body || "";
+  document.getElementById("fSources").value = sourcesToText(p.sources);
+  document.getElementById("fPublished").checked = !!p.published;
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+async function deletePost(id){
+  if(!confirm("Eliminare definitivamente questo articolo?")) return;
+  const { error } = await client.from("blog_posts").delete().eq("id", id);
+  if(error){ setStatus("Errore eliminazione: " + error.message, "error"); return; }
+  await loadPosts();
+  setStatus("Articolo eliminato.", "ok");
+}
+
+document.getElementById("saveBtn").addEventListener("click", async () => {
+  const id = document.getElementById("editId").value;
+  const title = document.getElementById("fTitle").value.trim();
+  const slug = slugify(document.getElementById("fSlug").value.trim() || title);
+  const excerpt = document.getElementById("fExcerpt").value.trim();
+  const body = document.getElementById("fBody").value.trim();
+  const sources = parseSources(document.getElementById("fSources").value);
+  const published = document.getElementById("fPublished").checked;
+
+  if(!title || !body){
+    setStatus("Titolo e testo dell'articolo sono obbligatori.", "error");
+    return;
+  }
+
+  const existing = allPosts.find(p => p.slug === slug && p.id !== id);
+  if(existing){
+    setStatus("Esiste gia' un articolo con questo slug: \"" + slug + "\". Cambialo.", "error");
+    return;
+  }
+
+  const payload = {
+    title, slug, excerpt: excerpt || null, body, sources,
+    published,
+    published_at: published ? (id ? (allPosts.find(p=>p.id===id)?.published_at || new Date().toISOString()) : new Date().toISOString()) : null,
+    updated_at: new Date().toISOString(),
+  };
+
+  let error;
+  if(id){
+    ({ error } = await client.from("blog_posts").update(payload).eq("id", id));
+  } else {
+    ({ error } = await client.from("blog_posts").insert(payload));
+  }
+  if(error){ setStatus("Errore salvataggio: " + error.message, "error"); return; }
+  setStatus("Articolo salvato.", "ok");
+  resetForm();
+  await loadPosts();
+});
+
+function renderPosts(){
+  const tbody = document.getElementById("postsBody");
+  if(!allPosts.length){ tbody.innerHTML = '<tr><td colspan="4">Nessun articolo ancora.</td></tr>'; return; }
+  tbody.innerHTML = allPosts.map(p => `
+    <tr>
+      <td>${esc(p.title)}</td>
+      <td><span class="badge ${p.published ? "published" : "draft"}">${p.published ? "Pubblicato" : "Bozza"}</span></td>
+      <td>${fmtDate(p.published_at || p.created_at)}</td>
+      <td>
+        <div class="row-actions">
+          <a data-edit="${esc(p.id)}">Modifica</a>
+          ${p.published ? `<a href="../articolo.html?slug=${encodeURIComponent(p.slug)}" target="_blank">Vedi</a>` : ""}
+          <a class="danger" data-del="${esc(p.id)}">Elimina</a>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+  tbody.querySelectorAll("[data-edit]").forEach(el => el.addEventListener("click", () => editPost(el.getAttribute("data-edit"))));
+  tbody.querySelectorAll("[data-del]").forEach(el => el.addEventListener("click", () => deletePost(el.getAttribute("data-del"))));
+}
+
+async function loadPosts(){
+  const { data, error } = await client.from("blog_posts").select("*").order("created_at", { ascending: false });
+  if(error){ setStatus("Errore caricamento articoli: " + error.message, "error"); return; }
+  allPosts = data || [];
+  renderPosts();
+}
+
+async function init(){
+  const { data:{ session } } = await client.auth.getSession();
+  if(!session){ window.location.href = "login.html"; return; }
+  const { data: profile } = await client.from("profiles").select("role").eq("id", session.user.id).single();
+  if(!profile || profile.role !== "admin"){
+    setStatus("Accesso riservato agli admin.", "error");
+    return;
+  }
+  await loadPosts();
+}
+init();
+</script>
+
+</body>
+</html>
