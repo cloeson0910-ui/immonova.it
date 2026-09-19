@@ -240,6 +240,10 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
       <input type="number" id="cPrice" min="0" step="1">
     </div>
     <div class="field">
+      <label>Prezzo manuale (&euro;/notte) &mdash; vince sempre sulla media</label>
+      <input type="number" id="cManualPrice" min="0" step="1" placeholder="lascia vuoto per usare la media">
+    </div>
+    <div class="field">
       <label>Riempimento giu&ndash;set (%)</label>
       <input type="number" id="cOccHigh" min="0" max="100" step="1" value="70">
     </div>
@@ -255,8 +259,36 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
       <label>Cedolare secca (%)</label>
       <input type="number" id="cCedolare" min="0" max="100" step="1" value="21">
     </div>
-    <button class="header-actions primary" id="recalcBtn" type="button" style="padding:10px 22px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:11px;cursor:pointer;font-family:inherit;">Ricalcola</button>
-    <div class="hint">Il prezzo medio si precompila dai comparabili trovati sul web per questa scheda; puoi correggerlo a mano. Il riempimento giu&ndash;set &egrave; l'unico dato di occupazione impostabile: i restanti mesi seguono una curva stagionale stimata (vedi nota nel documento), non un dato ufficiale mensile.</div>
+    <div class="field">
+      <label>% manuale Gennaio&ndash;Maggio</label>
+      <input type="number" id="cPctJanMay" step="1" placeholder="default -10%">
+    </div>
+    <div class="field">
+      <label>% manuale Giugno</label>
+      <input type="number" id="cPctJun" step="1" placeholder="default 0%">
+    </div>
+    <div class="field">
+      <label>% manuale Luglio</label>
+      <input type="number" id="cPctJul" step="1" placeholder="default 0%">
+    </div>
+    <div class="field">
+      <label>% manuale Agosto</label>
+      <input type="number" id="cPctAug" step="1" placeholder="default +20%">
+    </div>
+    <div class="field">
+      <label>% manuale Settimana di Ferragosto</label>
+      <input type="number" id="cPctFerragosto" step="1" placeholder="default +30%">
+    </div>
+    <div class="field">
+      <label>% manuale Settembre</label>
+      <input type="number" id="cPctSep" step="1" placeholder="default +10%">
+    </div>
+    <div class="field">
+      <label>% manuale Ottobre&ndash;Dicembre</label>
+      <input type="number" id="cPctOctDec" step="1" placeholder="default 0% / -10%">
+    </div>
+    <button class="header-actions primary" id="recalcBtn" type="button" style="padding:10px 22px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;text-transform:uppercase;letter-spacing:.1em;font-size:11px;cursor:pointer;font-family:inherit;">Ricalcola e salva</button>
+    <div class="hint">Il prezzo medio si precompila dai comparabili trovati sul web per questa scheda. Se compili "Prezzo manuale" viene usato sempre quello, anche dopo un ricaricamento della pagina. Le caselle "% manuale" per periodo, se compilate, sostituiscono sempre la curva stagionale automatica per quel periodo (anche loro salvate). Il riempimento giu&ndash;set resta l'unico dato di occupazione impostabile: i restanti mesi seguono una curva stagionale stimata (vedi nota nel documento), non un dato ufficiale mensile.</div>
   </div>
 </div>
 
@@ -273,7 +305,7 @@ table.rep-table tr.season td{ background:rgba(166,127,52,.10); }
 <script>
 // Cambia questa stringa ogni volta che questo file viene modificato: serve solo a far
 // riconoscere alla pagina la propria versione (vedi verifyPageIsCurrent piu' sotto).
-const PAGE_BUILD_VERSION = "2026-09-19.05";
+const PAGE_BUILD_VERSION = "2026-09-19.06";
 
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -303,21 +335,63 @@ function generationFolioText(){
 // Agosto e' diviso in due righe per isolare la settimana di Ferragosto (10-17 agosto, 8
 // giorni) dal resto del mese (23 giorni), entrambe con lo stesso riempimento giu-set
 // impostato nel pannello di controllo.
+// "periodKey" raggruppa i mesi nei 7 periodi manuali impostabili dal pannello di controllo
+// (cPctJanMay, cPctJun, cPctJul, cPctAug, cPctFerragosto, cPctSep, cPctOctDec): se per un
+// periodo e' presente una % manuale, questa sostituisce SEMPRE il priceMult di default per
+// tutti i mesi di quel periodo (vedi applyMonthPctOverrides).
 const MONTHS = [
-  {name:"Gennaio", days:31, occ:0.10, priceMult:0.90},
-  {name:"Febbraio", days:28, occ:0.10, priceMult:0.90},
-  {name:"Marzo", days:31, occ:0.20, priceMult:0.90},
-  {name:"Aprile", days:30, occ:0.35, priceMult:0.90},
-  {name:"Maggio", days:31, occ:0.50, priceMult:0.90},
-  {name:"Giugno", days:30, occ:"HIGH", priceMult:1.00},
-  {name:"Luglio", days:31, occ:"HIGH", priceMult:1.00},
-  {name:"Agosto (esclusa settimana Ferragosto)", days:23, occ:"HIGH", priceMult:1.20},
-  {name:"Settimana di Ferragosto (10–17 ago)", days:8, occ:"HIGH", priceMult:1.30},
-  {name:"Settembre", days:30, occ:"HIGH", priceMult:1.10},
-  {name:"Ottobre", days:31, occ:0.40, priceMult:1.00},
-  {name:"Novembre", days:30, occ:0.15, priceMult:0.90},
-  {name:"Dicembre", days:31, occ:0.15, priceMult:0.90},
+  {name:"Gennaio", days:31, occ:0.10, priceMult:0.90, periodKey:"jan_may"},
+  {name:"Febbraio", days:28, occ:0.10, priceMult:0.90, periodKey:"jan_may"},
+  {name:"Marzo", days:31, occ:0.20, priceMult:0.90, periodKey:"jan_may"},
+  {name:"Aprile", days:30, occ:0.35, priceMult:0.90, periodKey:"jan_may"},
+  {name:"Maggio", days:31, occ:0.50, priceMult:0.90, periodKey:"jan_may"},
+  {name:"Giugno", days:30, occ:"HIGH", priceMult:1.00, periodKey:"jun"},
+  {name:"Luglio", days:31, occ:"HIGH", priceMult:1.00, periodKey:"jul"},
+  {name:"Agosto (esclusa settimana Ferragosto)", days:23, occ:"HIGH", priceMult:1.20, periodKey:"aug"},
+  {name:"Settimana di Ferragosto (10–17 ago)", days:8, occ:"HIGH", priceMult:1.30, periodKey:"ferragosto"},
+  {name:"Settembre", days:30, occ:"HIGH", priceMult:1.10, periodKey:"sep"},
+  {name:"Ottobre", days:31, occ:0.40, priceMult:1.00, periodKey:"oct_dec"},
+  {name:"Novembre", days:30, occ:0.15, priceMult:0.90, periodKey:"oct_dec"},
+  {name:"Dicembre", days:31, occ:0.15, priceMult:0.90, periodKey:"oct_dec"},
 ];
+
+const MONTH_PCT_FIELD_IDS = {
+  jan_may:"cPctJanMay", jun:"cPctJun", jul:"cPctJul", aug:"cPctAug",
+  ferragosto:"cPctFerragosto", sep:"cPctSep", oct_dec:"cPctOctDec",
+};
+
+// Legge le 7 caselle "% manuale" dal pannello di controllo. Una casella vuota = nessun
+// override per quel periodo (resta il default). Ritorna solo le chiavi effettivamente
+// compilate, cosi' un oggetto vuoto {} significa "usa sempre la curva automatica".
+function readManualMonthPct(){
+  const out = {};
+  Object.keys(MONTH_PCT_FIELD_IDS).forEach(key => {
+    const el = document.getElementById(MONTH_PCT_FIELD_IDS[key]);
+    const raw = el ? el.value : "";
+    if(raw === "" || raw == null) return;
+    const n = Number(raw);
+    if(Number.isFinite(n)) out[key] = n;
+  });
+  return out;
+}
+
+function applyManualMonthPctToInputs(manualMonthPct){
+  const src = manualMonthPct || {};
+  Object.keys(MONTH_PCT_FIELD_IDS).forEach(key => {
+    const el = document.getElementById(MONTH_PCT_FIELD_IDS[key]);
+    if(!el) return;
+    el.value = (src[key] === undefined || src[key] === null) ? "" : src[key];
+  });
+}
+
+// Se per il periodKey del mese e' presente un override manuale (%), sostituisce SEMPRE il
+// priceMult di default con 1 + override/100 -- coerente con "questi dati, se presenti,
+// vincono sempre sui dati automatici".
+function effectivePriceMult(month, manualMonthPct){
+  const override = manualMonthPct ? manualMonthPct[month.periodKey] : undefined;
+  if(override === undefined || override === null || override === "") return month.priceMult ?? 1;
+  return 1 + (Number(override) / 100);
+}
 
 let analysis = null;
 
@@ -385,7 +459,7 @@ function computeAvgPrice(comparables){
   return prices.reduce((a,b)=>a+b,0) / prices.length;
 }
 
-function buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
+function buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, manualMonthPct){
   const occHigh = occHighPct / 100;
   const feeMin = feeMinPct / 100;
   const feeMax = feeMaxPct / 100;
@@ -393,14 +467,15 @@ function buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
   const rows = MONTHS.map(m => {
     const occ = m.occ === "HIGH" ? occHigh : m.occ;
     const nights = Math.round(m.days * occ);
-    const monthPrice = price * (m.priceMult ?? 1);
+    const priceMult = effectivePriceMult(m, manualMonthPct);
+    const monthPrice = price * priceMult;
     const gross = nights * monthPrice;
     const feeMinEur = gross * feeMin;
     const feeMaxEur = gross * feeMax;
     const cedEur = gross * ced;
     const netMin = gross - feeMaxEur - cedEur; // gestione max -> netto minore
     const netMax = gross - feeMinEur - cedEur; // gestione min -> netto maggiore
-    return { name:m.name, isHigh:m.occ==="HIGH", occPct: Math.round(occ*100), nights, price:monthPrice, priceMult:m.priceMult ?? 1, gross, feeMinEur, feeMaxEur, cedEur, netMin, netMax };
+    return { name:m.name, isHigh:m.occ==="HIGH", occPct: Math.round(occ*100), nights, price:monthPrice, priceMult, gross, feeMinEur, feeMaxEur, cedEur, netMin, netMax };
   });
   const totals = rows.reduce((acc,r) => {
     acc.nights += r.nights; acc.gross += r.gross; acc.feeMinEur += r.feeMinEur;
@@ -410,8 +485,8 @@ function buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
   return { rows, totals };
 }
 
-function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
-  const proj = buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct);
+function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, manualMonthPct){
+  const proj = buildProjection(price, occHighPct, feeMinPct, feeMaxPct, cedolarePct, manualMonthPct);
   const { rows, totals } = proj;
   const location = [a.municipality, a.province].filter(Boolean).join(" (") + (a.province ? ")" : "");
   const features = a.features || {};
@@ -598,27 +673,54 @@ function renderReport(a, price, occHighPct, feeMinPct, feeMaxPct, cedolarePct){
 
 function recalcAndRender(){
   if(!analysis) return;
-  const price = Number(document.getElementById("cPrice").value) || 0;
+  const avgPrice = Number(document.getElementById("cPrice").value) || 0;
+  const manualPriceRaw = document.getElementById("cManualPrice").value;
+  const manualPrice = manualPriceRaw === "" ? 0 : (Number(manualPriceRaw) || 0);
+  // Il prezzo manuale, se compilato, vince SEMPRE sulla media dei comparabili.
+  const price = manualPrice > 0 ? manualPrice : avgPrice;
   const occHigh = Number(document.getElementById("cOccHigh").value) || 0;
   const feeMin = Number(document.getElementById("cFeeMin").value) || 0;
   const feeMax = Number(document.getElementById("cFeeMax").value) || 0;
   const ced = Number(document.getElementById("cCedolare").value) || 0;
+  const manualMonthPct = readManualMonthPct();
   if(price <= 0){
     document.getElementById("pageStatus").className = "status error";
-    document.getElementById("pageStatus").textContent = "Inserisci un prezzo medio a notte maggiore di zero (nessun comparabile trovato su questa scheda).";
+    document.getElementById("pageStatus").textContent = "Inserisci un prezzo medio o un prezzo manuale a notte maggiore di zero (nessun comparabile trovato su questa scheda).";
     document.getElementById("reportBook").innerHTML = "";
     return;
   }
   document.getElementById("pageStatus").textContent = "";
-  renderReport(analysis, price, occHigh, feeMin, feeMax, ced);
+  renderReport(analysis, price, occHigh, feeMin, feeMax, ced, manualMonthPct);
 }
 
-document.getElementById("recalcBtn").addEventListener("click", () => {
+async function saveManualOverrides(){
+  if(!analysis) return;
+  const manualPriceRaw = document.getElementById("cManualPrice").value;
+  const manualPrice = manualPriceRaw === "" ? null : (Number(manualPriceRaw) || null);
+  const manualMonthPct = readManualMonthPct();
+  const { error } = await client.from("short_rent_analyses").update({
+    manual_price_per_night: manualPrice,
+    manual_month_pct: manualMonthPct,
+  }).eq("id", analysis.id);
+  if(error){
+    document.getElementById("pageStatus").className = "status error";
+    document.getElementById("pageStatus").textContent = "Valori ricalcolati ma non salvati: " + error.message;
+    return false;
+  }
+  analysis.manual_price_per_night = manualPrice;
+  analysis.manual_month_pct = manualMonthPct;
+  return true;
+}
+
+document.getElementById("recalcBtn").addEventListener("click", async () => {
   // Cambiando i valori il documento non corrisponde piu' all'ultimo PDF generato: lo stamp
   // di versione va tolto, altrimenti resterebbe visibile un orario di generazione riferito
   // a numeri ormai superati.
   GENERATION_STAMP = null;
   recalcAndRender();
+  // Prezzo manuale e % per periodo si salvano sulla scheda: altrimenti si perderebbero al
+  // primo ricaricamento della pagina, vanificando "vincono sempre sui dati automatici".
+  await saveManualOverrides();
 });
 document.getElementById("printBtn").addEventListener("click", () => window.print());
 
@@ -899,6 +1001,8 @@ async function init(){
   analysis = data;
   const avgPrice = computeAvgPrice(data.comparables);
   document.getElementById("cPrice").value = avgPrice ? Math.round(avgPrice) : "";
+  document.getElementById("cManualPrice").value = (data.manual_price_per_night === null || data.manual_price_per_night === undefined) ? "" : data.manual_price_per_night;
+  applyManualMonthPctToInputs(data.manual_month_pct);
   recalcAndRender();
   if(data.report_share_url) renderLinkRow(data.report_share_url, data.report_link_generated_at);
 }
