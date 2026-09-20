@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMMONOVA | Contabilità</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#7f6430;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.3}
+.header{padding:20px 42px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.14);background:rgba(244,236,223,.72);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10;flex-wrap:wrap;gap:14px}
+.brand{font-size:20px;letter-spacing:.16em;color:#a67f34;font-weight:300;text-decoration:none}
+.back-link{padding:9px 16px;border:1px solid rgba(166,127,52,.28);background:rgba(255,255,255,.26);border-radius:8px;color:#7f6430;text-decoration:none;font-size:12px;letter-spacing:.04em}
+main{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+h1{font-size:26px;font-weight:300;letter-spacing:.04em;color:#5c4a22;margin-bottom:4px}
+.subtitle{font-size:13px;color:#9c8452;margin-bottom:28px}
+.status{min-height:22px;margin:10px 0 18px;font-size:13px}
+.status.error{color:#9c2f2f}
+.status.success{color:#4f7f45}
+.period-bar{display:flex;gap:12px;align-items:center;margin-bottom:22px;flex-wrap:wrap}
+.period-bar label{font-size:12px;color:#8f7643}
+.period-bar select,.period-bar input{padding:8px 10px;border:1px solid rgba(166,127,52,.28);border-radius:6px;background:rgba(255,255,255,.5);color:#5c4a22;font-family:inherit;font-size:13px}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:36px}
+.summary-card{background:rgba(255,255,255,.4);border:1px solid rgba(166,127,52,.18);border-radius:10px;padding:16px 18px}
+.summary-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#a58139;margin-bottom:8px}
+.summary-value{font-size:24px;font-weight:400;color:#5c4a22}
+.summary-value.neg{color:#9c2f2f}
+.summary-value.pos{color:#4f7f45}
+section.block{background:rgba(255,255,255,.32);border:1px solid rgba(166,127,52,.16);border-radius:12px;padding:22px 24px;margin-bottom:26px}
+.block-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.block-title{font-size:16px;letter-spacing:.05em;color:#5c4a22;text-transform:uppercase;font-weight:400}
+.block-hint{font-size:12px;color:#9c8452;margin-top:2px}
+form.inline-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;align-items:end}
+form.inline-form label{display:block;font-size:11px;color:#8f7643;margin-bottom:4px}
+form.inline-form input,form.inline-form select,form.inline-form textarea{width:100%;padding:9px 10px;border:1px solid rgba(166,127,52,.28);border-radius:6px;background:rgba(255,255,255,.55);color:#5c4a22;font-family:inherit;font-size:13px}
+.btn{padding:10px 18px;border-radius:7px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;font-size:12px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;font-family:inherit}
+.btn.secondary{background:rgba(255,255,255,.4);color:#7f6430}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid rgba(166,127,52,.14)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#a58139}
+tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
+.badge{padding:3px 9px;border-radius:20px;font-size:10px;letter-spacing:.04em;text-transform:uppercase}
+.badge.draft{background:rgba(166,127,52,.15);color:#8f7643}
+.badge.sent{background:rgba(60,120,200,.15);color:#2e5c94}
+.badge.delivered{background:rgba(79,127,69,.15);color:#4f7f45}
+.badge.rejected,.badge.error{background:rgba(156,47,47,.15);color:#9c2f2f}
+.badge.received,.badge.processed{background:rgba(79,127,69,.15);color:#4f7f45}
+.del-btn{background:none;border:none;color:#9c2f2f;cursor:pointer;font-size:12px;text-decoration:underline}
+.empty-row td{color:#9c8452;font-style:italic;text-align:center;padding:18px}
+.disclaimer{font-size:11px;color:#9c8452;line-height:1.5;margin-top:10px;font-style:italic}
+.table-wrap{overflow-x:auto}
+@media(max-width:700px){.header{padding:16px 20px}main{padding:22px 16px 60px}}
+</style>
+</head>
+<body>
+<div class="header">
+  <a href="dashboard.html" class="brand">IMMONOVA</a>
+  <a href="dashboard.html" class="back-link">&larr; Torna alla Dashboard</a>
+</div>
+
+<main>
+  <h1>Contabilità</h1>
+  <div class="subtitle">Conto economico, IVA, spese e fatture (SDI) — uso interno.</div>
+  <div class="status" id="pageStatus"></div>
+
+  <div class="period-bar">
+    <label>Periodo</label>
+    <select id="periodMonth"></select>
+    <select id="periodYear"></select>
+    <button class="btn secondary" id="refreshSummaryBtn" type="button">Aggiorna</button>
+  </div>
+
+  <div class="summary-grid" id="summaryGrid">
+    <div class="summary-card"><div class="summary-label">Ricavi (fatture emesse)</div><div class="summary-value" id="sumRevenue">—</div></div>
+    <div class="summary-card"><div class="summary-label">Costi (fatture ricevute + spese)</div><div class="summary-value" id="sumCosts">—</div></div>
+    <div class="summary-card"><div class="summary-label">Utile netto periodo</div><div class="summary-value" id="sumProfit">—</div></div>
+    <div class="summary-card"><div class="summary-label">IVA a debito</div><div class="summary-value" id="sumVatDebit">—</div></div>
+    <div class="summary-card"><div class="summary-label">IVA a credito</div><div class="summary-value" id="sumVatCredit">—</div></div>
+    <div class="summary-card"><div class="summary-label">IVA da versare (saldo)</div><div class="summary-value" id="sumVatBalance">—</div></div>
+  </div>
+
+  <section class="block">
+    <div class="block-head">
+      <div>
+        <div class="block-title">Spese manuali</div>
+        <div class="block-hint">Cartoleria, benzina, utenze e altre spese non fatturate elettronicamente.</div>
+      </div>
+    </div>
+    <form class="inline-form" id="expenseForm">
+      <div><label>Data</label><input type="date" id="expDate" required></div>
+      <div><label>Categoria</label>
+        <select id="expCategory">
+          <option value="carburante">Carburante</option>
+          <option value="cartoleria">Cartoleria/ufficio</option>
+          <option value="utenze">Utenze</option>
+          <option value="marketing">Marketing/pubblicità</option>
+          <option value="software">Software/abbonamenti</option>
+          <option value="viaggi">Viaggi/trasferte</option>
+          <option value="personale">Costo personale</option>
+          <option value="altro">Altro</option>
+        </select>
+      </div>
+      <div><label>Descrizione</label><input type="text" id="expDescription" placeholder="es. Rifornimento auto aziendale"></div>
+      <div><label>Importo lordo (€)</label><input type="number" step="0.01" id="expAmountGross" required></div>
+      <div><label>Aliquota IVA %</label><input type="number" step="0.01" id="expVatRate" value="22"></div>
+      <div><label>Pagamento</label>
+        <select id="expPaymentMethod">
+          <option value="carta">Carta</option>
+          <option value="bonifico">Bonifico</option>
+          <option value="contanti">Contanti</option>
+          <option value="altro">Altro</option>
+        </select>
+      </div>
+      <div><button class="btn" type="submit">Aggiungi spesa</button></div>
+    </form>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Data</th><th>Categoria</th><th>Descrizione</th><th>Netto</th><th>IVA</th><th>Lordo</th><th></th></tr></thead>
+      <tbody id="expensesBody"><tr class="empty-row"><td colspan="7">Caricamento...</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <div>
+        <div class="block-title">Fatture emesse</div>
+        <div class="block-hint">Registrazione manuale. L'invio automatico tramite SDI (via Aruba) sarà attivato quando saranno collegate le credenziali API.</div>
+      </div>
+    </div>
+    <form class="inline-form" id="invoiceIssuedForm">
+      <div><label>Numero fattura</label><input type="text" id="issNumber" required></div>
+      <div><label>Data</label><input type="date" id="issDate" required></div>
+      <div><label>Cliente</label><input type="text" id="issClient" required></div>
+      <div><label>P.IVA/CF cliente</label><input type="text" id="issClientVat"></div>
+      <div><label>Importo netto (€)</label><input type="number" step="0.01" id="issAmountNet" required></div>
+      <div><label>Aliquota IVA %</label><input type="number" step="0.01" id="issVatRate" value="22"></div>
+      <div><label>Descrizione</label><input type="text" id="issDescription"></div>
+      <div><button class="btn" type="submit">Registra fattura</button></div>
+    </form>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Netto</th><th>IVA</th><th>Lordo</th><th>Stato</th><th></th></tr></thead>
+      <tbody id="invoicesIssuedBody"><tr class="empty-row"><td colspan="8">Caricamento...</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <div>
+        <div class="block-title">Fatture ricevute</div>
+        <div class="block-hint">Fatture passive dai fornitori. Registrazione manuale finché non è collegata la ricezione automatica via SDI.</div>
+      </div>
+    </div>
+    <form class="inline-form" id="invoiceReceivedForm">
+      <div><label>Fornitore</label><input type="text" id="recSupplier" required></div>
+      <div><label>P.IVA fornitore</label><input type="text" id="recSupplierVat"></div>
+      <div><label>Numero fattura fornitore</label><input type="text" id="recNumber"></div>
+      <div><label>Data</label><input type="date" id="recDate" required></div>
+      <div><label>Importo netto (€)</label><input type="number" step="0.01" id="recAmountNet" required></div>
+      <div><label>Aliquota IVA %</label><input type="number" step="0.01" id="recVatRate" value="22"></div>
+      <div><label>Categoria</label><input type="text" id="recCategory" placeholder="es. servizi, forniture"></div>
+      <div><button class="btn" type="submit">Registra fattura</button></div>
+    </form>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Fornitore</th><th>Numero</th><th>Data</th><th>Netto</th><th>IVA</th><th>Lordo</th><th>Stato</th><th></th></tr></thead>
+      <tbody id="invoicesReceivedBody"><tr class="empty-row"><td colspan="8">Caricamento...</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+
+  <div class="disclaimer">
+    I calcoli di IVA, contributi e conto economico mostrati in questa pagina sono un supporto operativo interno e non sostituiscono la consulenza di un commercialista: prima di versamenti, dichiarazioni o bilanci ufficiali, fai sempre verificare i numeri da un professionista abilitato.
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const client=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser=null,currentProfile=null,isAdmin=false;
+const pageStatus=document.getElementById("pageStatus");
+
+function setStatus(msg,cls){pageStatus.textContent=msg||"";pageStatus.className="status"+(cls?" "+cls:"")}
+function eur(n){return (Number(n)||0).toLocaleString("it-IT",{style:"currency",currency:"EUR"})}
+
+async function checkAuth(){
+  const {data:{session},error}=await client.auth.getSession();
+  if(error||!session){window.location.href="login.html";return false}
+  currentUser=session.user;
+  return true;
+}
+async function loadProfile(){
+  const {data,error}=await client.from("profiles").select("id,email,full_name,role").eq("id",currentUser.id).single();
+  if(error){console.error(error);return}
+  currentProfile=data;
+  isAdmin=currentProfile?.role==="admin"||currentProfile?.role==="ceo";
+  if(!isAdmin){
+    setStatus("Sezione riservata: non hai i permessi per accedere alla contabilità.","error");
+    document.querySelectorAll("section.block, .period-bar, .summary-grid").forEach(el=>el.style.display="none");
+  }
+}
+
+function populatePeriodSelectors(){
+  const monthSel=document.getElementById("periodMonth");
+  const yearSel=document.getElementById("periodYear");
+  const months=["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  months.forEach((m,i)=>{const o=document.createElement("option");o.value=String(i+1);o.textContent=m;monthSel.appendChild(o)});
+  const now=new Date();
+  monthSel.value=String(now.getMonth()+1);
+  const startYear=now.getFullYear()-3;
+  for(let y=startYear;y<=now.getFullYear()+1;y++){const o=document.createElement("option");o.value=String(y);o.textContent=String(y);if(y===now.getFullYear())o.selected=true;yearSel.appendChild(o)}
+}
+
+function periodRange(){
+  const m=parseInt(document.getElementById("periodMonth").value,10);
+  const y=parseInt(document.getElementById("periodYear").value,10);
+  const start=new Date(Date.UTC(y,m-1,1));
+  const end=new Date(Date.UTC(y,m,1));
+  return {startIso:start.toISOString().slice(0,10), endIso:end.toISOString().slice(0,10)};
+}
+
+let cachedExpenses=[],cachedIssued=[],cachedReceived=[];
+
+async function loadExpenses(){
+  const {startIso,endIso}=periodRange();
+  const {data,error}=await client.from("business_expenses").select("*").gte("expense_date",startIso).lt("expense_date",endIso).order("expense_date",{ascending:false});
+  if(error){setStatus("Errore caricamento spese: "+error.message,"error");return}
+  cachedExpenses=data||[];
+  renderExpenses();
+}
+function renderExpenses(){
+  const tbody=document.getElementById("expensesBody");
+  if(!cachedExpenses.length){tbody.innerHTML='<tr class="empty-row"><td colspan="7">Nessuna spesa nel periodo selezionato.</td></tr>';return}
+  tbody.innerHTML=cachedExpenses.map(e=>`<tr>
+    <td>${new Date(e.expense_date).toLocaleDateString("it-IT")}</td>
+    <td>${escapeHTML(e.category)}</td>
+    <td>${escapeHTML(e.description||"")}</td>
+    <td>${eur(e.amount_net)}</td>
+    <td>${eur(e.vat_amount)}</td>
+    <td>${eur(e.amount_gross)}</td>
+    <td><button class="del-btn" data-id="${e.id}" data-type="expense">Elimina</button></td>
+  </tr>`).join("");
+}
+
+async function loadInvoicesIssued(){
+  const {startIso,endIso}=periodRange();
+  const {data,error}=await client.from("business_invoices_issued").select("*").gte("invoice_date",startIso).lt("invoice_date",endIso).order("invoice_date",{ascending:false});
+  if(error){setStatus("Errore caricamento fatture emesse: "+error.message,"error");return}
+  cachedIssued=data||[];
+  renderInvoicesIssued();
+}
+function renderInvoicesIssued(){
+  const tbody=document.getElementById("invoicesIssuedBody");
+  if(!cachedIssued.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">Nessuna fattura emessa nel periodo selezionato.</td></tr>';return}
+  tbody.innerHTML=cachedIssued.map(inv=>`<tr>
+    <td>${escapeHTML(inv.invoice_number)}</td>
+    <td>${new Date(inv.invoice_date).toLocaleDateString("it-IT")}</td>
+    <td>${escapeHTML(inv.client_name)}</td>
+    <td>${eur(inv.amount_net)}</td>
+    <td>${eur(inv.vat_amount)}</td>
+    <td>${eur(inv.amount_gross)}</td>
+    <td><span class="badge ${escapeHTML(inv.status)}">${escapeHTML(inv.status)}</span></td>
+    <td><button class="del-btn" data-id="${inv.id}" data-type="issued">Elimina</button></td>
+  </tr>`).join("");
+}
+
+async function loadInvoicesReceived(){
+  const {startIso,endIso}=periodRange();
+  const {data,error}=await client.from("business_invoices_received").select("*").gte("invoice_date",startIso).lt("invoice_date",endIso).order("invoice_date",{ascending:false});
+  if(error){setStatus("Errore caricamento fatture ricevute: "+error.message,"error");return}
+  cachedReceived=data||[];
+  renderInvoicesReceived();
+}
+function renderInvoicesReceived(){
+  const tbody=document.getElementById("invoicesReceivedBody");
+  if(!cachedReceived.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">Nessuna fattura ricevuta nel periodo selezionato.</td></tr>';return}
+  tbody.innerHTML=cachedReceived.map(inv=>`<tr>
+    <td>${escapeHTML(inv.supplier_name)}</td>
+    <td>${escapeHTML(inv.supplier_invoice_number||"")}</td>
+    <td>${new Date(inv.invoice_date).toLocaleDateString("it-IT")}</td>
+    <td>${eur(inv.amount_net)}</td>
+    <td>${eur(inv.vat_amount)}</td>
+    <td>${eur(inv.amount_gross)}</td>
+    <td><span class="badge ${escapeHTML(inv.status)}">${escapeHTML(inv.status)}</span></td>
+    <td><button class="del-btn" data-id="${inv.id}" data-type="received">Elimina</button></td>
+  </tr>`).join("");
+}
+
+function escapeHTML(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+function recomputeSummary(){
+  const revenue=cachedIssued.reduce((a,i)=>a+Number(i.amount_net||0),0);
+  const vatDebit=cachedIssued.reduce((a,i)=>a+Number(i.vat_amount||0),0);
+  const costsInvoices=cachedReceived.reduce((a,i)=>a+Number(i.amount_net||0),0);
+  const vatCredit=cachedReceived.reduce((a,i)=>a+Number(i.vat_amount||0),0);
+  const costsExpenses=cachedExpenses.reduce((a,e)=>a+Number(e.amount_net||0),0);
+  const vatCreditExpenses=cachedExpenses.reduce((a,e)=>a+Number(e.vat_amount||0),0);
+  const totalCosts=costsInvoices+costsExpenses;
+  const totalVatCredit=vatCredit+vatCreditExpenses;
+  const profit=revenue-totalCosts;
+  const vatBalance=vatDebit-totalVatCredit;
+
+  document.getElementById("sumRevenue").textContent=eur(revenue);
+  document.getElementById("sumCosts").textContent=eur(totalCosts);
+  const profitEl=document.getElementById("sumProfit");
+  profitEl.textContent=eur(profit);
+  profitEl.className="summary-value "+(profit>=0?"pos":"neg");
+  document.getElementById("sumVatDebit").textContent=eur(vatDebit);
+  document.getElementById("sumVatCredit").textContent=eur(totalVatCredit);
+  const balEl=document.getElementById("sumVatBalance");
+  balEl.textContent=eur(vatBalance);
+  balEl.className="summary-value "+(vatBalance>=0?"neg":"pos");
+}
+
+async function refreshAll(){
+  setStatus("Aggiornamento in corso...","");
+  await Promise.all([loadExpenses(),loadInvoicesIssued(),loadInvoicesReceived()]);
+  recomputeSummary();
+  setStatus("Dati aggiornati.","success");
+  setTimeout(()=>setStatus(""),2000);
+}
+
+document.getElementById("expenseForm").addEventListener("submit",async(e)=>{
+  e.preventDefault();
+  const payload={
+    expense_date:document.getElementById("expDate").value,
+    category:document.getElementById("expCategory").value,
+    description:document.getElementById("expDescription").value||null,
+    amount_gross:parseFloat(document.getElementById("expAmountGross").value),
+    vat_rate:parseFloat(document.getElementById("expVatRate").value)||0,
+    payment_method:document.getElementById("expPaymentMethod").value,
+    created_by:currentUser.id
+  };
+  const {error}=await client.from("business_expenses").insert(payload);
+  if(error){setStatus("Errore salvataggio spesa: "+error.message,"error");return}
+  e.target.reset();
+  document.getElementById("expVatRate").value="22";
+  await refreshAll();
+});
+
+document.getElementById("invoiceIssuedForm").addEventListener("submit",async(e)=>{
+  e.preventDefault();
+  const net=parseFloat(document.getElementById("issAmountNet").value);
+  const vatRate=parseFloat(document.getElementById("issVatRate").value)||0;
+  const vatAmount=Math.round(net*vatRate)/100;
+  const payload={
+    invoice_number:document.getElementById("issNumber").value,
+    invoice_date:document.getElementById("issDate").value,
+    client_name:document.getElementById("issClient").value,
+    client_vat:document.getElementById("issClientVat").value||null,
+    description:document.getElementById("issDescription").value||null,
+    amount_net:net,
+    vat_rate:vatRate,
+    vat_amount:vatAmount,
+    amount_gross:Math.round((net+vatAmount)*100)/100,
+    status:"draft",
+    created_by:currentUser.id
+  };
+  const {error}=await client.from("business_invoices_issued").insert(payload);
+  if(error){setStatus("Errore salvataggio fattura: "+error.message,"error");return}
+  e.target.reset();
+  document.getElementById("issVatRate").value="22";
+  await refreshAll();
+});
+
+document.getElementById("invoiceReceivedForm").addEventListener("submit",async(e)=>{
+  e.preventDefault();
+  const net=parseFloat(document.getElementById("recAmountNet").value);
+  const vatRate=parseFloat(document.getElementById("recVatRate").value)||0;
+  const vatAmount=Math.round(net*vatRate)/100;
+  const payload={
+    supplier_name:document.getElementById("recSupplier").value,
+    supplier_vat:document.getElementById("recSupplierVat").value||null,
+    supplier_invoice_number:document.getElementById("recNumber").value||null,
+    invoice_date:document.getElementById("recDate").value,
+    category:document.getElementById("recCategory").value||null,
+    amount_net:net,
+    vat_rate:vatRate,
+    vat_amount:vatAmount,
+    amount_gross:Math.round((net+vatAmount)*100)/100,
+    status:"received"
+  };
+  const {error}=await client.from("business_invoices_received").insert(payload);
+  if(error){setStatus("Errore salvataggio fattura: "+error.message,"error");return}
+  e.target.reset();
+  document.getElementById("recVatRate").value="22";
+  await refreshAll();
+});
+
+document.addEventListener("click",async(e)=>{
+  const btn=e.target.closest(".del-btn");
+  if(!btn) return;
+  const id=btn.dataset.id, type=btn.dataset.type;
+  const table=type==="expense"?"business_expenses":type==="issued"?"business_invoices_issued":"business_invoices_received";
+  if(!window.confirm("Eliminare questa riga? L'operazione non è reversibile.")) return;
+  const {error}=await client.from(table).delete().eq("id",id);
+  if(error){setStatus("Errore eliminazione: "+error.message,"error");return}
+  await refreshAll();
+});
+
+document.getElementById("refreshSummaryBtn").addEventListener("click",refreshAll);
+document.getElementById("periodMonth").addEventListener("change",refreshAll);
+document.getElementById("periodYear").addEventListener("change",refreshAll);
+
+(async function init(){
+  populatePeriodSelectors();
+  const ok=await checkAuth();
+  if(!ok) return;
+  await loadProfile();
+  if(isAdmin) await refreshAll();
+})();
+</script>
+</body>
+</html>
