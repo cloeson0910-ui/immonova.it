@@ -1097,21 +1097,32 @@ async function checkNewReceivedInvoicesSilently(){
       if(error){ console.error("[login] errore import fattura ricevuta",error); continue; }
       if(upserted && upserted.length) imported++;
     }
-    if(imported>0){
-      document.getElementById("newReceivedInvoicesToastMsg").textContent=
-        imported===1 ? "È arrivata 1 nuova fattura ricevuta via SDI." : ("Sono arrivate "+imported+" nuove fatture ricevute via SDI.");
-      document.getElementById("newReceivedInvoicesToast").style.display="block";
-    }
+    if(imported>0) showNewReceivedInvoicesToast(imported);
   }catch(e){
     console.warn("[login] controllo automatico fatture ricevute fallito (silenzioso):",e);
   }
 }
-(function bindNewReceivedInvoicesToast(){
-  const closeBtn=document.getElementById("newReceivedInvoicesToastClose");
-  const goBtn=document.getElementById("newReceivedInvoicesToastGo");
-  if(closeBtn) closeBtn.addEventListener("click",()=>{ document.getElementById("newReceivedInvoicesToast").style.display="none"; });
-  if(goBtn) goBtn.addEventListener("click",()=>{ window.location.href="contabilita.html#receivedInvoicesSection"; });
-})();
+/* STESSO IDENTICO BUG (e stessa correzione) già documentato sopra per #incompleteOverlay: il
+   markup del toast (#newReceivedInvoicesToast) sta subito PRIMA di </body>, cioè DOPO questo
+   <script> — agganciare i listener a livello di script, eseguito subito durante il parsing,
+   trova sempre null perché l'elemento non esiste ancora nel DOM in quel momento. "Vai alla
+   sezione" e "Chiudi" restavano quindi silenziosamente senza handler. Fix: agganciare i
+   listener dentro la funzione che mostra il toast, la prima volta che viene chiamata. */
+var newReceivedInvoicesToastBound = false;
+function showNewReceivedInvoicesToast(count){
+  var toast=document.getElementById("newReceivedInvoicesToast");
+  if(!toast) return;
+  if(!newReceivedInvoicesToastBound){
+    newReceivedInvoicesToastBound = true;
+    var closeBtn=document.getElementById("newReceivedInvoicesToastClose");
+    var goBtn=document.getElementById("newReceivedInvoicesToastGo");
+    if(closeBtn) closeBtn.addEventListener("click",function(){ toast.style.display="none"; });
+    if(goBtn) goBtn.addEventListener("click",function(){ window.location.href="contabilita.html#receivedInvoicesSection"; });
+  }
+  document.getElementById("newReceivedInvoicesToastMsg").textContent=
+    count===1 ? "È arrivata 1 nuova fattura ricevuta via SDI." : ("Sono arrivate "+count+" nuove fatture ricevute via SDI.");
+  toast.style.display="block";
+}
 
 (async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadCollaborators();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);await loadIncompleteInvestorsPopup();setBoot("","");if(isAdmin){ checkNewReceivedInvoicesSilently(); }}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
 </script>
