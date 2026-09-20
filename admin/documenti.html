@@ -899,50 +899,220 @@ function openNda(existing){
 }
 document.getElementById("openNdaBtn").addEventListener("click", function(){ if(selectedClient) openNda(); });
 
+/* ---- Incarico di mediazione immobiliare (v2) ----
+   Riscritto per ricalcare, nella sostanza, il modello professionale standard di settore
+   ("Incarico mediatorio a promuovere la vendita") fornito dall'utente: qualità del Venditore,
+   dati anagrafici estesi, descrizione completa dell'immobile, dichiarazioni del Venditore
+   (provenienza, conformità edilizia/urbanistica, agibilità, planimetria, impianti,
+   certificazione energetica, gravami/ipoteche), visite e consegna chiavi, prezzo e modalità di
+   pagamento, esclusiva, proposta di acquisto/preliminare, provvigione + richiamo all'art. 1755
+   c.c., durata/rinnovo, corrispettivo per mancata accettazione di proposta conforme, penali,
+   comunicazioni, clausole aggiuntive, e approvazione specifica ex artt. 1341-1342 c.c. delle
+   clausole vessatorie (esclusiva, irrevocabilità/rinnovo tacito, penali) -- in precedenza il
+   generatore produceva solo un documento sintetico su 4 punti, senza alcun valore comparabile
+   al modello realmente usato in agenzia. */
+var INC_FIELD_IDS = ["incQualita","incQualitaRappresentanza","incQualitaSocieta","incQualitaAltro",
+  "incNatoA","incNatoIl","incRilasciatoDaComune",
+  "incComune","incVia","incCivico","incDestinazione","incComposizione","incPiano","incInterno","incAccessori","incDatiCatastali",
+  "incTipoProprieta","incTipoProprietaAltro","incStato","incCanoneAnnuo","incScadenzaLocazione","incConsegnaContrattoEntro",
+  "incProvenienza","incProvenienzaAltro","incPienaProprieta","incPienaProprietaAltro","incConformeEdilizio","incAgibilita","incPlanimetriaCorrisponde","incImpiantiConformi",
+  "incCertEnergetica","incClasseEnergetica","incIpe","incGravami","incIpotecaBanca","incIpotecaResiduo","incImpostePagate","incControversie",
+  "incGiorniVisite","incOrariVisite","incConsegnaChiavi",
+  "incPrezzo","incModalitaPagamento","incGiorniRogito",
+  "incEsclusiva","incProvvigione","incPenale",
+  "incScadenzaIncarico","incRinnovo","incNote"];
+/* Costruisce l'oggetto "details" salvato in DB a partire dagli INC_FIELD_IDS sopra, usato sia
+   dal refresh() dell'anteprima (vedi openIncarico) sia dal salvataggio (vedi genSaveBtn) --
+   cosi' i due punti restano sempre sincronizzati anche se in futuro si aggiunge un campo. */
+function incCollectDetails(){
+  var out = { opportunity_id: selectedOpportunity ? selectedOpportunity.id : null };
+  INC_FIELD_IDS.forEach(function(id){
+    var el = document.getElementById(id);
+    var key = id.replace(/^inc/, "");
+    key = key.charAt(0).toLowerCase() + key.slice(1);
+    out[key] = el ? (el.value || "").trim() || null : null;
+  });
+  return out;
+}
+function incSelect(id, options, current){
+  return '<select id="' + id + '">' + options.map(function(o){
+    return '<option value="' + o.v + '"' + (o.v === current ? " selected" : "") + '>' + o.l + '</option>';
+  }).join("") + '</select>';
+}
+function incQualitaText(f){
+  if(f.qualita === "rappresentante"){
+    return ', in qualità di rappresentante in forza di ' + (f.qualitaRappresentanza || "procura/mandato") + ' de' + (f.qualitaSocieta ? 'lla società/del Sig. ' + escapeHTML(f.qualitaSocieta) : 'l proprietario') + ', proprietario dell\'immobile oggetto del presente incarico';
+  }
+  if(f.qualita === "altro"){
+    return ', in qualità di ' + escapeHTML(f.qualitaAltro || "soggetto interessato");
+  }
+  return ', in qualità di proprietario dell\'immobile oggetto del presente incarico';
+}
 function incaricoBodyHTML(f){
-  var esclusivaText = f.esclusiva === "si" ? "in esclusiva" : "senza vincolo di esclusiva";
-  return '<p>Con il presente atto, <strong>' + escapeHTML(fullName(selectedClient)) + '</strong>' + clientLegalIdentityHTML() + ' (di seguito "il Proponente"), conferisce a <strong>IMMONOVA S.r.l.</strong> incarico di mediazione immobiliare ' + esclusivaText + ' per la vendita dell\'immobile di seguito descritto.</p>'
-    + '<h4>1. Immobile oggetto dell\'incarico</h4><p>' + escapeHTML(f.indirizzo || "—") + (f.categoria ? " — " + escapeHTML(f.categoria) : "") + '</p>'
-    + '<h4>2. Prezzo richiesto</h4><p>€ ' + (f.prezzo ? Number(f.prezzo).toLocaleString("it-IT") : "da definire") + '</p>'
-    + '<h4>3. Durata dell\'incarico</h4><p>Il presente incarico ha durata di ' + escapeHTML(f.durata || "6") + ' mesi dalla data di sottoscrizione, con rinnovo tacito salvo disdetta scritta di una delle parti con almeno 15 giorni di preavviso.</p>'
-    + '<h4>4. Provvigione</h4><p>In caso di conclusione dell\'affare per effetto dell\'attività di mediazione di IMMONOVA, è dovuta una provvigione pari al ' + escapeHTML(f.provvigione || "3") + '% del prezzo di vendita definitivo, a carico del Proponente, da corrispondersi alla stipula del contratto preliminare o definitivo.</p>'
-    + '<h4>5. Obblighi del Proponente</h4><p>Il Proponente dichiara la piena e libera disponibilità dell\'immobile e si impegna a comunicare tempestivamente a IMMONOVA eventuali trattative parallele o offerte ricevute autonomamente durante la vigenza del presente incarico.</p>'
-    + (f.note ? '<h4>6. Note aggiuntive</h4><p>' + escapeHTML(f.note) + '</p>' : "");
+  var esclusivaSi = f.esclusiva === "si";
+  var natoText = (f.natoA || f.natoIl) ? (', nato/a a ' + escapeHTML(f.natoA || "—") + ' il ' + escapeHTML(f.natoIl || "—")) : "";
+  var rilascioText = f.rilasciatoDaComune ? (', rilasciata dal Comune di ' + escapeHTML(f.rilasciatoDaComune)) : "";
+
+  var tipoProprietaLabel = f.tipoProprieta === "nuda" ? "della nuda proprietà" : f.tipoProprieta === "altro" ? (escapeHTML(f.tipoProprietaAltro || "altro diritto")) : "della piena proprietà";
+  var statoText = f.stato === "occupato_proprietario" ? "occupato dal Venditore e libero al rogito"
+    : f.stato === "locato" ? ("locato" + (f.canoneAnnuo ? (" al canone annuo attuale di € " + Number(f.canoneAnnuo).toLocaleString("it-IT")) : "") + (f.scadenzaLocazione ? (", con contratto scadente il " + new Date(f.scadenzaLocazione).toLocaleDateString("it-IT")) : "") + (f.consegnaContrattoEntro ? ("; il Venditore si impegna a consegnare copia del contratto di locazione entro il " + new Date(f.consegnaContrattoEntro).toLocaleDateString("it-IT")) : ""))
+    : "libero";
+
+  var provenienzaLabel = { compravendita:"compravendita", successione:"successione", donazione:"donazione" }[f.provenienza] || escapeHTML(f.provenienzaAltro || "altro titolo");
+  var pienaProprietaText = f.pienaProprieta === "altro" ? escapeHTML(f.pienaProprietaAltro || "altro regime di proprietà") : "di sua piena proprietà";
+  var edilizioText = f.conformeEdilizio === "no" ? "NON è conforme" : "è conforme";
+  var agibilitaText = f.agibilita === "no" ? "NON è dotato" : "è dotato";
+  var planimetriaText = f.planimetriaCorrisponde === "no" ? "NON corrisponde esattamente" : "corrisponde";
+  var impiantiText = f.impiantiConformi === "no" ? "non conformi" : "conformi";
+  var certEnergeticaText = f.certEnergetica === "posseduta"
+    ? ("dotato di certificazione energetica classe " + escapeHTML(f.classeEnergetica || "—") + (f.ipe ? (", IPE " + escapeHTML(f.ipe)) : ""))
+    : f.certEnergetica === "non_soggetto"
+      ? "non dotato di certificazione energetica, in quanto non soggetto all'obbligo ai sensi della vigente normativa"
+      : "non dotato di certificazione energetica, che il Venditore si impegna a fornire in conformità alla vigente normativa";
+  var gravamiText = f.gravami === "ipoteca"
+    ? ("gravato da ipoteca iscritta a garanzia di mutuo presso " + escapeHTML(f.ipotecaBanca || "istituto bancario") + " per residui € " + (f.ipotecaResiduo ? Number(f.ipotecaResiduo).toLocaleString("it-IT") : "—") + " alla data odierna; il Venditore si impegna ad estinguere il debito e ad espletare ogni formalità necessaria alla cancellazione dell'ipoteca entro l'atto notarile o contestualmente allo stesso")
+    : "libero da iscrizioni, trascrizioni pregiudizievoli, pesi, oneri e servitù attive e passive";
+  var impostePagateText = f.impostePagate === "no" ? "NON ha regolarmente pagato" : "ha regolarmente pagato";
+  var controversieText = f.controversie === "si" ? "vi sono controversie relative all'Immobile, come specificato nelle note aggiuntive" : "non vi sono controversie relative all'Immobile";
+  var chiaviText = f.consegnaChiavi === "si" ? "consegna le chiavi dell'Immobile all'Agente, manlevandolo da ogni responsabilità in ordine alla loro custodia" : "non consegna le chiavi dell'Immobile";
+
+  var rinnovoText = f.rinnovo === "rinnovo_con_esclusiva" ? "si intenderà tacitamente rinnovato, con esclusiva, per un pari periodo di tempo, e per una sola volta, salvo disdetta tramite lettera raccomandata A/R (o PEC) che dovrà pervenire all'Agente almeno 20 giorni prima della naturale scadenza"
+    : f.rinnovo === "rinnovo_senza_esclusiva" ? "si intenderà tacitamente rinnovato, senza esclusiva, per un pari periodo di tempo, e per una sola volta, salvo disdetta tramite lettera raccomandata A/R (o PEC) che dovrà pervenire all'Agente almeno 20 giorni prima della naturale scadenza"
+    : "si intenderà cessato a tutti gli effetti";
+
+  var html = '<p>Il sottoscritto <strong>' + escapeHTML(fullName(selectedClient)) + '</strong>' + natoText + clientLegalIdentityHTML() + rilascioText + incQualitaText(f) + ' (in seguito "il Venditore"), che si impegna a fornire tutta la documentazione necessaria e idonea al trasferimento dell\'immobile, conferisce a <strong>IMMONOVA S.r.l.</strong> (in seguito "l\'Agente"), con facoltà di avvalersi della submediazione e/o collaborazione di mediatori, società di mediazione e/o consulenti con i quali riterrà più opportuno collaborare, senza oneri aggiuntivi a carico del Venditore, INCARICO DI MEDIAZIONE per promuovere la vendita ' + tipoProprietaLabel + ' dell\'immobile sito nel Comune di ' + escapeHTML(f.comune || "—") + ', Via ' + escapeHTML(f.via || "—") + ' n. ' + escapeHTML(f.civico || "—") + ', destinazione d\'uso ' + escapeHTML(f.destinazione || "—") + (f.composizione ? (', composto da ' + escapeHTML(f.composizione)) : "") + (f.piano ? (', piano ' + escapeHTML(f.piano)) : "") + (f.interno ? (' interno ' + escapeHTML(f.interno)) : "") + (f.accessori ? (', accessori ' + escapeHTML(f.accessori)) : "") + (f.datiCatastali ? ('; dati catastali: ' + escapeHTML(f.datiCatastali)) : "") + ' (in seguito, "l\'Immobile"), attualmente ' + statoText + '.</p>'
+
+    + '<h4>1. Dichiarazioni del Venditore</h4>'
+    + '<p>Il Venditore dichiara che l\'Immobile: è pervenuto allo stesso per ' + provenienzaLabel + '; è ' + pienaProprietaText + '; ' + edilizioText + ' alle norme edilizie ed urbanistiche e ' + agibilitaText + ' di agibilità; la planimetria depositata in catasto ' + planimetriaText + ' esattamente allo stato di fatto; è dotato di impianti ' + impiantiText + ' alle normative vigenti; è ' + certEnergeticaText + '; è ' + gravamiText + '.</p>'
+    + '<p>Il Venditore dichiara inoltre che farà avere all\'acquirente, al momento del rogito, attestazione da parte dell\'amministrazione del condominio in ordine all\'assolvimento degli oneri condominiali in tale data; che ' + impostePagateText + ' le imposte dirette e/o indirette dovute con riferimento all\'Immobile; che ' + controversieText + '.</p>'
+    + '<p>Il Venditore si impegna a consentire le visite presso l\'Immobile nei seguenti giorni: ' + escapeHTML(f.giorniVisite || "da concordare") + ', orari: ' + escapeHTML(f.orariVisite || "da concordare") + '. A tale scopo, il Venditore ' + chiaviText + '.</p>'
+
+    + '<h4>2. Prezzo di vendita richiesto, modalità di pagamento e data del rogito</h4>'
+    + '<p>Prezzo di vendita richiesto dal Venditore: € ' + (f.prezzo ? Number(f.prezzo).toLocaleString("it-IT") : "da definire") + ', ritenuto dallo stesso congruo anche in considerazione dei valori di mercato. Modalità di pagamento: ' + escapeHTML(f.modalitaPagamento || "da definire tra le parti") + '. Il saldo del prezzo dovrà essere liquidato all\'atto notarile, da stipularsi entro ' + escapeHTML(f.giorniRogito || "60") + ' giorni dalla comunicazione dell\'accettazione della proposta di acquisto da parte del Venditore.</p>'
+
+    + '<h4>3. Esclusiva</h4>'
+    + (esclusivaSi
+        ? '<p>Il Venditore conferisce il presente incarico <strong>con esclusiva</strong>: durante il periodo di validità del presente incarico, il Venditore non potrà conferire a soggetti terzi l\'incarico di promuovere la vendita dell\'Immobile né potrà addivenire alla vendita diretta dello stesso. L\'Agente si impegna a: esporre in loco cartellonistica pubblicitaria; promuovere l\'Immobile tramite inserzioni su riviste di settore, quotidiani e stampa in genere; inserire i dati dell\'Immobile sul sito internet istituzionale con pubblicazione delle foto, nonché eventualmente su altri portali specializzati, con diffusione anche tramite MLS (Multiple Listing Service); prestare assistenza sino all\'atto notarile.</p>'
+        : '<p>Il Venditore conferisce il presente incarico <strong>senza esclusiva</strong>. L\'Agente si impegna a fornire i seguenti servizi: ricerca/inserimento dell\'Immobile nel proprio database; riscontro con l\'archivio richieste clienti; accompagnamento dei clienti interessati a visionare l\'Immobile.</p>')
+    + '<p>In entrambi i casi il Venditore, con la sottoscrizione del presente incarico, presta il proprio consenso allo svolgimento delle attività pubblicitarie ritenute dall\'Agente più idonee ed all\'uso delle foto dell\'Immobile a fini promozionali. Il Venditore prende atto che, in mancanza di produzione della certificazione energetica, l\'Agente non potrà pubblicizzare la vendita dell\'Immobile.</p>'
+
+    + '<h4>4. Proposta di acquisto, contratto preliminare e scrittura ripetitiva dettagliata</h4>'
+    + '<p>L\'Agente farà sottoscrivere agli aspiranti acquirenti una proposta di acquisto, con l\'incarico di consegnarla al Venditore ad avvenuta conoscenza, da parte del proponente, dell\'accettazione della proposta d\'acquisto, ovvero di restituirla al proponente in caso di mancata accettazione da parte del Venditore. Sarà facoltà delle parti sottoscrivere, successivamente alla conclusione del contratto preliminare, una scrittura ripetitiva del medesimo, al fine di aggiungervi eventuali elementi accessori non disciplinati nello stesso.</p>'
+
+    + '<h4>5. Corrispettivi a carico del Venditore</h4>'
+    + '<p>Il Venditore riconosce maturata e si impegna a versare all\'Agente la provvigione del ' + escapeHTML(f.provvigione || "3") + '% + IVA sul prezzo di vendita, alla conclusione del contratto preliminare avvenuta per effetto della conoscenza da parte del proponente dell\'accettazione della proposta di acquisto. Qualora la vendita venga effettuata dal Venditore entro 12 mesi dalla scadenza dell\'incarico o del suo rinnovo, a soggetti in precedenza segnalati dall\'Agente o che abbiano visitato l\'Immobile accompagnati dall\'Agente durante il periodo di validità dello stesso, sarà dovuto al medesimo Agente, ai sensi dell\'art. 1755 cod. civ., un importo pari alla provvigione sopra indicata calcolata sul prezzo di vendita, riconoscendo il Venditore la dipendenza di tale vendita dall\'attività mediatoria svolta dall\'Agente.</p>'
+
+    + '<h4>6. Durata dell\'incarico e rinnovo</h4>'
+    + '<p>Il presente incarico è irrevocabile e ha durata sino al ' + (f.scadenzaIncarico ? new Date(f.scadenzaIncarico).toLocaleDateString("it-IT") : "—") + ' compreso, dopodiché ' + rinnovoText + '.</p>'
+
+    + '<h4>7. Corrispettivo per la mancata accettazione di proposta conforme</h4>'
+    + '<p>Il Venditore dichiara essere di suo interesse che l\'Agente raccolga proposte d\'acquisto alle condizioni contenute nel presente incarico. Qualora il Venditore non intendesse accettare una proposta di acquisto conforme all\'incarico, sarà tenuto a versare all\'Agente un corrispettivo pari alla percentuale indicata all\'art. 5 calcolata sul prezzo di cui all\'art. 2, quale remunerazione dell\'attività svolta per il reperimento della proposta d\'acquisto alle condizioni contenute nel presente incarico.</p>'
+
+    + '<h4>8. Penali a carico del Venditore</h4>'
+    + '<p>È dovuta all\'Agente una penale pari al ' + escapeHTML(f.penale || "0") + '% del prezzo di cui all\'art. 2 qualora il Venditore violi l\'esclusiva scelta ai sensi dell\'art. 3, comunichi all\'Agente informazioni errate o carenti che possano pregiudicare l\'espletamento dell\'attività mediatoria (salvo il maggior danno), impedisca ripetutamente all\'Agente di far visitare l\'Immobile ai propri clienti, o revochi l\'incarico prima della scadenza senza giustificato motivo.</p>'
+
+    + '<h4>9. Comunicazioni</h4>'
+    + '<p>Ogni comunicazione relativa al presente incarico dovrà essere inviata al Venditore all\'indirizzo sopra indicato, presso il quale elegge domicilio ad ogni effetto.</p>'
+
+    + (f.note ? ('<h4>10. Clausole aggiuntive</h4><p>' + escapeHTML(f.note) + '</p>') : "")
+
+    + '<p style="margin-top:20px;font-size:12px">Ai sensi degli articoli 1341-1342 Cod. Civ., il Venditore approva specificamente, con la sottoscrizione in calce, le clausole: n. 3 (esclusiva' + (esclusivaSi ? '' : ', ove conferita') + '); n. 6 (irrevocabilità e rinnovo tacito); n. 8 (penali per violazione esclusiva, errate informazioni fornite, impedimento delle visite o revoca incarico prima della scadenza); n. 7 (corrispettivo per mancata accettazione di proposta conforme).</p>';
+
+  return html;
 }
 
 function openIncarico(existing){
   currentGenType = "incarico";
   editingDocId = existing ? existing.id : null;
   var d = (existing && existing.details) || {};
+  var defaultScadenza = d.scadenzaIncarico || new Date(Date.now() + 180*24*3600*1000).toISOString().slice(0,10);
+
+  function sect(title){ return '<div style="grid-column:1/-1;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a67f34;font-weight:600;margin:14px 0 2px;border-top:1px solid rgba(166,127,52,.18);padding-top:12px">' + title + '</div>'; }
+  function txt(id, label, value, placeholder, type){ return '<div class="field"><label>' + label + '</label><input type="' + (type||"text") + '" id="' + id + '" value="' + escapeHTMLAttr(value) + '"' + (placeholder ? (' placeholder="' + escapeHTMLAttr(placeholder) + '"') : "") + '></div>'; }
+
   genFormFields.innerHTML =
     '<div class="gen-form-fields"><div class="grid2">' +
-    '<div class="field"><label>Indirizzo immobile</label><input type="text" id="incIndirizzo" value="' + escapeHTMLAttr(d.indirizzo) + '"></div>' +
-    '<div class="field"><label>Categoria</label><input type="text" id="incCategoria" value="' + escapeHTMLAttr(d.categoria) + '" placeholder="Es. Appartamento, Villa…"></div>' +
-    '<div class="field"><label>Prezzo richiesto (€)</label><input type="number" id="incPrezzo" min="0" value="' + escapeHTMLAttr(d.prezzo) + '"></div>' +
-    '<div class="field"><label>Esclusiva</label><select id="incEsclusiva"><option value="si"' + (d.esclusiva!=="no"?" selected":"") + '>Sì, in esclusiva</option><option value="no"' + (d.esclusiva==="no"?" selected":"") + '>No, senza esclusiva</option></select></div>' +
-    '<div class="field"><label>Durata (mesi)</label><input type="number" id="incDurata" value="' + escapeHTMLAttr(d.durata || "6") + '" min="1"></div>' +
-    '<div class="field"><label>Provvigione (%)</label><input type="number" id="incProvvigione" value="' + escapeHTMLAttr(d.provvigione || "3") + '" step="0.1" min="0"></div>' +
+    sect("Qualità del Venditore") +
+    '<div class="field"><label>Qualità</label>' + incSelect("incQualita", [{v:"proprietario",l:"Proprietario dell'immobile"},{v:"rappresentante",l:"Rappresentante (procura/mandato)"},{v:"altro",l:"Altro"}], d.qualita || "proprietario") + '</div>' +
+    txt("incQualitaRappresentanza", "In forza di (se rappresentante)", d.qualitaRappresentanza, "Es. procura notarile del ...") +
+    txt("incQualitaSocieta", "Società/Sig. rappresentato (se rappresentante)", d.qualitaSocieta) +
+    txt("incQualitaAltro", "Specifica (se \"Altro\")", d.qualitaAltro) +
+
+    sect("Dati anagrafici del Venditore (integrano la scheda contatto)") +
+    txt("incNatoA", "Nato/a a", d.natoA) +
+    txt("incNatoIl", "Nato/a il", d.natoIl, "", "date") +
+    txt("incRilasciatoDaComune", "Documento d'identità rilasciato dal Comune di", d.rilasciatoDaComune) +
+
+    sect("Immobile") +
+    txt("incComune", "Comune", d.comune) +
+    txt("incVia", "Via/Piazza", d.via) +
+    txt("incCivico", "N. civico", d.civico) +
+    txt("incDestinazione", "Destinazione d'uso", d.destinazione, "Es. Abitativo, Commerciale…") +
+    txt("incComposizione", "Composto da", d.composizione, "Es. ingresso, soggiorno, 2 camere, cucina, bagno") +
+    txt("incPiano", "Piano", d.piano) +
+    txt("incInterno", "Interno", d.interno) +
+    txt("incAccessori", "Accessori", d.accessori, "Es. cantina, posto auto") +
+    txt("incDatiCatastali", "Dati catastali", d.datiCatastali, "Foglio, particella, subalterno, categoria") +
+    '<div class="field"><label>Tipo di diritto in vendita</label>' + incSelect("incTipoProprieta", [{v:"piena",l:"Piena proprietà"},{v:"nuda",l:"Nuda proprietà"},{v:"altro",l:"Altro"}], d.tipoProprieta || "piena") + '</div>' +
+    txt("incTipoProprietaAltro", "Specifica (se \"Altro\")", d.tipoProprietaAltro) +
+    '<div class="field"><label>Stato dell\'immobile</label>' + incSelect("incStato", [{v:"libero",l:"Libero"},{v:"occupato_proprietario",l:"Occupato dal proprietario, libero al rogito"},{v:"locato",l:"Locato"}], d.stato || "libero") + '</div>' +
+    txt("incCanoneAnnuo", "Canone annuo attuale (€, se locato)", d.canoneAnnuo, "", "number") +
+    txt("incScadenzaLocazione", "Scadenza contratto di locazione", d.scadenzaLocazione, "", "date") +
+    txt("incConsegnaContrattoEntro", "Consegna copia contratto locazione entro", d.consegnaContrattoEntro, "", "date") +
+
+    sect("Dichiarazioni del Venditore") +
+    '<div class="field"><label>Provenienza dell\'immobile</label>' + incSelect("incProvenienza", [{v:"compravendita",l:"Compravendita"},{v:"successione",l:"Successione"},{v:"donazione",l:"Donazione"},{v:"altro",l:"Altro"}], d.provenienza || "compravendita") + '</div>' +
+    txt("incProvenienzaAltro", "Specifica (se \"Altro\")", d.provenienzaAltro) +
+    '<div class="field"><label>Titolarità</label>' + incSelect("incPienaProprieta", [{v:"si",l:"Di piena proprietà del Venditore"},{v:"altro",l:"Altro regime"}], d.pienaProprieta || "si") + '</div>' +
+    txt("incPienaProprietaAltro", "Specifica regime (se \"Altro\")", d.pienaProprietaAltro) +
+    '<div class="field"><label>Conformità edilizia/urbanistica</label>' + incSelect("incConformeEdilizio", [{v:"si",l:"Conforme"},{v:"no",l:"Non conforme"}], d.conformeEdilizio || "si") + '</div>' +
+    '<div class="field"><label>Agibilità</label>' + incSelect("incAgibilita", [{v:"si",l:"Dotato di agibilità"},{v:"no",l:"Non dotato di agibilità"}], d.agibilita || "si") + '</div>' +
+    '<div class="field"><label>Planimetria catastale</label>' + incSelect("incPlanimetriaCorrisponde", [{v:"si",l:"Corrisponde allo stato di fatto"},{v:"no",l:"Non corrisponde"}], d.planimetriaCorrisponde || "si") + '</div>' +
+    '<div class="field"><label>Impianti</label>' + incSelect("incImpiantiConformi", [{v:"si",l:"Conformi alle normative vigenti"},{v:"no",l:"Non conformi"}], d.impiantiConformi || "si") + '</div>' +
+    '<div class="field"><label>Certificazione energetica</label>' + incSelect("incCertEnergetica", [{v:"posseduta",l:"Posseduta"},{v:"non_posseduta_fornira",l:"Non posseduta, la fornirà"},{v:"non_soggetto",l:"Non soggetto all'obbligo"}], d.certEnergetica || "non_posseduta_fornira") + '</div>' +
+    txt("incClasseEnergetica", "Classe energetica (se posseduta)", d.classeEnergetica) +
+    txt("incIpe", "IPE (se posseduta)", d.ipe) +
+    '<div class="field"><label>Gravami/ipoteche</label>' + incSelect("incGravami", [{v:"libero",l:"Libero da gravami"},{v:"ipoteca",l:"Gravato da ipoteca"}], d.gravami || "libero") + '</div>' +
+    txt("incIpotecaBanca", "Banca/istituto ipoteca (se gravato)", d.ipotecaBanca) +
+    txt("incIpotecaResiduo", "Residuo debito ipoteca € (se gravato)", d.ipotecaResiduo, "", "number") +
+    '<div class="field"><label>Imposte dirette/indirette sull\'immobile</label>' + incSelect("incImpostePagate", [{v:"si",l:"Regolarmente pagate"},{v:"no",l:"Non regolarmente pagate"}], d.impostePagate || "si") + '</div>' +
+    '<div class="field"><label>Controversie sull\'immobile</label>' + incSelect("incControversie", [{v:"no",l:"Nessuna controversia"},{v:"si",l:"Vi sono controversie (dettaglia nelle note)"}], d.controversie || "no") + '</div>' +
+
+    sect("Visite e chiavi") +
+    txt("incGiorniVisite", "Giorni per le visite", d.giorniVisite, "Es. da lunedì a venerdì") +
+    txt("incOrariVisite", "Orari per le visite", d.orariVisite, "Es. 9:00-18:00") +
+    '<div class="field"><label>Consegna chiavi all\'Agente</label>' + incSelect("incConsegnaChiavi", [{v:"no",l:"No"},{v:"si",l:"Sì"}], d.consegnaChiavi || "no") + '</div>' +
+
+    sect("Prezzo e pagamento") +
+    txt("incPrezzo", "Prezzo di vendita richiesto (€)", d.prezzo, "", "number") +
+    txt("incModalitaPagamento", "Modalità di pagamento", d.modalitaPagamento, "Es. a mezzo assegni circolari alla stipula") +
+    txt("incGiorniRogito", "Giorni per il rogito dall'accettazione", d.giorniRogito || "60", "", "number") +
+
+    sect("Esclusiva, provvigione e penali") +
+    '<div class="field"><label>Esclusiva</label>' + incSelect("incEsclusiva", [{v:"si",l:"Sì, in esclusiva"},{v:"no",l:"No, senza esclusiva"}], d.esclusiva || "si") + '</div>' +
+    txt("incProvvigione", "Provvigione (%) + IVA", d.provvigione || "3", "", "number") +
+    txt("incPenale", "Penale per violazione esclusiva (%)", d.penale || "0", "", "number") +
+
+    sect("Durata e rinnovo") +
+    txt("incScadenzaIncarico", "Scadenza dell'incarico", defaultScadenza, "", "date") +
+    '<div class="field"><label>Alla scadenza</label>' + incSelect("incRinnovo", [{v:"cessa",l:"Si intenderà cessato"},{v:"rinnovo_con_esclusiva",l:"Rinnovo tacito, con esclusiva"},{v:"rinnovo_senza_esclusiva",l:"Rinnovo tacito, senza esclusiva"}], d.rinnovo || "cessa") + '</div>' +
+
+    sect("Note / clausole aggiuntive") +
     '</div><div class="field"><label>Note aggiuntive</label><input type="text" id="incNote" value="' + escapeHTMLAttr(d.note) + '"></div>' +
     '<button type="button" class="btn secondary" id="incRefreshBtn" style="margin-top:6px">Aggiorna anteprima</button></div>';
 
   function refresh(){
-    var f = {
-      indirizzo: document.getElementById("incIndirizzo").value.trim(),
-      categoria: document.getElementById("incCategoria").value.trim(),
-      prezzo: document.getElementById("incPrezzo").value,
-      esclusiva: document.getElementById("incEsclusiva").value,
-      durata: document.getElementById("incDurata").value,
-      provvigione: document.getElementById("incProvvigione").value,
-      note: document.getElementById("incNote").value.trim()
-    };
+    var f = incCollectDetails();
+    Object.keys(f).forEach(function(k){ if(f[k] === null) f[k] = ""; }); // incaricoBodyHTML si aspetta stringhe vuote, non null, per i controlli "if(f.x)"
     genDocBody.innerHTML = incaricoBodyHTML(f);
     return f;
   }
-  genDocTitle.textContent = "Incarico di Mediazione Immobiliare";
+  genDocTitle.textContent = "Incarico di Mediazione Immobiliare a Promuovere la Vendita";
   var initial = refresh();
   document.getElementById("incRefreshBtn").addEventListener("click", refresh);
-  ["incIndirizzo","incCategoria","incPrezzo","incEsclusiva","incDurata","incProvvigione","incNote"].forEach(function(id){
-    document.getElementById(id).addEventListener("change", refresh);
+  INC_FIELD_IDS.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener("change", refresh);
   });
   document.getElementById("genSignClient").textContent = fullName(selectedClient);
   document.getElementById("genSignDate").textContent = todayIt();
@@ -1049,16 +1219,7 @@ document.getElementById("genSaveBtn").addEventListener("click", async function()
   if(!selectedClient || !currentGenType) return;
   var details = {};
   if(currentGenType === "incarico"){
-    details = {
-      opportunity_id: selectedOpportunity ? selectedOpportunity.id : null,
-      indirizzo: (document.getElementById("incIndirizzo")||{}).value || null,
-      categoria: (document.getElementById("incCategoria")||{}).value || null,
-      prezzo: (document.getElementById("incPrezzo")||{}).value || null,
-      esclusiva: (document.getElementById("incEsclusiva")||{}).value || null,
-      durata: (document.getElementById("incDurata")||{}).value || null,
-      provvigione: (document.getElementById("incProvvigione")||{}).value || null,
-      note: (document.getElementById("incNote")||{}).value || null
-    };
+    details = incCollectDetails();
   }else if(currentGenType === "onorario"){
     details = {
       opportunity_id: selectedOpportunity ? selectedOpportunity.id : null,
