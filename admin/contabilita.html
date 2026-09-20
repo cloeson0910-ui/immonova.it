@@ -220,6 +220,7 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
       <div><label>Comune</label><input type="text" id="issClientComune"></div>
       <div><label>Provincia</label><input type="text" id="issClientProvincia" maxlength="2"></div>
       <div><label>PEC cliente (o Codice SDI)</label><input type="text" id="issClientPec" placeholder="PEC oppure 7 caratteri Codice Destinatario"></div>
+      <div><label>Email cliente (copia di cortesia)</label><input type="email" id="issClientEmail" placeholder="usata solo per l'invio della copia PDF, non per SDI"></div>
       <div><button class="btn" type="submit">Registra fattura</button></div>
     </form>
     <div class="table-wrap">
@@ -344,6 +345,7 @@ function renderInvoicesIssued(){
     const sendBtn = canSend
       ? `<button class="btn secondary" style="padding:6px 10px;font-size:10px" data-id="${inv.id}" data-action="send-sdi">Invia a SDI</button>`
       : (inv.status==="sent"||inv.status==="delivered" ? `<span style="font-size:11px;color:#8f7643">Inviata${inv.sdi_identifier?" (ID "+escapeHTML(inv.sdi_identifier)+")":""}</span>` : "");
+    const previewBtn = `<button class="btn secondary" style="padding:6px 10px;font-size:10px;margin-left:6px" data-id="${inv.id}" data-action="preview-invoice">Anteprima / Invia copia</button>`;
     return `<tr>
     <td>${escapeHTML(inv.invoice_number)}</td>
     <td>${new Date(inv.invoice_date).toLocaleDateString("it-IT")}</td>
@@ -352,7 +354,7 @@ function renderInvoicesIssued(){
     <td>${eur(inv.vat_amount)}</td>
     <td>${eur(inv.amount_gross)}</td>
     <td><span class="badge ${escapeHTML(inv.status)}">${escapeHTML(inv.status)}</span>${inv.sdi_message?`<div style="font-size:10px;color:#9c2f2f;margin-top:3px">${escapeHTML(inv.sdi_message)}</div>`:""}</td>
-    <td>${sendBtn}<button class="del-btn" data-id="${inv.id}" data-type="issued" style="margin-left:8px">Elimina</button></td>
+    <td>${sendBtn}${previewBtn}<button class="del-btn" data-id="${inv.id}" data-type="issued" style="margin-left:8px">Elimina</button></td>
   </tr>`;}).join("");
 }
 
@@ -454,7 +456,8 @@ document.getElementById("invoiceIssuedForm").addEventListener("submit",async(e)=
     client_comune:document.getElementById("issClientComune").value||null,
     client_provincia:document.getElementById("issClientProvincia").value||null,
     client_sdi_code:isSdiCode?pecOrSdi.toUpperCase():null,
-    client_pec:(!isSdiCode&&pecOrSdi)?pecOrSdi:null
+    client_pec:(!isSdiCode&&pecOrSdi)?pecOrSdi:null,
+    client_email:document.getElementById("issClientEmail").value.trim()||null
   };
   const {error}=await client.from("business_invoices_issued").insert(payload);
   if(error){setStatus("Errore salvataggio fattura: "+error.message,"error");return}
@@ -738,19 +741,23 @@ async function sendInvoiceToSdi(invoiceId){
       await refreshAll();
       return;
     }
-    if(result.ok){
+    // Consideriamo l'invio davvero riuscito SOLO se Invoicetronic ha restituito un id
+    // dell'invio: un HTTP 2xx da solo non basta (in passato un path/base URL sbagliati
+    // rispondevano comunque 2xx senza che la fattura arrivasse mai a Invoicetronic).
+    const sdiId=(result.ok && result.data && (result.data.id || result.data.Id || result.data.identifier)) || null;
+    if(result.ok && sdiId){
       await client.from("business_company_profile").update({next_transmission_progressive:Number(progressivo)+1}).eq("id",1);
-      const sdiId=(result.data && (result.data.id || result.data.identifier)) || null;
+      const latestState=(result.data && (result.data.latest_state||result.data.latestState)) || null;
       await client.from("business_invoices_issued").update({
         status:"sent", sent_at:new Date().toISOString(), xml_content:xml, sdi_progressivo:progressivo,
-        sdi_identifier:sdiId?String(sdiId):null, sdi_message:null
+        sdi_identifier:String(sdiId), sdi_message:latestState?("Stato SDI: "+latestState):null
       }).eq("id",invoiceId);
-      setStatus("Fattura inviata a Invoicetronic (ambiente sandbox se stai usando una chiave ik_test_).","success");
+      setStatus("Fattura inviata a Invoicetronic (ID "+sdiId+", ambiente sandbox se stai usando una chiave ik_test_). Verifica anche nella dashboard Invoicetronic \"Fatture inviate\".","success");
     }else{
-      const msg=(result.data && (result.data.message||JSON.stringify(result.data))) || ("HTTP "+result.status);
+      const msg=(result.data && (result.data.message||JSON.stringify(result.data))) || (result.ok?"Risposta OK ma senza id di conferma — invio non considerato riuscito.":("HTTP "+result.status));
       await client.from("business_invoices_issued").update({status:"error",sdi_message:String(msg).slice(0,500)}).eq("id",invoiceId);
-      setStatus("Invoicetronic ha rifiutato la fattura: "+msg,"error");
-      console.error("[invoicetronic send] risposta non-ok",result);
+      setStatus("Invoicetronic non ha confermato l'invio: "+msg,"error");
+      console.error("[invoicetronic send] risposta non valida",result);
     }
   }catch(err){
     await client.from("business_invoices_issued").update({status:"error",sdi_message:String(err&&err.message||err).slice(0,500)}).eq("id",invoiceId);
@@ -761,11 +768,101 @@ async function sendInvoiceToSdi(invoiceId){
 }
 
 document.getElementById("invoicesIssuedBody").addEventListener("click",async(e)=>{
-  const btn=e.target.closest('[data-action="send-sdi"]');
-  if(!btn) return;
-  btn.disabled=true;
-  await sendInvoiceToSdi(btn.dataset.id);
+  const sendBtn=e.target.closest('[data-action="send-sdi"]');
+  if(sendBtn){ sendBtn.disabled=true; await sendInvoiceToSdi(sendBtn.dataset.id); return; }
+  const previewBtn=e.target.closest('[data-action="preview-invoice"]');
+  if(previewBtn){ openInvoicePreview(previewBtn.dataset.id); return; }
 });
+
+/* ================= Anteprima fattura + copia di cortesia ================= */
+function buildInvoicePreviewHtml(invoice, company){
+  const rowSubject=escapeHTML(invoice.description||"Prestazione di servizi");
+  const clientAddrLine=[invoice.client_address,[invoice.client_cap,invoice.client_comune,invoice.client_provincia].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const companyAddrLine=[company&&company.address,[company&&company.cap,company&&company.comune,company&&company.provincia].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const statusLabel={draft:"Bozza (non ancora inviata a SDI)",sent:"Inviata a SDI"+(invoice.sdi_identifier?" — ID "+invoice.sdi_identifier:""),error:"Errore invio SDI",delivered:"Consegnata"}[invoice.status]||invoice.status;
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
+<title>Fattura ${escapeHTML(invoice.invoice_number)} — Anteprima</title>
+<style>
+body{font-family:"Helvetica Neue",Arial,sans-serif;color:#333;max-width:800px;margin:30px auto;padding:0 20px}
+.toolbar{display:flex;gap:10px;justify-content:flex-end;margin-bottom:24px}
+.toolbar button{padding:9px 16px;border-radius:6px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:13px;cursor:pointer}
+.toolbar button.secondary{background:#fff;color:#a67f34}
+.doc{border:1px solid #ddd;border-radius:8px;padding:36px}
+.doc h1{font-size:20px;letter-spacing:.08em;color:#5c4a22;font-weight:400;margin-bottom:2px}
+.doc .tag{font-size:11px;color:#9c8452;text-transform:uppercase;letter-spacing:.08em;margin-bottom:24px}
+.parties{display:flex;justify-content:space-between;gap:30px;margin-bottom:28px}
+.party h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#a58139;margin-bottom:6px}
+.party p{font-size:13px;line-height:1.5;margin:0}
+.meta{display:flex;gap:30px;margin-bottom:28px;font-size:13px}
+.meta div span{display:block;font-size:11px;text-transform:uppercase;color:#a58139;margin-bottom:3px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid #eee}
+th{font-size:10px;text-transform:uppercase;color:#a58139}
+.totals{margin-left:auto;width:280px;font-size:13px}
+.totals div{display:flex;justify-content:space-between;padding:4px 0}
+.totals .grand{font-weight:600;font-size:15px;border-top:2px solid #ddd;padding-top:8px;margin-top:4px}
+.status-note{margin-top:24px;font-size:11px;color:#9c8452;font-style:italic}
+@media print{.toolbar{display:none}body{margin:0}.doc{border:none;padding:0}}
+</style></head><body>
+<div class="toolbar">
+  <button class="secondary" onclick="window.close()">Chiudi</button>
+  <button onclick="sendCourtesyEmail()">Invia copia di cortesia via email</button>
+  <button onclick="window.print()">Stampa / Salva PDF</button>
+</div>
+<div class="doc">
+  <h1>${escapeHTML((company&&company.legal_name)||"IMMONOVA S.R.L.")}</h1>
+  <div class="tag">Fattura n. ${escapeHTML(invoice.invoice_number)} del ${new Date(invoice.invoice_date).toLocaleDateString("it-IT")} — copia di cortesia, non sostituisce il documento elettronico SDI</div>
+  <div class="parties">
+    <div class="party">
+      <h3>Cedente / Prestatore</h3>
+      <p>${escapeHTML((company&&company.legal_name)||"—")}<br>
+      ${escapeHTML(companyAddrLine||"—")}<br>
+      P.IVA ${escapeHTML((company&&company.vat_number)||"—")}${company&&company.pec?"<br>PEC "+escapeHTML(company.pec):""}</p>
+    </div>
+    <div class="party">
+      <h3>Cessionario / Committente</h3>
+      <p>${escapeHTML(invoice.client_name||"—")}<br>
+      ${escapeHTML(clientAddrLine||"—")}<br>
+      ${invoice.client_vat?"P.IVA/CF "+escapeHTML(invoice.client_vat)+"<br>":""}${invoice.client_pec?"PEC "+escapeHTML(invoice.client_pec):""}</p>
+    </div>
+  </div>
+  <div class="meta">
+    <div><span>Numero</span>${escapeHTML(invoice.invoice_number)}</div>
+    <div><span>Data</span>${new Date(invoice.invoice_date).toLocaleDateString("it-IT")}</div>
+    <div><span>Stato</span>${escapeHTML(statusLabel)}</div>
+  </div>
+  <table>
+    <thead><tr><th>Descrizione</th><th>Imponibile</th><th>IVA %</th><th>Imposta</th><th>Totale</th></tr></thead>
+    <tbody><tr><td>${rowSubject}</td><td>${eur(invoice.amount_net)}</td><td>${Number(invoice.vat_rate||0)}%</td><td>${eur(invoice.vat_amount)}</td><td>${eur(invoice.amount_gross)}</td></tr></tbody>
+  </table>
+  <div class="totals">
+    <div><span>Imponibile</span><span>${eur(invoice.amount_net)}</span></div>
+    <div><span>IVA</span><span>${eur(invoice.vat_amount)}</span></div>
+    <div class="grand"><span>Totale documento</span><span>${eur(invoice.amount_gross)}</span></div>
+  </div>
+  <div class="status-note">Documento generato da IMMONOVA a scopo di anteprima/copia di cortesia. Il documento fiscalmente valido è l'XML FatturaPA trasmesso via SDI.</div>
+</div>
+<script>
+function sendCourtesyEmail(){
+  const to=${JSON.stringify(invoice.client_email||"")};
+  const subject=${JSON.stringify("Copia di cortesia fattura "+invoice.invoice_number+" — "+((company&&company.legal_name)||"IMMONOVA S.R.L."))};
+  const body=${JSON.stringify("Buongiorno "+(invoice.client_name||"")+",\n\nin allegato la copia di cortesia della fattura n. "+invoice.invoice_number+" del "+new Date(invoice.invoice_date).toLocaleDateString("it-IT")+" (importo "+Number(invoice.amount_gross||0).toFixed(2)+" EUR).\n\nPer allegare il PDF: usa il pulsante \"Stampa / Salva PDF\" in questa pagina, salva il file, poi allegalo qui prima di inviare.\n\nCordiali saluti,\n"+((company&&company.legal_name)||"IMMONOVA S.R.L."))};
+  if(!to){ alert("Nessuna email cliente salvata su questa fattura: aggiorna il campo \\"Email cliente\\" in Fatture emesse e riapri l'anteprima."); return; }
+  window.location.href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+}
+</script>
+</body></html>`;
+}
+
+function openInvoicePreview(invoiceId){
+  const invoice=cachedIssued.find(i=>i.id===invoiceId);
+  if(!invoice){setStatus("Fattura non trovata in cache, aggiorna la pagina.","error");return}
+  const win=window.open("","_blank");
+  if(!win){setStatus("Il browser ha bloccato l'apertura della finestra di anteprima: consenti i popup per questo sito.","error");return}
+  win.document.open();
+  win.document.write(buildInvoicePreviewHtml(invoice, companyProfile));
+  win.document.close();
+}
 
 /* ================= Fattura da Immobile ================= */
 let propertySearchTimer=null;
@@ -913,6 +1010,7 @@ document.getElementById("generatePropertyInvoicesBtn").addEventListener("click",
       client_name:sellerName, client_vat:selectedOfferData.seller_fiscal_code||null,
       client_address:selectedOfferData.seller_residence_address||null,
       client_pec:selectedOfferData.seller_pec||null,
+      client_email:selectedOfferData.seller_email||null,
       description:"Provvigione di mediazione immobiliare — venditore — "+selectedProperty.title,
       amount_net:sellerNet, vat_rate:vatRate, vat_amount:vat, amount_gross:Math.round((sellerNet+vat)*100)/100,
       status:"draft", opportunity_id:selectedProperty.id, created_by:currentUser.id
@@ -925,6 +1023,7 @@ document.getElementById("generatePropertyInvoicesBtn").addEventListener("click",
       client_name:buyerName, client_vat:selectedOfferData.buyer_fiscal_code||null,
       client_address:selectedOfferData.buyer_residence_address||null,
       client_pec:selectedOfferData.buyer_pec||null,
+      client_email:selectedOfferData.buyer_email||null,
       description:"Provvigione di mediazione immobiliare — acquirente — "+selectedProperty.title,
       amount_net:buyerNet, vat_rate:vatRate, vat_amount:vat, amount_gross:Math.round((buyerNet+vat)*100)/100,
       status:"draft", opportunity_id:selectedProperty.id, created_by:currentUser.id
