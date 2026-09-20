@@ -52,6 +52,8 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
 .empty-row td{color:#9c8452;font-style:italic;text-align:center;padding:18px}
 .disclaimer{font-size:11px;color:#9c8452;line-height:1.5;margin-top:10px;font-style:italic}
 .table-wrap{overflow-x:auto}
+#propertySearchResults{width:100%;padding:8px;border:1px solid rgba(166,127,52,.28);border-radius:6px;background:rgba(255,255,255,.6);font-family:inherit;font-size:13px}
+#propertySearchResults option{padding:6px 4px}
 @media(max-width:700px){.header{padding:16px 20px}main{padding:22px 16px 60px}}
 </style>
 </head>
@@ -121,6 +123,52 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
       <thead><tr><th>Data</th><th>Categoria</th><th>Descrizione</th><th>Netto</th><th>IVA</th><th>Lordo</th><th></th></tr></thead>
       <tbody id="expensesBody"><tr class="empty-row"><td colspan="7">Caricamento...</td></tr></tbody>
     </table>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <div>
+        <div class="block-title">Fattura da Immobile</div>
+        <div class="block-hint">Seleziona un immobile: recupero i dati anagrafici reali di venditore e acquirente dall'ultima proposta registrata, e (se presente) la provvigione impostata nell'incarico di mediazione collegato. Genera due fatture distinte, una per ciascuna parte.</div>
+      </div>
+    </div>
+    <form class="inline-form" id="propertyLookupForm" style="margin-bottom:10px">
+      <div style="grid-column:1/-1"><label>Cerca immobile (titolo/località)</label><input type="text" id="propertySearchInput" placeholder="Digita per cercare..." autocomplete="off"></div>
+      <div style="grid-column:1/-1"><select id="propertySearchResults" size="5" style="display:none"></select></div>
+    </form>
+    <div id="propertyInvoiceDetail" style="display:none">
+      <div class="summary-grid" style="margin-bottom:18px">
+        <div class="summary-card"><div class="summary-label">Immobile</div><div class="summary-value" id="propInfoTitle" style="font-size:15px">—</div></div>
+        <div class="summary-card"><div class="summary-label">Prezzo offerta</div><div class="summary-value" id="propInfoPrice" style="font-size:18px">—</div></div>
+        <div class="summary-card"><div class="summary-label">Incarico collegato</div><div class="summary-value" id="propInfoMandate" style="font-size:13px">—</div></div>
+      </div>
+
+      <div class="table-wrap" style="margin-bottom:16px">
+        <table>
+          <thead><tr><th>Parte</th><th>Nome</th><th>C.F.</th><th>Indirizzo</th><th>Email</th><th>PEC</th></tr></thead>
+          <tbody>
+            <tr><td>Venditore</td><td id="sellerName">—</td><td id="sellerCf">—</td><td id="sellerAddr">—</td><td id="sellerEmail">—</td><td id="sellerPec">—</td></tr>
+            <tr><td>Acquirente</td><td id="buyerName">—</td><td id="buyerCf">—</td><td id="buyerAddr">—</td><td id="buyerEmail">—</td><td id="buyerPec">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <form class="inline-form" id="propertyInvoiceForm">
+        <div><label>Base importo</label>
+          <select id="propInvoiceBasis">
+            <option value="percent">Provvigione % sul prezzo</option>
+            <option value="fixed">Importo fisso per fattura</option>
+          </select>
+        </div>
+        <div id="propPercentFields"><label>Provvigione venditore %</label><input type="number" step="0.01" id="propSellerPercent" value="3"></div>
+        <div id="propPercentFields2"><label>Provvigione acquirente %</label><input type="number" step="0.01" id="propBuyerPercent" value="0"></div>
+        <div id="propFixedFields1" style="display:none"><label>Importo fisso venditore (€ netto)</label><input type="number" step="0.01" id="propSellerFixed"></div>
+        <div id="propFixedFields2" style="display:none"><label>Importo fisso acquirente (€ netto)</label><input type="number" step="0.01" id="propBuyerFixed"></div>
+        <div><label>Aliquota IVA %</label><input type="number" step="0.01" id="propVatRate" value="22"></div>
+        <div><button class="btn" type="button" id="generatePropertyInvoicesBtn">Genera 2 fatture</button></div>
+      </form>
+      <div class="disclaimer">Le due fatture vengono create come bozza in "Fatture emesse" qui sotto (numero da assegnare tu), e i dati anagrafici di venditore/acquirente vengono anche salvati/aggiornati nella scheda Contatti (investors) se mancanti.</div>
     </div>
   </section>
 
@@ -435,6 +483,176 @@ document.getElementById("testInvoicetronicBtn").addEventListener("click",async()
 document.getElementById("refreshSummaryBtn").addEventListener("click",refreshAll);
 document.getElementById("periodMonth").addEventListener("change",refreshAll);
 document.getElementById("periodYear").addEventListener("change",refreshAll);
+
+/* ================= Fattura da Immobile ================= */
+let propertySearchTimer=null;
+let selectedProperty=null; // {id, title, location, price}
+let selectedOfferData=null; // ultima riga opportunity_offers per l'immobile scelto
+let selectedMandate=null; // ultimo incarico (immonova_client_documents) collegato all'immobile
+
+document.getElementById("propertySearchInput").addEventListener("input",function(){
+  const q=this.value.trim();
+  clearTimeout(propertySearchTimer);
+  const resultsEl=document.getElementById("propertySearchResults");
+  if(q.length<2){resultsEl.style.display="none";resultsEl.innerHTML="";return}
+  propertySearchTimer=setTimeout(async()=>{
+    const {data,error}=await client.from("opportunities").select("id,title,location,price").or(`title.ilike.%${q}%,location.ilike.%${q}%`).limit(15);
+    if(error){console.error(error);return}
+    resultsEl.innerHTML="";
+    (data||[]).forEach(o=>{
+      const opt=document.createElement("option");
+      opt.value=o.id;
+      opt.textContent=o.title+(o.location?" — "+o.location:"")+(o.price?" — "+o.price:"");
+      resultsEl.appendChild(opt);
+    });
+    resultsEl.style.display=(data&&data.length)?"block":"none";
+  },300);
+});
+
+document.getElementById("propertySearchResults").addEventListener("change",async function(){
+  const id=this.value;
+  if(!id) return;
+  document.getElementById("propertySearchResults").style.display="none";
+  await loadPropertyForInvoicing(id);
+});
+
+async function loadPropertyForInvoicing(opportunityId){
+  setStatus("Recupero dati immobile...","");
+  const {data:prop,error:propErr}=await client.from("opportunities").select("id,title,location,price").eq("id",opportunityId).single();
+  if(propErr||!prop){setStatus("Errore recupero immobile: "+(propErr&&propErr.message),"error");return}
+  selectedProperty=prop;
+
+  const {data:offers,error:offersErr}=await client.from("opportunity_offers").select("*").eq("opportunity_id",opportunityId).order("created_at",{ascending:false}).limit(1);
+  if(offersErr){console.error(offersErr)}
+  selectedOfferData=(offers&&offers[0])||null;
+
+  const {data:mandates,error:mandateErr}=await client.from("immonova_client_documents").select("id,details,created_at").eq("opportunity_id",opportunityId).eq("document_type","incarico").order("created_at",{ascending:false}).limit(1);
+  if(mandateErr){console.error(mandateErr)}
+  selectedMandate=(mandates&&mandates[0])||null;
+
+  document.getElementById("propInfoTitle").textContent=prop.title+(prop.location?" — "+prop.location:"");
+  document.getElementById("propInfoPrice").textContent=selectedOfferData&&selectedOfferData.offered_price?eur(selectedOfferData.offered_price):(prop.price||"—");
+
+  if(selectedMandate&&selectedMandate.details&&selectedMandate.details.provvigione){
+    document.getElementById("propInfoMandate").textContent="Trovato ("+new Date(selectedMandate.created_at).toLocaleDateString("it-IT")+") — provvigione "+selectedMandate.details.provvigione+"%";
+    document.getElementById("propSellerPercent").value=selectedMandate.details.provvigione;
+  }else{
+    document.getElementById("propInfoMandate").textContent="Nessun incarico collegato trovato — provvigione da impostare a mano.";
+  }
+
+  if(selectedOfferData){
+    document.getElementById("sellerName").textContent=[selectedOfferData.seller_first_name,selectedOfferData.seller_last_name].filter(Boolean).join(" ")||"—";
+    document.getElementById("sellerCf").textContent=selectedOfferData.seller_fiscal_code||"—";
+    document.getElementById("sellerAddr").textContent=selectedOfferData.seller_residence_address||"—";
+    document.getElementById("sellerEmail").textContent=selectedOfferData.seller_email||"—";
+    document.getElementById("sellerPec").textContent=selectedOfferData.seller_pec||"—";
+    document.getElementById("buyerName").textContent=[selectedOfferData.buyer_first_name,selectedOfferData.buyer_last_name].filter(Boolean).join(" ")||"—";
+    document.getElementById("buyerCf").textContent=selectedOfferData.buyer_fiscal_code||"—";
+    document.getElementById("buyerAddr").textContent=selectedOfferData.buyer_residence_address||"—";
+    document.getElementById("buyerEmail").textContent=selectedOfferData.buyer_email||"—";
+    document.getElementById("buyerPec").textContent=selectedOfferData.buyer_pec||"—";
+    setStatus("Dati immobile e ultima proposta caricati.","success");
+  }else{
+    ["sellerName","sellerCf","sellerAddr","sellerEmail","sellerPec","buyerName","buyerCf","buyerAddr","buyerEmail","buyerPec"].forEach(id=>document.getElementById(id).textContent="—");
+    setStatus("Nessuna proposta (opportunity_offers) trovata per questo immobile: servono per recuperare i dati anagrafici di venditore/acquirente. Puoi comunque generare le fatture, ma dovrai completare i dati a mano dopo.","error");
+  }
+  document.getElementById("propertyInvoiceDetail").style.display="block";
+}
+
+document.getElementById("propInvoiceBasis").addEventListener("change",function(){
+  const isPercent=this.value==="percent";
+  document.getElementById("propPercentFields").style.display=isPercent?"block":"none";
+  document.getElementById("propPercentFields2").style.display=isPercent?"block":"none";
+  document.getElementById("propFixedFields1").style.display=isPercent?"none":"block";
+  document.getElementById("propFixedFields2").style.display=isPercent?"none":"block";
+});
+
+async function syncInvestorFromOfferData(prefix,label){
+  if(!selectedOfferData) return;
+  const cf=selectedOfferData[prefix+"_fiscal_code"];
+  const firstName=selectedOfferData[prefix+"_first_name"];
+  const lastName=selectedOfferData[prefix+"_last_name"];
+  if(!cf&&!firstName) return;
+  let existing=null;
+  if(cf){
+    const {data}=await client.from("investors").select("*").eq("codice_fiscale",cf).limit(1);
+    existing=(data&&data[0])||null;
+  }
+  const patch={
+    first_name:firstName||null, last_name:lastName||null,
+    codice_fiscale:cf||null,
+    residence_address:selectedOfferData[prefix+"_residence_address"]||null,
+    email:selectedOfferData[prefix+"_email"]||null,
+    phone:selectedOfferData[prefix+"_phone"]||null,
+    pec:selectedOfferData[prefix+"_pec"]||null,
+    id_document_type:selectedOfferData[prefix+"_id_document_type"]||null,
+    id_document_number:selectedOfferData[prefix+"_id_document_number"]||null,
+    date_of_birth:selectedOfferData[prefix+"_birth_date"]||null
+  };
+  if(existing){
+    // Aggiorna SOLO i campi che nell'anagrafica esistente sono vuoti, non sovrascrive dati già presenti.
+    const fill={};
+    Object.keys(patch).forEach(k=>{ if(patch[k]!=null && (existing[k]==null || existing[k]==="")) fill[k]=patch[k]; });
+    if(Object.keys(fill).length){
+      await client.from("investors").update(fill).eq("id",existing.id);
+    }
+  }else{
+    await client.from("investors").insert({...patch, is_investor: prefix==="buyer", is_seller: prefix==="seller", investor_type:"private", status:"active", created_by:currentUser.id});
+  }
+}
+
+document.getElementById("generatePropertyInvoicesBtn").addEventListener("click",async()=>{
+  if(!selectedProperty){setStatus("Seleziona prima un immobile.","error");return}
+  const basis=document.getElementById("propInvoiceBasis").value;
+  const vatRate=parseFloat(document.getElementById("propVatRate").value)||0;
+  const price=selectedOfferData&&selectedOfferData.offered_price?Number(selectedOfferData.offered_price):null;
+
+  let sellerNet,buyerNet;
+  if(basis==="percent"){
+    if(!price){setStatus("Nessun prezzo offerta disponibile per calcolare la provvigione: usa importo fisso oppure completa la proposta.","error");return}
+    sellerNet=Math.round(price*parseFloat(document.getElementById("propSellerPercent").value||0))/100;
+    buyerNet=Math.round(price*parseFloat(document.getElementById("propBuyerPercent").value||0))/100;
+  }else{
+    sellerNet=parseFloat(document.getElementById("propSellerFixed").value)||0;
+    buyerNet=parseFloat(document.getElementById("propBuyerFixed").value)||0;
+  }
+
+  const sellerName=selectedOfferData?[selectedOfferData.seller_first_name,selectedOfferData.seller_last_name].filter(Boolean).join(" "):"";
+  const buyerName=selectedOfferData?[selectedOfferData.buyer_first_name,selectedOfferData.buyer_last_name].filter(Boolean).join(" "):"";
+
+  if(!sellerName&&!buyerName){setStatus("Mancano i dati anagrafici (nessuna proposta trovata): completa prima la scheda offerta per questo immobile.","error");return}
+
+  const rows=[];
+  if(sellerNet>0&&sellerName){
+    const vat=Math.round(sellerNet*vatRate)/100;
+    rows.push({
+      invoice_number:"DA-ASSEGNARE-V-"+selectedProperty.id, invoice_date:new Date().toISOString().slice(0,10),
+      client_name:sellerName, client_vat:selectedOfferData.seller_fiscal_code||null,
+      description:"Provvigione di mediazione immobiliare — venditore — "+selectedProperty.title,
+      amount_net:sellerNet, vat_rate:vatRate, vat_amount:vat, amount_gross:Math.round((sellerNet+vat)*100)/100,
+      status:"draft", opportunity_id:selectedProperty.id, created_by:currentUser.id
+    });
+  }
+  if(buyerNet>0&&buyerName){
+    const vat=Math.round(buyerNet*vatRate)/100;
+    rows.push({
+      invoice_number:"DA-ASSEGNARE-A-"+selectedProperty.id, invoice_date:new Date().toISOString().slice(0,10),
+      client_name:buyerName, client_vat:selectedOfferData.buyer_fiscal_code||null,
+      description:"Provvigione di mediazione immobiliare — acquirente — "+selectedProperty.title,
+      amount_net:buyerNet, vat_rate:vatRate, vat_amount:vat, amount_gross:Math.round((buyerNet+vat)*100)/100,
+      status:"draft", opportunity_id:selectedProperty.id, created_by:currentUser.id
+    });
+  }
+  if(!rows.length){setStatus("Nessun importo maggiore di zero per venditore o acquirente: imposta almeno una provvigione/importo.","error");return}
+
+  const {error}=await client.from("business_invoices_issued").insert(rows);
+  if(error){setStatus("Errore creazione fatture: "+error.message,"error");return}
+
+  await Promise.all([syncInvestorFromOfferData("seller"),syncInvestorFromOfferData("buyer")]);
+
+  setStatus(rows.length+" fattura/e creata/e in bozza (numero provvisorio, assegnane uno definitivo prima dell'invio) — dati anagrafici sincronizzati in Contatti.","success");
+  await refreshAll();
+});
 
 (async function init(){
   populatePeriodSelectors();

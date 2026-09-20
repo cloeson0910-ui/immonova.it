@@ -929,6 +929,7 @@ document.getElementById("genSaveBtn").addEventListener("click", async function()
   var details = {};
   if(currentGenType === "incarico"){
     details = {
+      opportunity_id: selectedOpportunity ? selectedOpportunity.id : null,
       indirizzo: (document.getElementById("incIndirizzo")||{}).value || null,
       categoria: (document.getElementById("incCategoria")||{}).value || null,
       prezzo: (document.getElementById("incPrezzo")||{}).value || null,
@@ -962,7 +963,13 @@ document.getElementById("genSaveBtn").addEventListener("click", async function()
     + signFooterStaticHTML(details.luogo, document.getElementById("genSignDate").textContent, fullName(selectedClient));
   var payload = {
     investor_id: selectedClient.id, document_type: currentGenType, sent_via:"stampa_pdf",
-    details: details, document_html: snapshot, created_by: currentUser.id
+    details: details, document_html: snapshot, created_by: currentUser.id,
+    /* Colonna vera (non solo dentro details), cosi' un incarico/onorario collegato a un immobile
+       e' interrogabile direttamente in SQL/da altre pagine (es. contabilita.html per recuperare
+       la provvigione al momento di generare le fatture) senza dover leggere dentro il jsonb. */
+    opportunity_id: (currentGenType === "incarico" || currentGenType === "onorario")
+      ? (selectedOpportunity ? selectedOpportunity.id : null)
+      : null
   };
   var btn = document.getElementById("genSaveBtn");
   var res;
