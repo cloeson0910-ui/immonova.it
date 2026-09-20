@@ -128,8 +128,9 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
     <div class="block-head">
       <div>
         <div class="block-title">Fatture emesse</div>
-        <div class="block-hint">Registrazione manuale. L'invio automatico tramite SDI (via Aruba) sarà attivato quando saranno collegate le credenziali API.</div>
+        <div class="block-hint">Registrazione manuale. Collegamento SDI reale via Invoicetronic in fase di test (ambiente sandbox, nessuna fattura viene davvero trasmessa all'Agenzia delle Entrate finché non si passa a una chiave di produzione).</div>
       </div>
+      <button class="btn secondary" id="testInvoicetronicBtn" type="button">Verifica connessione Invoicetronic</button>
     </div>
     <form class="inline-form" id="invoiceIssuedForm">
       <div><label>Numero fattura</label><input type="text" id="issNumber" required></div>
@@ -402,6 +403,33 @@ document.addEventListener("click",async(e)=>{
   const {error}=await client.from(table).delete().eq("id",id);
   if(error){setStatus("Errore eliminazione: "+error.message,"error");return}
   await refreshAll();
+});
+
+document.getElementById("testInvoicetronicBtn").addEventListener("click",async()=>{
+  setStatus("Verifica connessione a Invoicetronic in corso...","");
+  try{
+    const {data:{session}}=await client.auth.getSession();
+    const resp=await fetch(SUPABASE_URL+"/functions/v1/invoicetronic-proxy",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({action:"status"})
+    });
+    const result=await resp.json();
+    if(!resp.ok || result.error){
+      setStatus("Errore proxy: "+(result.error||resp.statusText),"error");
+      console.error("[invoicetronic] errore proxy",result);
+      return;
+    }
+    if(result.ok){
+      setStatus("Connessione a Invoicetronic riuscita (sandbox). Risposta: "+JSON.stringify(result.data).slice(0,200),"success");
+    }else{
+      setStatus("Invoicetronic ha risposto con stato "+result.status+" — controlla la console per il dettaglio.","error");
+      console.error("[invoicetronic] risposta non-ok",result);
+    }
+  }catch(err){
+    setStatus("Errore di rete verso il proxy: "+(err&&err.message||err),"error");
+    console.error(err);
+  }
 });
 
 document.getElementById("refreshSummaryBtn").addEventListener("click",refreshAll);
