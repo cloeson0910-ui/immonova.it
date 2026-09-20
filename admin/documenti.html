@@ -85,6 +85,12 @@ button, .btn{cursor:pointer;font-family:inherit}
 .gen-sign-who{font-size:11.5px;color:#5c4a20;line-height:1.5}
 .gen-luogo-print{display:none}
 .gen-actions{margin-top:30px;display:flex;gap:10px;flex-wrap:wrap}
+/* Pad firma touch (dito su iPad/cellulare, mouse su desktop): canvas con la stessa riga di base
+   della vecchia .gen-sign-line, cosi' l'aspetto stampato resta identico quando non firmato. */
+.gen-sig-canvas{width:100%;height:90px;border-bottom:1px solid #4a3c1f;touch-action:none;cursor:crosshair;background:transparent}
+.gen-sig-clear{background:none;border:none;padding:0;font-size:10.5px;color:#a67f34;text-decoration:underline;cursor:pointer;margin-top:4px;font-family:inherit}
+.gen-sig-img{max-height:90px;max-width:100%;display:block;margin:0 auto}
+@media print{ .gen-sig-clear{display:none!important} }
 .gen-form-fields{margin-bottom:22px;padding:14px;background:rgba(166,127,52,.06);border:1px solid rgba(166,127,52,.16)}
 .hist-row{padding:9px 0;border-bottom:1px solid rgba(166,127,52,.10);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .hist-row-main{flex:1;min-width:200px}
@@ -326,11 +332,13 @@ button, .btn{cursor:pointer;font-family:inherit}
       <div class="gen-sign-date">Data: <strong id="genSignDate"></strong></div>
       <div class="gen-sign-cols">
         <div class="gen-sign-col">
-          <div class="gen-sign-line"></div>
+          <canvas class="gen-sig-canvas" id="genSigClientCanvas"></canvas>
+          <button type="button" class="gen-sig-clear" id="genSigClientClear">Cancella firma</button>
           <div class="gen-sign-who">Il Cliente<br><strong id="genSignClient"></strong></div>
         </div>
         <div class="gen-sign-col">
-          <div class="gen-sign-line"></div>
+          <canvas class="gen-sig-canvas" id="genSigAgentCanvas"></canvas>
+          <button type="button" class="gen-sig-clear" id="genSigAgentClear">Cancella firma</button>
           <div class="gen-sign-who">Per IMMONOVA S.r.l.</div>
         </div>
       </div>
@@ -338,6 +346,8 @@ button, .btn{cursor:pointer;font-family:inherit}
     <div class="gen-actions">
       <button type="button" class="btn" id="genPrintBtn">Stampa / Salva PDF</button>
       <button type="button" class="btn secondary" id="genSaveBtn">Registra documento</button>
+      <button type="button" class="btn secondary" id="genEmailBtn">Invia copia via email</button>
+      <button type="button" class="btn secondary" id="genWhatsappBtn">Invia via WhatsApp</button>
     </div>
   </div>
 </div>
@@ -355,6 +365,82 @@ function updateGenSaveBtnLabel(){
   var btn = document.getElementById("genSaveBtn");
   if(btn) btn.textContent = editingDocId ? "Aggiorna documento" : "Registra documento";
 }
+
+/* ================================ Pad firma touch (iPad/cellulare/mouse) ================================
+   Due firme indipendenti (Cliente / IMMONOVA) disegnabili col dito o col mouse direttamente sul
+   documento prima di registrarlo o stamparlo. In stampa dal vivo (window.print()) il canvas viene
+   stampato cosi' com'e' -- ma lo snapshot salvato in DB (genSaveBtn) e una ristampa successiva
+   (printSavedDocument) non possono contenere un <canvas> vivo, quindi la firma va cristallizzata
+   come immagine (toDataURL) al momento del salvataggio: vedi genSignatureDataUrl() più sotto. */
+var genSignaturePads = {}; // { client: {canvas, ctx, drawing, hasInk}, agent: {...} }
+
+function initSignaturePad(canvasId, clearBtnId, key){
+  var canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  // Ridimensiona il canvas alla risoluzione reale del device (retina/iPad) cosi' il tratto non è sgranato.
+  var ratio = window.devicePixelRatio || 1;
+  var rect = canvas.getBoundingClientRect();
+  var cssWidth = rect.width || canvas.parentElement.getBoundingClientRect().width || 300;
+  canvas.width = Math.max(1, Math.round(cssWidth * ratio));
+  canvas.height = Math.round(90 * ratio);
+  var ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#2c2312";
+  var state = { canvas: canvas, ctx: ctx, drawing: false, hasInk: false, cssWidth: cssWidth };
+  genSignaturePads[key] = state;
+
+  function pos(e){
+    var r = canvas.getBoundingClientRect();
+    var clientX = (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
+    var clientY = (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
+    return { x: clientX - r.left, y: clientY - r.top };
+  }
+  function start(e){ e.preventDefault(); state.drawing = true; state.hasInk = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+  function move(e){ if(!state.drawing) return; e.preventDefault(); var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }
+  function end(e){ state.drawing = false; }
+
+  canvas.addEventListener("pointerdown", start);
+  canvas.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  // Fallback touch events (alcuni iPad/browser piu' datati non hanno Pointer Events completi).
+  canvas.addEventListener("touchstart", start, { passive:false });
+  canvas.addEventListener("touchmove", move, { passive:false });
+  canvas.addEventListener("touchend", end);
+
+  var clearBtn = document.getElementById(clearBtnId);
+  if(clearBtn) clearBtn.addEventListener("click", function(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    state.hasInk = false;
+  });
+}
+
+/* Chiamata ad ogni apertura del generatore (openNda/openIncarico/openOnorario, via
+   setupSignFooter): reinizializza i due pad puliti, cosi' una firma lasciata sul documento
+   precedente non si trascina in quello successivo. */
+function resetSignaturePads(){
+  ["client","agent"].forEach(function(key){
+    var st = genSignaturePads[key];
+    if(st) st.ctx.clearRect(0, 0, st.canvas.width, st.canvas.height);
+  });
+  if(!genSignaturePads.client) initSignaturePad("genSigClientCanvas", "genSigClientClear", "client");
+  if(!genSignaturePads.agent) initSignaturePad("genSigAgentCanvas", "genSigAgentClear", "agent");
+  if(genSignaturePads.client) genSignaturePads.client.hasInk = false;
+  if(genSignaturePads.agent) genSignaturePads.agent.hasInk = false;
+}
+
+/* Restituisce { client: dataUrlOrNull, agent: dataUrlOrNull } -- null se quel pad è rimasto vuoto,
+   cosi' un documento salvato senza firma disegnata mantiene la vecchia riga vuota (comportamento
+   invariato), invece di incollare un'immagine trasparente inutile. */
+function genSignatureDataUrls(){
+  var out = { client: null, agent: null };
+  ["client","agent"].forEach(function(key){
+    var st = genSignaturePads[key];
+    if(st && st.hasInk) out[key] = st.canvas.toDataURL("image/png");
+  });
+  return out;
+}
 /* Precompila il campo "Luogo di sottoscrizione" con quello usato l'ultima volta (se si sta
    modificando un documento già registrato) o "Roma" di default per un documento nuovo, e tiene
    sincronizzato il testo mostrato in stampa (.gen-luogo-print) col valore digitato — l'input in
@@ -366,6 +452,8 @@ function setupSignFooter(existingDetails){
   luogoInput.value = (existingDetails && existingDetails.luogo) || "Roma";
   luogoPrint.textContent = luogoInput.value;
   luogoInput.oninput = function(){ luogoPrint.textContent = luogoInput.value; };
+  // Overlay appena aperto: il canvas ha appena la sua dimensione reale nel DOM, sicuro da (re)inizializzare qui.
+  setTimeout(resetSignaturePads, 0);
 }
 
 async function checkAuth(){
@@ -697,12 +785,18 @@ async function loadClientHistory(investorId){
    snapshot salvato al momento del "Registra/Aggiorna documento" (genSaveBtn), cosi' una ristampa
    successiva mostra esattamente la stessa firma vista e approvata, non una versione ricalcolata
    al momento della stampa con data odierna (sbagliata per un documento firmato in passato). */
-function signFooterStaticHTML(luogo, dataStr, clientName){
+function signFooterStaticHTML(luogo, dataStr, clientName, signatures){
+  var sig = signatures || {};
+  function signBlock(dataUrl){
+    return dataUrl
+      ? '<img src="' + dataUrl + '" style="max-height:90px;max-width:100%;display:block;margin:0 auto 8px;border-bottom:1px solid #4a3c1f">'
+      : '<div style="border-bottom:1px solid #4a3c1f;height:1px;margin-bottom:8px"></div>';
+  }
   return '<div style="margin-top:60px;font-size:12.5px;color:#4a3c1f">'
     + 'Luogo: <strong>' + escapeHTML(luogo || "Roma") + '</strong> — Data: <strong>' + escapeHTML(dataStr || todayIt()) + '</strong>'
     + '<div style="display:flex;justify-content:space-between;gap:40px;margin-top:56px">'
-    + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #4a3c1f;height:1px;margin-bottom:8px"></div><div style="font-size:11.5px;color:#5c4a20;line-height:1.5">Il Cliente<br><strong>' + escapeHTML(clientName || "") + '</strong></div></div>'
-    + '<div style="flex:1;text-align:center"><div style="border-bottom:1px solid #4a3c1f;height:1px;margin-bottom:8px"></div><div style="font-size:11.5px;color:#5c4a20;line-height:1.5">Per IMMONOVA S.r.l.</div></div>'
+    + '<div style="flex:1;text-align:center">' + signBlock(sig.client) + '<div style="font-size:11.5px;color:#5c4a20;line-height:1.5">Il Cliente<br><strong>' + escapeHTML(clientName || "") + '</strong></div></div>'
+    + '<div style="flex:1;text-align:center">' + signBlock(sig.agent) + '<div style="font-size:11.5px;color:#5c4a20;line-height:1.5">Per IMMONOVA S.r.l.</div></div>'
     + '</div></div>';
 }
 
@@ -924,6 +1018,33 @@ document.getElementById("genCloseBtn").addEventListener("click", function(){
 });
 document.getElementById("genPrintBtn").addEventListener("click", function(){ window.print(); });
 
+/* Invio della copia firmata al cliente: nessun servizio di invio email/programmatico è collegato
+   (nessuna chiave SMTP/Resend/SendGrid configurata), quindi qui si apre il client di posta o
+   WhatsApp del dispositivo con testo/destinatario già precompilati -- l'agente allega il PDF
+   appena salvato con "Stampa / Salva PDF" (su iPad/iPhone: "Stampa" → "Salva su File"). Stesso
+   pattern già usato per la copia di cortesia delle fatture in admin/contabilita.html. */
+function genDocLabel(){ return (genDocTitle.textContent || "Documento").trim(); }
+document.getElementById("genEmailBtn").addEventListener("click", function(){
+  if(!selectedClient) return;
+  var email = (selectedClient.email || "").trim();
+  if(!email){ alert("Il contatto selezionato non ha un'email salvata: aggiungila nella scheda contatto oppure invia manualmente."); return; }
+  var title = genDocLabel();
+  var subject = title + " — IMMONOVA S.r.l.";
+  var body = "Buongiorno " + fullName(selectedClient) + ",\n\n"
+    + "in allegato trova il documento \"" + title + "\" firmato in data odierna.\n\n"
+    + "(Nota per chi invia: salva prima il PDF con \"Stampa / Salva PDF\" — su iPad/iPhone: Stampa → Salva su File — poi allega quel file a questa email prima di inviarla.)\n\n"
+    + "Cordiali saluti,\nIMMONOVA S.r.l.";
+  window.location.href = "mailto:" + encodeURIComponent(email) + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+});
+document.getElementById("genWhatsappBtn").addEventListener("click", function(){
+  if(!selectedClient) return;
+  var phone = (selectedClient.phone || "").replace(/[^0-9+]/g, "");
+  if(!phone){ alert("Il contatto selezionato non ha un numero di telefono salvato: aggiungilo nella scheda contatto oppure invia manualmente."); return; }
+  var title = genDocLabel();
+  var text = "Buongiorno " + fullName(selectedClient) + ", le invio il documento \"" + title + "\" firmato — IMMONOVA S.r.l. (il PDF va allegato manualmente: salvalo prima con \"Stampa / Salva PDF\").";
+  window.open("https://wa.me/" + encodeURIComponent(phone.replace(/^\+/, "")) + "?text=" + encodeURIComponent(text), "_blank");
+});
+
 document.getElementById("genSaveBtn").addEventListener("click", async function(){
   if(!selectedClient || !currentGenType) return;
   var details = {};
@@ -960,7 +1081,7 @@ document.getElementById("genSaveBtn").addEventListener("click", async function()
      e approvato al momento della registrazione, non una versione "nuda" senza firma. */
   var snapshot = '<div class="gen-doc-title" style="font-size:20px;color:#4a3c1f;margin-bottom:18px">' + genDocTitle.innerHTML + '</div>'
     + genDocBody.innerHTML
-    + signFooterStaticHTML(details.luogo, document.getElementById("genSignDate").textContent, fullName(selectedClient));
+    + signFooterStaticHTML(details.luogo, document.getElementById("genSignDate").textContent, fullName(selectedClient), genSignatureDataUrls());
   var payload = {
     investor_id: selectedClient.id, document_type: currentGenType, sent_via:"stampa_pdf",
     details: details, document_html: snapshot, created_by: currentUser.id,
