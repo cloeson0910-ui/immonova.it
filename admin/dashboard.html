@@ -1017,7 +1017,103 @@ async function loadPendingRequestsPopup(){
   }
 }
 
-(async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadCollaborators();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);await loadIncompleteInvestorsPopup();setBoot("","");}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
+/* ---- Controllo automatico "nuove fatture ricevute via SDI" al login ----
+   Lanciato in automatico e in silenzio (nessun errore mostrato se fallisce, non blocca
+   il resto della dashboard) subito dopo il login di un admin/ceo. Se Invoicetronic
+   restituisce fatture passive non ancora presenti in business_invoices_received, le importa
+   (stesso parser XML FatturaPA usato in admin/contabilita.html) e mostra un piccolo popup
+   con un link diretto alla sezione "Fatture ricevute" di Contabilità. */
+function parseFatturaPaXmlReceived(xmlStr){
+  const out={supplierName:null,supplierVat:null,invoiceNumber:null,invoiceDate:null,amountNet:0,vatRate:0,vatAmount:0,amountGross:0};
+  if(!xmlStr) return out;
+  try{
+    const doc=new DOMParser().parseFromString(xmlStr,"application/xml");
+    if(doc.getElementsByTagName("parsererror").length) return out;
+    const tag=(name)=>{ const els=doc.getElementsByTagName(name); return els.length?(els[0].textContent||"").trim():""; };
+    const cedente=doc.getElementsByTagName("CedentePrestatore")[0];
+    if(cedente){
+      const den=cedente.getElementsByTagName("Denominazione")[0];
+      if(den){ out.supplierName=den.textContent.trim(); }
+      else{
+        const nome=cedente.getElementsByTagName("Nome")[0], cognome=cedente.getElementsByTagName("Cognome")[0];
+        out.supplierName=[nome&&nome.textContent.trim(),cognome&&cognome.textContent.trim()].filter(Boolean).join(" ")||null;
+      }
+      const idFiscale=cedente.getElementsByTagName("IdFiscaleIVA")[0];
+      if(idFiscale){ const idCodice=idFiscale.getElementsByTagName("IdCodice")[0]; if(idCodice) out.supplierVat=idCodice.textContent.trim(); }
+    }
+    out.invoiceNumber=tag("Numero")||null;
+    out.invoiceDate=tag("Data")||null;
+    out.amountGross=parseFloat(tag("ImportoTotaleDocumento"))||0;
+    const riepiloghi=doc.getElementsByTagName("DatiRiepilogo");
+    let net=0,vat=0,rate=0;
+    for(let i=0;i<riepiloghi.length;i++){
+      const r=riepiloghi[i];
+      const imp=r.getElementsByTagName("ImponibileImporto")[0]; if(imp) net+=parseFloat(imp.textContent)||0;
+      const ivaAmt=r.getElementsByTagName("Imposta")[0]; if(ivaAmt) vat+=parseFloat(ivaAmt.textContent)||0;
+      if(!rate){ const al=r.getElementsByTagName("AliquotaIVA")[0]; if(al) rate=parseFloat(al.textContent)||0; }
+    }
+    out.amountNet=Math.round(net*100)/100; out.vatAmount=Math.round(vat*100)/100; out.vatRate=rate;
+    if(!out.amountGross) out.amountGross=Math.round((out.amountNet+out.vatAmount)*100)/100;
+  }catch(e){ console.error("[parse FatturaPA ricevuta]",e); }
+  return out;
+}
+
+async function checkNewReceivedInvoicesSilently(){
+  try{
+    const {data:{session}}=await client.auth.getSession();
+    if(!session) return;
+    const resp=await fetch(SUPABASE_URL+"/functions/v1/invoicetronic-proxy",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({action:"list_receive",unread:false,include_payload:true})
+    });
+    const result=await resp.json().catch(()=>null);
+    if(!resp.ok || !result || result.error || !result.ok){ console.warn("[login] controllo fatture ricevute non riuscito (silenzioso)",result); return; }
+
+    const list=Array.isArray(result.data) ? result.data : (result.data && Array.isArray(result.data.items) ? result.data.items : []);
+    if(!list.length) return;
+
+    let imported=0;
+    for(const item of list){
+      const sdiId=String(item.id||item.Id||item.identifier||item.guid||"").trim();
+      if(!sdiId) continue;
+      let xml=item.payload||"";
+      if(item.encoding==="Base64" && xml){ try{ xml=atob(xml); }catch(e){} }
+      const parsed=parseFatturaPaXmlReceived(xml);
+      const payload={
+        supplier_name: parsed.supplierName || item.prestatore || "Fornitore da verificare",
+        supplier_vat: item.prestatore || parsed.supplierVat || null,
+        supplier_invoice_number: parsed.invoiceNumber || null,
+        invoice_date: parsed.invoiceDate || new Date().toISOString().slice(0,10),
+        amount_net: parsed.amountNet || 0,
+        vat_rate: parsed.vatRate || 0,
+        vat_amount: parsed.vatAmount || 0,
+        amount_gross: parsed.amountGross || 0,
+        sdi_identifier: sdiId,
+        status: "received",
+        notes: item.file_name ? ("File SDI: "+item.file_name) : null
+      };
+      const {data:upserted,error}=await client.from("business_invoices_received").upsert(payload,{onConflict:"sdi_identifier",ignoreDuplicates:true}).select();
+      if(error){ console.error("[login] errore import fattura ricevuta",error); continue; }
+      if(upserted && upserted.length) imported++;
+    }
+    if(imported>0){
+      document.getElementById("newReceivedInvoicesToastMsg").textContent=
+        imported===1 ? "È arrivata 1 nuova fattura ricevuta via SDI." : ("Sono arrivate "+imported+" nuove fatture ricevute via SDI.");
+      document.getElementById("newReceivedInvoicesToast").style.display="block";
+    }
+  }catch(e){
+    console.warn("[login] controllo automatico fatture ricevute fallito (silenzioso):",e);
+  }
+}
+(function bindNewReceivedInvoicesToast(){
+  const closeBtn=document.getElementById("newReceivedInvoicesToastClose");
+  const goBtn=document.getElementById("newReceivedInvoicesToastGo");
+  if(closeBtn) closeBtn.addEventListener("click",()=>{ document.getElementById("newReceivedInvoicesToast").style.display="none"; });
+  if(goBtn) goBtn.addEventListener("click",()=>{ window.location.href="contabilita.html#receivedInvoicesSection"; });
+})();
+
+(async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadCollaborators();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);await loadIncompleteInvestorsPopup();setBoot("","");if(isAdmin){ checkNewReceivedInvoicesSilently(); }}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
 </script>
 
 <div class="incomplete-overlay" id="incompleteOverlay" hidden>
@@ -1035,6 +1131,15 @@ async function loadPendingRequestsPopup(){
     <p class="hint">Questi clienti compratori hanno richiesto un dossier e sono ancora in attesa: il dossier non è ancora stato inviato (o la richiesta non è stata ancora approvata/rifiutata). Apri la richiesta per approvarla e/o inviare il dossier.</p>
     <div class="incomplete-list" id="pendingRequestsList"></div>
     <div class="incomplete-actions"><button type="button" id="pendingRequestsCloseBtn">Chiudi</button></div>
+  </div>
+</div>
+
+<div id="newReceivedInvoicesToast" style="display:none;position:fixed;top:90px;right:24px;z-index:999;max-width:320px;background:#5c4a22;color:#fff8ea;border-radius:10px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.28);font-size:13px;line-height:1.5;font-family:inherit">
+  <div style="font-weight:600;margin-bottom:6px">📩 Nuove fatture ricevute</div>
+  <div id="newReceivedInvoicesToastMsg" style="margin-bottom:12px;opacity:.9"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button type="button" id="newReceivedInvoicesToastClose" style="background:none;border:1px solid rgba(255,255,255,.4);color:#fff8ea;border-radius:6px;padding:7px 12px;font-size:11px;cursor:pointer">Chiudi</button>
+    <button type="button" id="newReceivedInvoicesToastGo" style="background:#fff8ea;border:none;color:#5c4a22;border-radius:6px;padding:7px 12px;font-size:11px;cursor:pointer;font-weight:600">Vai alla sezione</button>
   </div>
 </div>
 </body>

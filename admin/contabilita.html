@@ -68,6 +68,15 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
   <div class="subtitle">Conto economico, IVA, spese e fatture (SDI) — uso interno.</div>
   <div class="status" id="pageStatus"></div>
 
+  <div id="newReceivedToast" style="display:none;position:fixed;top:90px;right:24px;z-index:999;max-width:320px;background:#5c4a22;color:#fff8ea;border-radius:10px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.28);font-size:13px;line-height:1.5">
+    <div style="font-weight:600;margin-bottom:6px">📩 Nuove fatture ricevute</div>
+    <div id="newReceivedToastMsg" style="margin-bottom:12px;opacity:.9"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button type="button" id="newReceivedToastClose" style="background:none;border:1px solid rgba(255,255,255,.4);color:#fff8ea;border-radius:6px;padding:7px 12px;font-size:11px;cursor:pointer">Chiudi</button>
+      <button type="button" id="newReceivedToastGo" style="background:#fff8ea;border:none;color:#5c4a22;border-radius:6px;padding:7px 12px;font-size:11px;cursor:pointer;font-weight:600">Vai alla sezione</button>
+    </div>
+  </div>
+
   <div class="period-bar">
     <label>Periodo</label>
     <select id="periodMonth"></select>
@@ -231,12 +240,13 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
     </div>
   </section>
 
-  <section class="block">
+  <section class="block" id="receivedInvoicesSection">
     <div class="block-head">
       <div>
         <div class="block-title">Fatture ricevute</div>
-        <div class="block-hint">Fatture passive dai fornitori. Registrazione manuale finché non è collegata la ricezione automatica via SDI.</div>
+        <div class="block-hint">Fatture passive dai fornitori. Registrazione manuale, oppure sincronizzazione automatica di quelle arrivate via SDI attraverso Invoicetronic (controllata anche in automatico ad ogni accesso).</div>
       </div>
+      <button class="btn secondary" id="syncReceivedBtn" type="button">Sincronizza da Invoicetronic</button>
     </div>
     <form class="inline-form" id="invoiceReceivedForm">
       <div><label>Fornitore</label><input type="text" id="recSupplier" required></div>
@@ -381,6 +391,128 @@ function renderInvoicesReceived(){
 }
 
 function escapeHTML(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+/* Estrae i dati principali (fornitore, numero, data, importi) da un XML FatturaPA
+   ricevuto via Invoicetronic. Gli elementi del corpo (fuori dal namespace prefissato
+   della radice) non hanno prefisso, quindi getElementsByTagName funziona sul nome locale. */
+function parseFatturaPaXmlReceived(xmlStr){
+  const out={supplierName:null,supplierVat:null,invoiceNumber:null,invoiceDate:null,amountNet:0,vatRate:0,vatAmount:0,amountGross:0};
+  if(!xmlStr) return out;
+  try{
+    const doc=new DOMParser().parseFromString(xmlStr,"application/xml");
+    if(doc.getElementsByTagName("parsererror").length) return out;
+    const tag=(name)=>{ const els=doc.getElementsByTagName(name); return els.length?(els[0].textContent||"").trim():""; };
+    const cedente=doc.getElementsByTagName("CedentePrestatore")[0];
+    if(cedente){
+      const den=cedente.getElementsByTagName("Denominazione")[0];
+      if(den){ out.supplierName=den.textContent.trim(); }
+      else{
+        const nome=cedente.getElementsByTagName("Nome")[0], cognome=cedente.getElementsByTagName("Cognome")[0];
+        out.supplierName=[nome&&nome.textContent.trim(),cognome&&cognome.textContent.trim()].filter(Boolean).join(" ")||null;
+      }
+      const idFiscale=cedente.getElementsByTagName("IdFiscaleIVA")[0];
+      if(idFiscale){ const idCodice=idFiscale.getElementsByTagName("IdCodice")[0]; if(idCodice) out.supplierVat=idCodice.textContent.trim(); }
+    }
+    out.invoiceNumber=tag("Numero")||null;
+    out.invoiceDate=tag("Data")||null;
+    out.amountGross=parseFloat(tag("ImportoTotaleDocumento"))||0;
+    const riepiloghi=doc.getElementsByTagName("DatiRiepilogo");
+    let net=0,vat=0,rate=0;
+    for(let i=0;i<riepiloghi.length;i++){
+      const r=riepiloghi[i];
+      const imp=r.getElementsByTagName("ImponibileImporto")[0]; if(imp) net+=parseFloat(imp.textContent)||0;
+      const ivaAmt=r.getElementsByTagName("Imposta")[0]; if(ivaAmt) vat+=parseFloat(ivaAmt.textContent)||0;
+      if(!rate){ const al=r.getElementsByTagName("AliquotaIVA")[0]; if(al) rate=parseFloat(al.textContent)||0; }
+    }
+    out.amountNet=Math.round(net*100)/100; out.vatAmount=Math.round(vat*100)/100; out.vatRate=rate;
+    if(!out.amountGross) out.amountGross=Math.round((out.amountNet+out.vatAmount)*100)/100;
+  }catch(e){ console.error("[parse FatturaPA ricevuta]",e); }
+  return out;
+}
+
+/* silent=true: usata per il controllo automatico all'accesso (non mostra errori bloccanti
+   in stato "error" invadente, non tocca il pulsante, e ritorna il numero di fatture nuove
+   invece di scrivere solo lo stato testuale). */
+async function syncReceivedFromSdi(silent){
+  const btn=document.getElementById("syncReceivedBtn");
+  if(!silent){ btn.disabled=true; setStatus("Sincronizzazione fatture ricevute da Invoicetronic in corso...",""); }
+  try{
+    const {data:{session}}=await client.auth.getSession();
+    const resp=await fetch(SUPABASE_URL+"/functions/v1/invoicetronic-proxy",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({action:"list_receive",unread:false,include_payload:true})
+    });
+    const result=await resp.json();
+    if(!resp.ok || result.error){
+      if(!silent){ setStatus("Errore proxy: "+(result.error||resp.statusText),"error"); btn.disabled=false; }
+      console.error("[sync ricevute]",result);
+      return 0;
+    }
+    if(!result.ok){
+      if(!silent){ setStatus("Invoicetronic ha risposto con errore (HTTP "+result.status+"): "+JSON.stringify(result.data).slice(0,300),"error"); btn.disabled=false; }
+      console.error("[sync ricevute] risposta non valida",result);
+      return 0;
+    }
+
+    const list=Array.isArray(result.data) ? result.data : (result.data && Array.isArray(result.data.items) ? result.data.items : []);
+    if(!list.length){
+      if(!silent){ setStatus("Nessuna fattura ricevuta trovata su Invoicetronic per questo account.","success"); btn.disabled=false; }
+      return 0;
+    }
+
+    let imported=0, skipped=0, failed=0;
+    for(const item of list){
+      const sdiId=String(item.id||item.Id||item.identifier||item.guid||"").trim();
+      if(!sdiId){ failed++; continue; }
+      let xml=item.payload||"";
+      if(item.encoding==="Base64" && xml){ try{ xml=atob(xml); }catch(e){ console.error("[sync ricevute] decodifica base64 fallita",e); } }
+      const parsed=parseFatturaPaXmlReceived(xml);
+      const payload={
+        supplier_name: parsed.supplierName || item.prestatore || "Fornitore da verificare",
+        supplier_vat: item.prestatore || parsed.supplierVat || null,
+        supplier_invoice_number: parsed.invoiceNumber || null,
+        invoice_date: parsed.invoiceDate || new Date().toISOString().slice(0,10),
+        amount_net: parsed.amountNet || 0,
+        vat_rate: parsed.vatRate || 0,
+        vat_amount: parsed.vatAmount || 0,
+        amount_gross: parsed.amountGross || 0,
+        sdi_identifier: sdiId,
+        status: "received",
+        notes: item.file_name ? ("File SDI: "+item.file_name) : null
+      };
+      const {data:upserted,error}=await client.from("business_invoices_received").upsert(payload,{onConflict:"sdi_identifier",ignoreDuplicates:true}).select();
+      if(error){ console.error("[sync ricevute] errore upsert",error); failed++; continue; }
+      if(upserted && upserted.length) imported++; else skipped++;
+    }
+    if(!silent){
+      setStatus("Sincronizzazione completata: "+imported+" nuova/e importata/e, "+skipped+" già presenti"+(failed?(", "+failed+" con errori (vedi console)"):"")+".", failed?"error":"success");
+    }
+    if(imported>0) await refreshAll();
+    return imported;
+  }catch(err){
+    if(!silent){ setStatus("Errore di rete durante la sincronizzazione: "+(err&&err.message||err),"error"); }
+    console.error("[sync ricevute]",err);
+    return 0;
+  }finally{
+    if(!silent) btn.disabled=false;
+  }
+}
+
+document.getElementById("syncReceivedBtn").addEventListener("click", ()=>syncReceivedFromSdi(false));
+
+function showNewReceivedToast(count){
+  document.getElementById("newReceivedToastMsg").textContent=
+    count===1 ? "È arrivata 1 nuova fattura ricevuta via SDI." : ("Sono arrivate "+count+" nuove fatture ricevute via SDI.");
+  document.getElementById("newReceivedToast").style.display="block";
+}
+document.getElementById("newReceivedToastClose").addEventListener("click",()=>{
+  document.getElementById("newReceivedToast").style.display="none";
+});
+document.getElementById("newReceivedToastGo").addEventListener("click",()=>{
+  document.getElementById("newReceivedToast").style.display="none";
+  document.getElementById("receivedInvoicesSection").scrollIntoView({behavior:"smooth",block:"start"});
+});
 
 function recomputeSummary(){
   const revenue=cachedIssued.reduce((a,i)=>a+Number(i.amount_net||0),0);
@@ -1045,7 +1177,15 @@ document.getElementById("generatePropertyInvoicesBtn").addEventListener("click",
   const ok=await checkAuth();
   if(!ok) return;
   await loadProfile();
-  if(isAdmin){ await loadCompanyProfile(); await refreshAll(); }
+  if(isAdmin){
+    await loadCompanyProfile();
+    await refreshAll();
+    // Il controllo automatico delle nuove fatture ricevute via SDI avviene al login,
+    // in dashboard.html (popup "Nuove fatture ricevute"): qui resta solo il pulsante manuale.
+    if(window.location.hash==="#receivedInvoicesSection"){
+      document.getElementById("receivedInvoicesSection").scrollIntoView({behavior:"smooth",block:"start"});
+    }
+  }
 })();
 </script>
 </body>
