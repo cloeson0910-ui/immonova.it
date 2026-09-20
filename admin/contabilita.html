@@ -82,12 +82,13 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
     <select id="periodMonth"></select>
     <select id="periodYear"></select>
     <button class="btn secondary" id="refreshSummaryBtn" type="button">Aggiorna</button>
+    <button class="btn" id="openAccountingReportBtn" type="button">Documento contabile stampabile</button>
   </div>
 
   <div class="summary-grid" id="summaryGrid">
-    <div class="summary-card"><div class="summary-label">Ricavi (fatture emesse)</div><div class="summary-value" id="sumRevenue">—</div></div>
-    <div class="summary-card"><div class="summary-label">Costi (fatture ricevute + spese)</div><div class="summary-value" id="sumCosts">—</div></div>
-    <div class="summary-card"><div class="summary-label">Utile netto periodo</div><div class="summary-value" id="sumProfit">—</div></div>
+    <div class="summary-card"><div class="summary-label">Ricavi imponibili (IVA esclusa)</div><div class="summary-value" id="sumRevenue">—</div></div>
+    <div class="summary-card"><div class="summary-label">Costi imponibili (fatture ricevute + spese, IVA esclusa)</div><div class="summary-value" id="sumCosts">—</div></div>
+    <div class="summary-card"><div class="summary-label">Utile netto periodo (ricavi imponibile − costi imponibile, IVA esclusa)</div><div class="summary-value" id="sumProfit">—</div></div>
     <div class="summary-card"><div class="summary-label">IVA a debito</div><div class="summary-value" id="sumVatDebit">—</div></div>
     <div class="summary-card"><div class="summary-label">IVA a credito</div><div class="summary-value" id="sumVatCredit">—</div></div>
     <div class="summary-card"><div class="summary-label">IVA da versare (saldo)</div><div class="summary-value" id="sumVatBalance">—</div></div>
@@ -537,6 +538,147 @@ function recomputeSummary(){
   balEl.textContent=eur(vatBalance);
   balEl.className="summary-value "+(vatBalance>=0?"neg":"pos");
 }
+
+/* ================= Documento contabile stampabile (Conto Economico per voce) ================= */
+function periodLabel(){
+  const monthSel=document.getElementById("periodMonth");
+  const yearSel=document.getElementById("periodYear");
+  return monthSel.options[monthSel.selectedIndex].textContent+" "+yearSel.value;
+}
+
+const EXPENSE_CATEGORY_LABELS={
+  carburante:"Carburante", cartoleria:"Cartoleria/ufficio", utenze:"Utenze",
+  marketing:"Marketing/pubblicità", software:"Software/abbonamenti",
+  viaggi:"Viaggi/trasferte", personale:"Costo personale", altro:"Altro"
+};
+
+/* Unisce spese manuali (business_expenses) e fatture passive (business_invoices_received) in
+   un'unica analisi per voce di costo, cosi' si vede subito quale categoria (carburante,
+   utenze, marketing ecc.) pesa di piu' sul periodo, non solo il totale costi aggregato. */
+function computeCostBreakdown(){
+  const map={};
+  function add(rawLabel, net, gross, vat){
+    const key=(rawLabel||"Altro").toString().trim()||"Altro";
+    if(!map[key]) map[key]={label:key, net:0, gross:0, vat:0, count:0};
+    map[key].net+=Number(net)||0; map[key].gross+=Number(gross)||0; map[key].vat+=Number(vat)||0; map[key].count++;
+  }
+  cachedExpenses.forEach(e=>add(EXPENSE_CATEGORY_LABELS[e.category]||e.category, e.amount_net, e.amount_gross, e.vat_amount));
+  cachedReceived.forEach(r=>add(r.category||"Fatture fornitori (non categorizzate)", r.amount_net, r.amount_gross, r.vat_amount));
+  return Object.values(map).sort((a,b)=>b.net-a.net);
+}
+
+function buildAccountingReportHtml(){
+  const breakdown=computeCostBreakdown();
+  const totalCostNet=breakdown.reduce((a,c)=>a+c.net,0);
+  const totalCostGross=breakdown.reduce((a,c)=>a+c.gross,0);
+  const totalCostVat=breakdown.reduce((a,c)=>a+c.vat,0);
+  const totalCostCount=breakdown.reduce((a,c)=>a+c.count,0);
+  const revenueNet=cachedIssued.reduce((a,i)=>a+Number(i.amount_net||0),0);
+  const revenueVat=cachedIssued.reduce((a,i)=>a+Number(i.vat_amount||0),0);
+  const revenueGross=revenueNet+revenueVat;
+  const profit=revenueNet-totalCostNet;
+  const vatBalance=revenueVat-totalCostVat;
+  const maxNet=breakdown.length?breakdown[0].net:0;
+
+  const rowsCosts=breakdown.length ? breakdown.map(c=>{
+    const pct=totalCostNet>0?(c.net/totalCostNet*100):0;
+    const barPct=maxNet>0?(c.net/maxNet*100):0;
+    return `<tr>
+      <td>${escapeHTML(c.label)}</td>
+      <td class="num">${c.count}</td>
+      <td class="num">${eur(c.net)}</td>
+      <td class="num">${eur(c.vat)}</td>
+      <td class="num">${eur(c.gross)}</td>
+      <td class="num">${pct.toFixed(1)}%</td>
+      <td><div class="bar-track"><div class="bar-fill" style="width:${barPct.toFixed(1)}%"></div></div></td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="7" class="empty">Nessun costo registrato nel periodo.</td></tr>`;
+
+  const rowsRevenue=cachedIssued.length ? cachedIssued.map(i=>`<tr>
+    <td>${escapeHTML(i.invoice_number)}</td>
+    <td>${new Date(i.invoice_date).toLocaleDateString("it-IT")}</td>
+    <td>${escapeHTML(i.client_name)}</td>
+    <td>${escapeHTML(i.description||"")}</td>
+    <td class="num">${eur(i.amount_net)}</td>
+    <td class="num">${eur(i.vat_amount)}</td>
+    <td class="num">${eur(i.amount_gross)}</td>
+  </tr>`).join("") : `<tr><td colspan="7" class="empty">Nessuna fattura emessa nel periodo.</td></tr>`;
+
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8">
+<title>Conto Economico — ${escapeHTML(periodLabel())}</title>
+<style>
+body{font-family:"Helvetica Neue",Arial,sans-serif;color:#333;max-width:980px;margin:30px auto;padding:0 20px}
+.toolbar{display:flex;gap:10px;justify-content:flex-end;margin-bottom:24px}
+.toolbar button{padding:9px 16px;border-radius:6px;border:1px solid #a67f34;background:#a67f34;color:#fff;font-size:13px;cursor:pointer}
+.toolbar button.secondary{background:#fff;color:#a67f34}
+.doc{border:1px solid #ddd;border-radius:8px;padding:36px}
+.doc h1{font-size:20px;letter-spacing:.08em;color:#5c4a22;font-weight:400;margin-bottom:2px}
+.doc .tag{font-size:11px;color:#9c8452;text-transform:uppercase;letter-spacing:.08em;margin-bottom:26px}
+.doc h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#a58139;border-bottom:1px solid #eee;padding-bottom:6px;margin:26px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid #eee;vertical-align:middle}
+th{font-size:10px;text-transform:uppercase;color:#a58139}
+td.num,th.num{text-align:right}
+tr.total-row td{font-weight:700;border-top:2px solid #ccc}
+.bar-track{width:110px;height:8px;background:#f1e9d8;border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;background:#a67f34;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.summary-table{max-width:420px;margin-top:6px}
+.summary-table td{padding:8px 6px}
+.summary-table td:first-child{color:#9c8452}
+.summary-table td:last-child{text-align:right;font-weight:600}
+.summary-table tr.grand td{font-size:16px;border-top:2px solid #ddd;padding-top:12px}
+.pos{color:#4f7f45}.neg{color:#9c2f2f}
+.empty{text-align:center;font-style:italic;color:#9c8452}
+.disclaimer{font-size:10.5px;color:#9c8452;font-style:italic;margin-top:26px;line-height:1.5}
+@media print{.toolbar{display:none}body{margin:0}.doc{border:none;padding:0}}
+</style></head><body>
+<div class="toolbar">
+  <button class="secondary" onclick="window.close()">Chiudi</button>
+  <button onclick="window.print()">Stampa / Salva PDF</button>
+</div>
+<div class="doc">
+  <h1>${escapeHTML((companyProfile&&companyProfile.legal_name)||"IMMONOVA S.R.L.")}</h1>
+  <div class="tag">Conto Economico per voce — ${escapeHTML(periodLabel())} — generato il ${new Date().toLocaleDateString("it-IT")}</div>
+
+  <h2>Ricavi (fatture emesse)</h2>
+  <table>
+    <thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Descrizione</th><th class="num">Netto</th><th class="num">IVA</th><th class="num">Lordo</th></tr></thead>
+    <tbody>${rowsRevenue}
+    <tr class="total-row"><td colspan="4">Totale ricavi</td><td class="num">${eur(revenueNet)}</td><td class="num">${eur(revenueVat)}</td><td class="num">${eur(revenueGross)}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Costi per voce (spese manuali + fatture fornitori)</h2>
+  <table>
+    <thead><tr><th>Voce di costo</th><th class="num">N. documenti</th><th class="num">Imponibile</th><th class="num">IVA</th><th class="num">Totale</th><th class="num">% sui costi</th><th>Incidenza</th></tr></thead>
+    <tbody>${rowsCosts}
+    <tr class="total-row"><td>Totale costi</td><td class="num">${totalCostCount}</td><td class="num">${eur(totalCostNet)}</td><td class="num">${eur(totalCostVat)}</td><td class="num">${eur(totalCostGross)}</td><td class="num">100%</td><td></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Riepilogo periodo</h2>
+  <table class="summary-table">
+    <tr><td>Ricavi imponibili (IVA esclusa)</td><td>${eur(revenueNet)}</td></tr>
+    <tr><td>Costi imponibili (IVA esclusa)</td><td>${eur(totalCostNet)}</td></tr>
+    <tr class="grand"><td>Utile netto periodo (imponibile − imponibile)</td><td class="${profit>=0?"pos":"neg"}">${eur(profit)}</td></tr>
+    <tr><td>IVA a debito (su ricavi)</td><td>${eur(revenueVat)}</td></tr>
+    <tr><td>IVA a credito (su costi)</td><td>${eur(totalCostVat)}</td></tr>
+    <tr class="grand"><td>Saldo IVA${vatBalance>=0?" (da versare)":" (a credito)"}</td><td class="${vatBalance>=0?"neg":"pos"}">${eur(vatBalance)}</td></tr>
+  </table>
+
+  <div class="disclaimer">Documento generato da IMMONOVA a supporto operativo interno, sulla base dei dati registrati in Contabilità per il periodo indicato. Non sostituisce il bilancio ufficiale né la consulenza di un commercialista: prima di versamenti, dichiarazioni o bilanci ufficiali, fai sempre verificare i numeri da un professionista abilitato.</div>
+</div>
+</body></html>`;
+}
+
+function openAccountingReport(){
+  const win=window.open("","_blank");
+  if(!win){ setStatus("Il browser ha bloccato l'apertura del documento: consenti i popup per questo sito.","error"); return; }
+  win.document.open();
+  win.document.write(buildAccountingReportHtml());
+  win.document.close();
+}
+document.getElementById("openAccountingReportBtn").addEventListener("click", openAccountingReport);
 
 async function refreshAll(){
   setStatus("Aggiornamento in corso...","");
