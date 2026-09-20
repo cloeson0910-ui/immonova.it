@@ -175,8 +175,35 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
   <section class="block">
     <div class="block-head">
       <div>
+        <div class="block-title">Dati Azienda (Cedente/Prestatore in fattura)</div>
+        <div class="block-hint">Anagrafica fiscale di IMMONOVA S.R.L. richiesta dallo schema FatturaPA per generare fatture elettroniche valide. Va compilata una sola volta.</div>
+      </div>
+    </div>
+    <form class="inline-form" id="companyProfileForm">
+      <div><label>Ragione sociale</label><input type="text" id="cpLegalName"></div>
+      <div><label>Partita IVA</label><input type="text" id="cpVatNumber" placeholder="11 cifre"></div>
+      <div><label>Codice Fiscale</label><input type="text" id="cpFiscalCode"></div>
+      <div><label>Regime fiscale</label>
+        <select id="cpRegimeFiscale">
+          <option value="RF01">RF01 — Ordinario</option>
+          <option value="RF19">RF19 — Forfettario</option>
+        </select>
+      </div>
+      <div><label>Indirizzo (via/numero)</label><input type="text" id="cpAddress"></div>
+      <div><label>CAP</label><input type="text" id="cpCap"></div>
+      <div><label>Comune</label><input type="text" id="cpComune"></div>
+      <div><label>Provincia (sigla)</label><input type="text" id="cpProvincia" maxlength="2"></div>
+      <div><label>PEC</label><input type="text" id="cpPec"></div>
+      <div><label>Codice Destinatario SDI</label><input type="text" id="cpSdiCode" maxlength="7" placeholder="7 caratteri, lascia vuoto se usi la PEC"></div>
+      <div><button class="btn secondary" type="button" id="saveCompanyProfileBtn">Salva dati azienda</button></div>
+    </form>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <div>
         <div class="block-title">Fatture emesse</div>
-        <div class="block-hint">Registrazione manuale. Collegamento SDI reale via Invoicetronic in fase di test (ambiente sandbox, nessuna fattura viene davvero trasmessa all'Agenzia delle Entrate finché non si passa a una chiave di produzione).</div>
+        <div class="block-hint">Registrazione manuale + invio reale via SDI (XML FatturaPA generato automaticamente, trasmesso tramite Invoicetronic). Con la chiave sandbox attuale nessuna fattura raggiunge davvero l'Agenzia delle Entrate — serve una chiave di produzione per l'invio ufficiale.</div>
       </div>
       <button class="btn secondary" id="testInvoicetronicBtn" type="button">Verifica connessione Invoicetronic</button>
     </div>
@@ -188,6 +215,11 @@ tr.total-row td{font-weight:600;border-top:2px solid rgba(166,127,52,.3)}
       <div><label>Importo netto (€)</label><input type="number" step="0.01" id="issAmountNet" required></div>
       <div><label>Aliquota IVA %</label><input type="number" step="0.01" id="issVatRate" value="22"></div>
       <div><label>Descrizione</label><input type="text" id="issDescription"></div>
+      <div><label>Indirizzo cliente</label><input type="text" id="issClientAddress" placeholder="Via/numero"></div>
+      <div><label>CAP</label><input type="text" id="issClientCap"></div>
+      <div><label>Comune</label><input type="text" id="issClientComune"></div>
+      <div><label>Provincia</label><input type="text" id="issClientProvincia" maxlength="2"></div>
+      <div><label>PEC cliente (o Codice SDI)</label><input type="text" id="issClientPec" placeholder="PEC oppure 7 caratteri Codice Destinatario"></div>
       <div><button class="btn" type="submit">Registra fattura</button></div>
     </form>
     <div class="table-wrap">
@@ -307,16 +339,21 @@ async function loadInvoicesIssued(){
 function renderInvoicesIssued(){
   const tbody=document.getElementById("invoicesIssuedBody");
   if(!cachedIssued.length){tbody.innerHTML='<tr class="empty-row"><td colspan="8">Nessuna fattura emessa nel periodo selezionato.</td></tr>';return}
-  tbody.innerHTML=cachedIssued.map(inv=>`<tr>
+  tbody.innerHTML=cachedIssued.map(inv=>{
+    const canSend = inv.status==="draft" || inv.status==="error";
+    const sendBtn = canSend
+      ? `<button class="btn secondary" style="padding:6px 10px;font-size:10px" data-id="${inv.id}" data-action="send-sdi">Invia a SDI</button>`
+      : (inv.status==="sent"||inv.status==="delivered" ? `<span style="font-size:11px;color:#8f7643">Inviata${inv.sdi_identifier?" (ID "+escapeHTML(inv.sdi_identifier)+")":""}</span>` : "");
+    return `<tr>
     <td>${escapeHTML(inv.invoice_number)}</td>
     <td>${new Date(inv.invoice_date).toLocaleDateString("it-IT")}</td>
     <td>${escapeHTML(inv.client_name)}</td>
     <td>${eur(inv.amount_net)}</td>
     <td>${eur(inv.vat_amount)}</td>
     <td>${eur(inv.amount_gross)}</td>
-    <td><span class="badge ${escapeHTML(inv.status)}">${escapeHTML(inv.status)}</span></td>
-    <td><button class="del-btn" data-id="${inv.id}" data-type="issued">Elimina</button></td>
-  </tr>`).join("");
+    <td><span class="badge ${escapeHTML(inv.status)}">${escapeHTML(inv.status)}</span>${inv.sdi_message?`<div style="font-size:10px;color:#9c2f2f;margin-top:3px">${escapeHTML(inv.sdi_message)}</div>`:""}</td>
+    <td>${sendBtn}<button class="del-btn" data-id="${inv.id}" data-type="issued" style="margin-left:8px">Elimina</button></td>
+  </tr>`;}).join("");
 }
 
 async function loadInvoicesReceived(){
@@ -398,6 +435,8 @@ document.getElementById("invoiceIssuedForm").addEventListener("submit",async(e)=
   const net=parseFloat(document.getElementById("issAmountNet").value);
   const vatRate=parseFloat(document.getElementById("issVatRate").value)||0;
   const vatAmount=Math.round(net*vatRate)/100;
+  const pecOrSdi=document.getElementById("issClientPec").value.trim();
+  const isSdiCode=/^[A-Za-z0-9]{7}$/.test(pecOrSdi);
   const payload={
     invoice_number:document.getElementById("issNumber").value,
     invoice_date:document.getElementById("issDate").value,
@@ -409,7 +448,13 @@ document.getElementById("invoiceIssuedForm").addEventListener("submit",async(e)=
     vat_amount:vatAmount,
     amount_gross:Math.round((net+vatAmount)*100)/100,
     status:"draft",
-    created_by:currentUser.id
+    created_by:currentUser.id,
+    client_address:document.getElementById("issClientAddress").value||null,
+    client_cap:document.getElementById("issClientCap").value||null,
+    client_comune:document.getElementById("issClientComune").value||null,
+    client_provincia:document.getElementById("issClientProvincia").value||null,
+    client_sdi_code:isSdiCode?pecOrSdi.toUpperCase():null,
+    client_pec:(!isSdiCode&&pecOrSdi)?pecOrSdi:null
   };
   const {error}=await client.from("business_invoices_issued").insert(payload);
   if(error){setStatus("Errore salvataggio fattura: "+error.message,"error");return}
@@ -483,6 +528,244 @@ document.getElementById("testInvoicetronicBtn").addEventListener("click",async()
 document.getElementById("refreshSummaryBtn").addEventListener("click",refreshAll);
 document.getElementById("periodMonth").addEventListener("change",refreshAll);
 document.getElementById("periodYear").addEventListener("change",refreshAll);
+
+/* ================= Dati Azienda (Cedente/Prestatore) ================= */
+let companyProfile=null;
+
+async function loadCompanyProfile(){
+  const {data,error}=await client.from("business_company_profile").select("*").eq("id",1).single();
+  if(error){console.error(error);return}
+  companyProfile=data;
+  document.getElementById("cpLegalName").value=data.legal_name||"";
+  document.getElementById("cpVatNumber").value=data.vat_number||"";
+  document.getElementById("cpFiscalCode").value=data.fiscal_code||"";
+  document.getElementById("cpRegimeFiscale").value=data.regime_fiscale||"RF01";
+  document.getElementById("cpAddress").value=data.address||"";
+  document.getElementById("cpCap").value=data.cap||"";
+  document.getElementById("cpComune").value=data.comune||"";
+  document.getElementById("cpProvincia").value=data.provincia||"";
+  document.getElementById("cpPec").value=data.pec||"";
+  document.getElementById("cpSdiCode").value=data.sdi_codice_destinatario||"";
+}
+
+document.getElementById("saveCompanyProfileBtn").addEventListener("click",async()=>{
+  const payload={
+    id:1,
+    legal_name:document.getElementById("cpLegalName").value||"IMMONOVA S.R.L.",
+    vat_number:document.getElementById("cpVatNumber").value||null,
+    fiscal_code:document.getElementById("cpFiscalCode").value||null,
+    regime_fiscale:document.getElementById("cpRegimeFiscale").value,
+    address:document.getElementById("cpAddress").value||null,
+    cap:document.getElementById("cpCap").value||null,
+    comune:document.getElementById("cpComune").value||null,
+    provincia:document.getElementById("cpProvincia").value||null,
+    pec:document.getElementById("cpPec").value||null,
+    sdi_codice_destinatario:document.getElementById("cpSdiCode").value||null,
+    updated_at:new Date().toISOString()
+  };
+  const {error}=await client.from("business_company_profile").upsert(payload);
+  if(error){setStatus("Errore salvataggio dati azienda: "+error.message,"error");return}
+  setStatus("Dati azienda salvati.","success");
+  await loadCompanyProfile();
+});
+
+async function getNextInvoiceNumber(){
+  const year=new Date().getFullYear();
+  const {data,error}=await client.from("business_company_profile").select("next_invoice_progressive").eq("id",1).single();
+  const n=(data&&data.next_invoice_progressive)||1;
+  await client.from("business_company_profile").update({next_invoice_progressive:n+1}).eq("id",1);
+  return n+"/"+year;
+}
+
+/* ================= Generatore XML FatturaPA + invio SDI ================= */
+function xmlEsc(s){
+  return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+}
+function isPartitaIva(s){ return /^[0-9]{11}$/.test(String(s||"").trim()); }
+function isCodiceFiscale(s){ return /^[A-Za-z0-9]{16}$/.test(String(s||"").trim()) || /^[0-9]{11}$/.test(String(s||"").trim()); }
+
+/* Genera un XML FatturaPA (FPR12, formato privati) conforme allo schema ufficiale v1.2.2.
+   Campi obbligatori coperti: DatiTrasmissione, CedentePrestatore (con RegimeFiscale e Sede),
+   CessionarioCommittente, DatiGeneraliDocumento, una riga DettaglioLinee, DatiRiepilogo.
+   Non gestisce: split payment, ritenuta, allegati, righe multiple — sufficiente per una
+   provvigione di mediazione a riga singola come queste fatture. */
+function buildFatturaPAXml(invoice, company, progressivoInvio){
+  const cf=company.fiscal_code||company.vat_number;
+  const piva=company.vat_number;
+  const clientVatRaw=(invoice.client_vat||"").trim();
+  const clientIsPiva=isPartitaIva(clientVatRaw);
+  const codiceDestinatario=invoice.client_sdi_code || (invoice.client_pec ? "0000000" : "0000000");
+  const pecDestinatarioBlock=(!invoice.client_sdi_code && invoice.client_pec) ? `<PECDestinatario>${xmlEsc(invoice.client_pec)}</PECDestinatario>` : "";
+
+  const nameParts=String(invoice.client_name||"").trim().split(/\s+/);
+  const cessionarioAnagrafica = nameParts.length>1
+    ? `<Nome>${xmlEsc(nameParts.slice(0,-1).join(" "))}</Nome><Cognome>${xmlEsc(nameParts.slice(-1).join(" "))}</Cognome>`
+    : `<Denominazione>${xmlEsc(invoice.client_name)}</Denominazione>`;
+
+  const cessionarioFiscale = clientIsPiva
+    ? `<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>${xmlEsc(clientVatRaw)}</IdCodice></IdFiscaleIVA>${clientVatRaw!==""?`<CodiceFiscale>${xmlEsc(clientVatRaw)}</CodiceFiscale>`:""}`
+    : (clientVatRaw ? `<CodiceFiscale>${xmlEsc(clientVatRaw)}</CodiceFiscale>` : "");
+
+  const amountNet=Number(invoice.amount_net).toFixed(2);
+  const vatAmount=Number(invoice.vat_amount).toFixed(2);
+  const vatRate=Number(invoice.vat_rate).toFixed(2);
+  const amountGross=Number(invoice.amount_gross).toFixed(2);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<p:FatturaElettronica xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" versione="FPR12">
+<FatturaElettronicaHeader>
+<DatiTrasmissione>
+<IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>${xmlEsc(piva)}</IdCodice></IdTrasmittente>
+<ProgressivoInvio>${xmlEsc(progressivoInvio)}</ProgressivoInvio>
+<FormatoTrasmissione>FPR12</FormatoTrasmissione>
+<CodiceDestinatario>${xmlEsc(codiceDestinatario)}</CodiceDestinatario>
+${pecDestinatarioBlock}
+</DatiTrasmissione>
+<CedentePrestatore>
+<DatiAnagrafici>
+<IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>${xmlEsc(piva)}</IdCodice></IdFiscaleIVA>
+<CodiceFiscale>${xmlEsc(cf)}</CodiceFiscale>
+<Anagrafica><Denominazione>${xmlEsc(company.legal_name)}</Denominazione></Anagrafica>
+<RegimeFiscale>${xmlEsc(company.regime_fiscale||"RF01")}</RegimeFiscale>
+</DatiAnagrafici>
+<Sede>
+<Indirizzo>${xmlEsc(company.address)}</Indirizzo>
+<CAP>${xmlEsc(company.cap)}</CAP>
+<Comune>${xmlEsc(company.comune)}</Comune>
+<Provincia>${xmlEsc(company.provincia)}</Provincia>
+<Nazione>${xmlEsc(company.nazione||"IT")}</Nazione>
+</Sede>
+</CedentePrestatore>
+<CessionarioCommittente>
+<DatiAnagrafici>
+${cessionarioFiscale}
+<Anagrafica>${cessionarioAnagrafica}</Anagrafica>
+</DatiAnagrafici>
+<Sede>
+<Indirizzo>${xmlEsc(invoice.client_address||"N/D")}</Indirizzo>
+<CAP>${xmlEsc(invoice.client_cap||"00000")}</CAP>
+<Comune>${xmlEsc(invoice.client_comune||"N/D")}</Comune>
+${invoice.client_provincia?`<Provincia>${xmlEsc(invoice.client_provincia)}</Provincia>`:""}
+<Nazione>${xmlEsc(invoice.client_nazione||"IT")}</Nazione>
+</Sede>
+</CessionarioCommittente>
+</FatturaElettronicaHeader>
+<FatturaElettronicaBody>
+<DatiGenerali>
+<DatiGeneraliDocumento>
+<TipoDocumento>TD01</TipoDocumento>
+<Divisa>EUR</Divisa>
+<Data>${xmlEsc(invoice.invoice_date)}</Data>
+<Numero>${xmlEsc(String(invoice.invoice_number).replace(/[^A-Za-z0-9/.-]/g,""))}</Numero>
+<ImportoTotaleDocumento>${amountGross}</ImportoTotaleDocumento>
+<Causale>${xmlEsc(invoice.description||"Prestazione di servizi")}</Causale>
+</DatiGeneraliDocumento>
+</DatiGenerali>
+<DatiBeniServizi>
+<DettaglioLinee>
+<NumeroLinea>1</NumeroLinea>
+<Descrizione>${xmlEsc(invoice.description||"Prestazione di servizi")}</Descrizione>
+<Quantita>1.00</Quantita>
+<PrezzoUnitario>${amountNet}</PrezzoUnitario>
+<PrezzoTotale>${amountNet}</PrezzoTotale>
+<AliquotaIVA>${vatRate}</AliquotaIVA>
+</DettaglioLinee>
+<DatiRiepilogo>
+<AliquotaIVA>${vatRate}</AliquotaIVA>
+<ImponibileImporto>${amountNet}</ImponibileImporto>
+<Imposta>${vatAmount}</Imposta>
+<EsigibilitaIVA>I</EsigibilitaIVA>
+</DatiRiepilogo>
+</DatiBeniServizi>
+<DatiPagamento>
+<CondizioniPagamento>TP02</CondizioniPagamento>
+<DettaglioPagamento>
+<ModalitaPagamento>MP05</ModalitaPagamento>
+<ImportoPagamento>${amountGross}</ImportoPagamento>
+</DettaglioPagamento>
+</DatiPagamento>
+</FatturaElettronicaBody>
+</p:FatturaElettronica>`;
+}
+
+async function sendInvoiceToSdi(invoiceId){
+  const invoice=cachedIssued.find(i=>i.id===invoiceId);
+  if(!invoice){setStatus("Fattura non trovata in cache, aggiorna la pagina.","error");return}
+
+  if(!companyProfile||!companyProfile.vat_number||!companyProfile.address||!companyProfile.cap||!companyProfile.comune||!companyProfile.provincia){
+    setStatus("Completa prima i \"Dati Azienda\" (Partita IVA, indirizzo, CAP, comune, provincia) qui sopra: servono per generare l'XML.","error");
+    return;
+  }
+
+  let clientAddress=invoice.client_address, clientCap=invoice.client_cap, clientComune=invoice.client_comune;
+  if(!clientAddress) clientAddress=window.prompt("Indirizzo del cliente (via/numero) mancante — inseriscilo per generare la fattura elettronica:","");
+  if(clientAddress===null){setStatus("Invio annullato: indirizzo cliente mancante.","error");return}
+  if(!clientCap) clientCap=window.prompt("CAP del cliente mancante:","");
+  if(clientCap===null){setStatus("Invio annullato: CAP cliente mancante.","error");return}
+  if(!clientComune) clientComune=window.prompt("Comune del cliente mancante:","");
+  if(clientComune===null){setStatus("Invio annullato: comune cliente mancante.","error");return}
+
+  if(clientAddress!==invoice.client_address || clientCap!==invoice.client_cap || clientComune!==invoice.client_comune){
+    await client.from("business_invoices_issued").update({client_address:clientAddress,client_cap:clientCap,client_comune:clientComune}).eq("id",invoiceId);
+    invoice.client_address=clientAddress; invoice.client_cap=clientCap; invoice.client_comune=clientComune;
+  }
+
+  if(!invoice.client_vat && !invoice.client_address){
+    setStatus("Manca sia la P.IVA/CF sia un indirizzo utilizzabile per il cliente: completa la fattura prima di inviarla.","error");
+    return;
+  }
+
+  setStatus("Generazione XML e invio a Invoicetronic in corso...","");
+
+  const {data:progRow}=await client.from("business_company_profile").select("next_transmission_progressive").eq("id",1).single();
+  const progressivo=String((progRow&&progRow.next_transmission_progressive)||1).padStart(5,"0");
+
+  const xml=buildFatturaPAXml(invoice, companyProfile, progressivo);
+  const fileName="IT"+(companyProfile.vat_number||"00000000000")+"_"+progressivo+".xml";
+
+  try{
+    const {data:{session}}=await client.auth.getSession();
+    const resp=await fetch(SUPABASE_URL+"/functions/v1/invoicetronic-proxy",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({action:"send_xml",xml:xml,fileName:fileName})
+    });
+    const result=await resp.json();
+    if(!resp.ok || result.error){
+      await client.from("business_invoices_issued").update({status:"error",sdi_message:(result.error||resp.statusText)}).eq("id",invoiceId);
+      setStatus("Errore invio a Invoicetronic: "+(result.error||resp.statusText),"error");
+      console.error("[invoicetronic send]",result);
+      await refreshAll();
+      return;
+    }
+    if(result.ok){
+      await client.from("business_company_profile").update({next_transmission_progressive:Number(progressivo)+1}).eq("id",1);
+      const sdiId=(result.data && (result.data.id || result.data.identifier)) || null;
+      await client.from("business_invoices_issued").update({
+        status:"sent", sent_at:new Date().toISOString(), xml_content:xml, sdi_progressivo:progressivo,
+        sdi_identifier:sdiId?String(sdiId):null, sdi_message:null
+      }).eq("id",invoiceId);
+      setStatus("Fattura inviata a Invoicetronic (ambiente sandbox se stai usando una chiave ik_test_).","success");
+    }else{
+      const msg=(result.data && (result.data.message||JSON.stringify(result.data))) || ("HTTP "+result.status);
+      await client.from("business_invoices_issued").update({status:"error",sdi_message:String(msg).slice(0,500)}).eq("id",invoiceId);
+      setStatus("Invoicetronic ha rifiutato la fattura: "+msg,"error");
+      console.error("[invoicetronic send] risposta non-ok",result);
+    }
+  }catch(err){
+    await client.from("business_invoices_issued").update({status:"error",sdi_message:String(err&&err.message||err).slice(0,500)}).eq("id",invoiceId);
+    setStatus("Errore di rete durante l'invio: "+(err&&err.message||err),"error");
+    console.error(err);
+  }
+  await refreshAll();
+}
+
+document.getElementById("invoicesIssuedBody").addEventListener("click",async(e)=>{
+  const btn=e.target.closest('[data-action="send-sdi"]');
+  if(!btn) return;
+  btn.disabled=true;
+  await sendInvoiceToSdi(btn.dataset.id);
+});
 
 /* ================= Fattura da Immobile ================= */
 let propertySearchTimer=null;
@@ -626,8 +909,10 @@ document.getElementById("generatePropertyInvoicesBtn").addEventListener("click",
   if(sellerNet>0&&sellerName){
     const vat=Math.round(sellerNet*vatRate)/100;
     rows.push({
-      invoice_number:"DA-ASSEGNARE-V-"+selectedProperty.id, invoice_date:new Date().toISOString().slice(0,10),
+      invoice_number:await getNextInvoiceNumber(), invoice_date:new Date().toISOString().slice(0,10),
       client_name:sellerName, client_vat:selectedOfferData.seller_fiscal_code||null,
+      client_address:selectedOfferData.seller_residence_address||null,
+      client_pec:selectedOfferData.seller_pec||null,
       description:"Provvigione di mediazione immobiliare — venditore — "+selectedProperty.title,
       amount_net:sellerNet, vat_rate:vatRate, vat_amount:vat, amount_gross:Math.round((sellerNet+vat)*100)/100,
       status:"draft", opportunity_id:selectedProperty.id, created_by:currentUser.id
@@ -636,8 +921,10 @@ document.getElementById("generatePropertyInvoicesBtn").addEventListener("click",
   if(buyerNet>0&&buyerName){
     const vat=Math.round(buyerNet*vatRate)/100;
     rows.push({
-      invoice_number:"DA-ASSEGNARE-A-"+selectedProperty.id, invoice_date:new Date().toISOString().slice(0,10),
+      invoice_number:await getNextInvoiceNumber(), invoice_date:new Date().toISOString().slice(0,10),
       client_name:buyerName, client_vat:selectedOfferData.buyer_fiscal_code||null,
+      client_address:selectedOfferData.buyer_residence_address||null,
+      client_pec:selectedOfferData.buyer_pec||null,
       description:"Provvigione di mediazione immobiliare — acquirente — "+selectedProperty.title,
       amount_net:buyerNet, vat_rate:vatRate, vat_amount:vat, amount_gross:Math.round((buyerNet+vat)*100)/100,
       status:"draft", opportunity_id:selectedProperty.id, created_by:currentUser.id
@@ -659,7 +946,7 @@ document.getElementById("generatePropertyInvoicesBtn").addEventListener("click",
   const ok=await checkAuth();
   if(!ok) return;
   await loadProfile();
-  if(isAdmin) await refreshAll();
+  if(isAdmin){ await loadCompanyProfile(); await refreshAll(); }
 })();
 </script>
 </body>
