@@ -257,6 +257,7 @@ var UI_STRINGS = {
   acq_panel_note:"Sopralluoghi registrati dagli agenti con la pagina \"Acquisizione Immobile\": importa i dati direttamente in una nuova valutazione invece di reinserirli a mano.",
   acq_loading:"Caricamento...", acq_loading_error:"Errore nel caricamento delle acquisizioni.",
   acq_empty:"Nessuna acquisizione registrata.",
+  acq_all_imported:"Tutte le acquisizioni registrate sono già state importate in una valutazione.",
   acq_badge_imported:"Già importata", acq_badge_draft:"Bozza", acq_badge_done:"Completata", acq_badge_sent:"Inviata",
   acq_btn_import:"Importa → Nuova Valutazione"
 };
@@ -353,9 +354,11 @@ async function loadValuations(){
 
 /* ---- Pannello "Acquisizioni da importare": mostra i sopralluoghi registrati con
    property-acquisition-form.html, cosi' da poterne importare i dati in una nuova valutazione con
-   un solo clic invece di ridigitarli. Segna con un badge quelle gia' importate (in base a
-   source_acquisition_id sulle valutazioni gia' salvate), ma non le nasconde: puo' sempre servire
-   ricrearne una seconda. ---- */
+   un solo clic invece di ridigitarli. Quelle gia' importate (in base a source_acquisition_id
+   sulle valutazioni gia' salvate) vengono tolte dall'elenco -- la lista si chiama "da importare",
+   quindi una volta importata non ha piu' senso restare li'; per rifarne una seconda si puo'
+   comunque partire dalla valutazione gia' creata (Modifica) o aprire di nuovo l'acquisizione da
+   property-acquisition-form.html e salvarla come nuova. ---- */
 var acqList = document.getElementById("acqList");
 
 async function loadAcquisitionsPanel(){
@@ -369,8 +372,8 @@ async function loadAcquisitionsPanel(){
     return;
   }
 
-  var acquisitions = acqResult.data || [];
-  if(!acquisitions.length){
+  var allAcquisitions = acqResult.data || [];
+  if(!allAcquisitions.length){
     acqList.innerHTML = '<div class="empty">' + escapeHTML(T.acq_empty) + '</div>';
     return;
   }
@@ -381,7 +384,13 @@ async function loadAcquisitionsPanel(){
     (linkedResult.data || []).forEach(function(v){ importedIds[v.source_acquisition_id] = true; });
   }catch(e){
     // colonna non ancora presente (migrazione non eseguita) o altro problema non bloccante --
-    // il pannello resta comunque utile senza il badge "già importata".
+    // il pannello resta comunque utile, semplicemente senza filtrare le gia' importate.
+  }
+
+  var acquisitions = allAcquisitions.filter(function(a){ return !importedIds[a.id]; });
+  if(!acquisitions.length){
+    acqList.innerHTML = '<div class="empty">' + escapeHTML(T.acq_all_imported) + '</div>';
+    return;
   }
 
   var statusBadgeText = { bozza:T.acq_badge_draft, completata:T.acq_badge_done, inviata:T.acq_badge_sent };
@@ -390,10 +399,7 @@ async function loadAcquisitionsPanel(){
     var name = [a.owner_first_name, a.owner_last_name].filter(Boolean).join(" ") || "—";
     var propertyBits = [a.property_type, a.property_address || a.municipality].filter(Boolean).join(" — ");
     var location = [a.municipality, a.province].filter(Boolean).join(" (") + (a.province ? ")" : "");
-    var isImported = !!importedIds[a.id];
-    var badge = isImported
-      ? '<span class="acq-row-badge imported">' + escapeHTML(T.acq_badge_imported) + '</span>'
-      : '<span class="acq-row-badge">' + escapeHTML(statusBadgeText[a.status] || a.status || "") + '</span>';
+    var badge = '<span class="acq-row-badge">' + escapeHTML(statusBadgeText[a.status] || a.status || "") + '</span>';
     return '<div class="acq-row">'
       + '<div class="acq-row-main">'
         + '<div class="acq-row-name">' + escapeHTML(name) + '</div>'
