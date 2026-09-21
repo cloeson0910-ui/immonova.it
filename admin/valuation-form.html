@@ -1004,15 +1004,27 @@ calculateBtn.addEventListener("click", async function(){
     /* ---- Protezione anti-anomalie: prima di calcolare l'intervallo, scarta ogni valore
        troppo lontano dalla mediana del pool (oltre 2.5x sopra o sotto) -- un solo comparabile
        fuori scala (per errore geografico, o un dato AI mal trovato) non deve piu' poter far
-       esplodere l'intervallo finale a livelli inutilizzabili. ---- */
-    function trimOutliers(values){
-      if(values.length < 3) return values; // con 1-2 valori non c'e' abbastanza segnale per giudicare cosa sia "anomalo"
+       esplodere l'intervallo finale a livelli inutilizzabili. Le stesse soglie vengono poi
+       riusate per togliere quel comparabile ANCHE dalla tabella mostrata nel report (vedi
+       piu' sotto) -- prima veniva solo escluso dal calcolo ma restava comunque visibile in
+       tabella con un prezzo/mq palesemente sbagliato, che e' quello che l'utente vedeva. ---- */
+    function outlierBounds(values){
+      if(values.length < 3) return null; // con 1-2 valori non c'e' abbastanza segnale per giudicare cosa sia "anomalo"
       var s = values.slice().sort(function(a,b){return a-b;});
       var mid = Math.floor(s.length/2);
       var med = s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
-      return values.filter(function(v){ return v >= med*0.4 && v <= med*2.5; });
+      return { min: med*0.4, max: med*2.5 };
+    }
+    var priceBounds = outlierBounds(pricesPerSqm);
+    function trimOutliers(values){
+      if(!priceBounds) return values;
+      return values.filter(function(v){ return v >= priceBounds.min && v <= priceBounds.max; });
     }
     var trimmedPricesPerSqm = trimOutliers(pricesPerSqm);
+    function dropPriceOutliers(comparables){
+      if(!priceBounds) return comparables;
+      return (comparables||[]).filter(function(c){ return !c.price_per_sqm || (c.price_per_sqm >= priceBounds.min && c.price_per_sqm <= priceBounds.max); });
+    }
 
     var equivSurface = equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm);
     var comparativoMin = null, comparativoMax = null;
@@ -1060,8 +1072,8 @@ calculateBtn.addEventListener("click", async function(){
       resultBox.classList.remove("visible");
       setProgress(T.msg_no_data_at_all, 100, "error");
       lastCalculation = {
-        comparables_snapshot: { internal: internalResult.comparables, internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, internal_geo_radius_km: internalResult.geo_radius_km, geocoded_lat: geocodeResult.lat, geocoded_lng: geocodeResult.lng, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
-        ai_comparables: aiResult.comparables || [], ai_narrative: aiResult,
+        comparables_snapshot: { internal: dropPriceOutliers(internalResult.comparables), internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, internal_geo_radius_km: internalResult.geo_radius_km, geocoded_lat: geocodeResult.lat, geocoded_lng: geocodeResult.lng, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
+        ai_comparables: dropPriceOutliers(aiResult.comparables), ai_narrative: aiResult,
         valuation_comparativo_min:null, valuation_comparativo_max:null, valuation_reddituale_min:null, valuation_reddituale_max:null,
         estimated_value_min:null, estimated_value_max:null, estimated_value_per_sqm:null, suggested_listing_price:null
       };
@@ -1099,7 +1111,7 @@ calculateBtn.addEventListener("click", async function(){
 
     lastCalculation = {
       comparables_snapshot: {
-        internal: internalResult.comparables,
+        internal: dropPriceOutliers(internalResult.comparables),
         internal_price_per_sqm: internalResult.pricePerSqm,
         internal_geography_level: internalResult.geography_level,
         internal_geo_radius_km: internalResult.geo_radius_km,
@@ -1111,7 +1123,7 @@ calculateBtn.addEventListener("click", async function(){
         equivalent_surface: equivSurface,
         generated_at: new Date().toISOString()
       },
-      ai_comparables: aiResult.comparables || [],
+      ai_comparables: dropPriceOutliers(aiResult.comparables),
       ai_narrative: {
         position_analysis: aiResult.position_analysis || null,
         positive_elements: aiResult.positive_elements || [],
