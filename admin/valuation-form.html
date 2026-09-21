@@ -356,6 +356,24 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
         </div>
       </div>
       <p class="section-note" data-i18n="section_yield_manual_note">Facoltativo: se compili questi due campi, il rendimento che imposti tu ha la priorità su quello ragionato dall'AI. La tabella di sensitività del metodo reddituale procederà a scatti di 1 punto esatto tra il tuo minimo e il tuo massimo (es. 4 e 8 → 4, 5, 6, 7, 8).</p>
+      <div class="grid-3">
+        <div class="field">
+          <label data-i18n="label_price_per_sqm_manual">Prezzo/mq di riferimento zona (€, facoltativo)</label>
+          <input type="number" id="pricePerSqmManual" min="1" step="1">
+        </div>
+      </div>
+      <p class="section-note" data-i18n="section_price_manual_note">Facoltativo: se lo conosci tu (come agente del posto) meglio di quanto la ricerca web possa trovarlo, inserisci qui il prezzo/mq reale di riferimento per la zona. Se compilato, ha SEMPRE la priorità sul metodo comparativo: sostituisce interamente il pool di comparabili interni/AI/mercato per il calcolo dell'intervallo (i comparabili restano comunque mostrati nel documento come riferimento, ma non concorrono al calcolo).</p>
+      <div class="grid-3">
+        <div class="field">
+          <label data-i18n="label_price_per_sqm_range_min">Prezzo/mq atteso minimo zona (€, facoltativo)</label>
+          <input type="number" id="pricePerSqmRangeMin" min="1" step="1">
+        </div>
+        <div class="field">
+          <label data-i18n="label_price_per_sqm_range_max">Prezzo/mq atteso massimo zona (€, facoltativo)</label>
+          <input type="number" id="pricePerSqmRangeMax" min="1" step="1">
+        </div>
+      </div>
+      <p class="section-note" data-i18n="section_price_range_note">Facoltativo, alternativo al campo sopra: se conosci solo un intervallo plausibile (non un prezzo esatto), inserisci qui il minimo e il massimo attesi per la zona. Qualsiasi comparabile (interno, AI o dato di mercato) con prezzo/mq oltre il 20% sotto il minimo o oltre il 20% sopra il massimo viene scartato automaticamente, sia dal calcolo sia dalla tabella. Se compili anche il "prezzo di riferimento" sopra, quello ha comunque la priorità e questo intervallo funge solo da filtro sui comparabili mostrati.</p>
     </div>
 
     <div class="section">
@@ -995,27 +1013,44 @@ calculateBtn.addEventListener("click", async function(){
 
     /* ---- Metodo comparativo: pool unificato di tutte le fonti disponibili -- comparabili
        interni IMMONOVA, dato di mercato pubblico (se abbastanza locale), comparabili trovati
-       dall'AI. Piu' fonti concordano, piu' la stima e' solida. ---- */
+       dall'AI. Piu' fonti concordano, piu' la stima e' solida.
+       ECCEZIONE: se l'agente ha inserito un prezzo/mq di riferimento manuale (perche' conosce
+       la zona meglio di quanto la ricerca web possa trovarla -- tipico per comuni piccoli con
+       pochi annunci online), quello sostituisce INTERAMENTE il pool per il calcolo: nessuna
+       fonte automatica puo' avere piu' voce in capitolo della conoscenza diretta del mercato
+       locale dell'agente. I comparabili restano comunque mostrati in tabella come riferimento
+       informativo, semplicemente non concorrono piu' al calcolo dell'intervallo. ---- */
+    var pricePerSqmManual = numVal("pricePerSqmManual");
+    var pricePerSqmRangeMin = numVal("pricePerSqmRangeMin");
+    var pricePerSqmRangeMax = numVal("pricePerSqmRangeMax");
     var pricesPerSqm = [];
-    if(internalResult.pricePerSqm) pricesPerSqm.push(internalResult.pricePerSqm);
-    if(marketResult.value) pricesPerSqm.push(marketResult.value);
-    (aiResult.comparables||[]).forEach(function(c){ if(c.price_per_sqm) pricesPerSqm.push(c.price_per_sqm); });
+    if(pricePerSqmManual){
+      pricesPerSqm = [pricePerSqmManual];
+    }else{
+      if(internalResult.pricePerSqm) pricesPerSqm.push(internalResult.pricePerSqm);
+      if(marketResult.value) pricesPerSqm.push(marketResult.value);
+      (aiResult.comparables||[]).forEach(function(c){ if(c.price_per_sqm) pricesPerSqm.push(c.price_per_sqm); });
+    }
 
-    /* ---- Protezione anti-anomalie: prima di calcolare l'intervallo, scarta solo i valori
-       troppo ALTI rispetto agli ALTRI valori del pool -- mai quelli bassi. Un prezzo/mq
-       basso e' un'informazione di mercato legittima (spesso il piu' realistico: un immobile
-       simile venduto/proposto a meno) e va sempre tenuto, sia in tabella sia nel calcolo --
-       e' un prezzo ALTO fuori scala (errore geografico, o un dato AI mal trovato/letto) che
-       falsa la stima verso l'alto e va scartato. La valutazione deve restare prudente e
-       aderente al mercato reale, non gonfiata da un singolo annuncio ottimistico.
-       BUG CORRETTO in precedenza: la versione con la mediana calcolata includendo il valore
-       stesso era autoreferenziale e non scartava quasi mai nulla con solo 3 comparabili. Ora
-       ogni valore viene confrontato con la MEDIA DEGLI ALTRI valori del pool (esclude se
-       stesso dal calcolo del riferimento): un prezzo/mq che supera la media degli altri
-       annunci di oltre il 40% viene considerato "fuori scala" e scartato, sia dal calcolo
-       dell'intervallo sia dalla tabella comparabili -- ma solo verso l'alto. ---- */
-    var OUTLIER_DEVIATION_THRESHOLD = 0.4; // 40% di scostamento SOPRA la media degli altri valori
+    /* ---- Protezione anti-anomalie sui prezzi/mq: due modalita', su richiesta esplicita.
+       1) Se l'agente ha compilato "prezzo/mq atteso minimo/massimo zona" (perche' conosce la
+          zona meglio di quanto la ricerca web possa trovarla), quell'intervallo E' il filtro:
+          qualsiasi comparabile con prezzo/mq oltre il 20% sotto il minimo o oltre il 20% sopra
+          il massimo viene scartato -- soglia fissa scelta dall'agente, non calcolata sui dati.
+       2) Altrimenti, fallback automatico: scarta solo i valori troppo ALTI rispetto alla media
+          degli ALTRI valori del pool (mai quelli bassi -- un prezzo/mq basso e' informazione
+          di mercato legittima, spesso il piu' realistico, e va sempre tenuto). Questo evita
+          che un solo comparabile fuori scala (errore geografico, o un dato AI mal letto)
+          falsi la stima verso l'alto quando l'agente non ha impostato un intervallo suo.
+       In entrambi i casi il filtro vale sia per il calcolo dell'intervallo sia per la tabella
+       comparabili mostrata nel documento (vedi dropPriceOutliers piu' sotto). ---- */
+    var hasManualRange = pricePerSqmRangeMin != null && pricePerSqmRangeMax != null && pricePerSqmRangeMin < pricePerSqmRangeMax;
+    var MANUAL_RANGE_TOLERANCE = 0.2; // ±20%, come richiesto esplicitamente
+    var OUTLIER_DEVIATION_THRESHOLD = 0.4; // fallback automatico: 40% di scostamento SOPRA la media degli altri valori
     function isPriceOutlier(value, allValues){
+      if(hasManualRange){
+        return value < pricePerSqmRangeMin*(1-MANUAL_RANGE_TOLERANCE) || value > pricePerSqmRangeMax*(1+MANUAL_RANGE_TOLERANCE);
+      }
       if(allValues.length < 3) return false; // con 1-2 valori non c'e' abbastanza segnale per giudicare cosa sia "fuori scala"
       var others = allValues.filter(function(v){ return v !== value; });
       if(others.length !== allValues.length - 1) others = allValues.slice(); // valore duplicato nel pool: confronta comunque con l'intero pool
@@ -1155,6 +1190,7 @@ calculateBtn.addEventListener("click", async function(){
         listing_margin_is_fallback: listingMarginIsFallback
       },
       valuation_comparativo_min: comparativoMin, valuation_comparativo_max: comparativoMax,
+      comparativo_is_manual: !!pricePerSqmManual,
       valuation_reddituale_min: reddituraleMin, valuation_reddituale_max: reddituraleMax,
       estimated_value_min: finalMin, estimated_value_max: finalMax,
       estimated_value_per_sqm: equivSurface ? centralValue/equivSurface : null,
@@ -1172,7 +1208,10 @@ calculateBtn.addEventListener("click", async function(){
     else detailParts.push("<em>Comparabili IMMONOVA: nessun comparabile interno trovato nello stesso comune (non si allarga mai ad altri comuni).</em>");
     detailParts.push("<strong>Metodo reddituale:</strong> " + (hasReddituale ? formatEuro(reddituraleMin) + " – " + formatEuro(reddituraleMax) : (isRented ? "canone non inserito" : "immobile non locato")));
     detailParts.push("<strong>Prezzo di immissione consigliato:</strong> " + formatEuro(suggestedListingPrice));
+    if(pricePerSqmManual) detailParts.push("<em>Metodo comparativo calcolato sul prezzo/mq di riferimento inserito manualmente (" + formatEuro(pricePerSqmManual) + "/mq), non sui comparabili automatici.</em>");
+    else if(hasManualRange) detailParts.push("<em>Comparabili filtrati sull'intervallo prezzo/mq atteso impostato manualmente (" + formatEuro(pricePerSqmRangeMin) + " – " + formatEuro(pricePerSqmRangeMax) + "/mq, ±20%): esclusi automaticamente quelli fuori soglia.</em>");
     if(aiResult.ai_disclaimer) detailParts.push("<em>" + escapeHTML(aiResult.ai_disclaimer) + "</em>");
+    if(aiResult.search_coverage_note) detailParts.push("<em>Copertura della ricerca AI: " + escapeHTML(aiResult.search_coverage_note) + "</em>");
     resultDetail.innerHTML = detailParts.join("<br>");
 
     setProgress("", 0, "");
@@ -1229,6 +1268,9 @@ async function loadValuationForEdit(){
   document.getElementById("currentAnnualRent").value = data.current_annual_rent ?? "";
   document.getElementById("yieldMinManual").value = data.yield_min_manual ?? "";
   document.getElementById("yieldMaxManual").value = data.yield_max_manual ?? "";
+  document.getElementById("pricePerSqmManual").value = data.price_per_sqm_manual ?? "";
+  document.getElementById("pricePerSqmRangeMin").value = data.price_per_sqm_range_min ?? "";
+  document.getElementById("pricePerSqmRangeMax").value = data.price_per_sqm_range_max ?? "";
   document.getElementById("notes").value = data.notes || "";
   document.getElementById("cadastralIsPrimaCasa").checked = !!data.cadastral_is_prima_casa;
   computeAndRenderCadastralValue();
@@ -1435,6 +1477,9 @@ form.addEventListener("submit", async function(event){
     current_annual_rent: numVal("currentAnnualRent"),
     yield_min_manual: numVal("yieldMinManual"),
     yield_max_manual: numVal("yieldMaxManual"),
+    price_per_sqm_manual: numVal("pricePerSqmManual"),
+    price_per_sqm_range_min: numVal("pricePerSqmRangeMin"),
+    price_per_sqm_range_max: numVal("pricePerSqmRangeMax"),
     notes: val("notes") || null,
     cadastral_is_prima_casa: document.getElementById("cadastralIsPrimaCasa").checked,
     cadastral_value: lastCadastralCalc ? lastCadastralCalc.cadastral_value : null,
