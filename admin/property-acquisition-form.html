@@ -15,9 +15,18 @@
   header h1{font-size:17px;margin:0;letter-spacing:.02em}
   .status-pill{font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:4px 10px;border-radius:20px;background:#f1e6cc;color:var(--gold-dark);font-weight:600}
   .container{max-width:900px;margin:0 auto;padding:18px}
-  .loader-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);padding:10px 14px;border-radius:10px;margin-bottom:16px}
+  .loader-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);padding:10px 14px;border-radius:10px;margin-bottom:6px;position:relative}
   .loader-row input{flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
   .loader-row button{white-space:nowrap}
+  .search-results{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;max-height:360px;overflow-y:auto;display:none}
+  .search-results.open{display:block}
+  .search-result-item{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .search-result-item:last-child{border-bottom:none}
+  .search-result-item:hover{background:#f7f1e0}
+  .search-result-name{font-size:14px;font-weight:700;color:var(--ink)}
+  .search-result-meta{font-size:12.5px;color:var(--ink-soft)}
+  .search-result-empty{padding:14px;font-size:13px;color:var(--ink-soft);text-align:center}
+  .sr-status{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:10px;background:#f1e6cc;color:var(--gold-dark);font-weight:700;margin-left:6px;vertical-align:middle}
   .section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 20px;margin-bottom:18px}
   .section-title{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--gold-dark);margin:0 0 4px;font-weight:700}
   .section-hint{font-size:12.5px;color:var(--ink-soft);margin:0 0 14px}
@@ -74,10 +83,10 @@
 <div class="container">
 
   <div class="loader-row">
-    <input type="text" id="loadIdInput" placeholder="ID acquisizione da riaprire (lascia vuoto per una nuova)">
-    <button type="button" class="secondary" id="loadBtn">Apri</button>
+    <input type="text" id="loadIdInput" placeholder="Cerca acquisizione salvata per nome, cognome, indirizzo o comune…" autocomplete="off">
     <button type="button" class="secondary" id="newBtn">Nuova acquisizione</button>
   </div>
+  <div class="search-results" id="searchResults"></div>
 
   <div class="section">
     <h2 class="section-title">Dati sopralluogo</h2>
@@ -699,16 +708,92 @@ async function importFromInvestor(){
 
 document.getElementById("saveBtn").addEventListener("click", function(){ saveAcquisition(false); });
 document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
-document.getElementById("loadBtn").addEventListener("click", function(){
-  var v = document.getElementById("loadIdInput").value.trim();
-  if(v) loadAcquisition(Number(v));
-});
 document.getElementById("newBtn").addEventListener("click", function(){
   window.location.href = window.location.pathname;
 });
 
+/* ---- Ricerca acquisizioni salvate per nome/cognome/indirizzo/comune, al posto del vecchio
+   campo "ID acquisizione da riaprire" che richiedeva di conoscere a memoria l'id numerico. ---- */
+var searchInput = document.getElementById("loadIdInput");
+var searchResultsEl = document.getElementById("searchResults");
+var searchDebounceTimer = null;
+var searchRequestSeq = 0;
+
+function statusLabel(status){
+  return status === "completata" ? "Completata" : status === "inviata" ? "Inviata" : "Bozza";
+}
+
+function renderSearchResults(rows){
+  if(!rows || !rows.length){
+    searchResultsEl.innerHTML = '<div class="search-result-empty">Nessuna acquisizione trovata.</div>';
+    searchResultsEl.classList.add("open");
+    return;
+  }
+  searchResultsEl.innerHTML = "";
+  rows.forEach(function(row){
+    var item = document.createElement("div");
+    item.className = "search-result-item";
+    var name = [row.owner_first_name, row.owner_last_name].filter(Boolean).join(" ") || "(senza nome)";
+    var addr = [row.property_address, row.municipality].filter(Boolean).join(", ") || "indirizzo non indicato";
+    var when = row.created_at ? new Date(row.created_at).toLocaleDateString("it-IT") : "";
+    item.innerHTML =
+      '<span class="search-result-name">' + escapeHtml(name) + '<span class="sr-status">' + statusLabel(row.status) + '</span></span>' +
+      '<span class="search-result-meta">' + escapeHtml(addr) + (when ? " · " + when : "") + " · ID " + row.id + "</span>";
+    item.addEventListener("click", function(){
+      searchResultsEl.classList.remove("open");
+      searchInput.value = name;
+      loadAcquisition(row.id);
+    });
+    searchResultsEl.appendChild(item);
+  });
+  searchResultsEl.classList.add("open");
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c];
+  });
+}
+
+async function runAcquisitionSearch(term){
+  var seq = ++searchRequestSeq;
+  if(!term){
+    searchResultsEl.classList.remove("open");
+    searchResultsEl.innerHTML = "";
+    return;
+  }
+  var like = "%" + term.replace(/[%_]/g, "") + "%";
+  var res = await client.from("immonova_acquisitions")
+    .select("id,owner_first_name,owner_last_name,property_address,municipality,status,created_at")
+    .or(["owner_first_name.ilike." + like, "owner_last_name.ilike." + like, "property_address.ilike." + like, "municipality.ilike." + like].join(","))
+    .order("created_at", { ascending:false })
+    .limit(20);
+  if(seq !== searchRequestSeq) return; // risposta arrivata in ritardo rispetto a una ricerca più recente: scartata
+  if(res.error){
+    console.warn("Ricerca acquisizioni non riuscita:", res.error);
+    return;
+  }
+  renderSearchResults(res.data);
+}
+
+searchInput.addEventListener("input", function(){
+  var term = searchInput.value.trim();
+  clearTimeout(searchDebounceTimer);
+  if(!term){
+    searchResultsEl.classList.remove("open");
+    searchResultsEl.innerHTML = "";
+    return;
+  }
+  searchDebounceTimer = setTimeout(function(){ runAcquisitionSearch(term); }, 300);
+});
+searchInput.addEventListener("focus", function(){
+  if(searchResultsEl.innerHTML && searchInput.value.trim()) searchResultsEl.classList.add("open");
+});
+document.addEventListener("click", function(e){
+  if(!e.target.closest(".loader-row") && !e.target.closest(".search-results")) searchResultsEl.classList.remove("open");
+});
+
 if(currentId){
-  document.getElementById("loadIdInput").value = currentId;
   loadAcquisition(currentId);
 }else{
   importFromInvestor();
