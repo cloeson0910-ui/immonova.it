@@ -122,6 +122,10 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
 .result-range{font-size:26px;color:#7f6430;margin-bottom:16px}
 .result-detail{font-size:12.5px;color:#8f7643;line-height:1.9}
 .result-detail strong{color:#5a4a2a}
+.comparables-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}
+.comparables-table th,.comparables-table td{text-align:left;padding:6px 8px;border-bottom:1px solid #e8dfc8}
+.comparables-table th{color:#a67f34;text-transform:uppercase;letter-spacing:.05em;font-size:10.5px}
+.comparables-table td{color:#5a4a2a}
 
 .footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
 .btn-group{display:flex;gap:12px;flex-wrap:wrap}
@@ -1213,6 +1217,21 @@ calculateBtn.addEventListener("click", async function(){
     if(aiResult.ai_disclaimer) detailParts.push("<em>" + escapeHTML(aiResult.ai_disclaimer) + "</em>");
     if(aiResult.search_coverage_note) detailParts.push("<em>Copertura della ricerca AI: " + escapeHTML(aiResult.search_coverage_note) + "</em>");
     resultDetail.innerHTML = detailParts.join("<br>");
+
+    /* ---- Tabella comparabili (vista interna per l'agente): mostra titolo/descrizione
+       sintetica, m² e €/mq oltre alla fonte, cosi' l'agente puo' valutare la plausibilita' di
+       ogni comparabile senza dover riaprire l'annuncio -- richiesto esplicitamente perche' la
+       sola via/indirizzo non basta a capire di che immobile si tratti. Include sia i
+       comparabili interni IMMONOVA sia quelli trovati dalla ricerca AI/diretta sui portali,
+       gia' filtrati dagli outlier di prezzo. ---- */
+    var tableComparables = ([]).concat(dropPriceOutliers(internalResult.comparables)||[], dropPriceOutliers(aiResult.comparables)||[]);
+    if(tableComparables.length){
+      var rowsHtml = tableComparables.map(function(c){
+        var ppsRaw = c.price_per_sqm != null ? c.price_per_sqm : c.pricePerSqm; // interni: pricePerSqm, AI/diretti: price_per_sqm
+        return "<tr><td>" + escapeHTML(c.title || c.location || "") + "</td><td>" + (c.size_sqm ? c.size_sqm + " mq" : "—") + "</td><td>" + formatEuro(ppsRaw) + "</td><td>" + escapeHTML(c.source || (c.id ? "IMMONOVA (interno)" : "")) + "</td></tr>";
+      }).join("");
+      resultDetail.innerHTML += "<table class=\"comparables-table\"><thead><tr><th>Comparabile</th><th>Superficie</th><th>€/mq</th><th>Fonte</th></tr></thead><tbody>" + rowsHtml + "</tbody></table>";
+    }
 
     setProgress("", 0, "");
   }catch(error){
