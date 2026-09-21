@@ -949,7 +949,7 @@ document.getElementById("cadastralIsPrimaCasa").addEventListener("change", compu
 /* ---- Trova comparabili reali via AI (motore dedicato, separato -- immonova-ai-valuation-engine),
    con ricerca web attiva, stesso principio del resto del sistema: se non trova nulla di
    verificabile lo dice chiaramente, non inventa mai un prezzo. ---- */
-async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter, propertyLat, propertyLng){
+async function findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter, propertyLat, propertyLng, pricePerSqmMin, pricePerSqmMax){
   try{
     var result = await client.functions.invoke("immonova-ai-valuation-engine", {
       body:{
@@ -957,7 +957,12 @@ async function findAiComparablesAndNarrative(category, municipality, province, r
         internal_size: internalSize || null, address: address || null, property_condition: propertyCondition || null,
         is_rented: !!isRented, current_annual_rent: currentAnnualRent || null,
         has_sea_view: !!hasSeaView, has_historic_center: !!hasHistoricCenter,
-        latitude: propertyLat != null ? propertyLat : null, longitude: propertyLng != null ? propertyLng : null
+        latitude: propertyLat != null ? propertyLat : null, longitude: propertyLng != null ? propertyLng : null,
+        // Filtro prezzo/mq min-max impostato dall'agente (facoltativo, "prezzo di riferimento
+        // manuale" o intervallo min-max): quando presente, il motore lo usa per filtrare GIA'
+        // in fase di ricerca sui portali (URL con budget applicato) invece di scartare solo
+        // dopo -- richiesto esplicitamente per ottenere piu' comparabili reali dentro budget.
+        price_per_sqm_min: pricePerSqmMin || null, price_per_sqm_max: pricePerSqmMax || null
       }
     });
     if(result.error) return { comparables:[], position_analysis:null, positive_elements:[], risk_elements:[], conclusion:null, ai_disclaimer:"Ricerca AI non disponibile: " + result.error.message };
@@ -1013,7 +1018,15 @@ calculateBtn.addEventListener("click", async function(){
     var populationComposition = await findPopulationComposition(municipality, province, region);
     setProgress((T.msg_calculating||"") + " (ricerca AI comparabili...)", 65, "");
     var propertyCondition = val("propertyCondition");
-    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter, geocodeResult.lat, geocodeResult.lng);
+    // Letti QUI (non piu' sotto) perche' servono gia' alla chiamata del motore AI: il filtro
+    // prezzo/mq min-max, quando l'agente lo compila, deve guidare la ricerca stessa sui portali
+    // (URL di ricerca gia' filtrati per budget) e non solo scartare a posteriori i risultati
+    // gia' trovati -- altrimenti la ricerca web/portali continua a sprecare tempo su annunci
+    // fuori budget invece di restituirne di piu' dentro il range richiesto.
+    var pricePerSqmManual = numVal("pricePerSqmManual");
+    var pricePerSqmRangeMin = numVal("pricePerSqmRangeMin");
+    var pricePerSqmRangeMax = numVal("pricePerSqmRangeMax");
+    var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter, geocodeResult.lat, geocodeResult.lng, pricePerSqmManual || pricePerSqmRangeMin, pricePerSqmManual || pricePerSqmRangeMax);
 
     /* ---- Metodo comparativo: pool unificato di tutte le fonti disponibili -- comparabili
        interni IMMONOVA, dato di mercato pubblico (se abbastanza locale), comparabili trovati
@@ -1024,9 +1037,6 @@ calculateBtn.addEventListener("click", async function(){
        fonte automatica puo' avere piu' voce in capitolo della conoscenza diretta del mercato
        locale dell'agente. I comparabili restano comunque mostrati in tabella come riferimento
        informativo, semplicemente non concorrono piu' al calcolo dell'intervallo. ---- */
-    var pricePerSqmManual = numVal("pricePerSqmManual");
-    var pricePerSqmRangeMin = numVal("pricePerSqmRangeMin");
-    var pricePerSqmRangeMax = numVal("pricePerSqmRangeMax");
     var pricesPerSqm = [];
     if(pricePerSqmManual){
       pricesPerSqm = [pricePerSqmManual];
