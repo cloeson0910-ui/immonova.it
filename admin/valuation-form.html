@@ -749,7 +749,11 @@ async function findInternalComparables(category, province, municipality, hasSeaV
 
   // ---- Fallback (nessuna coordinata disponibile, o nessun comparabile nel raggio): stesso
   // criterio di prima, comune + caratteristiche di zona (vista mare/centro storico), poi
-  // comune, poi provincia -- mai spacciato per basato sulla posizione esatta. ----
+  // comune senza vincolo di zona. NIENTE fallback a livello provinciale: un comparabile in un
+  // comune diverso, anche nella stessa provincia, NON e' mai accettabile -- se non c'e' nessun
+  // comparabile interno nello stesso comune, meglio restituire un elenco vuoto (il metodo
+  // comparativo si appoggia comunque ai comparabili AI e/o al dato di mercato pubblico) che
+  // spacciare per comparabile un immobile di un altro paese. ----
   var inMunicipality = municipality
     ? result.data.filter(function(o){ return o.municipality && String(o.municipality).toLowerCase() === String(municipality).toLowerCase(); })
     : [];
@@ -768,10 +772,8 @@ async function findInternalComparables(category, province, municipality, hasSeaV
     withPricePerSqm = sameMunicipalityAnyZone;
     geographyLevel = "municipality";
   }else{
-    withPricePerSqm = (province
-      ? result.data.filter(function(o){ return o.province && String(o.province).toLowerCase() === String(province).toLowerCase(); }).map(function(o){ return toComparable(o, null); }).filter(Boolean)
-      : []);
-    geographyLevel = "province";
+    withPricePerSqm = [];
+    geographyLevel = null;
   }
 
   if(!withPricePerSqm.length) return { comparables: [], pricePerSqm: null, geography_level: null, geo_radius_km: null };
@@ -1141,10 +1143,9 @@ calculateBtn.addEventListener("click", async function(){
     var detailParts = [];
     var discardedCount = pricesPerSqm.length - trimmedPricesPerSqm.length;
     detailParts.push("<strong>Metodo comparativo:</strong> " + (hasComparativo ? formatEuro(comparativoMin) + " – " + formatEuro(comparativoMax) + " (" + trimmedPricesPerSqm.length + " fonti" + (discardedCount>0 ? ", " + discardedCount + " scartate come anomale" : "") + ")" : "non calcolabile"));
-    if(internalResult.geography_level === "geo_radius") detailParts.push("<em>Comparabili IMMONOVA: cercati per distanza reale dall'indirizzo geolocalizzato (raggio " + internalResult.geo_radius_km + " km).</em>");
-    else if(geocodeResult.lat == null) detailParts.push("<em>Comparabili IMMONOVA: indirizzo non geolocalizzabile, criterio basato su comune/zona (fallback).</em>");
-    else detailParts.push("<em>Comparabili IMMONOVA: nessun risultato nel raggio di " + GEO_RADIUS_KM + " km, allargato a comune/zona (fallback).</em>");
-    if(internalResult.geography_level === "province") detailParts.push("<em>Comparabili IMMONOVA: nessuno nello stesso comune, allargato a livello provinciale (meno preciso).</em>");
+    if(internalResult.geography_level === "geo_radius") detailParts.push("<em>Comparabili IMMONOVA: cercati per distanza reale dall'indirizzo geolocalizzato, sempre nello stesso comune (raggio " + internalResult.geo_radius_km + " km).</em>");
+    else if(internalResult.geography_level === "municipality_zone" || internalResult.geography_level === "municipality") detailParts.push("<em>Comparabili IMMONOVA: " + (geocodeResult.lat == null ? "indirizzo non geolocalizzabile, " : "nessun risultato nel raggio di " + GEO_RADIUS_KM + " km, ") + "criterio basato su comune" + (internalResult.geography_level === "municipality_zone" ? "/zona" : "") + " (fallback).</em>");
+    else detailParts.push("<em>Comparabili IMMONOVA: nessun comparabile interno trovato nello stesso comune (non si allarga mai ad altri comuni).</em>");
     detailParts.push("<strong>Metodo reddituale:</strong> " + (hasReddituale ? formatEuro(reddituraleMin) + " – " + formatEuro(reddituraleMax) : (isRented ? "canone non inserito" : "immobile non locato")));
     detailParts.push("<strong>Prezzo di immissione consigliato:</strong> " + formatEuro(suggestedListingPrice));
     if(aiResult.ai_disclaimer) detailParts.push("<em>" + escapeHTML(aiResult.ai_disclaimer) + "</em>");
