@@ -719,13 +719,20 @@ async function findInternalComparables(category, province, municipality, hasSeaV
     return { id: o.id, title: o.title, pricePerSqm: price / size, distance_km: (distanceKm!=null ? Math.round(distanceKm*10)/10 : null) };
   }
 
-  // ---- Tier 0 (il piu' preciso, se disponibile): distanza reale dalle coordinate. Non
-  // dipende dal confine comunale -- un immobile a 400m oltre il confine del comune vicino e'
-  // comunque un comparabile piu' valido di uno a 20km nello stesso comune. ----
+  // ---- Tier 0 (il piu' preciso, se disponibile): distanza reale dalle coordinate, MA SEMPRE
+  // ristretta allo stesso comune -- comuni diversi hanno mercati immobiliari diversi (prezzi,
+  // domanda, fiscalita' locale) anche a poche centinaia di metri di distanza in linea d'aria,
+  // e un raggio puramente geografico puo' agganciare per errore un immobile di un comune
+  // completamente diverso (es. una villa fronte mare di un'altra zona costiera risultata
+  // "vicina" per un immobile nell'entroterra, per un'imprecisione della geocodifica o delle
+  // coordinate salvate). Il vincolo di comune resta quindi non negoziabile anche in questo
+  // tier: la distanza reale serve solo a ordinare/restringere ULTERIORMENTE i comparabili
+  // gia' dello stesso comune, mai a scavalcare il confine comunale. ----
   if(propertyLat != null && propertyLng != null){
     var withDistance = result.data
       .map(function(o){
         if(o.latitude == null || o.longitude == null) return null;
+        if(municipality && (!o.municipality || String(o.municipality).toLowerCase() !== String(municipality).toLowerCase())) return null;
         var d = haversineDistanceKm(propertyLat, propertyLng, Number(o.latitude), Number(o.longitude));
         return d != null && d <= GEO_RADIUS_KM ? toComparable(o, d) : null;
       })
