@@ -1001,29 +1001,34 @@ calculateBtn.addEventListener("click", async function(){
     if(marketResult.value) pricesPerSqm.push(marketResult.value);
     (aiResult.comparables||[]).forEach(function(c){ if(c.price_per_sqm) pricesPerSqm.push(c.price_per_sqm); });
 
-    /* ---- Protezione anti-anomalie: prima di calcolare l'intervallo, scarta ogni valore
-       troppo lontano dalla mediana del pool (oltre 2.5x sopra o sotto) -- un solo comparabile
-       fuori scala (per errore geografico, o un dato AI mal trovato) non deve piu' poter far
-       esplodere l'intervallo finale a livelli inutilizzabili. Le stesse soglie vengono poi
-       riusate per togliere quel comparabile ANCHE dalla tabella mostrata nel report (vedi
-       piu' sotto) -- prima veniva solo escluso dal calcolo ma restava comunque visibile in
-       tabella con un prezzo/mq palesemente sbagliato, che e' quello che l'utente vedeva. ---- */
-    function outlierBounds(values){
-      if(values.length < 3) return null; // con 1-2 valori non c'e' abbastanza segnale per giudicare cosa sia "anomalo"
-      var s = values.slice().sort(function(a,b){return a-b;});
-      var mid = Math.floor(s.length/2);
-      var med = s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
-      return { min: med*0.4, max: med*2.5 };
+    /* ---- Protezione anti-anomalie: prima di calcolare l'intervallo, scarta solo i valori
+       troppo ALTI rispetto agli ALTRI valori del pool -- mai quelli bassi. Un prezzo/mq
+       basso e' un'informazione di mercato legittima (spesso il piu' realistico: un immobile
+       simile venduto/proposto a meno) e va sempre tenuto, sia in tabella sia nel calcolo --
+       e' un prezzo ALTO fuori scala (errore geografico, o un dato AI mal trovato/letto) che
+       falsa la stima verso l'alto e va scartato. La valutazione deve restare prudente e
+       aderente al mercato reale, non gonfiata da un singolo annuncio ottimistico.
+       BUG CORRETTO in precedenza: la versione con la mediana calcolata includendo il valore
+       stesso era autoreferenziale e non scartava quasi mai nulla con solo 3 comparabili. Ora
+       ogni valore viene confrontato con la MEDIA DEGLI ALTRI valori del pool (esclude se
+       stesso dal calcolo del riferimento): un prezzo/mq che supera la media degli altri
+       annunci di oltre il 40% viene considerato "fuori scala" e scartato, sia dal calcolo
+       dell'intervallo sia dalla tabella comparabili -- ma solo verso l'alto. ---- */
+    var OUTLIER_DEVIATION_THRESHOLD = 0.4; // 40% di scostamento SOPRA la media degli altri valori
+    function isPriceOutlier(value, allValues){
+      if(allValues.length < 3) return false; // con 1-2 valori non c'e' abbastanza segnale per giudicare cosa sia "fuori scala"
+      var others = allValues.filter(function(v){ return v !== value; });
+      if(others.length !== allValues.length - 1) others = allValues.slice(); // valore duplicato nel pool: confronta comunque con l'intero pool
+      var avgOthers = others.reduce(function(a,b){ return a+b; }, 0) / others.length;
+      if(!avgOthers) return false;
+      return (value - avgOthers) / avgOthers > OUTLIER_DEVIATION_THRESHOLD; // solo se TROPPO ALTO, mai se basso
     }
-    var priceBounds = outlierBounds(pricesPerSqm);
     function trimOutliers(values){
-      if(!priceBounds) return values;
-      return values.filter(function(v){ return v >= priceBounds.min && v <= priceBounds.max; });
+      return values.filter(function(v){ return !isPriceOutlier(v, values); });
     }
     var trimmedPricesPerSqm = trimOutliers(pricesPerSqm);
     function dropPriceOutliers(comparables){
-      if(!priceBounds) return comparables;
-      return (comparables||[]).filter(function(c){ return !c.price_per_sqm || (c.price_per_sqm >= priceBounds.min && c.price_per_sqm <= priceBounds.max); });
+      return (comparables||[]).filter(function(c){ return !c.price_per_sqm || !isPriceOutlier(c.price_per_sqm, pricesPerSqm); });
     }
 
     var equivSurface = equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm);
@@ -1106,7 +1111,14 @@ calculateBtn.addEventListener("click", async function(){
     var listingMarginPct = aiResult.listing_margin_pct != null ? aiResult.listing_margin_pct/100 : null;
     if(listingMarginPct == null){ listingMarginPct = 0.10; listingMarginIsFallback = true; }
 
-    var centralValue = (finalMin + finalMax) / 2;
+    /* ---- Valore centrale indicativo: intenzionalmente spostato verso il basso dell'intervallo
+       (35% della sua ampiezza, non 50%) invece del semplice punto medio -- una valutazione
+       immobiliare seria deve restare aderente al mercato reale e prudente, non gonfiata verso
+       l'alto dell'intervallo. Il range completo (finalMin-finalMax) resta comunque mostrato
+       per intero nel documento: qui si sceglie solo dove posizionare il valore "di riferimento"
+       al suo interno. ---- */
+    var CENTRAL_VALUE_RANGE_POSITION = 0.35; // 0 = minimo dell'intervallo, 0.5 = punto medio
+    var centralValue = finalMin + (finalMax - finalMin) * CENTRAL_VALUE_RANGE_POSITION;
     var suggestedListingPrice = Math.round(centralValue * (1+listingMarginPct) / 100) * 100;
 
     lastCalculation = {
