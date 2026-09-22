@@ -100,6 +100,29 @@ color:#fff;
 display:none;
 }
 
+.admin-only-cell{
+display:none;
+}
+
+.bulk-toolbar{
+display:none;
+align-items:center;
+gap:12px;
+margin:12px 0;
+padding:10px 14px;
+background:rgba(166,127,52,.1);
+border:1px solid rgba(166,127,52,.3);
+border-radius:8px;
+}
+
+.bulk-toolbar.visible{
+display:flex;
+}
+
+.bulk-toolbar .bulk-count{
+font-weight:600;
+}
+
 .container{
 max-width:1450px;
 margin:auto;
@@ -484,11 +507,18 @@ Caricamento area riservata...
 </select>
 </div>
 
+<div id="bulkToolbar" class="bulk-toolbar">
+<span class="bulk-count" id="bulkCount"></span>
+<button type="button" class="danger" id="bulkDeleteBtn" onclick="bulkDeleteOpportunities()" data-i18n="btn_bulk_delete">Elimina selezionati</button>
+<button type="button" onclick="clearSelection()" data-i18n="btn_bulk_clear">Annulla selezione</button>
+</div>
+
 <div class="table-wrapper">
 
 <table>
 <thead>
 <tr>
+<th class="admin-only-cell"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)"></th>
 <th data-i18n="th_cover">Copertina</th>
 <th data-i18n="th_title">Titolo</th>
 <th data-i18n="th_category">Categoria</th>
@@ -504,7 +534,7 @@ Caricamento area riservata...
 
 <tbody id="opportunitiesTable">
 <tr>
-<td colspan="10" class="empty" data-i18n="loading">Caricamento...</td>
+<td colspan="11" class="empty" data-i18n="loading">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -534,6 +564,7 @@ let currentUser = null;
 let currentProfile = null;
 let isAdmin = false;
 let allOpportunities = [];
+let selectedIds = new Set();
 let currentUserLanguage = "it";
 
 
@@ -572,6 +603,10 @@ var UI_STRINGS = {
   no_such_link:"", action_view:"Vedi", action_evaluate:"Valuta", action_open:"Apri",
   select_change_review:"Cambia revisione", select_change_commercial:"Cambia commerciale",
   btn_suspend:"Sospendi", btn_publish:"Pubblica", btn_selling_party:"Selling Party", btn_delete:"Elimina",
+  btn_bulk_delete:"Elimina selezionati", btn_bulk_clear:"Annulla selezione",
+  bulk_count_suffix:" selezionati", confirm_bulk_delete_prefix:"Confermi l'eliminazione di ", confirm_bulk_delete_suffix:" proposte selezionate? L'operazione non è reversibile.",
+  msg_bulk_deleting:"Eliminazione in corso...", msg_bulk_deleted_prefix:"Eliminate ", msg_bulk_deleted_suffix:" proposte.",
+  msg_bulk_partial_prefix:"Eliminate ", msg_bulk_partial_mid:" di ", msg_bulk_partial_suffix:" proposte. Alcune eliminazioni sono fallite.",
   msg_updating_review:"Aggiornamento stato revisione...", msg_review_updated:"Stato revisione aggiornato correttamente.",
   msg_updating_commercial:"Aggiornamento stato commerciale...", msg_commercial_updated:"Stato commerciale aggiornato correttamente.",
   confirm_sold:"Confermi che questa opportunità è venduta? Verrà sospesa dalle opportunità pubbliche e comparirà nelle Success Stories.",
@@ -786,6 +821,14 @@ async function loadProfile(){
   document.querySelectorAll(".admin-only").forEach(el => {
     el.style.display = isAdmin ? "inline-block" : "none";
   });
+
+  document.querySelectorAll(".admin-only-cell").forEach(el => {
+    el.style.display = isAdmin ? "table-cell" : "none";
+  });
+
+  if(!isAdmin){
+    selectedIds.clear();
+  }
 }
 
 async function loadOpportunities(){
@@ -798,7 +841,7 @@ async function loadOpportunities(){
     console.error(error);
     table.innerHTML = `
       <tr>
-        <td colspan="10" class="empty">${escapeHTML(T.loading_error)}</td>
+        <td colspan="11" class="empty">${escapeHTML(T.loading_error)}</td>
       </tr>
     `;
     return;
@@ -1001,7 +1044,7 @@ function renderTable(data){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="10" class="empty">${escapeHTML(T.empty_none)}</td>
+        <td colspan="11" class="empty">${escapeHTML(T.empty_none)}</td>
       </tr>
     `;
     return;
@@ -1014,6 +1057,7 @@ function renderTable(data){
 
     return `
       <tr>
+        <td class="admin-only-cell"><input type="checkbox" class="row-checkbox" data-id="${escapeHTML(String(item.id))}" ${selectedIds.has(String(item.id)) ? "checked" : ""} onchange="toggleRowSelect(this)"></td>
         <td>${renderCoverCell(item)}</td>
         <td>${escapeHTML(item.title || "")}${renderLinkedEvents(item)}</td>
         <td><span class="badge">${escapeHTML(item.category || "")}</span></td>
@@ -1087,6 +1131,106 @@ function renderTable(data){
       </tr>
     `;
   }).join("");
+
+  const validIds = new Set(data.map(item => String(item.id)));
+  selectedIds.forEach(id => {
+    if(!validIds.has(id)) selectedIds.delete(id);
+  });
+
+  document.querySelectorAll(".admin-only-cell").forEach(el => {
+    el.style.display = isAdmin ? "table-cell" : "none";
+  });
+
+  updateBulkToolbar();
+}
+
+function toggleRowSelect(checkbox){
+  const id = checkbox.getAttribute("data-id");
+  if(checkbox.checked){
+    selectedIds.add(id);
+  }else{
+    selectedIds.delete(id);
+  }
+  updateBulkToolbar();
+}
+
+function toggleSelectAll(checked){
+  document.querySelectorAll(".row-checkbox").forEach(checkbox => {
+    checkbox.checked = checked;
+    const id = checkbox.getAttribute("data-id");
+    if(checked){
+      selectedIds.add(id);
+    }else{
+      selectedIds.delete(id);
+    }
+  });
+  updateBulkToolbar();
+}
+
+function clearSelection(){
+  selectedIds.clear();
+  document.querySelectorAll(".row-checkbox").forEach(checkbox => {
+    checkbox.checked = false;
+  });
+  const selectAll = document.getElementById("selectAllCheckbox");
+  if(selectAll) selectAll.checked = false;
+  updateBulkToolbar();
+}
+
+function updateBulkToolbar(){
+  const toolbar = document.getElementById("bulkToolbar");
+  const countLabel = document.getElementById("bulkCount");
+  if(!toolbar || !countLabel) return;
+
+  const count = selectedIds.size;
+  toolbar.classList.toggle("visible", isAdmin && count > 0);
+  countLabel.textContent = count + (T.bulk_count_suffix || " selezionati");
+
+  const selectAll = document.getElementById("selectAllCheckbox");
+  if(selectAll){
+    const rowCheckboxes = document.querySelectorAll(".row-checkbox");
+    selectAll.checked = rowCheckboxes.length > 0 && count === rowCheckboxes.length;
+  }
+}
+
+async function bulkDeleteOpportunities(){
+  if(!isAdmin) return;
+
+  const ids = Array.from(selectedIds);
+  if(ids.length === 0) return;
+
+  const confirmed = confirm(T.confirm_bulk_delete_prefix + ids.length + T.confirm_bulk_delete_suffix);
+  if(!confirmed) return;
+
+  setStatus(T.msg_bulk_deleting, "");
+
+  let successCount = 0;
+  let lastError = null;
+
+  for(let i = 0; i < ids.length; i++){
+    const id = ids[i];
+    const { error } = await client
+      .from("opportunities")
+      .delete()
+      .eq("id", id);
+
+    if(error){
+      lastError = error;
+      continue;
+    }
+
+    successCount++;
+    selectedIds.delete(id);
+  }
+
+  if(lastError && successCount < ids.length){
+    setStatus(T.msg_bulk_partial_prefix + successCount + T.msg_bulk_partial_mid + ids.length + T.msg_bulk_partial_suffix, "error");
+  }else{
+    setStatus(T.msg_bulk_deleted_prefix + successCount + T.msg_bulk_deleted_suffix, "success");
+  }
+
+  selectedIds.clear();
+  await loadOpportunities();
 }
 
 async function changeReviewStatus(id, newStatus){
