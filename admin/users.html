@@ -419,6 +419,25 @@ td{
           </select>
         </div>
 
+        <div class="field" id="agencyBlock">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:400">
+            <input type="checkbox" id="is_super_user" style="width:auto">
+            <span data-i18n="label_is_super_user">È un Super User (gestisce un'agenzia partner esterna)</span>
+          </label>
+        </div>
+
+        <div class="field" id="newAgencyNameBlock" style="display:none">
+          <label for="agency_name" data-i18n="label_agency_name">Nome agenzia</label>
+          <input type="text" id="agency_name" placeholder="Es. Studio Immobiliare Rossi">
+        </div>
+
+        <div class="field" id="belongsToAgencyBlock">
+          <label for="managed_by" data-i18n="label_managed_by">Agenzia di appartenenza</label>
+          <select id="managed_by">
+            <option value="" data-i18n="opt_immonova_direct">IMMONOVA — personale diretto (nessuna agenzia)</option>
+          </select>
+        </div>
+
         <div class="field">
           <label for="professional_role" data-i18n="label_professional_role">Incarico operativo</label>
           <select id="professional_role" required>
@@ -467,6 +486,7 @@ td{
               <th data-i18n="th_email">Email</th>
               <th data-i18n="th_phone">Telefono</th>
               <th data-i18n="th_is_super_user">Super User</th>
+              <th data-i18n="th_agency_name">Agenzia</th>
               <th data-i18n="th_super_user">Gestito da</th>
               <th data-i18n="th_access">Accesso</th>
               <th data-i18n="th_role">Incarico</th>
@@ -480,7 +500,7 @@ td{
 
           <tbody id="usersTable">
             <tr>
-              <td colspan="12" class="empty" data-i18n="empty_loading">Caricamento...</td>
+              <td colspan="13" class="empty" data-i18n="empty_loading">Caricamento...</td>
             </tr>
           </tbody>
         </table>
@@ -531,6 +551,10 @@ var UI_STRINGS = {
   label_phone: "Telefono",
   label_password: "Password temporanea",
   label_role: "Ruolo accesso",
+  label_is_super_user: "È un Super User (gestisce un'agenzia partner esterna)",
+  label_agency_name: "Nome agenzia",
+  label_managed_by: "Agenzia di appartenenza",
+  opt_immonova_direct: "IMMONOVA — personale diretto (nessuna agenzia)",
   label_professional_role: "Incarico operativo",
   label_language: "Lingua",
   role_user: "User",
@@ -549,6 +573,7 @@ var UI_STRINGS = {
   filter_no_super_user: "Senza Super User assegnato",
   opt_no_super_user: "Nessuno",
   th_is_super_user: "Super User",
+  th_agency_name: "Agenzia",
   opt_is_super_user: "Sì, Super User",
   opt_not_super_user: "No",
   th_name: "Nome",
@@ -753,12 +778,12 @@ function languageOptionsHTML(selected){
 async function loadUsers(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,phone,role,professional_role,language,active,created_at,is_super_user,managed_by")
+    .select("id,email,full_name,phone,role,professional_role,language,active,created_at,is_super_user,managed_by,agency_name")
     .order("created_at", { ascending:false });
 
   if(result.error){
-    // Colonna is_super_user/managed_by non ancora presente (SQL non eseguita): riprova senza,
-    // cosi' la pagina resta comunque utilizzabile finche' non esegui la migrazione.
+    // Colonna is_super_user/managed_by/agency_name non ancora presente (SQL non eseguita):
+    // riprova senza, cosi' la pagina resta comunque utilizzabile finche' non esegui la migrazione.
     if(result.error.code === "42703"){
       result = await client
         .from("profiles")
@@ -768,13 +793,21 @@ async function loadUsers(){
   }
 
   if(result.error){
-    usersTable.innerHTML = '<tr><td colspan="12" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="13" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
     return;
   }
 
   allUsersData = result.data || [];
   renderSuperUserFilterOptions();
   renderUsersTable();
+  populateAgencySelect();
+}
+
+/* ---- Etichetta di un'agenzia (= un super user): usa il nome agenzia se impostato,
+   altrimenti ripiega sul nome/email della persona -- cosi' resta sempre leggibile anche
+   per le agenzie create prima che il campo agency_name esistesse. ---- */
+function agencyLabel(su){
+  return su.agency_name || su.full_name || su.email || su.id;
 }
 
 /* ---- Popola il filtro "Filtra per Super User" con la lista dei super user esistenti,
@@ -791,7 +824,7 @@ function renderSuperUserFilterOptions(){
   var options = '<option value="">' + escapeHTML(T.filter_all_super_users) + '</option>';
   superUsers.forEach(function(su){
     var count = countByManager[su.id] || 0;
-    var label = (su.full_name || su.email || su.id) + " (" + count + ")";
+    var label = agencyLabel(su) + " (" + count + ")";
     options += '<option value="' + su.id + '" ' + (superUserFilterValue === su.id ? "selected" : "") + '>' + escapeHTML(label) + '</option>';
   });
   options += '<option value="__none__" ' + (superUserFilterValue === "__none__" ? "selected" : "") + '>' + escapeHTML(T.filter_no_super_user) + '</option>';
@@ -799,11 +832,30 @@ function renderSuperUserFilterOptions(){
   superUserFilter.innerHTML = options;
 }
 
+/* ---- Popola il menu "Agenzia di appartenenza" nel form di creazione nuovo utente, con
+   l'elenco delle agenzie (super user) già esistenti -- cosi' si assegna subito il
+   collaboratore alla sua agenzia invece di doverlo fare dopo dalla tabella qui sotto. ---- */
+function populateAgencySelect(){
+  var select = document.getElementById("managed_by");
+  if(!select) return;
+
+  var superUsers = allUsersData.filter(function(u){ return !!u.is_super_user; });
+  var currentValue = select.value;
+
+  var options = '<option value="" data-i18n="opt_immonova_direct">' + escapeHTML(T.opt_immonova_direct) + '</option>';
+  superUsers.forEach(function(su){
+    options += '<option value="' + su.id + '">' + escapeHTML(agencyLabel(su)) + '</option>';
+  });
+
+  select.innerHTML = options;
+  select.value = currentValue;
+}
+
 function superUserOptionsHTML(user){
   var superUsers = allUsersData.filter(function(u){ return !!u.is_super_user && u.id !== user.id; });
   var out = '<option value="">' + escapeHTML(T.opt_no_super_user) + '</option>';
   superUsers.forEach(function(su){
-    var label = su.full_name || su.email || su.id;
+    var label = agencyLabel(su);
     out += '<option value="' + su.id + '" ' + (user.managed_by === su.id ? "selected" : "") + '>' + escapeHTML(label) + '</option>';
   });
   return out;
@@ -817,7 +869,7 @@ function renderUsersTable(){
   });
 
   if(data.length === 0){
-    usersTable.innerHTML = '<tr><td colspan="12" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="13" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
     return;
   }
 
@@ -863,7 +915,14 @@ function renderUsersTable(){
         </td>
 
         <td>
-          <select class="small-select" onchange="updateUserManagedBy('${user.id}', this.value)">
+          ${user.is_super_user
+            ? `<input class="small-input" type="text" value="${escapeHTML(user.agency_name || "")}" placeholder="${escapeHTML(T.label_agency_name)}" onchange="updateUserField('${user.id}', 'agency_name', this.value)">`
+            : `<span style="opacity:.45">—</span>`
+          }
+        </td>
+
+        <td>
+          <select class="small-select" onchange="updateUserManagedBy('${user.id}', this.value)" ${user.is_super_user ? "disabled" : ""}>
             ${superUserOptionsHTML(user)}
           </select>
         </td>
@@ -1045,6 +1104,9 @@ userForm.addEventListener("submit", async function(e){
   var role = document.getElementById("role").value;
   var professional_role = document.getElementById("professional_role").value;
   var language = document.getElementById("language").value;
+  var is_super_user = document.getElementById("is_super_user").checked && role !== "admin";
+  var agency_name = document.getElementById("agency_name").value.trim();
+  var managed_by = document.getElementById("managed_by").value;
 
   var result = await client.functions.invoke("create-user", {
     body:{
@@ -1054,7 +1116,10 @@ userForm.addEventListener("submit", async function(e){
       password:password,
       role:role,
       professional_role:professional_role,
-      language:language
+      language:language,
+      is_super_user:is_super_user,
+      agency_name:agency_name,
+      managed_by:managed_by || null
     }
   });
 
@@ -1084,9 +1149,35 @@ userForm.addEventListener("submit", async function(e){
   userForm.reset();
   createBtn.disabled = false;
   createBtn.textContent = T.btn_create;
+  syncAgencyFieldsVisibility();
 
   await loadUsers();
 });
+
+/* ---- Mostra "Nome agenzia" solo se si sta creando un Super User, oppure "Agenzia di
+   appartenenza" solo se non lo è -- i due concetti si escludono a vicenda (un Super User
+   è la radice della propria agenzia, non può appartenere a un'altra). Se il ruolo accesso
+   è Admin, il blocco Super User/agenzia viene nascosto del tutto (un admin non appartiene
+   mai a un'agenzia esterna, vede/gestisce tutto per definizione). ---- */
+function syncAgencyFieldsVisibility(){
+  var roleValue = document.getElementById("role").value;
+  var isSuperUserChecked = document.getElementById("is_super_user").checked;
+  var agencyBlock = document.getElementById("agencyBlock");
+  var newAgencyNameBlock = document.getElementById("newAgencyNameBlock");
+  var belongsToAgencyBlock = document.getElementById("belongsToAgencyBlock");
+
+  var isAdminRole = roleValue === "admin";
+
+  agencyBlock.style.display = isAdminRole ? "none" : "";
+  newAgencyNameBlock.style.display = (!isAdminRole && isSuperUserChecked) ? "" : "none";
+  belongsToAgencyBlock.style.display = (!isAdminRole && !isSuperUserChecked) ? "" : "none";
+
+  document.getElementById("agency_name").required = (!isAdminRole && isSuperUserChecked);
+}
+
+document.getElementById("role").addEventListener("change", syncAgencyFieldsVisibility);
+document.getElementById("is_super_user").addEventListener("change", syncAgencyFieldsVisibility);
+syncAgencyFieldsVisibility();
 
 document.getElementById("logoutBtn").addEventListener("click", async function(){
   await client.auth.signOut();

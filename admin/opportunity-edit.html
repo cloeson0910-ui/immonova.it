@@ -5295,6 +5295,7 @@ var PROPERTY_FEATURES = [
 var isAdmin = false;
 var loadedFeatured = false;
 var loadedPublished = false;
+var editableOpportunityIds = null;
 
 var currentUserFullName = "";
 
@@ -5311,6 +5312,20 @@ async function loadUserLanguage(){
 
   isAdmin = !!(result.data && result.data.role === "admin");
   applyAdminRestrictions();
+
+  if(!isAdmin){
+    /* Serve a sapere se questo immobile appartiene alla mia agenzia (proprio o di un
+       collega/super user che mi gestisce) PRIMA di sbloccare il form: un super user può
+       APRIRE in lettura qualsiasi immobile del sito, ma può salvare modifiche solo sui
+       propri o su quelli della sua stessa agenzia -- vedi applyOwnershipLock più sotto. */
+    var editableRes = await client.rpc("immonova_my_editable_opportunity_ids");
+    if(editableRes.error){
+      console.warn("Impossibile caricare gli immobili modificabili:", editableRes.error.message);
+      editableOpportunityIds = new Set();
+    }else{
+      editableOpportunityIds = new Set((editableRes.data || []).map(function(v){ return String(v); }));
+    }
+  }
 
   /* Il campo "Registrato da" della timeline è ora un menu a tendina (vedi loadCollaborators),
      preselezionato sull'utente loggato ma modificabile -- currentUserFullName resta come
@@ -5511,7 +5526,8 @@ async function loadOpportunity(){
 function applyOwnershipLock(data){
   if(isAdmin) return;
 
-  var isLocked = (data.review_status && data.review_status !== "da_verificare") || data.published === true;
+  var isForeignAgency = !!(editableOpportunityIds && !editableOpportunityIds.has(String(data.id)));
+  var isLocked = isForeignAgency || (data.review_status && data.review_status !== "da_verificare") || data.published === true;
   if(!isLocked) return;
 
   form.querySelectorAll("input, select, textarea, button[type=submit]").forEach(function(el){
@@ -5520,7 +5536,9 @@ function applyOwnershipLock(data){
 
   var banner = document.createElement("div");
   banner.style.cssText = "padding:16px 20px;margin-bottom:20px;background:rgba(156,47,47,.08);border:1px solid rgba(156,47,47,.3);color:#9c2f2f;font-size:14px;";
-  banner.textContent = T.msg_opportunity_locked || "Questa opportunità è in revisione o pubblicata: non è più modificabile. Contatta un amministratore per qualsiasi cambiamento.";
+  banner.textContent = isForeignAgency
+    ? (T.msg_opportunity_foreign_agency || "Questo immobile appartiene a un'altra agenzia: puoi solo visualizzarlo, non modificarlo.")
+    : (T.msg_opportunity_locked || "Questa opportunità è in revisione o pubblicata: non è più modificabile. Contatta un amministratore per qualsiasi cambiamento.");
   form.parentNode.insertBefore(banner, form);
 }
 

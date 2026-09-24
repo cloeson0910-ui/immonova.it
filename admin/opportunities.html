@@ -104,6 +104,18 @@ display:none;
 display:none;
 }
 
+.super-user-only{
+display:none;
+}
+
+.other-agency-note{
+font-size:10px;
+letter-spacing:.08em;
+text-transform:uppercase;
+color:#9c2f2f;
+opacity:.75;
+}
+
 .bulk-toolbar{
 display:none;
 align-items:center;
@@ -528,13 +540,14 @@ Caricamento area riservata...
 <th data-i18n="th_commercial">Commerciale</th>
 <th data-i18n="th_published">Pubblicata</th>
 <th data-i18n="th_documents">Documenti</th>
+<th class="super-user-only" data-i18n="th_copy_link">Link Dossier</th>
 <th data-i18n="th_actions">Azioni</th>
 </tr>
 </thead>
 
 <tbody id="opportunitiesTable">
 <tr>
-<td colspan="11" class="empty" data-i18n="loading">Caricamento...</td>
+<td colspan="12" class="empty" data-i18n="loading">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -563,6 +576,8 @@ const subtitle = document.getElementById("subtitle");
 let currentUser = null;
 let currentProfile = null;
 let isAdmin = false;
+let isSuperUser = false;
+let editableOpportunityIds = new Set();
 let allOpportunities = [];
 let selectedIds = new Set();
 let currentUserLanguage = "it";
@@ -583,7 +598,9 @@ const REQUIRED_DOCUMENT_TYPES = [
 
 var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_new_proposal:"Nuova Proposta", nav_inquiries:"Richieste", nav_users:"Utenti", logout:"Logout",
-  role_reserved:"Area Riservata", role_admin:"Area Admin", role_user_area:"Area Utente",
+  role_reserved:"Area Riservata", role_admin:"Area Admin", role_user_area:"Area Utente", role_super_user:"Area Agenzia Partner",
+  th_copy_link: "Link Dossier", btn_copy_link: "Copia link", btn_copy_link_missing: "Dossier non ancora generato", msg_link_copied: "Link copiato negli appunti.",
+  badge_other_agency: "Non modificabile: altra agenzia",
   title:"Proposte",
   loading_area:"Caricamento area riservata...",
   subtitle_admin:"Gestisci tutte le proposte ricevute. Puoi valutarle, approvarle, rifiutarle, pubblicarle o sospenderle.",
@@ -708,6 +725,16 @@ function escapeHTML(value){
     .replaceAll("'","&#039;");
 }
 
+async function copyDossierLink(url){
+  if(!url) return;
+  try{
+    await navigator.clipboard.writeText(url);
+    setStatus(T.msg_link_copied, "success");
+  }catch(e){
+    window.prompt(T.msg_link_copied, url);
+  }
+}
+
 function setStatus(message, type){
   statusBox.className = "status " + (type || "");
   statusBox.textContent = message || "";
@@ -793,14 +820,14 @@ async function checkAuth(){
 async function loadProfile(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,role,language")
+    .select("id,email,full_name,role,language,is_super_user")
     .eq("id", currentUser.id)
     .single();
 
   if(result.error){
-    var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
-    if(looksLikeMissingLanguageColumn){
-      console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL. Interfaccia mostrata in italiano nel frattempo.");
+    var looksLikeMissingColumn = /language|is_super_user/i.test(result.error.message || "") || result.error.code === "42703";
+    if(looksLikeMissingColumn){
+      console.warn("Colonna profiles.language o is_super_user non trovata: esegui la migrazione SQL. Interfaccia mostrata in italiano nel frattempo.");
       result = await client.from("profiles").select("id,email,full_name,role").eq("id", currentUser.id).single();
     }
   }
@@ -813,10 +840,11 @@ async function loadProfile(){
 
   currentProfile = result.data;
   isAdmin = currentProfile.role === "admin";
+  isSuperUser = !!currentProfile.is_super_user;
 
   await applyLanguage(currentProfile.language || "it");
 
-  roleLabel.textContent = isAdmin ? T.role_admin : T.role_user_area;
+  roleLabel.textContent = isAdmin ? T.role_admin : (isSuperUser ? T.role_super_user : T.role_user_area);
 
   document.querySelectorAll(".admin-only").forEach(el => {
     el.style.display = isAdmin ? "inline-block" : "none";
@@ -826,9 +854,32 @@ async function loadProfile(){
     el.style.display = isAdmin ? "table-cell" : "none";
   });
 
+  document.querySelectorAll(".super-user-only").forEach(el => {
+    el.style.display = (isAdmin || isSuperUser) ? "table-cell" : "none";
+  });
+
+  await loadEditableOpportunityIds();
+
   if(!isAdmin){
     selectedIds.clear();
   }
+}
+
+/* Elenco (solo ID) degli immobili che l'utente corrente può davvero modificare: i propri,
+   oppure (se admin) tutti, oppure (se super user o collaboratore di un'agenzia) quelli di
+   chiunque appartenga alla stessa agenzia. Usa una funzione RPC lato Supabase apposta:
+   un super user vede TUTTI gli immobili (RLS separata), ma può scriverne solo un sottoinsieme,
+   e non ha comunque accesso ai profili altrui per calcolarlo da solo lato client. */
+async function loadEditableOpportunityIds(){
+  editableOpportunityIds = new Set();
+  if(isAdmin) return;
+
+  const { data, error } = await client.rpc("immonova_my_editable_opportunity_ids");
+  if(error){
+    console.warn("Impossibile caricare gli immobili modificabili:", error.message);
+    return;
+  }
+  (data || []).forEach(id => editableOpportunityIds.add(String(id)));
 }
 
 async function loadOpportunities(){
@@ -841,7 +892,7 @@ async function loadOpportunities(){
     console.error(error);
     table.innerHTML = `
       <tr>
-        <td colspan="11" class="empty">${escapeHTML(T.loading_error)}</td>
+        <td colspan="12" class="empty">${escapeHTML(T.loading_error)}</td>
       </tr>
     `;
     return;
@@ -1044,7 +1095,7 @@ function renderTable(data){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="11" class="empty">${escapeHTML(T.empty_none)}</td>
+        <td colspan="12" class="empty">${escapeHTML(T.empty_none)}</td>
       </tr>
     `;
     return;
@@ -1054,6 +1105,8 @@ function renderTable(data){
     const reviewStatus = item.review_status || "da_verificare";
     const commercialStatus = item.commercial_status || "available";
     const canPublish = isAdmin && reviewStatus === "approvato" && commercialStatus !== "sold" && commercialStatus !== "withdrawn";
+    const canEditRow = isAdmin || editableOpportunityIds.has(String(item.id));
+    const dossierLink = item.dossier_share_url || item.dossier_sintetico_share_url || "";
 
     return `
       <tr>
@@ -1082,6 +1135,13 @@ function renderTable(data){
           ${renderDocumentSummary(item)}
         </td>
 
+        <td class="super-user-only">
+          ${dossierLink
+            ? `<button type="button" onclick="copyDossierLink('${escapeHTML(dossierLink)}')">${escapeHTML(T.btn_copy_link)}</button>`
+            : `<span class="other-agency-note">${escapeHTML(T.btn_copy_link_missing)}</span>`
+          }
+        </td>
+
         <td>
           <div class="actions">
 
@@ -1091,9 +1151,13 @@ function renderTable(data){
               </a>
             ` : ""}
 
-            <a href="opportunity-edit.html?id=${encodeURIComponent(item.id)}">
-              ${isAdmin ? escapeHTML(T.action_evaluate) : escapeHTML(T.action_open)}
-            </a>
+            ${canEditRow ? `
+              <a href="opportunity-edit.html?id=${encodeURIComponent(item.id)}">
+                ${isAdmin ? escapeHTML(T.action_evaluate) : escapeHTML(T.action_open)}
+              </a>
+            ` : `
+              <span class="other-agency-note">${escapeHTML(T.badge_other_agency)}</span>
+            `}
 
             ${isAdmin ? `
               <select onchange="changeReviewStatus('${item.id}', this.value)">
