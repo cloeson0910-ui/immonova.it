@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consenso Videochiamata | IMMONOVA</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+
+body{
+background:#f4ecdf;
+font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+color:#4a3c1f;
+}
+
+body::before{
+content:"";
+position:fixed;
+inset:0;
+z-index:-1;
+background:
+radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+#f4ecdf;
+}
+
+.header{
+padding:34px 20px 24px;
+text-align:center;
+}
+
+.logo-main{
+font-size:22px;
+font-weight:600;
+letter-spacing:.35em;
+color:#a67f34;
+}
+
+.logo-sub{
+margin-top:8px;
+font-size:10px;
+font-weight:700;
+letter-spacing:.2em;
+color:#a58139;
+text-transform:uppercase;
+}
+
+.container{
+max-width:640px;
+margin:0 auto;
+padding:0 20px 60px;
+}
+
+.card{
+background:rgba(255,255,255,.55);
+backdrop-filter:blur(8px);
+border:1px solid rgba(166,127,52,.2);
+padding:28px 24px;
+margin-bottom:20px;
+}
+
+.call-title{
+font-size:22px;
+font-weight:300;
+color:#a67f34;
+margin-bottom:8px;
+}
+
+.call-meta{
+font-size:13px;
+color:#8f7643;
+line-height:1.7;
+}
+
+.intro{
+font-size:14px;
+line-height:1.8;
+color:#5a4a28;
+margin-top:16px;
+}
+
+.doc-section{
+margin-bottom:14px;
+}
+
+.doc-header{
+display:flex;
+align-items:center;
+gap:10px;
+padding:14px 16px;
+background:rgba(166,127,52,.08);
+border:1px solid rgba(166,127,52,.2);
+cursor:pointer;
+font-size:13px;
+letter-spacing:.06em;
+text-transform:uppercase;
+color:#a67f34;
+}
+
+.doc-body{
+display:none;
+padding:16px;
+border:1px solid rgba(166,127,52,.15);
+border-top:none;
+font-size:13px;
+line-height:1.8;
+color:#5a4a28;
+max-height:260px;
+overflow-y:auto;
+background:rgba(255,255,255,.4);
+}
+
+.doc-body.open{display:block}
+
+.doc-check{
+display:flex;
+align-items:flex-start;
+gap:10px;
+padding:14px 16px;
+font-size:13px;
+line-height:1.6;
+color:#4a3c1f;
+}
+
+.doc-check input{margin-top:3px}
+
+.field{
+margin-top:20px;
+}
+
+.field label{
+display:block;
+font-size:11px;
+letter-spacing:.14em;
+text-transform:uppercase;
+color:#8f7643;
+margin-bottom:8px;
+}
+
+.field input[type=text]{
+width:100%;
+padding:14px 16px;
+border:1px solid rgba(166,127,52,.25);
+background:rgba(255,255,255,.5);
+font-size:14px;
+color:#4a3c1f;
+outline:none;
+}
+
+.submit-btn{
+width:100%;
+margin-top:24px;
+padding:16px;
+border:none;
+background:#a67f34;
+color:#fffaf0;
+letter-spacing:.14em;
+text-transform:uppercase;
+font-size:12px;
+cursor:pointer;
+}
+
+.submit-btn:disabled{
+opacity:.4;
+cursor:not-allowed;
+}
+
+.status{
+margin-top:16px;
+font-size:13px;
+text-align:center;
+min-height:20px;
+}
+
+.status.error{color:#9c2f2f}
+.status.success{color:#4f7f45}
+
+.state-message{
+text-align:center;
+padding:60px 20px;
+font-size:15px;
+color:#5a4a28;
+line-height:1.8;
+}
+
+.disclaimer{
+margin-top:16px;
+font-size:11px;
+line-height:1.6;
+color:#8f7643;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo-main">IMMONOVA</div>
+  <div class="logo-sub">Off Market &middot; Consulting</div>
+</div>
+
+<div class="container">
+  <div id="loadingState" class="state-message">Caricamento in corso...</div>
+  <div id="content" style="display:none"></div>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const inviteToken = params.get("t");
+
+const FUNCTIONS_BASE = "https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1";
+const ANON_KEY = "sb_publishable_YySRrYs6VqiGLmP9958PjA_dUM6MDU8";
+
+/* ---- Testi legali standard IMMONOVA: informativa privacy, liberatoria alla registrazione
+   e accordo di riservatezza (NDA), mostrati per intero prima della firma. Questi testi sono
+   una base di partenza ragionevole, non una consulenza legale: vanno fatti rivedere da un
+   legale prima dell'uso reale, soprattutto per adattarli a giurisdizioni diverse dall'Italia. ---- */
+const DOCUMENTS = {
+  privacy: {
+    label: "Informativa Privacy",
+    text: `Ai sensi del Regolamento (UE) 2016/679 (GDPR), IMMONOVA S.R.L., in qualità di titolare del trattamento, La informa che i Suoi dati personali (nome, cognome, indirizzo email, immagine e voce raccolte durante la videochiamata) saranno trattati per le seguenti finalità: organizzazione e svolgimento della videochiamata, verifica dell'attività svolta dai collaboratori e dalle agenzie partner sugli immobili trattati, tutela in caso di controversie relative alla mediazione immobiliare.
+
+La base giuridica del trattamento è il consenso che Lei presta con la presente accettazione. I dati saranno conservati per il tempo necessario alle finalità sopra indicate e comunque non oltre i termini di legge applicabili ai rapporti di mediazione immobiliare. I dati non saranno comunicati a soggetti terzi estranei a IMMONOVA, salvo obblighi di legge.
+
+Lei ha diritto di accedere ai Suoi dati, chiederne la rettifica, la cancellazione, la limitazione del trattamento, nonché di opporsi al trattamento e proporre reclamo all'Autorità Garante per la protezione dei dati personali. Per esercitare tali diritti può scrivere a amministrazione@immonova-consulting.com.`
+  },
+  liberatoria_registrazione: {
+    label: "Liberatoria alla Registrazione",
+    text: `Con la presente Lei acconsente espressamente alla registrazione audio e video della videochiamata a cui sta per partecipare, organizzata da IMMONOVA S.R.L. o da un'agenzia partner operante sulla piattaforma IMMONOVA.
+
+La registrazione ha lo scopo esclusivo di documentare l'attività di consulenza/mediazione svolta in relazione all'immobile o agli immobili oggetto della conversazione, e potrà essere utilizzata da IMMONOVA a fini probatori interni, anche in caso di controversie relative alla provvigione o all'attribuzione dell'attività tra collaboratori/agenzie.
+
+La registrazione non sarà diffusa pubblicamente, non sarà ceduta a terzi né utilizzata per finalità pubblicitarie senza Suo ulteriore ed esplicito consenso. Lei può revocare il consenso alla partecipazione in qualsiasi momento prima dell'inizio della registrazione, comunicandolo all'organizzatore; la revoca dopo l'inizio della videochiamata comporta l'uscita dalla stessa.`
+  },
+  nda: {
+    label: "Accordo di Riservatezza (NDA)",
+    text: `Partecipando a questa videochiamata, Lei si impegna a mantenere riservate tutte le informazioni relative all'immobile/agli immobili discussi, ai dati di prezzo, alle condizioni di vendita, ai dati personali delle altre parti coinvolte e a qualunque altra informazione non pubblica condivisa durante la conversazione.
+
+Tali informazioni non potranno essere diffuse, comunicate a terzi o utilizzate per finalità diverse dalla valutazione dell'opportunità immobiliare presentata, senza il previo consenso scritto di IMMONOVA S.R.L. e/o dell'agenzia partner coinvolta.
+
+Questo impegno di riservatezza resta valido anche dopo la conclusione della videochiamata e per l'intera durata della trattativa relativa all'immobile/agli immobili oggetto della conversazione.`
+  }
+};
+
+let participantData = null;
+
+function escapeHTML(value){
+  return String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+function formatDate(value){
+  try{
+    return new Intl.DateTimeFormat("it-IT",{ dateStyle:"full", timeStyle:"short", timeZone:"Europe/Rome" }).format(new Date(value));
+  }catch(e){
+    return value;
+  }
+}
+
+function renderMessage(message){
+  document.getElementById("loadingState").style.display = "none";
+  var content = document.getElementById("content");
+  content.style.display = "block";
+  content.innerHTML = '<div class="card"><div class="state-message">' + escapeHTML(message) + '</div></div>';
+}
+
+function renderForm(data){
+  document.getElementById("loadingState").style.display = "none";
+  var content = document.getElementById("content");
+  content.style.display = "block";
+
+  var call = data.call;
+  var participant = data.participant;
+
+  if(participant.consent_completed_at){
+    content.innerHTML =
+      '<div class="card">' +
+        '<div class="call-title">' + escapeHTML(call.title) + '</div>' +
+        '<div class="call-meta">' + escapeHTML(formatDate(call.scheduled_at)) + '</div>' +
+        '<div class="state-message" style="padding:30px 0 0">Hai già completato la firma per questa videochiamata il ' + escapeHTML(formatDate(participant.consent_completed_at)) + '. Riceverai il link per accedere alla stanza non appena sarà disponibile.</div>' +
+      '</div>';
+    return;
+  }
+
+  var docsHtml = "";
+  Object.keys(DOCUMENTS).forEach(function(key){
+    var doc = DOCUMENTS[key];
+    docsHtml +=
+      '<div class="doc-section">' +
+        '<div class="doc-header" onclick="toggleDoc(\'' + key + '\')">' +
+          '<span>' + escapeHTML(doc.label) + '</span>' +
+        '</div>' +
+        '<div class="doc-body" id="body_' + key + '">' + escapeHTML(doc.text).replaceAll("\n\n","<br><br>") + '</div>' +
+        '<div class="doc-check">' +
+          '<input type="checkbox" id="check_' + key + '" onchange="syncSubmitState()">' +
+          '<label for="check_' + key + '">Ho letto e accetto: ' + escapeHTML(doc.label) + '</label>' +
+        '</div>' +
+      '</div>';
+  });
+
+  content.innerHTML =
+    '<div class="card">' +
+      '<div class="call-title">' + escapeHTML(call.title) + '</div>' +
+      '<div class="call-meta">' + escapeHTML(formatDate(call.scheduled_at)) + '</div>' +
+      '<div class="intro">Ciao ' + escapeHTML(participant.full_name) + ', prima di partecipare a questa videochiamata IMMONOVA ti chiediamo di leggere e accettare i seguenti documenti. La videochiamata potrà essere registrata come previsto dalla liberatoria qui sotto.</div>' +
+    '</div>' +
+    '<div class="card">' +
+      docsHtml +
+      '<div class="field">' +
+        '<label for="signatureName">Firma (nome e cognome)</label>' +
+        '<input type="text" id="signatureName" placeholder="Scrivi il tuo nome e cognome completo">' +
+      '</div>' +
+      '<button class="submit-btn" id="submitBtn" disabled onclick="submitConsent()">Accetto e firmo</button>' +
+      '<div class="status" id="statusMsg"></div>' +
+      '<div class="disclaimer">Firmando dichiari di aver preso visione e di accettare integralmente i documenti sopra riportati. La firma viene registrata con data, ora e indirizzo IP a fini probatori.</div>' +
+    '</div>';
+}
+
+function toggleDoc(key){
+  var body = document.getElementById("body_" + key);
+  body.classList.toggle("open");
+}
+
+function syncSubmitState(){
+  var allChecked = Object.keys(DOCUMENTS).every(function(key){
+    return document.getElementById("check_" + key).checked;
+  });
+  var nameFilled = document.getElementById("signatureName").value.trim().length > 2;
+  document.getElementById("submitBtn").disabled = !(allChecked && nameFilled);
+}
+
+document.addEventListener("input", function(e){
+  if(e.target && e.target.id === "signatureName") syncSubmitState();
+});
+
+async function submitConsent(){
+  var statusEl = document.getElementById("statusMsg");
+  var submitBtn = document.getElementById("submitBtn");
+  var signatureName = document.getElementById("signatureName").value.trim();
+
+  var decisions = {};
+  var documentTexts = {};
+  Object.keys(DOCUMENTS).forEach(function(key){
+    decisions[key] = document.getElementById("check_" + key).checked;
+    documentTexts[key] = DOCUMENTS[key].text;
+  });
+
+  submitBtn.disabled = true;
+  statusEl.className = "status";
+  statusEl.textContent = "Invio firma in corso...";
+
+  try{
+    var res = await fetch(FUNCTIONS_BASE + "/immonova-video-call-consent-submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ANON_KEY, "apikey": ANON_KEY },
+      body: JSON.stringify({
+        invite_token: inviteToken,
+        decisions: decisions,
+        signature_full_name: signatureName,
+        document_texts: documentTexts
+      })
+    });
+    var json = await res.json();
+
+    if(!res.ok || !json.success){
+      throw new Error(json.message || "Errore durante l'invio.");
+    }
+
+    statusEl.className = "status success";
+    statusEl.textContent = "Firma registrata con successo. Riceverai il link per accedere alla videochiamata quando sarà disponibile.";
+    submitBtn.style.display = "none";
+  }catch(e){
+    statusEl.className = "status error";
+    statusEl.textContent = e.message || "Errore imprevisto.";
+    submitBtn.disabled = false;
+  }
+}
+
+(async function init(){
+  if(!inviteToken){
+    renderMessage("Link non valido: manca il codice di invito.");
+    return;
+  }
+
+  try{
+    var res = await fetch(FUNCTIONS_BASE + "/immonova-video-call-consent-get?t=" + encodeURIComponent(inviteToken), {
+      headers: { "Authorization": "Bearer " + ANON_KEY, "apikey": ANON_KEY }
+    });
+    var json = await res.json();
+
+    if(!res.ok || !json.success){
+      renderMessage(json.message || "Link non valido o scaduto.");
+      return;
+    }
+
+    participantData = json;
+    renderForm(json);
+  }catch(e){
+    renderMessage("Errore di connessione. Riprova tra qualche istante.");
+  }
+})();
+</script>
+
+</body>
+</html>

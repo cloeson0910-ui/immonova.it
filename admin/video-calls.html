@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Videochiamate | IMMONOVA</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+
+body{
+background:#f4ecdf;
+font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+color:#7f6430;
+}
+
+body::before{
+content:"";
+position:fixed;
+inset:0;
+z-index:-1;
+background:
+radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+#f4ecdf;
+}
+
+.header{
+padding:30px 40px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+border-bottom:1px solid rgba(166,127,52,.12);
+background:rgba(244,236,223,.72);
+backdrop-filter:blur(14px);
+position:sticky;
+top:0;
+z-index:10;
+}
+
+.logo{text-decoration:none;color:#a67f34}
+.logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}
+.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:#a58139}
+
+.header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.header-actions a,.logout{
+padding:10px 20px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.25);
+cursor:pointer;color:#a67f34;text-decoration:none;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+}
+.header-actions a:hover,.logout:hover{background:#a67f34;color:#fff}
+
+.container{max-width:1200px;margin:auto;padding:40px}
+
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#9a793c;margin-bottom:12px}
+.title{font-size:36px;font-weight:200;letter-spacing:.05em;color:#a67f34;margin-bottom:8px}
+.subtitle{font-size:14px;line-height:1.7;color:#8f7643;max-width:780px;margin-bottom:28px}
+
+.grid{display:grid;grid-template-columns:1fr 1.4fr;gap:28px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+
+.panel{
+background:rgba(255,255,255,.20);backdrop-filter:blur(8px);
+border:1px solid rgba(166,127,52,.15);padding:28px;
+box-shadow:0 24px 70px rgba(127,100,48,.07);
+}
+
+.panel-title{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#a67f34;margin-bottom:20px}
+
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8f7643;margin-bottom:6px}
+.field input,.field select,.field textarea{
+width:100%;padding:12px 14px;border:1px solid rgba(166,127,52,.22);background:rgba(255,255,255,.4);
+color:#4a3c1f;font-size:14px;outline:none;font-family:inherit;
+}
+.field textarea{resize:vertical;min-height:60px}
+
+.participant-row{
+display:grid;grid-template-columns:1fr 1fr 110px 32px;gap:8px;margin-bottom:8px;align-items:center;
+}
+.participant-row input,.participant-row select{
+padding:10px 12px;border:1px solid rgba(166,127,52,.22);background:rgba(255,255,255,.4);font-size:13px;outline:none;
+}
+.remove-participant{
+background:none;border:none;color:#9c2f2f;cursor:pointer;font-size:16px;line-height:1;
+}
+
+.add-participant-btn{
+padding:10px 16px;border:1px dashed rgba(166,127,52,.4);background:transparent;color:#a67f34;
+cursor:pointer;font-size:12px;letter-spacing:.08em;text-transform:uppercase;width:100%;margin-top:4px;
+}
+
+.primary-btn{
+width:100%;margin-top:20px;padding:15px;border:none;background:#a67f34;color:#fffaf0;
+letter-spacing:.14em;text-transform:uppercase;font-size:12px;cursor:pointer;
+}
+.primary-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.status{margin-top:14px;font-size:13px;min-height:18px}
+.status.error{color:#9c2f2f}
+.status.success{color:#4f7f45}
+
+.call-card{
+background:rgba(255,255,255,.28);border:1px solid rgba(166,127,52,.16);padding:20px;margin-bottom:16px;
+}
+.call-card-title{font-size:16px;color:#a67f34;margin-bottom:4px}
+.call-card-meta{font-size:12px;color:#8f7643;margin-bottom:12px}
+
+.call-status-badge{
+display:inline-block;padding:5px 10px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+border:1px solid rgba(166,127,52,.25);color:#a67f34;background:rgba(255,255,255,.3);
+}
+.call-status-badge.pronta{color:#4f7f45;border-color:rgba(79,127,69,.34);background:rgba(79,127,69,.08)}
+.call-status-badge.in_attesa_consensi{color:#8f5b28;border-color:rgba(143,91,40,.34);background:rgba(143,91,40,.08)}
+
+.participant-list{margin-top:12px;border-top:1px solid rgba(166,127,52,.12);padding-top:12px}
+.participant-item{
+display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;
+}
+.consent-pill{
+padding:4px 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+border:1px solid rgba(166,127,52,.25);color:#8f5b28;background:rgba(143,91,40,.06);
+}
+.consent-pill.done{color:#4f7f45;border-color:rgba(79,127,69,.34);background:rgba(79,127,69,.08)}
+
+.empty{padding:40px;text-align:center;opacity:.7;font-size:13px}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a href="dashboard.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">ADMIN</div>
+  </a>
+  <div class="header-actions">
+    <a href="dashboard.html">Dashboard</a>
+    <button class="logout" id="logoutBtn">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="kicker">Area Riservata</div>
+  <h1 class="title">Videochiamate</h1>
+  <p class="subtitle">
+    Organizza videochiamate tracciate con clienti e agenzie partner: ogni partecipante riceve un invito con
+    informativa privacy, liberatoria alla registrazione e accordo di riservatezza da leggere e firmare prima
+    di poter accedere alla stanza.
+  </p>
+
+  <div id="status" class="status"></div>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="panel-title">Nuova Videochiamata</div>
+
+      <div class="field">
+        <label for="callTitle">Titolo</label>
+        <input type="text" id="callTitle" placeholder="Es. Presentazione Villa Soleto - Sig. Rossi">
+      </div>
+
+      <div class="field">
+        <label for="callOpportunity">Immobile collegato (opzionale)</label>
+        <select id="callOpportunity">
+          <option value="">Nessuno / non collegata a un immobile specifico</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="callScheduledAt">Data e ora</label>
+        <input type="datetime-local" id="callScheduledAt">
+      </div>
+
+      <div class="field">
+        <label for="callNotes">Note (opzionale)</label>
+        <textarea id="callNotes" placeholder="Note interne, non visibili ai partecipanti"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Partecipanti</label>
+        <div id="participantsContainer"></div>
+        <button type="button" class="add-participant-btn" onclick="addParticipantRow()">+ Aggiungi partecipante</button>
+      </div>
+
+      <button type="button" class="primary-btn" id="createCallBtn" onclick="createCall()">Crea e invia inviti</button>
+      <div class="status" id="createStatus"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">Videochiamate Programmate</div>
+      <div id="callsList"><div class="empty">Caricamento...</div></div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let participantRowCount = 0;
+
+function escapeHTML(value){
+  return String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+function setStatus(elId, message, type){
+  var el = document.getElementById(elId);
+  el.className = "status " + (type || "");
+  el.textContent = message || "";
+}
+
+async function checkAuth(){
+  var sessionRes = await client.auth.getSession();
+  var session = sessionRes && sessionRes.data && sessionRes.data.session;
+  if(!session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  return true;
+}
+
+function addParticipantRow(prefill){
+  participantRowCount++;
+  var id = participantRowCount;
+  var container = document.getElementById("participantsContainer");
+  var row = document.createElement("div");
+  row.className = "participant-row";
+  row.id = "participantRow_" + id;
+  row.innerHTML =
+    '<input type="text" placeholder="Nome e cognome" id="pName_' + id + '" value="' + escapeHTML((prefill && prefill.name) || "") + '">' +
+    '<input type="email" placeholder="Email" id="pEmail_' + id + '" value="' + escapeHTML((prefill && prefill.email) || "") + '">' +
+    '<select id="pRole_' + id + '">' +
+      '<option value="cliente">Cliente</option>' +
+      '<option value="agente">Agente</option>' +
+      '<option value="testimone">Testimone</option>' +
+      '<option value="altro">Altro</option>' +
+    '</select>' +
+    '<button type="button" class="remove-participant" onclick="document.getElementById(\'participantRow_' + id + '\').remove()">&times;</button>';
+  container.appendChild(row);
+}
+
+function collectParticipants(){
+  var rows = document.querySelectorAll(".participant-row");
+  var participants = [];
+  rows.forEach(function(row){
+    var id = row.id.replace("participantRow_", "");
+    var name = document.getElementById("pName_" + id).value.trim();
+    var email = document.getElementById("pEmail_" + id).value.trim();
+    var role = document.getElementById("pRole_" + id).value;
+    if(name && email){
+      participants.push({ full_name: name, email: email, role: role });
+    }
+  });
+  return participants;
+}
+
+async function loadOpportunitiesForSelect(){
+  var select = document.getElementById("callOpportunity");
+  var { data, error } = await client
+    .from("opportunities")
+    .select("id,title")
+    .order("created_at", { ascending:false })
+    .limit(200);
+
+  if(error || !data) return;
+
+  data.forEach(function(item){
+    var option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.title || ("Immobile #" + item.id);
+    select.appendChild(option);
+  });
+}
+
+async function createCall(){
+  var title = document.getElementById("callTitle").value.trim();
+  var opportunityId = document.getElementById("callOpportunity").value || null;
+  var scheduledAt = document.getElementById("callScheduledAt").value;
+  var notes = document.getElementById("callNotes").value.trim();
+  var participants = collectParticipants();
+
+  if(!title){ setStatus("createStatus", "Inserisci un titolo.", "error"); return; }
+  if(!scheduledAt){ setStatus("createStatus", "Inserisci data e ora.", "error"); return; }
+  if(participants.length === 0){ setStatus("createStatus", "Aggiungi almeno un partecipante con nome ed email.", "error"); return; }
+
+  var btn = document.getElementById("createCallBtn");
+  btn.disabled = true;
+  setStatus("createStatus", "Creazione in corso e invio inviti...", "");
+
+  var result = await client.functions.invoke("immonova-video-call-invite", {
+    body: {
+      title: title,
+      notes: notes || null,
+      scheduled_at: new Date(scheduledAt).toISOString(),
+      opportunity_id: opportunityId,
+      participants: participants
+    }
+  });
+
+  btn.disabled = false;
+
+  if(result.error || !result.data || !result.data.success){
+    var message = (result.data && result.data.message) || (result.error && result.error.message) || "Errore durante la creazione.";
+    setStatus("createStatus", message, "error");
+    return;
+  }
+
+  var failedEmails = (result.data.email_results || []).filter(function(r){ return !r.sent; });
+  if(failedEmails.length > 0){
+    setStatus("createStatus", "Videochiamata creata, ma alcuni inviti non sono partiti via email (" + failedEmails.map(function(f){return f.email;}).join(", ") + "). Contatta tu stesso quei partecipanti.", "error");
+  }else{
+    setStatus("createStatus", "Videochiamata creata e inviti inviati con successo.", "success");
+  }
+
+  document.getElementById("callTitle").value = "";
+  document.getElementById("callScheduledAt").value = "";
+  document.getElementById("callNotes").value = "";
+  document.getElementById("participantsContainer").innerHTML = "";
+  addParticipantRow();
+
+  await loadCalls();
+}
+
+function formatDate(value){
+  try{
+    return new Intl.DateTimeFormat("it-IT",{ dateStyle:"medium", timeStyle:"short" }).format(new Date(value));
+  }catch(e){
+    return value;
+  }
+}
+
+function statusLabel(status){
+  var labels = {
+    in_attesa_consensi: "In attesa di firme",
+    pronta: "Pronta",
+    in_corso: "In corso",
+    completata: "Completata",
+    annullata: "Annullata"
+  };
+  return labels[status] || status;
+}
+
+async function loadCalls(){
+  var listEl = document.getElementById("callsList");
+
+  var { data: calls, error } = await client
+    .from("immonova_video_calls")
+    .select("id,title,notes,scheduled_at,status,opportunity_id")
+    .order("scheduled_at", { ascending:false })
+    .limit(50);
+
+  if(error){
+    listEl.innerHTML = '<div class="empty">Errore nel caricamento.</div>';
+    return;
+  }
+
+  if(!calls || calls.length === 0){
+    listEl.innerHTML = '<div class="empty">Nessuna videochiamata ancora creata.</div>';
+    return;
+  }
+
+  var callIds = calls.map(function(c){ return c.id; });
+  var { data: participants } = await client
+    .from("immonova_video_call_participants")
+    .select("id,call_id,full_name,email,role,consent_completed_at,declined_at")
+    .in("call_id", callIds);
+
+  var participantsByCall = {};
+  (participants || []).forEach(function(p){
+    if(!participantsByCall[p.call_id]) participantsByCall[p.call_id] = [];
+    participantsByCall[p.call_id].push(p);
+  });
+
+  listEl.innerHTML = calls.map(function(call){
+    var callParticipants = participantsByCall[call.id] || [];
+    var participantsHtml = callParticipants.map(function(p){
+      var done = !!p.consent_completed_at;
+      return '<div class="participant-item">' +
+        '<span>' + escapeHTML(p.full_name) + ' &middot; ' + escapeHTML(p.role) + '</span>' +
+        '<span class="consent-pill ' + (done ? "done" : "") + '">' + (done ? "Firmato" : (p.declined_at ? "Rifiutato" : "In attesa")) + '</span>' +
+      '</div>';
+    }).join("");
+
+    return '<div class="call-card">' +
+      '<div class="call-card-title">' + escapeHTML(call.title) + '</div>' +
+      '<div class="call-card-meta">' + escapeHTML(formatDate(call.scheduled_at)) + ' &middot; <span class="call-status-badge ' + escapeHTML(call.status) + '">' + escapeHTML(statusLabel(call.status)) + '</span></div>' +
+      (call.notes ? '<div style="font-size:12px;color:#8f7643;margin-bottom:8px">' + escapeHTML(call.notes) + '</div>' : "") +
+      '<div class="participant-list">' + (participantsHtml || '<div class="empty" style="padding:10px">Nessun partecipante.</div>') + '</div>' +
+    '</div>';
+  }).join("");
+}
+
+document.getElementById("logoutBtn").addEventListener("click", async function(){
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  var logged = await checkAuth();
+  if(!logged) return;
+
+  addParticipantRow();
+  await loadOpportunitiesForSelect();
+  await loadCalls();
+})();
+</script>
+
+</body>
+</html>
