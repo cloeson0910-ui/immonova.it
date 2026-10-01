@@ -526,6 +526,14 @@ body::after{
 
   <div id="bootStatus" class="boot-status"></div>
 
+  <div id="blogReminderBanner" style="display:none;background:#fff4e5;border:1px solid #f0b865;color:#7a4d00;border-radius:8px;padding:12px 16px;margin:0 0 16px 0;display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <span id="blogReminderText" style="font-size:14px;"></span>
+    <div style="display:flex;gap:8px;">
+      <a href="articoli.html" class="btn" style="white-space:nowrap;" data-i18n="btn_write_article">Scrivi articolo</a>
+      <button type="button" onclick="dismissBlogReminder()" style="background:none;border:none;color:#7a4d00;text-decoration:underline;cursor:pointer;font-size:13px;" data-i18n="btn_remind_later">Ricordamelo tra qualche giorno</button>
+    </div>
+  </div>
+
   <section class="global-search">
     <input type="text" id="searchInput" class="search-input" data-i18n="search_placeholder" placeholder="Cerca opportunità, investitori, eventi, città, stato, categoria...">
   </section>
@@ -656,6 +664,7 @@ var UI_STRINGS = {
   title:"Command Center",
   subtitle:"Una vista unica per aprire direttamente opportunità, investitori, eventi e attività CRM senza passaggi inutili.",
   btn_new_opportunity:"Nuova Opportunità", btn_new_investor:"Nuovo Investitore", btn_new_event:"Nuovo Evento",
+  btn_write_article:"Scrivi articolo", btn_remind_later:"Ricordamelo tra qualche giorno",
   search_placeholder:"Cerca opportunità, investitori, eventi, città, stato, categoria...",
   tab_total:"Totale azienda", tab_performance:"Collaboratori / Agenzie", tab_portfolio:"Portfolio", tab_crm:"CRM & Eventi",
   owner_filter_label:"Filtro performance", owner_filter_total:"Totale azienda",
@@ -1126,7 +1135,42 @@ function showNewReceivedInvoicesToast(count){
   toast.style.display="block";
 }
 
-(async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadCollaborators();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);await loadIncompleteInvestorsPopup();setBoot("","");if(isAdmin){ checkNewReceivedInvoicesSilently(); }}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
+function dismissBlogReminder(){
+  var banner=document.getElementById("blogReminderBanner");
+  if(banner) banner.style.display="none";
+  try{ localStorage.setItem("immonova_blog_reminder_snooze_until", String(Date.now()+3*24*60*60*1000)); }catch(e){}
+}
+
+async function checkBlogReminderSilently(){
+  try{
+    var snoozeUntil=0;
+    try{ snoozeUntil=parseInt(localStorage.getItem("immonova_blog_reminder_snooze_until")||"0",10)||0; }catch(e){}
+    if(snoozeUntil && Date.now()<snoozeUntil) return;
+
+    var { data, error } = await client.from("blog_posts").select("created_at").order("created_at",{ascending:false}).limit(1);
+    if(error){ console.warn("[dashboard] controllo promemoria blog non riuscito (silenzioso)",error); return; }
+
+    var banner=document.getElementById("blogReminderBanner");
+    var textEl=document.getElementById("blogReminderText");
+    if(!banner||!textEl) return;
+
+    var REMINDER_DAYS=7;
+    if(!data || !data.length){
+      textEl.textContent="Non risulta ancora nessun articolo pubblicato sul blog. È un buon momento per scriverne uno!";
+      banner.style.display="flex";
+      return;
+    }
+
+    var lastDate=new Date(data[0].created_at);
+    var daysSince=Math.floor((Date.now()-lastDate.getTime())/(24*60*60*1000));
+    if(daysSince>=REMINDER_DAYS){
+      textEl.textContent="Sono passati "+daysSince+" giorni dall'ultimo articolo pubblicato sul blog: è ora di scriverne uno nuovo!";
+      banner.style.display="flex";
+    }
+  }catch(e){ console.warn("[dashboard] controllo promemoria blog non riuscito (silenzioso)",e); }
+}
+
+(async function init(){try{setBoot("Caricamento dati dashboard...","");if(await checkAuth()){await loadProfile();await loadCollaborators();await loadReports();await loadOpportunities();renderAll(allOpportunities);await loadInvestors();renderAll(allOpportunities);await loadEvents();renderAll(allOpportunities);await loadContactHistory();renderAll(allOpportunities);await loadInvestorRequests();renderAll(allOpportunities);await loadIncompleteInvestorsPopup();setBoot("","");checkBlogReminderSilently();if(isAdmin){ checkNewReceivedInvoicesSilently(); }}}catch(error){console.error(error);setBoot("Errore dashboard: "+(error.message||error),"error");}})();
 </script>
 
 <div class="incomplete-overlay" id="incompleteOverlay" hidden>
