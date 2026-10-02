@@ -189,7 +189,8 @@ function buildStage(){
     '<button type="button" class="ctrl-btn" id="micBtn" title="Microfono">&#127908;</button>' +
     '<button type="button" class="ctrl-btn" id="camBtn" title="Camera">&#128249;</button>' +
     '<button type="button" class="ctrl-btn" id="screenBtn" title="Condividi schermo">&#128187;</button>' +
-    '<button type="button" class="ctrl-btn leave" id="leaveBtn" title="Esci">&#10006;</button>';
+    '<button type="button" class="ctrl-btn leave" id="leaveBtn" title="Esci">&#10006;</button>' +
+    (callId ? '<button type="button" class="ctrl-btn leave" id="endCallBtn" title="Termina la videochiamata per tutti">&#9209;</button>' : "");
 
   document.body.insertBefore(stage, document.body.lastElementChild.nextSibling);
   document.body.appendChild(controls);
@@ -198,6 +199,9 @@ function buildStage(){
   document.getElementById("camBtn").onclick = toggleCam;
   document.getElementById("screenBtn").onclick = toggleScreenShare;
   document.getElementById("leaveBtn").onclick = leaveCall;
+  if(callId){
+    document.getElementById("endCallBtn").onclick = endCallForEveryone;
+  }
 }
 
 function tileIdFor(participant){
@@ -265,6 +269,23 @@ async function toggleScreenShare(){
   }catch(e){
     screenShareEnabled = !screenShareEnabled;
   }
+}
+
+async function endCallForEveryone(){
+  if(!callId) return;
+  if(!window.confirm("Terminare la videochiamata per tutti i partecipanti? La registrazione (se attiva) verrà elaborata e inviata a tutti via email.")) return;
+  try{
+    var client = window.supabase.createClient(SUPABASE_URL, ANON_KEY);
+    var sessionRes = await client.auth.getSession();
+    var session = sessionRes && sessionRes.data && sessionRes.data.session;
+    if(!session) return;
+    await fetch(FUNCTIONS_BASE + "/immonova-video-call-end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + session.access_token, "apikey": ANON_KEY },
+      body: JSON.stringify({ call_id: callId })
+    });
+  }catch(e){ /* usciamo comunque dalla chiamata */ }
+  leaveCall();
 }
 
 let hasLeft = false;
