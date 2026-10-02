@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Videochiamata | IMMONOVA</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%}
+
+body{
+background:#1c1710;
+font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+color:#f4ecdf;
+display:flex;
+flex-direction:column;
+min-height:100vh;
+}
+
+.top-bar{
+padding:16px 24px;
+display:flex;
+align-items:center;
+justify-content:space-between;
+background:rgba(0,0,0,.25);
+flex-wrap:wrap;
+gap:10px;
+}
+
+.logo{font-size:14px;font-weight:600;letter-spacing:.3em;color:#d8b36a}
+.call-title{font-size:13px;color:#cbb58a;opacity:.85}
+
+.state-message{
+margin:auto;
+text-align:center;
+padding:40px 20px;
+font-size:15px;
+line-height:1.8;
+color:#e8dcc4;
+max-width:480px;
+}
+
+.state-message .btn{
+display:inline-block;
+margin-top:18px;
+padding:13px 22px;
+border:1px solid rgba(216,179,106,.5);
+color:#d8b36a;
+text-decoration:none;
+letter-spacing:.1em;
+text-transform:uppercase;
+font-size:11px;
+cursor:pointer;
+background:none;
+}
+
+.stage{
+flex:1;
+display:grid;
+gap:8px;
+padding:12px;
+grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+align-content:center;
+}
+
+.tile{
+position:relative;
+background:#000;
+border-radius:6px;
+overflow:hidden;
+aspect-ratio:16/10;
+}
+
+.tile video{
+width:100%;
+height:100%;
+object-fit:cover;
+}
+
+.tile .tile-name{
+position:absolute;
+left:10px;
+bottom:8px;
+font-size:12px;
+background:rgba(0,0,0,.55);
+padding:4px 9px;
+border-radius:4px;
+letter-spacing:.03em;
+}
+
+.controls{
+padding:18px;
+display:flex;
+justify-content:center;
+gap:14px;
+background:rgba(0,0,0,.3);
+}
+
+.ctrl-btn{
+width:50px;
+height:50px;
+border-radius:50%;
+border:1px solid rgba(216,179,106,.35);
+background:rgba(255,255,255,.06);
+color:#f4ecdf;
+font-size:18px;
+cursor:pointer;
+display:flex;
+align-items:center;
+justify-content:center;
+}
+
+.ctrl-btn.off{background:rgba(156,47,47,.65);border-color:rgba(156,47,47,.8)}
+.ctrl-btn.leave{background:#9c2f2f;border-color:#9c2f2f}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo">IMMONOVA</div>
+  <div class="call-title" id="callTitleLabel"></div>
+</div>
+
+<div id="root" class="state-message">Caricamento...</div>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const FUNCTIONS_BASE = "https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1";
+const ANON_KEY = "sb_publishable_YySRrYs6VqiGLmP9958PjA_dUM6MDU8";
+const SUPABASE_URL = "https://bpzzmitmbavcmcasswbu.supabase.co";
+
+const params = new URLSearchParams(window.location.search);
+const inviteToken = params.get("t");
+const callId = params.get("call");
+
+let room = null;
+let micEnabled = true;
+let camEnabled = true;
+
+function setRootMessage(html){
+  document.getElementById("root").innerHTML = html;
+}
+
+function escapeHTML(value){
+  return String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+}
+
+async function fetchParticipantToken(){
+  var res = await fetch(FUNCTIONS_BASE + "/immonova-video-call-room-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + ANON_KEY, "apikey": ANON_KEY },
+    body: JSON.stringify({ invite_token: inviteToken })
+  });
+  return res.json();
+}
+
+async function fetchAdminToken(){
+  var client = window.supabase.createClient(SUPABASE_URL, ANON_KEY);
+  var sessionRes = await client.auth.getSession();
+  var session = sessionRes && sessionRes.data && sessionRes.data.session;
+  if(!session){
+    window.location.href = "admin/login.html";
+    return { success:false, message:"Sessione scaduta." };
+  }
+  var res = await fetch(FUNCTIONS_BASE + "/immonova-video-call-admin-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + session.access_token, "apikey": ANON_KEY },
+    body: JSON.stringify({ call_id: callId })
+  });
+  return res.json();
+}
+
+function buildStage(){
+  setRootMessage("");
+  var root = document.getElementById("root");
+  root.className = "";
+  root.id = "appRoot";
+
+  var stage = document.createElement("div");
+  stage.className = "stage";
+  stage.id = "stage";
+
+  var controls = document.createElement("div");
+  controls.className = "controls";
+  controls.innerHTML =
+    '<button class="ctrl-btn" id="micBtn" title="Microfono">&#127908;</button>' +
+    '<button class="ctrl-btn" id="camBtn" title="Camera">&#128249;</button>' +
+    '<button class="ctrl-btn leave" id="leaveBtn" title="Esci">&#10006;</button>';
+
+  document.body.insertBefore(stage, document.body.lastElementChild.nextSibling);
+  document.body.appendChild(controls);
+
+  document.getElementById("micBtn").onclick = toggleMic;
+  document.getElementById("camBtn").onclick = toggleCam;
+  document.getElementById("leaveBtn").onclick = leaveCall;
+}
+
+function tileIdFor(participant){
+  return "tile_" + participant.identity.replace(/[^a-zA-Z0-9_-]/g,"_");
+}
+
+function ensureTile(participant){
+  var stage = document.getElementById("stage");
+  var id = tileIdFor(participant);
+  var tile = document.getElementById(id);
+  if(!tile){
+    tile = document.createElement("div");
+    tile.className = "tile";
+    tile.id = id;
+    var nameEl = document.createElement("div");
+    nameEl.className = "tile-name";
+    nameEl.textContent = participant.name || participant.identity;
+    tile.appendChild(nameEl);
+    stage.appendChild(tile);
+  }
+  return tile;
+}
+
+function attachTrack(track, participant){
+  var tile = ensureTile(participant);
+  var el = track.attach();
+  el.autoplay = true;
+  if(track.kind === "audio") el.style.display = "none";
+  tile.insertBefore(el, tile.firstChild);
+}
+
+function detachParticipant(participant){
+  var tile = document.getElementById(tileIdFor(participant));
+  if(tile) tile.remove();
+}
+
+async function toggleMic(){
+  if(!room) return;
+  micEnabled = !micEnabled;
+  await room.localParticipant.setMicrophoneEnabled(micEnabled);
+  document.getElementById("micBtn").classList.toggle("off", !micEnabled);
+}
+
+async function toggleCam(){
+  if(!room) return;
+  camEnabled = !camEnabled;
+  await room.localParticipant.setCameraEnabled(camEnabled);
+  document.getElementById("camBtn").classList.toggle("off", !camEnabled);
+}
+
+function leaveCall(){
+  if(room) room.disconnect();
+  setRootMessage('<div>Hai lasciato la videochiamata. Puoi chiudere questa pagina.</div>');
+  document.getElementById("stage")?.remove();
+  document.querySelector(".controls")?.remove();
+}
+
+async function connectToRoom(data){
+  document.getElementById("callTitleLabel").textContent = data.call_title || "";
+  buildStage();
+
+  var LK = window.LivekitClient;
+  room = new LK.Room({ adaptiveStream: true, dynacast: true });
+
+  room.on(LK.RoomEvent.TrackSubscribed, function(track, publication, participant){
+    attachTrack(track, participant);
+  });
+  room.on(LK.RoomEvent.LocalTrackPublished, function(publication, participant){
+    if(publication.track) attachTrack(publication.track, participant);
+  });
+  room.on(LK.RoomEvent.ParticipantDisconnected, function(participant){
+    detachParticipant(participant);
+  });
+  room.on(LK.RoomEvent.Disconnected, function(){
+    leaveCall();
+  });
+
+  await room.connect(data.ws_url, data.token);
+  await room.localParticipant.setMicrophoneEnabled(true);
+  await room.localParticipant.setCameraEnabled(true);
+}
+
+(async function init(){
+  if(!inviteToken && !callId){
+    setRootMessage("Link non valido: manca il codice di accesso alla videochiamata.");
+    return;
+  }
+
+  try{
+    var data = inviteToken ? await fetchParticipantToken() : await fetchAdminToken();
+
+    if(!data || !data.success){
+      setRootMessage(escapeHTML((data && data.message) || "Impossibile accedere alla videochiamata."));
+      return;
+    }
+
+    await connectToRoom(data);
+  }catch(e){
+    setRootMessage("Errore di connessione alla videochiamata. Riprova tra qualche istante.");
+  }
+})();
+</script>
+
+</body>
+</html>
