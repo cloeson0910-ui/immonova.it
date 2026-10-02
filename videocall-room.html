@@ -186,15 +186,17 @@ function buildStage(){
   var controls = document.createElement("div");
   controls.className = "controls";
   controls.innerHTML =
-    '<button class="ctrl-btn" id="micBtn" title="Microfono">&#127908;</button>' +
-    '<button class="ctrl-btn" id="camBtn" title="Camera">&#128249;</button>' +
-    '<button class="ctrl-btn leave" id="leaveBtn" title="Esci">&#10006;</button>';
+    '<button type="button" class="ctrl-btn" id="micBtn" title="Microfono">&#127908;</button>' +
+    '<button type="button" class="ctrl-btn" id="camBtn" title="Camera">&#128249;</button>' +
+    '<button type="button" class="ctrl-btn" id="screenBtn" title="Condividi schermo">&#128187;</button>' +
+    '<button type="button" class="ctrl-btn leave" id="leaveBtn" title="Esci">&#10006;</button>';
 
   document.body.insertBefore(stage, document.body.lastElementChild.nextSibling);
   document.body.appendChild(controls);
 
   document.getElementById("micBtn").onclick = toggleMic;
   document.getElementById("camBtn").onclick = toggleCam;
+  document.getElementById("screenBtn").onclick = toggleScreenShare;
   document.getElementById("leaveBtn").onclick = leaveCall;
 }
 
@@ -219,11 +221,18 @@ function ensureTile(participant){
   return tile;
 }
 
-function attachTrack(track, participant){
+function attachTrack(track, participant, isLocal){
   var tile = ensureTile(participant);
   var el = track.attach();
   el.autoplay = true;
-  if(track.kind === "audio") el.style.display = "none";
+  el.playsInline = true;
+  el.setAttribute("playsinline", "true");
+  if(track.kind === "audio"){
+    el.style.display = "none";
+    el.muted = !!isLocal;
+  }else{
+    if(isLocal) el.muted = true;
+  }
   tile.insertBefore(el, tile.firstChild);
 }
 
@@ -246,11 +255,34 @@ async function toggleCam(){
   document.getElementById("camBtn").classList.toggle("off", !camEnabled);
 }
 
-function leaveCall(){
-  if(room) room.disconnect();
+let screenShareEnabled = false;
+async function toggleScreenShare(){
+  if(!room) return;
+  try{
+    screenShareEnabled = !screenShareEnabled;
+    await room.localParticipant.setScreenShareEnabled(screenShareEnabled, { audio: true });
+    document.getElementById("screenBtn").classList.toggle("off", screenShareEnabled);
+  }catch(e){
+    screenShareEnabled = !screenShareEnabled;
+  }
+}
+
+let hasLeft = false;
+async function leaveCall(){
+  if(hasLeft) return;
+  hasLeft = true;
+  try{
+    if(room){
+      await room.localParticipant.setMicrophoneEnabled(false);
+      await room.localParticipant.setCameraEnabled(false);
+      room.disconnect();
+    }
+  }catch(e){ /* ignora: stiamo comunque uscendo */ }
   setRootMessage('<div>Hai lasciato la videochiamata. Puoi chiudere questa pagina.</div>');
-  document.getElementById("stage")?.remove();
-  document.querySelector(".controls")?.remove();
+  var stageEl = document.getElementById("stage");
+  if(stageEl) stageEl.remove();
+  var controlsEl = document.querySelector(".controls");
+  if(controlsEl) controlsEl.remove();
 }
 
 async function connectToRoom(data){
@@ -261,10 +293,15 @@ async function connectToRoom(data){
   room = new LK.Room({ adaptiveStream: true, dynacast: true });
 
   room.on(LK.RoomEvent.TrackSubscribed, function(track, publication, participant){
-    attachTrack(track, participant);
+    attachTrack(track, participant, false);
   });
   room.on(LK.RoomEvent.LocalTrackPublished, function(publication, participant){
-    if(publication.track) attachTrack(publication.track, participant);
+    if(publication.track) attachTrack(publication.track, participant, true);
+  });
+  room.on(LK.RoomEvent.LocalTrackUnpublished, function(publication){
+    if(publication.track){
+      try{ publication.track.detach().forEach(function(el){ el.remove(); }); }catch(e){}
+    }
   });
   room.on(LK.RoomEvent.ParticipantDisconnected, function(participant){
     detachParticipant(participant);
