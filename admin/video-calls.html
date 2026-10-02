@@ -345,7 +345,7 @@ async function loadCalls(){
 
   var { data: calls, error } = await client
     .from("immonova_video_calls")
-    .select("id,title,notes,scheduled_at,status,opportunity_id")
+    .select("id,title,notes,scheduled_at,status,opportunity_id,created_by,started_at,ended_at,recording_status,recording_url")
     .order("scheduled_at", { ascending:false })
     .limit(50);
 
@@ -365,11 +365,29 @@ async function loadCalls(){
     .select("id,call_id,full_name,email,role,consent_completed_at,declined_at")
     .in("call_id", callIds);
 
+  var organizerIds = Array.from(new Set(calls.map(function(c){ return c.created_by; }).filter(Boolean)));
+  var organizersById = {};
+  if(organizerIds.length){
+    var { data: organizers } = await client
+      .from("profiles")
+      .select("id,full_name,email")
+      .in("id", organizerIds);
+    (organizers || []).forEach(function(o){ organizersById[o.id] = o; });
+  }
+
   var participantsByCall = {};
   (participants || []).forEach(function(p){
     if(!participantsByCall[p.call_id]) participantsByCall[p.call_id] = [];
     participantsByCall[p.call_id].push(p);
   });
+
+  var recordingLabels = {
+    none: "Nessuna registrazione",
+    recording: "Registrazione in corso",
+    processing: "Registrazione in elaborazione",
+    ready: "Registrazione disponibile",
+    failed: "Registrazione non riuscita"
+  };
 
   listEl.innerHTML = calls.map(function(call){
     var callParticipants = participantsByCall[call.id] || [];
@@ -382,11 +400,22 @@ async function loadCalls(){
     }).join("");
 
     var canJoin = (call.status === "pronta" || call.status === "in_corso");
+    var organizer = organizersById[call.created_by];
+    var organizerLabel = organizer ? (organizer.full_name || organizer.email) : null;
+
+    var metaLine = escapeHTML(formatDate(call.scheduled_at)) + ' &middot; <span class="call-status-badge ' + escapeHTML(call.status) + '">' + escapeHTML(statusLabel(call.status)) + '</span>';
+    if(organizerLabel) metaLine += ' &middot; Organizzata da ' + escapeHTML(organizerLabel);
+    if(call.ended_at) metaLine += ' &middot; Terminata il ' + escapeHTML(formatDate(call.ended_at));
+
+    var recordingHtml = '<div style="font-size:12px;color:#8f7643;margin:6px 0 10px">' + escapeHTML(recordingLabels[call.recording_status] || call.recording_status) +
+      (call.recording_status === "ready" && call.recording_url ? ' &middot; <a href="' + escapeHTML(call.recording_url) + '" target="_blank" style="color:#a67f34;text-decoration:underline">Guarda / scarica</a>' : "") +
+      '</div>';
 
     return '<div class="call-card">' +
       '<div class="call-card-title">' + escapeHTML(call.title) + '</div>' +
-      '<div class="call-card-meta">' + escapeHTML(formatDate(call.scheduled_at)) + ' &middot; <span class="call-status-badge ' + escapeHTML(call.status) + '">' + escapeHTML(statusLabel(call.status)) + '</span></div>' +
+      '<div class="call-card-meta">' + metaLine + '</div>' +
       (call.notes ? '<div style="font-size:12px;color:#8f7643;margin-bottom:8px">' + escapeHTML(call.notes) + '</div>' : "") +
+      recordingHtml +
       (canJoin ? '<a href="../videocall-room.html?call=' + call.id + '" target="_blank" style="display:inline-block;margin-bottom:10px;padding:9px 16px;background:#a67f34;color:#fffaf0;text-decoration:none;font-size:11px;letter-spacing:.1em;text-transform:uppercase">Entra nella videochiamata</a>' : "") +
       '<div class="participant-list">' + (participantsHtml || '<div class="empty" style="padding:10px">Nessun partecipante.</div>') + '</div>' +
     '</div>';
