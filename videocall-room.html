@@ -113,6 +113,7 @@ justify-content:center;
 
 .ctrl-btn.off{background:rgba(156,47,47,.65);border-color:rgba(156,47,47,.8)}
 .ctrl-btn.leave{background:#9c2f2f;border-color:#9c2f2f}
+.ctrl-btn.active{background:#2f6b3a;border-color:#3a8a48}
 
 .device-banner{
 background:#fff4e5;
@@ -290,15 +291,31 @@ async function toggleCam(){
   document.getElementById("camBtn").classList.toggle("off", !camEnabled);
 }
 
+function showScreenShareBanner(){
+  var banner = document.getElementById("deviceBanner");
+  if(!banner) return;
+  banner.innerHTML = '<strong>Stai condividendo lo schermo</strong>Gli altri partecipanti la vedono ora. Non vedi nulla di diverso qui di proposito, per evitare l\'effetto specchio. <br><button type="button" id="stopScreenShareBtn">Interrompi condivisione</button>';
+  banner.className = "device-banner show";
+  document.getElementById("stopScreenShareBtn").onclick = toggleScreenShare;
+}
+
 let screenShareEnabled = false;
 async function toggleScreenShare(){
   if(!room) return;
+  var targetState = !screenShareEnabled;
   try{
-    screenShareEnabled = !screenShareEnabled;
-    await room.localParticipant.setScreenShareEnabled(screenShareEnabled, { audio: true });
-    document.getElementById("screenBtn").classList.toggle("off", screenShareEnabled);
+    await room.localParticipant.setScreenShareEnabled(targetState, { audio: true });
+    screenShareEnabled = targetState;
+    document.getElementById("screenBtn").classList.toggle("active", screenShareEnabled);
+    if(screenShareEnabled){
+      showScreenShareBanner();
+    }else{
+      hideDeviceBanner();
+    }
   }catch(e){
-    screenShareEnabled = !screenShareEnabled;
+    // L'utente ha chiuso il pannello di selezione senza scegliere nulla: non è un errore da segnalare.
+    if(e && (e.name === "NotAllowedError" || e.name === "AbortError")) return;
+    showDeviceBanner("screen", e);
   }
 }
 
@@ -330,7 +347,14 @@ async function leaveCall(){
       room.disconnect();
     }
   }catch(e){ /* ignora: stiamo comunque uscendo */ }
-  setRootMessage('<div>Hai lasciato la videochiamata. Puoi chiudere questa pagina.</div>');
+  setRootMessage(
+    '<div style="text-align:center;padding:40px 20px">' +
+      '<div style="font-size:40px;line-height:1">&#10003;</div>' +
+      '<h2 style="margin:16px 0 8px;color:#f4ecdf">Grazie per aver partecipato</h2>' +
+      '<p style="color:#cfc3ac;max-width:420px;margin:0 auto 6px">La videochiamata &egrave; terminata. Non appena la registrazione sar&agrave; pronta, riceverai una email con il link per rivedere la riunione.</p>' +
+      '<p style="color:#9a8f7a;font-size:13px;margin-top:18px">Puoi chiudere questa pagina.</p>' +
+    '</div>'
+  );
   var stageEl = document.getElementById("stage");
   if(stageEl) stageEl.remove();
   var controlsEl = document.querySelector(".controls");
@@ -346,20 +370,27 @@ function showDeviceBanner(kind, err){
   var banner = document.getElementById("deviceBanner");
   if(!banner) return;
 
+  var labels = {
+    camera: { def:"la videocamera", cap:"Videocamera", sysPanel:"Fotocamera" },
+    microphone: { def:"il microfono", cap:"Microfono", sysPanel:"Microfono" },
+    screen: { def:"la condivisione schermo", cap:"Condivisione schermo", sysPanel:"Registrazione schermo" }
+  };
+  var L = labels[kind] || labels.camera;
+
   var name = (err && err.name) || "";
   var title, body;
 
   if(name === "NotAllowedError" || name === "PermissionDeniedError"){
-    title = (kind === "camera" ? "Videocamera" : "Microfono") + " bloccati dal browser";
-    body = "Clicca sull'icona del lucchetto (o della videocamera) accanto all'indirizzo del sito, imposta " + (kind === "camera" ? "Videocamera" : "Microfono") + " su \"Consenti\", poi ricarica questa pagina. Su Mac controlla anche Preferenze di Sistema &rarr; Privacy e Sicurezza &rarr; " + (kind === "camera" ? "Fotocamera" : "Microfono") + " e verifica che il browser sia abilitato.";
+    title = L.cap + " bloccata dal browser";
+    body = "Clicca sull'icona del lucchetto accanto all'indirizzo del sito, imposta " + L.cap + " su \"Consenti\", poi ricarica questa pagina. Su Mac controlla anche Preferenze di Sistema &rarr; Privacy e Sicurezza &rarr; " + L.sysPanel + " e verifica che il browser sia abilitato (dopo averlo attivato lì, riavvia completamente il browser).";
   }else if(name === "NotReadableError" || name === "TrackStartError"){
-    title = (kind === "camera" ? "Videocamera" : "Microfono") + " occupati da un'altra app";
-    body = "Chiudi altre schede o applicazioni che potrebbero usare " + (kind === "camera" ? "la videocamera" : "il microfono") + " (FaceTime, Zoom, Teams, altre schede con videochiamate aperte), poi ricarica questa pagina.";
+    title = L.cap + " occupata da un'altra app";
+    body = "Chiudi altre schede o applicazioni che potrebbero usare " + L.def + " (FaceTime, Zoom, Teams, altre schede con videochiamate aperte), poi ricarica questa pagina.";
   }else if(name === "NotFoundError" || name === "DevicesNotFoundError"){
-    title = "Nessuna " + (kind === "camera" ? "videocamera" : "microfono") + " trovato";
-    body = "Il browser non rileva un dispositivo collegato. Verifica che " + (kind === "camera" ? "la videocamera" : "il microfono") + " sia collegato e funzionante, poi ricarica.";
+    title = "Nessun dispositivo trovato per " + L.def;
+    body = "Il browser non rileva un dispositivo disponibile. Verifica che sia collegato e funzionante, poi ricarica.";
   }else{
-    title = "Problema con " + (kind === "camera" ? "la videocamera" : "il microfono");
+    title = "Problema con " + L.def;
     body = "Se usi Chrome, prova anche a disattivare temporaneamente eventuali estensioni (adblocker, strumenti privacy) o ad aprire il link in una finestra in incognito, poi ricarica.";
   }
 
