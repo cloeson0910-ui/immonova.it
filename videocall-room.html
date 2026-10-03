@@ -30,6 +30,8 @@ gap:10px;
 
 .logo{font-size:14px;font-weight:600;letter-spacing:.3em;color:#d8b36a}
 .call-title{font-size:13px;color:#cbb58a;opacity:.85}
+.call-timer{font-size:13px;color:#f4ecdf;font-variant-numeric:tabular-nums;letter-spacing:.05em;background:rgba(216,179,106,.18);border:1px solid rgba(216,179,106,.35);border-radius:14px;padding:4px 12px;display:none}
+.call-timer.show{display:inline-block}
 
 .state-message{
 margin:auto;
@@ -145,6 +147,7 @@ text-transform:uppercase;
 <div class="top-bar">
   <div class="logo">IMMONOVA</div>
   <div class="call-title" id="callTitleLabel"></div>
+  <div class="call-timer" id="callTimer"></div>
 </div>
 
 <div id="deviceBanner" class="device-banner"></div>
@@ -339,10 +342,37 @@ async function endCallForEveryone(){
   leaveCall();
 }
 
+let callTimerInterval = null;
+let callStartedAt = null;
+function formatElapsed(ms){
+  var totalSeconds = Math.floor(ms / 1000);
+  var h = Math.floor(totalSeconds / 3600);
+  var m = Math.floor((totalSeconds % 3600) / 60);
+  var s = totalSeconds % 60;
+  var pad = function(n){ return (n < 10 ? "0" : "") + n; };
+  return (h > 0 ? h + ":" + pad(m) : m) + ":" + pad(s);
+}
+function startCallTimer(){
+  var timerEl = document.getElementById("callTimer");
+  if(!timerEl || callTimerInterval) return;
+  callStartedAt = Date.now();
+  timerEl.textContent = "00:00";
+  timerEl.className = "call-timer show";
+  callTimerInterval = setInterval(function(){
+    timerEl.textContent = formatElapsed(Date.now() - callStartedAt);
+  }, 1000);
+}
+function stopCallTimer(){
+  if(callTimerInterval){ clearInterval(callTimerInterval); callTimerInterval = null; }
+  var timerEl = document.getElementById("callTimer");
+  if(timerEl) timerEl.className = "call-timer";
+}
+
 let hasLeft = false;
 async function leaveCall(){
   if(hasLeft) return;
   hasLeft = true;
+  stopCallTimer();
   try{
     if(room){
       await room.localParticipant.setMicrophoneEnabled(false);
@@ -442,6 +472,7 @@ async function connectToRoom(data){
 
   await room.connect(data.ws_url, data.token);
   hideDeviceBanner();
+  startCallTimer();
 
   try{
     await room.localParticipant.setMicrophoneEnabled(true);
