@@ -113,6 +113,30 @@ justify-content:center;
 
 .ctrl-btn.off{background:rgba(156,47,47,.65);border-color:rgba(156,47,47,.8)}
 .ctrl-btn.leave{background:#9c2f2f;border-color:#9c2f2f}
+
+.device-banner{
+background:#fff4e5;
+border-bottom:1px solid #f0b865;
+color:#7a4d00;
+padding:14px 20px;
+font-size:13px;
+line-height:1.6;
+display:none;
+}
+
+.device-banner.show{display:block}
+.device-banner strong{display:block;margin-bottom:4px;font-size:13px}
+.device-banner button{
+margin-top:10px;
+padding:8px 16px;
+border:1px solid #a67f34;
+background:none;
+color:#7a4d00;
+cursor:pointer;
+font-size:11px;
+letter-spacing:.08em;
+text-transform:uppercase;
+}
 </style>
 </head>
 <body>
@@ -121,6 +145,8 @@ justify-content:center;
   <div class="logo">IMMONOVA</div>
   <div class="call-title" id="callTitleLabel"></div>
 </div>
+
+<div id="deviceBanner" class="device-banner"></div>
 
 <div id="root" class="state-message">Caricamento...</div>
 
@@ -226,6 +252,11 @@ function ensureTile(participant){
 }
 
 function attachTrack(track, participant, isLocal){
+  // Non mostriamo mai a noi stessi la nostra condivisione schermo: se lo schermo condiviso
+  // include anche questa finestra, vedere la propria anteprima crea un effetto a specchi
+  // infiniti. Gli altri partecipanti continuano a vederla normalmente.
+  if(isLocal && track.source === "screen_share") return;
+
   var tile = ensureTile(participant);
   var el = track.attach();
   el.autoplay = true;
@@ -306,6 +337,36 @@ async function leaveCall(){
   if(controlsEl) controlsEl.remove();
 }
 
+function hideDeviceBanner(){
+  var banner = document.getElementById("deviceBanner");
+  if(banner){ banner.className = "device-banner"; banner.innerHTML = ""; }
+}
+
+function showDeviceBanner(kind, err){
+  var banner = document.getElementById("deviceBanner");
+  if(!banner) return;
+
+  var name = (err && err.name) || "";
+  var title, body;
+
+  if(name === "NotAllowedError" || name === "PermissionDeniedError"){
+    title = (kind === "camera" ? "Videocamera" : "Microfono") + " bloccati dal browser";
+    body = "Clicca sull'icona del lucchetto (o della videocamera) accanto all'indirizzo del sito, imposta " + (kind === "camera" ? "Videocamera" : "Microfono") + " su \"Consenti\", poi ricarica questa pagina. Su Mac controlla anche Preferenze di Sistema &rarr; Privacy e Sicurezza &rarr; " + (kind === "camera" ? "Fotocamera" : "Microfono") + " e verifica che il browser sia abilitato.";
+  }else if(name === "NotReadableError" || name === "TrackStartError"){
+    title = (kind === "camera" ? "Videocamera" : "Microfono") + " occupati da un'altra app";
+    body = "Chiudi altre schede o applicazioni che potrebbero usare " + (kind === "camera" ? "la videocamera" : "il microfono") + " (FaceTime, Zoom, Teams, altre schede con videochiamate aperte), poi ricarica questa pagina.";
+  }else if(name === "NotFoundError" || name === "DevicesNotFoundError"){
+    title = "Nessuna " + (kind === "camera" ? "videocamera" : "microfono") + " trovato";
+    body = "Il browser non rileva un dispositivo collegato. Verifica che " + (kind === "camera" ? "la videocamera" : "il microfono") + " sia collegato e funzionante, poi ricarica.";
+  }else{
+    title = "Problema con " + (kind === "camera" ? "la videocamera" : "il microfono");
+    body = "Se usi Chrome, prova anche a disattivare temporaneamente eventuali estensioni (adblocker, strumenti privacy) o ad aprire il link in una finestra in incognito, poi ricarica.";
+  }
+
+  banner.innerHTML = '<strong>' + title + '</strong>' + body + '<br><button type="button" onclick="window.location.reload()">Ricarica la pagina</button>';
+  banner.className = "device-banner show";
+}
+
 async function connectToRoom(data){
   document.getElementById("callTitleLabel").textContent = data.call_title || "";
   buildStage();
@@ -330,10 +391,24 @@ async function connectToRoom(data){
   room.on(LK.RoomEvent.Disconnected, function(){
     leaveCall();
   });
+  room.on(LK.RoomEvent.MediaDevicesError, function(err, kind){
+    showDeviceBanner(kind === "videoinput" ? "camera" : "microphone", err);
+  });
 
   await room.connect(data.ws_url, data.token);
-  await room.localParticipant.setMicrophoneEnabled(true);
-  await room.localParticipant.setCameraEnabled(true);
+  hideDeviceBanner();
+
+  try{
+    await room.localParticipant.setMicrophoneEnabled(true);
+  }catch(e){
+    showDeviceBanner("microphone", e);
+  }
+
+  try{
+    await room.localParticipant.setCameraEnabled(true);
+  }catch(e){
+    showDeviceBanner("camera", e);
+  }
 }
 
 (async function init(){
