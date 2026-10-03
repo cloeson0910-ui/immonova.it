@@ -168,7 +168,10 @@ let micEnabled = true;
 let camEnabled = true;
 
 function setRootMessage(html){
-  document.getElementById("root").innerHTML = html;
+  // buildStage() rinomina l'elemento id="root" in id="appRoot" quando si entra in
+  // chiamata: dopo quel momento dobbiamo aggiornare "appRoot", non più "root".
+  var el = document.getElementById("root") || document.getElementById("appRoot");
+  if(el) el.innerHTML = html;
 }
 
 function escapeHTML(value){
@@ -414,6 +417,17 @@ async function connectToRoom(data){
   room.on(LK.RoomEvent.LocalTrackUnpublished, function(publication){
     if(publication.track){
       try{ publication.track.detach().forEach(function(el){ el.remove(); }); }catch(e){}
+    }
+    // Se la condivisione schermo viene interrotta dal controllo nativo del browser
+    // (es. la barra "Stai condividendo... Interrompi condivisione" di Chrome/Safari)
+    // invece che dal nostro pulsante, LiveKit sblocca comunque il track: allineiamo
+    // qui lo stato dell'interfaccia, altrimenti il pulsante e il banner restano
+    // bloccati sullo stato "in condivisione".
+    if(publication.source === "screen_share" && screenShareEnabled){
+      screenShareEnabled = false;
+      var screenBtnEl = document.getElementById("screenBtn");
+      if(screenBtnEl) screenBtnEl.classList.remove("active");
+      hideDeviceBanner();
     }
   });
   room.on(LK.RoomEvent.ParticipantDisconnected, function(participant){
