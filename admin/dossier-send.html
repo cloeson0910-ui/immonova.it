@@ -363,6 +363,9 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
       <button class="btn secondary" onclick="window.print()" type="button" data-i18n="btn_print_pdf">Stampa / PDF</button>
       <button class="btn secondary" id="typographyPdfBtn" type="button" title="Genera e scarica un PDF ad alta risoluzione (~330 DPI), con le foto corrette (non più deformate), pronto da consegnare a una tipografia per la stampa fisica." data-i18n="btn_typography_pdf">Tipografia (alta risoluzione)</button>
       <button class="btn secondary" id="generateDossierLinkBtn" type="button" title="Il link viene generato da solo alla prima apertura del dossier. Usa questo pulsante solo per rigenerarlo (es. dopo aver cambiato la copertina).">Rigenera link dossier</button>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;margin:0 8px;white-space:nowrap">
+        <input type="checkbox" id="requiresOtpCheck" checked> Richiedi codice OTP per aprire il dossier
+      </label>
       <button class="btn send-btn" id="sendDossierBtn" type="button" disabled>Invia al cliente</button>
       <a class="btn secondary" id="editLink" href="#" data-i18n="btn_back_to_proposal">Torna alla proposta</a>
     </div>
@@ -1080,6 +1083,8 @@ async function loadInvestorRequest(){
     return;
   }
   investorRequest=res.data;
+  var otpCheck=document.getElementById("requiresOtpCheck");
+  if(otpCheck && investorRequest) otpCheck.checked = investorRequest.requires_otp!==false;
 }
 async function loadLatestReport(){
   lastReportLoadError=null;
@@ -4279,6 +4284,8 @@ async function sendDossierToClient(){
         pdf_url:pdfUrl,
         filename:filename,
         language:dossierLang,
+        request_id:investorRequest.id,
+        requires_otp:document.getElementById("requiresOtpCheck")?document.getElementById("requiresOtpCheck").checked:true,
         // v1: allegati Privacy Policy e NDA — gli stessi documenti che il
         // cliente ha accettato (investorRequest.privacy_accepted/nda_accepted)
         // prima di poter richiedere il dossier. La edge function
@@ -4310,7 +4317,8 @@ async function sendDossierToClient(){
       dossier_sent:true,
       dossier_sent_at:nowIso,
       dossier_pdf_url:pdfUrl,
-      status:"evasa"
+      status:"evasa",
+      requires_otp:document.getElementById("requiresOtpCheck")?document.getElementById("requiresOtpCheck").checked:true
     }).eq("id",investorRequest.id);
     if(upd.error){
       console.warn("Dossier inviato ma aggiornamento stato richiesta fallito:",upd.error.message);
