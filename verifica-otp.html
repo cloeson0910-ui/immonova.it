@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verifica codice | IMMONOVA</title>
+<style>
+  :root{--gold:#a67f34;--ink:#20180c;--bg:#faf7f0}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
+  .box{max-width:420px;width:100%;background:#fff;border:1px solid rgba(166,127,52,.18);border-radius:14px;padding:40px 32px;box-shadow:0 24px 70px rgba(127,100,48,.1)}
+  h1{font-size:22px;font-weight:600;margin:0 0 8px}
+  p{font-size:14px;color:#6b6353;line-height:1.5;margin:0 0 24px}
+  input[type=text]{width:100%;font-size:26px;letter-spacing:6px;text-align:center;padding:14px;border:1px solid #ddd3bd;border-radius:10px;margin-bottom:16px}
+  button{width:100%;padding:14px;background:var(--gold);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  .msg{margin-top:14px;font-size:13px;text-align:center}
+  .msg.err{color:#b23b3b}
+  .msg.ok{color:#2f7d4f}
+  .note{margin-top:22px;font-size:11px;color:#9b9280;line-height:1.5}
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>Verifica la tua identità</h1>
+    <p id="intro">Ti abbiamo inviato un codice di sicurezza. Inseriscilo qui sotto per continuare.</p>
+    <input type="text" id="code" maxlength="6" inputmode="numeric" placeholder="______" autofocus>
+    <button id="submitBtn">Verifica</button>
+    <div class="msg" id="msg"></div>
+    <div class="note">Per tua sicurezza registriamo data, ora, indirizzo IP e informazioni sul dispositivo utilizzato per ricevere e inserire questo codice.</div>
+  </div>
+
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  const otpId = params.get('otp_id');
+  const redirect = params.get('redirect') || '';
+  const FN_BASE = 'https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1';
+
+  if(!otpId){
+    document.getElementById('intro').textContent = 'Link non valido o incompleto.';
+    document.getElementById('submitBtn').disabled = true;
+  }
+
+  function deviceMeta(){
+    return {
+      platform_hint: navigator.platform || null,
+      screen: screen.width + 'x' + screen.height,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    };
+  }
+
+  document.getElementById('submitBtn').addEventListener('click', async function(){
+    const code = document.getElementById('code').value.trim();
+    const msg = document.getElementById('msg');
+    const btn = document.getElementById('submitBtn');
+    if(code.length !== 6){ msg.textContent = 'Inserisci il codice di 6 cifre.'; msg.className='msg err'; return; }
+    btn.disabled = true; btn.textContent = 'Verifica in corso...';
+    try{
+      const res = await fetch(FN_BASE + '/otp-verify', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(Object.assign({otp_id: otpId, code: code}, deviceMeta()))
+      });
+      const data = await res.json();
+      if(data.ok){
+        msg.textContent = 'Verifica completata. Reindirizzamento...';
+        msg.className = 'msg ok';
+        setTimeout(function(){
+          if(redirect) location.href = decodeURIComponent(redirect);
+        }, 900);
+      } else {
+        const reasons = {
+          wrong_code: 'Codice errato. ' + (data.attempts_left!=null ? data.attempts_left + ' tentativi rimasti.' : ''),
+          expired: 'Codice scaduto, richiedine uno nuovo.',
+          max_attempts: 'Troppi tentativi errati. Richiedi un nuovo codice.',
+          not_found: 'Richiesta non trovata.'
+        };
+        msg.textContent = reasons[data.reason] || 'Errore durante la verifica.';
+        msg.className = 'msg err';
+        btn.disabled = false; btn.textContent = 'Verifica';
+      }
+    }catch(e){
+      msg.textContent = 'Errore di rete, riprova.';
+      msg.className = 'msg err';
+      btn.disabled = false; btn.textContent = 'Verifica';
+    }
+  });
+})();
+</script>
+</body>
+</html>

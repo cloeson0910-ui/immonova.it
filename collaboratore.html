@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>IMMONOVA Staff</title>
+<link rel="manifest" href="manifest-collab.json">
+<meta name="theme-color" content="#a67f34">
+<link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+<style>
+  :root{--gold:#a67f34;--ink:#20180c;--bg:#f4ecdf;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:90px}
+  header{padding:22px 20px 16px;background:linear-gradient(135deg,#2a2013,#4a3a1f);color:#f4ecdf}
+  header h1{font-size:19px;margin:0 0 4px;font-weight:600}
+  header p{margin:0;font-size:12px;opacity:.75}
+  .wrap{padding:18px}
+  .tabs{display:flex;gap:8px;margin-bottom:18px;overflow-x:auto}
+  .tab{flex:0 0 auto;padding:9px 16px;border-radius:999px;background:#fff;border:1px solid #e6dcc4;font-size:13px;cursor:pointer;white-space:nowrap}
+  .tab.active{background:var(--gold);color:#fff;border-color:var(--gold)}
+  .card{background:var(--card);border:1px solid #ece3cf;border-radius:14px;padding:22px;margin-bottom:16px;box-shadow:0 10px 30px rgba(127,100,48,.06)}
+  .card h2{font-size:15px;margin:0 0 6px}
+  .card p.hint{font-size:12px;color:#8a8167;margin:0 0 18px}
+  select, input[type=text]{width:100%;padding:10px 12px;border:1px solid #ddd3bd;border-radius:8px;font-size:14px;margin-bottom:12px}
+  .rec-row{display:flex;align-items:center;gap:16px;justify-content:center;padding:18px 0}
+  .mic-btn{width:78px;height:78px;border-radius:50%;background:var(--gold);border:none;color:#fff;font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(166,127,52,.35);transition:transform .15s}
+  .mic-btn.recording{background:#c0392b;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(192,57,43,.5)}70%{box-shadow:0 0 0 18px rgba(192,57,43,0)}100%{box-shadow:0 0 0 0 rgba(192,57,43,0)}}
+  .rec-status{text-align:center;font-size:13px;color:#8a8167;margin-top:4px}
+  .live-transcript{min-height:60px;background:#faf7f0;border:1px dashed #ddd3bd;border-radius:10px;padding:12px;font-size:13px;color:#4a4330;margin-top:14px;white-space:pre-wrap}
+  table.result{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}
+  table.result th,table.result td{text-align:left;padding:9px 10px;border-bottom:1px solid #ece3cf}
+  table.result th{background:#faf7f0;font-weight:600;width:42%}
+  .save-row{display:flex;gap:10px;margin-top:16px}
+  button.primary{flex:1;padding:12px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+  button.secondary{padding:12px 16px;background:#fff;border:1px solid #ddd3bd;border-radius:8px;font-size:14px;cursor:pointer}
+  .list-item{border-bottom:1px solid #ece3cf;padding:12px 0;font-size:13px}
+  .list-item .meta{color:#8a8167;font-size:11px;margin-bottom:4px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eee3c7;color:#7a5f23;font-size:10px;margin-right:6px}
+  nav.bottom{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ece3cf;display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom))}
+  nav.bottom a{font-size:11px;color:#8a8167;text-decoration:none;text-align:center}
+  nav.bottom a.active{color:var(--gold);font-weight:600}
+  .msg{font-size:12px;margin-top:10px;text-align:center}
+  .msg.err{color:#b23b3b}
+  .msg.ok{color:#2f7d4f}
+  .login-box{max-width:360px;margin:60px auto;padding:30px;background:#fff;border-radius:14px;border:1px solid #ece3cf}
+  .login-box input{margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>IMMONOVA Staff</h1>
+  <p>App rapida per i collaboratori — note vocali, visite, clienti</p>
+</header>
+
+<div id="authGate" class="wrap" style="display:none">
+  <div class="login-box">
+    <h2 style="margin:0 0 14px">Accedi</h2>
+    <input type="text" id="loginEmail" placeholder="Email">
+    <input type="password" id="loginPassword" placeholder="Password">
+    <button class="primary" id="loginBtn" style="width:100%">Entra</button>
+    <div class="msg err" id="loginMsg"></div>
+  </div>
+</div>
+
+<div id="appWrap" class="wrap" style="display:none">
+  <div class="tabs">
+    <div class="tab active" data-tab="rec">Nuova nota vocale</div>
+    <div class="tab" data-tab="list">Le mie note</div>
+  </div>
+
+  <section id="tab-rec">
+    <div class="card">
+      <h2>Registra un vocale</h2>
+      <p class="hint">Parla liberamente: descrivi la visita, il cliente o l'appunto. Il sistema trascrive, individua le parole chiave e organizza tutto in una tabella.</p>
+
+      <select id="category">
+        <option value="visita_immobile">Report visita immobile</option>
+        <option value="nota_cliente">Nota su cliente/lead</option>
+        <option value="generico">Appunto generico</option>
+      </select>
+
+      <div class="rec-row">
+        <button class="mic-btn" id="micBtn">&#127908;</button>
+      </div>
+      <div class="rec-status" id="recStatus">Tocca il microfono per iniziare</div>
+
+      <div class="live-transcript" id="liveTranscript">La trascrizione apparirà qui mentre parli...</div>
+
+      <div id="resultBox" style="display:none">
+        <h2 style="margin-top:20px">Informazioni organizzate</h2>
+        <table class="result" id="resultTable"></table>
+        <div class="save-row">
+          <button class="secondary" id="discardBtn">Scarta</button>
+          <button class="primary" id="saveBtn">Salva nota</button>
+        </div>
+      </div>
+      <div class="msg" id="saveMsg"></div>
+    </div>
+  </section>
+
+  <section id="tab-list" style="display:none">
+    <div class="card">
+      <h2>Le mie ultime note</h2>
+      <div id="notesList"><p class="hint">Caricamento...</p></div>
+    </div>
+  </section>
+</div>
+
+<nav class="bottom">
+  <a href="#" class="active" data-tab="rec">Vocale</a>
+  <a href="#" data-tab="list">Note</a>
+  <a href="professionista.html">Profilo</a>
+</nav>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+(function(){
+  const FN_BASE = 'https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1';
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  let session = null;
+  let lastExtracted = null;
+  let lastTranscript = '';
+
+  // --- Service worker (riusa quello esistente se presente) ---
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js').catch(function(){});
+  }
+
+  // --- Auth ---
+  async function initAuth(){
+    const { data } = await client.auth.getSession();
+    session = data.session;
+    if(session){
+      document.getElementById('appWrap').style.display = '';
+      document.getElementById('authGate').style.display = 'none';
+      loadNotes();
+    } else {
+      document.getElementById('appWrap').style.display = 'none';
+      document.getElementById('authGate').style.display = '';
+    }
+  }
+  document.getElementById('loginBtn').addEventListener('click', async function(){
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const msg = document.getElementById('loginMsg');
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if(error){ msg.textContent = 'Credenziali non valide.'; return; }
+    session = data.session;
+    initAuth();
+  });
+  initAuth();
+
+  // --- Tabs ---
+  document.querySelectorAll('.tab, nav.bottom a[data-tab]').forEach(function(el){
+    el.addEventListener('click', function(e){
+      e.preventDefault();
+      const tab = el.getAttribute('data-tab');
+      if(!tab) return;
+      document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===tab); });
+      document.querySelectorAll('nav.bottom a[data-tab]').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===tab); });
+      document.getElementById('tab-rec').style.display = tab==='rec' ? '' : 'none';
+      document.getElementById('tab-list').style.display = tab==='list' ? '' : 'none';
+      if(tab==='list') loadNotes();
+    });
+  });
+
+  // --- Registrazione vocale con Web Speech API (gratuita, lato client) ---
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizer = null;
+  let recording = false;
+  let fullTranscript = '';
+
+  const micBtn = document.getElementById('micBtn');
+  const recStatus = document.getElementById('recStatus');
+  const liveTranscript = document.getElementById('liveTranscript');
+
+  if(!SpeechRecognition){
+    recStatus.textContent = 'Il tuo browser non supporta la trascrizione vocale (usa Chrome su Android/desktop).';
+    micBtn.disabled = true;
+  } else {
+    recognizer = new SpeechRecognition();
+    recognizer.lang = 'it-IT';
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+
+    recognizer.onresult = function(event){
+      let interim = '';
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        const txt = event.results[i][0].transcript;
+        if(event.results[i].isFinal){ fullTranscript += txt + ' '; }
+        else { interim += txt; }
+      }
+      liveTranscript.textContent = (fullTranscript + interim).trim() || 'La trascrizione apparirà qui mentre parli...';
+    };
+    recognizer.onerror = function(){ stopRecording(); };
+    recognizer.onend = function(){ if(recording){ try{ recognizer.start(); }catch(e){} } };
+  }
+
+  function startRecording(){
+    if(!recognizer) return;
+    fullTranscript = '';
+    liveTranscript.textContent = 'In ascolto...';
+    document.getElementById('resultBox').style.display = 'none';
+    recording = true;
+    micBtn.classList.add('recording');
+    recStatus.textContent = 'Registrazione in corso... tocca per terminare';
+    try{ recognizer.start(); }catch(e){}
+  }
+
+  function stopRecording(){
+    recording = false;
+    micBtn.classList.remove('recording');
+    recStatus.textContent = 'Elaborazione...';
+    if(recognizer){ try{ recognizer.stop(); }catch(e){} }
+    setTimeout(processTranscript, 400);
+  }
+
+  micBtn.addEventListener('click', function(){
+    if(recording) stopRecording(); else startRecording();
+  });
+
+  async function processTranscript(){
+    const transcript = fullTranscript.trim();
+    recStatus.textContent = 'Tocca il microfono per iniziare';
+    if(!transcript){ return; }
+    lastTranscript = transcript;
+    const category = document.getElementById('category').value;
+
+    try{
+      const { data: sessData } = await client.auth.getSession();
+      const token = sessData.session ? sessData.session.access_token : SUPABASE_ANON_KEY;
+      const userEmail = sessData.session ? sessData.session.user.email : null;
+
+      const res = await fetch(FN_BASE + '/voice-note-process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          transcript, category,
+          collaborator_name: userEmail,
+          collaborator_id: sessData.session ? sessData.session.user.id : null
+        })
+      });
+      const result = await res.json();
+      if(result.ok){
+        lastExtracted = result;
+        renderTable(result.extracted.table || []);
+        document.getElementById('resultBox').style.display = '';
+        document.getElementById('saveMsg').textContent = '';
+        document.getElementById('saveMsg').className = 'msg';
+        // già salvata dalla edge function; il pulsante "Salva" qui serve solo a confermare/ricaricare lista
+      } else {
+        document.getElementById('saveMsg').textContent = 'Errore elaborazione: ' + (result.error || 'sconosciuto');
+        document.getElementById('saveMsg').className = 'msg err';
+      }
+    }catch(e){
+      document.getElementById('saveMsg').textContent = "Errore di rete durante l'elaborazione.";
+      document.getElementById('saveMsg').className = 'msg err';
+    }
+  }
+
+  function renderTable(rows){
+    const table = document.getElementById('resultTable');
+    table.innerHTML = rows.map(function(r){
+      return '<tr><th>' + r.campo + '</th><td>' + r.valore + '</td></tr>';
+    }).join('');
+  }
+
+  document.getElementById('discardBtn').addEventListener('click', function(){
+    document.getElementById('resultBox').style.display = 'none';
+    liveTranscript.textContent = 'La trascrizione apparirà qui mentre parli...';
+  });
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    document.getElementById('saveMsg').textContent = 'Nota salvata.';
+    document.getElementById('saveMsg').className = 'msg ok';
+    document.getElementById('resultBox').style.display = 'none';
+    liveTranscript.textContent = 'La trascrizione apparirà qui mentre parli...';
+    loadNotes();
+  });
+
+  // --- Lista note ---
+  async function loadNotes(){
+    const listEl = document.getElementById('notesList');
+    const { data: sessData } = await client.auth.getSession();
+    if(!sessData.session){ return; }
+    const { data, error } = await client
+      .from('immonova_voice_notes')
+      .select('id, category, transcript, extracted, created_at')
+      .eq('collaborator_id', sessData.session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if(error || !data || !data.length){
+      listEl.innerHTML = '<p class="hint">Nessuna nota registrata ancora.</p>';
+      return;
+    }
+    const catLabel = { visita_immobile: 'Visita immobile', nota_cliente: 'Nota cliente', generico: 'Generico' };
+    listEl.innerHTML = data.map(function(n){
+      const date = new Date(n.created_at).toLocaleString('it-IT');
+      const rows = (n.extracted && n.extracted.table) ? n.extracted.table : [];
+      const tableHtml = rows.map(function(r){ return '<tr><th>' + r.campo + '</th><td>' + r.valore + '</td></tr>'; }).join('');
+      return '<div class="list-item"><span class="badge">' + (catLabel[n.category]||n.category) + '</span><div class="meta">' + date + '</div>' +
+        '<div style="margin:6px 0;font-size:12px;color:#4a4330">' + n.transcript.slice(0,160) + (n.transcript.length>160?'…':'') + '</div>' +
+        '<table class="result">' + tableHtml + '</table></div>';
+    }).join('');
+  }
+})();
+</script>
+</body>
+</html>
