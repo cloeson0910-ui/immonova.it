@@ -45,6 +45,11 @@
   .msg.ok{color:#2f7d4f}
   .login-box{max-width:360px;margin:60px auto;padding:30px;background:#fff;border-radius:14px;border:1px solid #ece3cf}
   .login-box input{margin-bottom:12px}
+  .quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:4px 0 20px}
+  .quick-tile{aspect-ratio:1;border:1px solid #ece3cf;background:#fff;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;box-shadow:0 8px 24px rgba(127,100,48,.06)}
+  .quick-tile:active{transform:scale(.97)}
+  .quick-icon{font-size:34px}
+  .quick-label{font-size:13px;font-weight:600;color:#4a3c1f}
 </style>
 </head>
 <body>
@@ -65,12 +70,35 @@
 </div>
 
 <div id="appWrap" class="wrap" style="display:none">
-  <div class="tabs">
+
+  <section id="tab-home">
+    <div class="quick-grid">
+      <button class="quick-tile" id="qtRec">
+        <span class="quick-icon">&#127908;</span>
+        <span class="quick-label">Nota vocale</span>
+      </button>
+      <button class="quick-tile" id="qtCalendar">
+        <span class="quick-icon">&#128197;</span>
+        <span class="quick-label">Calendario</span>
+      </button>
+      <button class="quick-tile" id="qtOpportunities">
+        <span class="quick-icon">&#127968;</span>
+        <span class="quick-label">Opportunità</span>
+      </button>
+      <button class="quick-tile" id="qtList">
+        <span class="quick-icon">&#128203;</span>
+        <span class="quick-label">Le mie note</span>
+      </button>
+    </div>
+  </section>
+
+  <div class="tabs" id="subTabs" style="display:none">
+    <div class="tab" data-tab="home">&larr; Indietro</div>
     <div class="tab active" data-tab="rec">Nuova nota vocale</div>
     <div class="tab" data-tab="list">Le mie note</div>
   </div>
 
-  <section id="tab-rec">
+  <section id="tab-rec" style="display:none">
     <div class="card">
       <h2>Registra un vocale</h2>
       <p class="hint">Parla liberamente: descrivi la visita, il cliente o l'appunto. Il sistema trascrive, individua le parole chiave e organizza tutto in una tabella.</p>
@@ -109,7 +137,8 @@
 </div>
 
 <nav class="bottom">
-  <a href="#" class="active" data-tab="rec">Vocale</a>
+  <a href="#" class="active" data-tab="home">Home</a>
+  <a href="#" data-tab="rec">Vocale</a>
   <a href="#" data-tab="list">Note</a>
   <a href="professionista.html">Profilo</a>
 </nav>
@@ -153,19 +182,29 @@
   });
   initAuth();
 
-  // --- Tabs ---
+  // --- Navigazione: home con pulsanti rapidi, oppure le sezioni interne ---
+  function showTab(tab){
+    document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===tab); });
+    document.querySelectorAll('nav.bottom a[data-tab]').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===tab); });
+    document.getElementById('tab-home').style.display = tab==='home' ? '' : 'none';
+    document.getElementById('subTabs').style.display = tab==='home' ? 'none' : '';
+    document.getElementById('tab-rec').style.display = tab==='rec' ? '' : 'none';
+    document.getElementById('tab-list').style.display = tab==='list' ? '' : 'none';
+    if(tab==='list') loadNotes();
+  }
   document.querySelectorAll('.tab, nav.bottom a[data-tab]').forEach(function(el){
     el.addEventListener('click', function(e){
       e.preventDefault();
       const tab = el.getAttribute('data-tab');
       if(!tab) return;
-      document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===tab); });
-      document.querySelectorAll('nav.bottom a[data-tab]').forEach(function(t){ t.classList.toggle('active', t.getAttribute('data-tab')===tab); });
-      document.getElementById('tab-rec').style.display = tab==='rec' ? '' : 'none';
-      document.getElementById('tab-list').style.display = tab==='list' ? '' : 'none';
-      if(tab==='list') loadNotes();
+      showTab(tab);
     });
   });
+  document.getElementById('qtRec').addEventListener('click', function(){ showTab('rec'); });
+  document.getElementById('qtList').addEventListener('click', function(){ showTab('list'); });
+  document.getElementById('qtCalendar').addEventListener('click', function(){ window.location.href = 'admin/calendar.html'; });
+  document.getElementById('qtOpportunities').addEventListener('click', function(){ window.location.href = 'admin/opportunities.html'; });
+  showTab('home');
 
   // --- Registrazione vocale con Web Speech API (gratuita, lato client) ---
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
