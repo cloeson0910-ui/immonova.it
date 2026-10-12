@@ -341,9 +341,18 @@
       const tableHtml = rows.map(function(r){ return '<tr><th>' + r.campo + '</th><td>' + r.valore + '</td></tr>'; }).join('');
       return '<div class="list-item"><span class="badge">' + (catLabel[n.category]||n.category) + '</span><div class="meta">' + date + '</div>' +
         '<div style="margin:6px 0;font-size:12px;color:#4a4330">' + n.transcript.slice(0,160) + (n.transcript.length>160?'…':'') + '</div>' +
-        '<table class="result">' + tableHtml + '</table></div>';
+        '<table class="result">' + tableHtml + '</table>' +
+        '<button type="button" class="secondary" style="margin-top:10px;width:100%" onclick="deleteVoiceNote(\'' + n.id + '\')">Elimina nota</button>' +
+        '</div>';
     }).join('');
   }
+
+  window.deleteVoiceNote = async function(id){
+    if(!window.confirm('Eliminare definitivamente questa nota e la tabella associata?')) return;
+    var res = await client.from('immonova_voice_notes').delete().eq('id', id);
+    if(res.error){ window.alert("Errore durante l'eliminazione: " + res.error.message); return; }
+    loadNotes();
+  };
 })();
 </script>
 </body>
