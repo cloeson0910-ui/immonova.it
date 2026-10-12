@@ -98,6 +98,23 @@ padding:24px 28px;
 .note-meta{font-size:12px;color:#8f7643}
 .note-meta strong{color:#7f6430}
 
+.note-actions{display:flex;gap:8px;flex-wrap:wrap}
+.action-btn{
+padding:8px 12px;
+border:1px solid rgba(166,127,52,.28);
+background:rgba(255,255,255,.3);
+color:#a67f34;
+cursor:pointer;
+font-size:10px;
+letter-spacing:.08em;
+text-transform:uppercase;
+font-family:inherit;
+white-space:nowrap;
+}
+.action-btn:hover{background:#a67f34;color:#fff}
+.action-btn.danger{border-color:rgba(156,47,47,.35);color:#9c2f2f}
+.action-btn.danger:hover{background:#9c2f2f;color:#fff}
+
 .badge{
 display:inline-block;
 padding:5px 11px;
@@ -254,6 +271,11 @@ function renderNotes(){
           '<div class="note-meta"><span class="badge">'+escapeHTML(CATEGORY_LABELS[n.category]||n.category)+'</span> ' +
             '<strong>'+escapeHTML(n.collaborator_name||"Sconosciuto")+'</strong> &middot; '+formatDate(n.created_at) +
           '</div>' +
+          '<div class="note-actions">' +
+            '<button type="button" class="action-btn" onclick="exportNote(\''+n.id+'\',\'notizia\')">Esporta &rarr; Notizia</button>' +
+            '<button type="button" class="action-btn" onclick="exportNote(\''+n.id+'\',\'mandato\')">Esporta &rarr; Mandato</button>' +
+            '<button type="button" class="action-btn danger" onclick="deleteNote(\''+n.id+'\')">Elimina</button>' +
+          '</div>' +
         '</div>' +
         '<div class="note-transcript">'+escapeHTML(n.transcript)+'</div>' +
         '<table class="result">'+tableHtml+'</table>' +
@@ -281,6 +303,46 @@ async function loadNotes(){
   status.textContent = "";
   populateCollaboratorFilter(allNotes);
   renderNotes();
+}
+
+async function deleteNote(id){
+  if(!window.confirm("Eliminare definitivamente questa nota vocale e la tabella associata? L'operazione non è reversibile.")) return;
+  var res = await client.from("immonova_voice_notes").delete().eq("id", id);
+  if(res.error){
+    window.alert("Errore durante l'eliminazione: " + res.error.message);
+    return;
+  }
+  allNotes = allNotes.filter(function(n){ return n.id !== id; });
+  populateCollaboratorFilter(allNotes);
+  renderNotes();
+}
+
+function exportNote(id, target){
+  var note = allNotes.find(function(n){ return n.id === id; });
+  if(!note) return;
+  var structured = (note.extracted && note.extracted.structured) ? note.extracted.structured : {};
+  var localita = structured.localita || structured.regione || "";
+  var dateLabel = formatDate(note.created_at);
+  var nomeCliente = structured.nome_cliente || "";
+  var nomeParts = nomeCliente ? nomeCliente.split(/\s+/) : [];
+  var clientFirstName = nomeParts.length ? nomeParts[0] : "";
+  var clientLastName = nomeParts.length > 1 ? nomeParts.slice(1).join(" ") : "";
+  var payload = {
+    target: target,
+    source_note_id: note.id,
+    title: "Nota vocale" + (localita ? " - " + localita : "") + " - " + dateLabel,
+    body: note.transcript,
+    address: localita,
+    structured: structured,
+    client_name: nomeCliente,
+    client_first_name: clientFirstName,
+    client_last_name: clientLastName,
+    category: note.category,
+    created_at: note.created_at
+  };
+  sessionStorage.setItem("immonova_voice_note_export", JSON.stringify(payload));
+  var targetUrl = target === "notizia" ? "notizie.html" : "search-mandate-form.html";
+  window.open(targetUrl, "_blank");
 }
 
 document.getElementById("filterCategory").addEventListener("change", renderNotes);

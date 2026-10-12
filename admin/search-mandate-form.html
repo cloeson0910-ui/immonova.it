@@ -1269,11 +1269,44 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   window.location.href = "../index.html";
 });
 
+// Prefill da una nota vocale esportata (admin/voice-notes.html): legge sessionStorage,
+// riempie i campi del mandato (zona, mq, camere, bagni, budget, note) e pulisce la chiave.
+function parseVoiceNoteAmount(value){
+  if(!value) return null;
+  var digits = String(value).replace(/[^\d]/g, "");
+  return digits ? Number(digits) : null;
+}
+function applyVoiceNoteExport(){
+  try{
+    var raw = sessionStorage.getItem("immonova_voice_note_export");
+    if(!raw) return;
+    var data = JSON.parse(raw);
+    if(data.target !== "mandato") return;
+    sessionStorage.removeItem("immonova_voice_note_export");
+    var s = data.structured || {};
+    var setVal = function(id, value){
+      var el = document.getElementById(id);
+      if(el && value != null && value !== "") el.value = value;
+    };
+    setVal("clientName", data.client_name || s.nome_cliente || "");
+    setVal("locationAreas", s.localita || s.regione || "");
+    setVal("sqmMin", s.mq || "");
+    setVal("bedroomsMin", s.camere || "");
+    setVal("bathroomsMin", s.bagni || "");
+    var budgetNum = parseVoiceNoteAmount(s.budget);
+    if(budgetNum) setVal("budgetMax", budgetNum);
+    setVal("notes", data.body || "");
+    var form = document.querySelector("form") || document.body;
+    form.scrollIntoView({ behavior:"smooth", block:"start" });
+  }catch(e){ /* nessun dato da precompilare, ignora */ }
+}
+
 (async function init(){
   if(await checkAuth()){
     await loadUserLanguage();
     initInterestAreaMap();
     await loadMandateForEdit();
+    applyVoiceNoteExport();
   }
 })();
 </script>

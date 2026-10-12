@@ -1225,12 +1225,32 @@ async function revealCapitalPartnersLinkIfAllowed(){
   }
 }
 
+// Prefill da una nota vocale esportata (admin/voice-notes.html): legge sessionStorage,
+// riempie titolo/testo/indirizzo del form e poi pulisce la chiave per non riusarla per sbaglio.
+function applyVoiceNoteExport(){
+  try{
+    var raw = sessionStorage.getItem("immonova_voice_note_export");
+    if(!raw) return;
+    var data = JSON.parse(raw);
+    if(data.target !== "notizia") return;
+    sessionStorage.removeItem("immonova_voice_note_export");
+    if(newsTitleInput) newsTitleInput.value = data.title || "";
+    if(newsBodyInput) newsBodyInput.value = data.body || "";
+    if(newsAddressInput && data.address) newsAddressInput.value = data.address;
+    if(clientFirstNameInput && data.client_first_name) clientFirstNameInput.value = data.client_first_name;
+    if(clientLastNameInput && data.client_last_name) clientLastNameInput.value = data.client_last_name;
+    var form = document.getElementById("newsForm");
+    if(form) form.scrollIntoView({ behavior:"smooth", block:"start" });
+  }catch(e){ /* nessun dato da precompilare, ignora */ }
+}
+
 (async function init(){
   if(await checkAuth()){
     const ok = await loadProfile();
     if(ok){
       await loadNews();
       await revealCapitalPartnersLinkIfAllowed();
+      applyVoiceNoteExport();
     }
   }
 })();
