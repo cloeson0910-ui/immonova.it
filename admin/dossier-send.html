@@ -992,15 +992,19 @@ function pieChartHTML(pct, caption, note){
 }
 function renderTourismDemandPage(){
   /* ATTENZIONE - NON allineare ciecamente a report-view.html: qui il chiamante è diverso.
-     In dossier-send.html questa funzione viene usata con push(T.chapter_financial,
-     renderTourismDemandPage()) -- push() vuole UNA stringa HTML (o "" per "nessuna pagina",
-     che push() scarta da sola con "if(!html) return"). In report-view.html invece il
-     chiamante fa .forEach() sul risultato e quindi lì la funzione DEVE restituire un array.
-     Sono due integrazioni diverse della stessa funzione gemella: qui i due casi di uscita
-     anticipata devono restituire "" (stringa vuota), MAI [] -- un array è "truthy" per
-     push(), quindi verrebbe salvato come pagina e injectFolio() poi crasha con
-     "html.replace is not a function" perché prova a chiamare .replace() su un array. */
-  if(isLandCategory()||isCommercialCategory()) return "";
+     In dossier-send.html questa funzione viene usata con
+     renderTourismDemandPage().forEach(function(p){ push(T.chapter_financial, p); }) -- vedi
+     il call site piu' sotto -- quindi restituisce SEMPRE un array di pagine (anche [] quando
+     non c'e' nulla da mostrare), mai una stringa. In report-view.html il chiamante e' diverso
+     (vedi nota li') e va tenuto allineato separatamente.
+     FIX: ogni scenario ADR (minimo/medio/massimo) sta sulla propria pagina, mai piu' di uno
+     scenario per pagina -- 2 grafici a torta + testo per scenario riempiono gia' comodamente
+     una pagina A4 orizzontale da soli; con 3 scenari (min+medio+max) il blocco intero non
+     ci stava più in una sola pagina e "overflow:hidden" tagliava silenziosamente lo scenario
+     massimo (e a volte anche la nota dello scenario medio) fuori dall'immagine catturata da
+     html2canvas. Stesso identico problema, e stessa soluzione, già applicata a
+     renderCashflowPage per le tabelle di cashflow a 15 righe. */
+  if(isLandCategory()||isCommercialCategory()) return [];
   var f=buildFinance();
   /* Una Villa/Appartamento si affittano a corpo intero, non camera per camera -- le notti
      vendute/anno sono occupazione×365 UNA volta sola, non moltiplicate per il numero di
@@ -1028,24 +1032,26 @@ function renderTourismDemandPage(){
   }else if(adrSingle){
     scenarios.push({adr:adrSingle, label:T.scenario_adr});
   }
-  if(!scenarios.length) return ""; // vedi commento in cima alla funzione: qui vuole sempre una stringa
+  if(!scenarios.length) return [];
 
-  var blocks=scenarios.map(function(sc){
+  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(sourceProviderLabel(demandTotals.source.provider_name||"-",!!demandTotals.source.source_url))+'</p>' : '';
+
+  var pages=[];
+  scenarios.forEach(function(sc,idx){
     var res=computeBreakEvenDemand(sc.adr, units, f.total, demandTotals);
-    if(!res) return "";
+    if(!res) return;
     var marketNote=demandTotals ? T.pie_market_share_note : T.tourism_demand_unavailable_note;
     var pies=pieChartHTML(res.marketSharePct, T.pie_market_share_caption, marketNote)
       + pieChartHTML(res.occupancyPct, T.pie_occupancy_caption, T.pie_occupancy_note);
     var exceedsNote = res.exceedsHorizon ? '<p class="info-text" style="font-style:italic">'+escapeHTML(fmt(T.tourism_demand_exceeds,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>' : '';
-    return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+exceedsNote+'</div>';
-  }).join("");
-  if(!blocks) return "";
-
-  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(sourceProviderLabel(demandTotals.source.provider_name||"-",!!demandTotals.source.source_url))+'</p>' : '';
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+'</h2><div class="lux-rule"></div>'
-    +'<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_intro,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>'
-    +blocks+srcLine
-    +'</div></article>';
+    var block='<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+exceedsNote+'</div>';
+    var isLast = idx===scenarios.length-1;
+    pages.push('<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+(sc.label?' — '+escapeHTML(sc.label):'')+'</h2><div class="lux-rule"></div>'
+      +'<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_intro,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>'
+      +block+(isLast?srcLine:'')
+      +'</div></article>');
+  });
+  return pages;
 }
 
 /* Sceglie tra due forme (singolare/plurale) di una frase gia' tradotta -- serve perche' le
@@ -3720,7 +3726,7 @@ function renderBook(){
     push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
     push(T.chapter_financial, renderInternalFacts());
     renderInvestmentStructure().forEach(function(p){ push(T.chapter_financial, p); });
-    push(T.chapter_financial, renderTourismDemandPage());
+    renderTourismDemandPage().forEach(function(p){ push(T.chapter_financial, p); });
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderOpexBreakdownPage());
     renderZESFiscalPage().forEach(function(p){ push(T.chapter_financial, p); });

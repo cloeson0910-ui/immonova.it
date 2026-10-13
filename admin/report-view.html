@@ -3773,7 +3773,13 @@ function pieChartHTML(pct, caption, note){
   return '<div class="pie-block"><div class="pie-chart">'+svg+'<div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
 }
 function renderTourismDemandPage(){
-  if(isLandCategory()||isCommercialCategory()) return "";
+  /* FIX: ogni scenario ADR (minimo/medio/massimo) sta sulla propria pagina, mai piu' di uno
+     scenario per pagina -- stesso bug e stessa soluzione di dossier-send.html (vedi commento
+     lì): con 3 scenari (min+medio+max) il blocco intero non ci stava in una sola pagina A4 e
+     "overflow:hidden" tagliava silenziosamente lo scenario massimo fuori dall'immagine
+     catturata da html2canvas. Ora restituisce SEMPRE un array di pagine (anche [] quando non
+     c'e' nulla da mostrare): il chiamante qui sotto fa .forEach, non più push() diretto. */
+  if(isLandCategory()||isCommercialCategory()) return [];
   var f=buildFinance();
   /* Vedi nota identica in renderInvestmentThesisPage: una Villa/Appartamento si affittano a
      corpo intero, non camera per camera -- le notti vendute/anno sono occupazione×365, non
@@ -3800,27 +3806,29 @@ function renderTourismDemandPage(){
   }else if(adrSingle){
     scenarios.push({adr:adrSingle, label:T.scenario_adr});
   }
-  if(!scenarios.length) return "";
+  if(!scenarios.length) return [];
 
   var occ=getOccupancyAssumption();
-  var blocks=scenarios.map(function(sc){
+  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(sourceProviderLabel(demandTotals.source.provider_name||"-",!!demandTotals.source.source_url))+'</p>' : '';
+
+  var pages=[];
+  scenarios.forEach(function(sc,idx){
     var res=computeBreakEvenDemand(sc.adr, occ, units, f.total, demandTotals);
-    if(!res) return "";
+    if(!res) return;
     var marketNote=demandTotals ? T.pie_market_share_note : T.tourism_demand_unavailable_note;
     var pies=pieChartHTML(res.marketSharePct, T.pie_market_share_caption, marketNote)
       + pieChartHTML(res.occupancyPct, T.pie_occupancy_caption, T.pie_occupancy_note);
     var breakEvenNote = res.breakEvenYear!=null
       ? '<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_breakeven_line,{breakEven:String(Math.round(res.breakEvenYear*10)/10)}))+(res.breakEvenExtrapolated?escapeHTML(T.extrapolated_note2):'')+'</p>'
       : '<p class="info-text" style="font-style:italic">'+escapeHTML(T.tourism_demand_exceeds)+'</p>';
-    return '<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+breakEvenNote+'</div>';
-  }).join("");
-  if(!blocks) return "";
-
-  var srcLine = demandTotals ? '<p class="info-text">'+escapeHTML(T.tourism_demand_source_prefix)+escapeHTML(sourceProviderLabel(demandTotals.source.provider_name||"-",!!demandTotals.source.source_url))+'</p>' : '';
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+'</h2><div class="lux-rule"></div>'
-    +'<p class="info-text">'+escapeHTML(T.tourism_demand_intro)+'</p>'
-    +blocks+srcLine
-    +'</div></article>';
+    var block='<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+breakEvenNote+'</div>';
+    var isLast = idx===scenarios.length-1;
+    pages.push('<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+(sc.label?' — '+escapeHTML(sc.label):'')+'</h2><div class="lux-rule"></div>'
+      +'<p class="info-text">'+escapeHTML(T.tourism_demand_intro)+'</p>'
+      +block+(isLast?srcLine:'')
+      +'</div></article>');
+  });
+  return pages;
 }
 
 /* ---- Serie storica turismo: solo dati reali multi-anno da Discovery ---- */
@@ -4032,7 +4040,7 @@ function renderBook(){
     push(T.chapter_financial, renderInternalFacts());
     push(T.chapter_financial, renderRoomKpiPage());
     push(T.chapter_financial, renderInvestmentStructure());
-    push(T.chapter_financial, renderTourismDemandPage());
+    renderTourismDemandPage().forEach(function(p){ push(T.chapter_financial, p); });
     renderCashflowPage().forEach(function(p){ push(T.chapter_financial, p); });
     push(T.chapter_financial, renderOpexBreakdownPage());
     renderZESFiscalPage().forEach(function(p){ push(T.chapter_financial, p); });
