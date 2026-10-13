@@ -27,9 +27,12 @@
   p.lead{font-size:13px;line-height:1.5;color:#6b6353;margin:0 0 16px}
   input[type=email],input[type=text]{width:100%;font-size:15px;padding:12px 14px;border:1px solid #ddd3bd;border-radius:6px;margin-bottom:12px;box-sizing:border-box;font-family:inherit}
   input#otpCode{font-size:22px;letter-spacing:5px;text-align:center}
+  label.nda{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.5;color:#6b6353;margin:0 0 16px;cursor:pointer}
+  label.nda input{margin-top:2px;flex:0 0 auto}
+  label.nda a{color:#a67f34}
   button.btn{display:block;width:100%;padding:14px 22px;background:#a67f34;color:#fffaf0;text-decoration:none;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;border-radius:2px;border:none;cursor:pointer;font-family:inherit}
   button.btn:hover{background:#8f6d2c}
-  button.btn:disabled{opacity:.6;cursor:default}
+  button.btn:disabled{opacity:.5;cursor:default}
   .msg{margin-top:12px;font-size:12px;text-align:center}
   .msg.err{color:#b23b3b}
   .msg.ok{color:#2f7d4f}
@@ -45,9 +48,10 @@
       <h1>Resort e Maneggio Le Rose</h1>
 
       <div class="step" id="stepEmail">
-        <p class="lead">Per accedere al dossier riservato, inserisci la tua email: ti invieremo un codice di verifica.</p>
+        <p class="lead">Per accedere al dossier riservato, inserisci la tua email: ti invieremo un codice di verifica valido 60 minuti.</p>
         <input type="email" id="otpEmail" placeholder="La tua email" autocomplete="email">
-        <button type="button" class="btn" id="sendCodeBtn">Invia codice</button>
+        <label class="nda"><input type="checkbox" id="ndaCheck">Ho letto e accetto l&#039;<a href="https://immonova-consulting.it/nda.html" target="_blank" rel="noopener">accordo di riservatezza (NDA)</a></label>
+        <button type="button" class="btn" id="sendCodeBtn" disabled>Invia codice</button>
       </div>
 
       <div class="step hidden" id="stepCode">
@@ -62,9 +66,10 @@
 
 <script>
 (function(){
-  var S = {"sendLabel":"Invia codice","sendingLabel":"Invio in corso...","sentNotice":"Codice inviato. Controlla la tua email (anche spam) e inseriscilo qui sotto.","codeLabel":"Codice di verifica","verifyLabel":"Verifica e scarica","verifyingLabel":"Verifica in corso...","wrongCode":"Codice errato.","expired":"Codice scaduto, richiedine uno nuovo.","maxAttempts":"Troppi tentativi errati. Richiedi un nuovo codice.","genericError":"Errore durante la verifica, riprova.","invalidEmail":"Inserisci un indirizzo email valido."};
+  var S = {"sendLabel":"Invia codice","sendingLabel":"Invio in corso...","sentNotice":"Codice inviato. Controlla la tua email (anche spam) e inseriscilo qui sotto.","codeLabel":"Codice di verifica","verifyLabel":"Verifica e scarica","verifyingLabel":"Verifica in corso...","wrongCode":"Codice errato.","expired":"Codice scaduto, richiedine uno nuovo.","maxAttempts":"Troppi tentativi errati. Richiedi un nuovo codice.","sendError":"Non siamo riusciti a inviare il codice. Riprova tra poco.","verifyError":"Errore durante la verifica, riprova.","invalidEmail":"Inserisci un indirizzo email valido.","ndaRequired":"Devi accettare l'accordo di riservatezza per continuare."};
   var FN_BASE = "https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1";
-  var PDF_URL = "https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/dossier-pdfs/opportunity-41/1791915599773_dossier_IMMONOVA_Resort_e_Maneggio_Le_Rose_it.pdf";
+  var ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwenptaXRtYmF2Y21jYXNzd2J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDk1ODQsImV4cCI6MjA5NzM4NTU4NH0.SkPicFpfYe69rI0JmASqm-jif-Ov3gQ0Mu20UbrYawY";
+  var PDF_URL = "https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/dossier-pdfs/opportunity-41/1791917171522_dossier_IMMONOVA_Resort_e_Maneggio_Le_Rose_it.pdf";
   var OPPORTUNITY_ID = "41";
   var otpId = null;
 
@@ -73,6 +78,13 @@
   var msg = document.getElementById("otpMsg");
   var sendBtn = document.getElementById("sendCodeBtn");
   var verifyBtn = document.getElementById("verifyCodeBtn");
+  var ndaCheck = document.getElementById("ndaCheck");
+
+  ndaCheck.addEventListener("change", function(){ sendBtn.disabled = !ndaCheck.checked; });
+
+  function fnHeaders(){
+    return { "Content-Type": "application/json", "apikey": ANON_KEY, "Authorization": "Bearer " + ANON_KEY };
+  }
 
   function setMsg(text, isErr){
     msg.textContent = text || "";
@@ -89,6 +101,7 @@
 
   sendBtn.addEventListener("click", async function(){
     var email = document.getElementById("otpEmail").value.trim();
+    if(!ndaCheck.checked){ setMsg(S.ndaRequired, true); return; }
     if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
       setMsg(S.invalidEmail, true);
       return;
@@ -99,26 +112,26 @@
     try{
       var res = await fetch(FN_BASE + "/otp-generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: fnHeaders(),
         body: JSON.stringify(Object.assign({
           purpose: "dossier", target_type: "opportunity", target_id: OPPORTUNITY_ID,
-          recipient_email: email
+          recipient_email: email, target_pdf_url: PDF_URL, nda_accepted: true
         }, deviceMeta()))
       });
       var data = await res.json();
-      if(data && data.ok){
+      if(res.ok && data && data.ok){
         otpId = data.otp_id;
         stepEmail.className = "step hidden";
         stepCode.className = "step";
         document.getElementById("codeStepLead").textContent = S.sentNotice;
         setMsg("", false);
       } else {
-        setMsg(S.genericError, true);
+        setMsg(S.sendError, true);
         sendBtn.disabled = false;
         sendBtn.textContent = S.sendLabel;
       }
     }catch(e){
-      setMsg(S.genericError, true);
+      setMsg(S.sendError, true);
       sendBtn.disabled = false;
       sendBtn.textContent = S.sendLabel;
     }
@@ -126,27 +139,27 @@
 
   verifyBtn.addEventListener("click", async function(){
     var code = document.getElementById("otpCode").value.trim();
-    if(!otpId || code.length !== 6){ setMsg(S.genericError, true); return; }
+    if(!otpId || code.length !== 6){ setMsg(S.verifyError, true); return; }
     verifyBtn.disabled = true;
     verifyBtn.textContent = S.verifyingLabel;
     try{
       var res = await fetch(FN_BASE + "/otp-verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: fnHeaders(),
         body: JSON.stringify(Object.assign({ otp_id: otpId, code: code }, deviceMeta()))
       });
       var data = await res.json();
-      if(data && data.ok){
+      if(res.ok && data && data.ok){
         setMsg("", false);
-        location.href = PDF_URL;
+        location.href = FN_BASE + "/dossier-download?otp_id=" + encodeURIComponent(otpId);
       } else {
         var reasons = { wrong_code: S.wrongCode, expired: S.expired, max_attempts: S.maxAttempts };
-        setMsg((data && reasons[data.reason]) || S.genericError, true);
+        setMsg((data && reasons[data.reason]) || S.verifyError, true);
         verifyBtn.disabled = false;
         verifyBtn.textContent = S.verifyLabel;
       }
     }catch(e){
-      setMsg(S.genericError, true);
+      setMsg(S.verifyError, true);
       verifyBtn.disabled = false;
       verifyBtn.textContent = S.verifyLabel;
     }
