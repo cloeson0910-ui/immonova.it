@@ -36,6 +36,10 @@
   const otpId = params.get('otp_id');
   const redirect = params.get('redirect') || '';
   const FN_BASE = 'https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1';
+  // Il gateway Supabase rifiuta ogni chiamata alle Edge Function priva dell'header "apikey",
+  // anche quando la funzione ha verify_jwt:false (il JWT e l'apikey sono due controlli diversi).
+  // Senza questo header la richiesta non arriva nemmeno alla funzione: va sempre inclusa.
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwenptaXRtYmF2Y21jYXNzd2J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDk1ODQsImV4cCI6MjA5NzM4NTU4NH0.SkPicFpfYe69rI0JmASqm-jif-Ov3gQ0Mu20UbrYawY';
 
   if(!otpId){
     document.getElementById('intro').textContent = 'Link non valido o incompleto.';
@@ -59,7 +63,7 @@
     try{
       const res = await fetch(FN_BASE + '/otp-verify', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {'Content-Type':'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY},
         body: JSON.stringify(Object.assign({otp_id: otpId, code: code}, deviceMeta()))
       });
       const data = await res.json();
@@ -67,7 +71,15 @@
         msg.textContent = 'Verifica completata. Reindirizzamento...';
         msg.className = 'msg ok';
         setTimeout(function(){
-          if(redirect) location.href = decodeURIComponent(redirect);
+          // 'redirect' è già stato decodificato una volta da URLSearchParams.get(): l'URL del
+          // dossier (spesso firmato, con parametri come token/signature) può contenere suoi
+          // propri caratteri "%" legittimi. Decodificarlo di nuovo qui generava un errore
+          // JavaScript non gestito ("URI malformed"), che bloccava il redirect in silenzio:
+          // il codice risultava verificato ma l'utente restava sulla pagina.
+          if(redirect){
+            try{ location.href = redirect; }
+            catch(e){ msg.textContent = 'Codice verificato, ma il link del dossier non è valido. Contatta IMMONOVA.'; msg.className = 'msg err'; }
+          }
         }, 900);
       } else {
         const reasons = {
