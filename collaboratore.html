@@ -152,6 +152,9 @@
   let session = null;
   let lastExtracted = null;
   let lastTranscript = '';
+  let lastCategory = null;
+  let lastCollaboratorId = null;
+  let lastCollaboratorName = null;
 
   // --- Service worker (riusa quello esistente se presente) ---
   if ('serviceWorker' in navigator) {
@@ -285,11 +288,15 @@
       const result = await res.json();
       if(result.ok){
         lastExtracted = result;
+        lastCategory = category;
+        lastCollaboratorId = sessData.session ? sessData.session.user.id : null;
+        lastCollaboratorName = userEmail;
         renderTable(result.extracted.table || []);
         document.getElementById('resultBox').style.display = '';
         document.getElementById('saveMsg').textContent = '';
         document.getElementById('saveMsg').className = 'msg';
-        // già salvata dalla edge function; il pulsante "Salva" qui serve solo a confermare/ricaricare lista
+        // NESSUN salvataggio automatico: la nota esiste solo qui finché non premi "Salva nota".
+        // "Scarta" quindi non deve mai cancellare nulla dal database: non c'è ancora nulla da cancellare.
       } else {
         document.getElementById('saveMsg').textContent = 'Errore elaborazione: ' + (result.error || 'sconosciuto');
         document.getElementById('saveMsg').className = 'msg err';
@@ -308,15 +315,46 @@
   }
 
   document.getElementById('discardBtn').addEventListener('click', function(){
+    // Nulla è mai stato scritto nel database: scartare significa solo azzerare lo stato locale.
+    lastTranscript = ''; lastExtracted = null; lastCategory = null;
     document.getElementById('resultBox').style.display = 'none';
     liveTranscript.textContent = 'La trascrizione apparirà qui mentre parli...';
   });
-  document.getElementById('saveBtn').addEventListener('click', function(){
-    document.getElementById('saveMsg').textContent = 'Nota salvata.';
-    document.getElementById('saveMsg').className = 'msg ok';
-    document.getElementById('resultBox').style.display = 'none';
-    liveTranscript.textContent = 'La trascrizione apparirà qui mentre parli...';
-    loadNotes();
+  document.getElementById('saveBtn').addEventListener('click', async function(){
+    if(!lastExtracted || !lastTranscript){
+      document.getElementById('saveMsg').textContent = 'Nessuna nota da salvare.';
+      document.getElementById('saveMsg').className = 'msg err';
+      return;
+    }
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+    try{
+      const { error } = await client.from('immonova_voice_notes').insert({
+        collaborator_id: lastCollaboratorId,
+        collaborator_name: lastCollaboratorName || null,
+        category: lastCategory,
+        transcript: lastTranscript,
+        extracted: lastExtracted.extracted,
+        status: 'processed'
+      });
+      if(error){
+        document.getElementById('saveMsg').textContent = 'Errore durante il salvataggio: ' + error.message;
+        document.getElementById('saveMsg').className = 'msg err';
+        saveBtn.disabled = false;
+        return;
+      }
+      document.getElementById('saveMsg').textContent = 'Nota salvata.';
+      document.getElementById('saveMsg').className = 'msg ok';
+      document.getElementById('resultBox').style.display = 'none';
+      liveTranscript.textContent = 'La trascrizione apparirà qui mentre parli...';
+      lastTranscript = ''; lastExtracted = null; lastCategory = null;
+      loadNotes();
+    }catch(e){
+      document.getElementById('saveMsg').textContent = "Errore di rete durante il salvataggio.";
+      document.getElementById('saveMsg').className = 'msg err';
+    }finally{
+      saveBtn.disabled = false;
+    }
   });
 
   // --- Lista note ---
