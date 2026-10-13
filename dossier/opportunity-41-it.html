@@ -24,9 +24,17 @@
   .card-body{padding:28px}
   .kicker{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a67f34;font-weight:600;margin:0 0 8px}
   h1{font-size:20px;margin:0 0 18px;line-height:1.3}
-  a.btn{display:inline-block;padding:14px 22px;background:#a67f34;color:#fffaf0;text-decoration:none;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;border-radius:2px}
-  a.btn:hover{background:#8f6d2c}
-  .fallback{margin-top:14px;font-size:12px;color:#8f7643}
+  p.lead{font-size:13px;line-height:1.5;color:#6b6353;margin:0 0 16px}
+  input[type=email],input[type=text]{width:100%;font-size:15px;padding:12px 14px;border:1px solid #ddd3bd;border-radius:6px;margin-bottom:12px;box-sizing:border-box;font-family:inherit}
+  input#otpCode{font-size:22px;letter-spacing:5px;text-align:center}
+  button.btn{display:block;width:100%;padding:14px 22px;background:#a67f34;color:#fffaf0;text-decoration:none;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:600;border-radius:2px;border:none;cursor:pointer;font-family:inherit}
+  button.btn:hover{background:#8f6d2c}
+  button.btn:disabled{opacity:.6;cursor:default}
+  .msg{margin-top:12px;font-size:12px;text-align:center}
+  .msg.err{color:#b23b3b}
+  .msg.ok{color:#2f7d4f}
+  .step{display:block}
+  .step.hidden{display:none}
 </style>
 </head>
 <body>
@@ -35,8 +43,115 @@
     <div class="card-body">
       <p class="kicker">IMMONOVA · Investment Book</p>
       <h1>Resort e Maneggio Le Rose</h1>
-      <a class="btn" id="dl" href="https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/dossier-pdfs/opportunity-41/1788798907783_dossier_IMMONOVA_Resort_e_Maneggio_Le_Rose_it.pdf">Scarica il dossier</a>
+
+      <div class="step" id="stepEmail">
+        <p class="lead">Per accedere al dossier riservato, inserisci la tua email: ti invieremo un codice di verifica.</p>
+        <input type="email" id="otpEmail" placeholder="La tua email" autocomplete="email">
+        <button type="button" class="btn" id="sendCodeBtn">Invia codice</button>
+      </div>
+
+      <div class="step hidden" id="stepCode">
+        <p class="lead" id="codeStepLead"></p>
+        <input type="text" id="otpCode" maxlength="6" inputmode="numeric" placeholder="______">
+        <button type="button" class="btn" id="verifyCodeBtn">Verifica e scarica</button>
+      </div>
+
+      <div class="msg" id="otpMsg"></div>
     </div>
   </div>
+
+<script>
+(function(){
+  var S = {"sendLabel":"Invia codice","sendingLabel":"Invio in corso...","sentNotice":"Codice inviato. Controlla la tua email (anche spam) e inseriscilo qui sotto.","codeLabel":"Codice di verifica","verifyLabel":"Verifica e scarica","verifyingLabel":"Verifica in corso...","wrongCode":"Codice errato.","expired":"Codice scaduto, richiedine uno nuovo.","maxAttempts":"Troppi tentativi errati. Richiedi un nuovo codice.","genericError":"Errore durante la verifica, riprova.","invalidEmail":"Inserisci un indirizzo email valido."};
+  var FN_BASE = "https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1";
+  var PDF_URL = "https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/dossier-pdfs/opportunity-41/1791915599773_dossier_IMMONOVA_Resort_e_Maneggio_Le_Rose_it.pdf";
+  var OPPORTUNITY_ID = "41";
+  var otpId = null;
+
+  var stepEmail = document.getElementById("stepEmail");
+  var stepCode = document.getElementById("stepCode");
+  var msg = document.getElementById("otpMsg");
+  var sendBtn = document.getElementById("sendCodeBtn");
+  var verifyBtn = document.getElementById("verifyCodeBtn");
+
+  function setMsg(text, isErr){
+    msg.textContent = text || "";
+    msg.className = "msg" + (text ? (isErr ? " err" : " ok") : "");
+  }
+
+  function deviceMeta(){
+    return {
+      platform_hint: navigator.platform || null,
+      screen: screen.width + "x" + screen.height,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    };
+  }
+
+  sendBtn.addEventListener("click", async function(){
+    var email = document.getElementById("otpEmail").value.trim();
+    if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+      setMsg(S.invalidEmail, true);
+      return;
+    }
+    sendBtn.disabled = true;
+    sendBtn.textContent = S.sendingLabel;
+    setMsg("", false);
+    try{
+      var res = await fetch(FN_BASE + "/otp-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({
+          purpose: "dossier", target_type: "opportunity", target_id: OPPORTUNITY_ID,
+          recipient_email: email
+        }, deviceMeta()))
+      });
+      var data = await res.json();
+      if(data && data.ok){
+        otpId = data.otp_id;
+        stepEmail.className = "step hidden";
+        stepCode.className = "step";
+        document.getElementById("codeStepLead").textContent = S.sentNotice;
+        setMsg("", false);
+      } else {
+        setMsg(S.genericError, true);
+        sendBtn.disabled = false;
+        sendBtn.textContent = S.sendLabel;
+      }
+    }catch(e){
+      setMsg(S.genericError, true);
+      sendBtn.disabled = false;
+      sendBtn.textContent = S.sendLabel;
+    }
+  });
+
+  verifyBtn.addEventListener("click", async function(){
+    var code = document.getElementById("otpCode").value.trim();
+    if(!otpId || code.length !== 6){ setMsg(S.genericError, true); return; }
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = S.verifyingLabel;
+    try{
+      var res = await fetch(FN_BASE + "/otp-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({ otp_id: otpId, code: code }, deviceMeta()))
+      });
+      var data = await res.json();
+      if(data && data.ok){
+        setMsg("", false);
+        location.href = PDF_URL;
+      } else {
+        var reasons = { wrong_code: S.wrongCode, expired: S.expired, max_attempts: S.maxAttempts };
+        setMsg((data && reasons[data.reason]) || S.genericError, true);
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = S.verifyLabel;
+      }
+    }catch(e){
+      setMsg(S.genericError, true);
+      verifyBtn.disabled = false;
+      verifyBtn.textContent = S.verifyLabel;
+    }
+  });
+})();
+</script>
 </body>
 </html>
