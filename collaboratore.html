@@ -31,6 +31,11 @@
   table.result{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}
   table.result th,table.result td{text-align:left;padding:9px 10px;border-bottom:1px solid #ece3cf}
   table.result th{background:#faf7f0;font-weight:600;width:42%}
+  table.result input.edit-field{width:100%;border:1px solid transparent;background:transparent;font-size:13px;font-family:inherit;color:var(--ink);padding:4px 6px;border-radius:6px}
+  table.result input.edit-field:focus{border-color:var(--gold);background:#fff;outline:none}
+  .edit-hint{font-size:11px;color:#8a8167;margin:2px 0 0}
+  .note-actions{display:flex;gap:8px;margin-top:10px}
+  .note-actions button{flex:1}
   .save-row{display:flex;gap:10px;margin-top:16px}
   button.primary{flex:1;padding:12px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
   button.secondary{padding:12px 16px;background:#fff;border:1px solid #ddd3bd;border-radius:8px;font-size:14px;cursor:pointer}
@@ -118,6 +123,7 @@
 
       <div id="resultBox" style="display:none">
         <h2 style="margin-top:20px">Informazioni organizzate</h2>
+        <p class="edit-hint">Tocca un campo per correggerlo prima di salvare (es. range come "150-180 mila €" o "2-3 camere").</p>
         <table class="result" id="resultTable"></table>
         <div class="save-row">
           <button class="secondary" id="discardBtn">Scarta</button>
@@ -307,11 +313,58 @@
     }
   }
 
+  function escapeAttr(s){
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function escapeHtml(s){ return escapeAttr(s); }
+
+  // Costruisce l'HTML di una tabella risultati con i campi "key" modificabili come input di testo.
+  function renderEditableRows(rows){
+    return rows.map(function(r){
+      if(r.key){
+        var val = (r.valore === '-' || r.valore == null) ? '' : r.valore;
+        return '<tr><th>' + escapeHtml(r.campo) + '</th><td><input type="text" class="edit-field" data-key="' + escapeAttr(r.key) + '" data-campo="' + escapeAttr(r.campo) + '" value="' + escapeAttr(val) + '" placeholder="-"></td></tr>';
+      }
+      return '<tr><th>' + escapeHtml(r.campo) + '</th><td>' + escapeHtml(r.valore) + '</td></tr>';
+    }).join('');
+  }
+
+  // Legge lo stato attuale (eventualmente corretto a mano) di una tabella modificabile nel DOM.
+  function collectEditedRows(tableEl){
+    return Array.from(tableEl.querySelectorAll('tr')).map(function(tr){
+      var th = tr.querySelector('th');
+      var inp = tr.querySelector('input.edit-field');
+      if(inp){
+        return { campo: th.textContent, key: inp.dataset.key, valore: inp.value.trim() || '-' };
+      }
+      var td = tr.querySelector('td');
+      return { campo: th.textContent, key: null, valore: td ? td.textContent : '-' };
+    });
+  }
+
+  // Applica le righe (eventualmente corrette) sia alla tabella di visualizzazione sia ai dati
+  // strutturati/keyword usati altrove (export Notizia/Mandato), cosi' una correzione manuale
+  // non resta "solo visiva" ma aggiorna davvero il dato.
+  function applyEditedRowsToExtracted(baseExtractedObj, editedRows){
+    const updated = JSON.parse(JSON.stringify(baseExtractedObj || {}));
+    updated.structured = updated.structured || {};
+    updated.keywords = updated.keywords || {};
+    editedRows.forEach(function(r){
+      if(!r.key) return;
+      const val = (r.valore === '-' || !r.valore) ? null : r.valore;
+      if(['punti_forza','difetti','esigenze_cliente'].indexOf(r.key) !== -1){
+        updated.keywords[r.key] = val ? val.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : [];
+      } else {
+        updated.structured[r.key] = val;
+      }
+    });
+    updated.table = editedRows;
+    return updated;
+  }
+
   function renderTable(rows){
     const table = document.getElementById('resultTable');
-    table.innerHTML = rows.map(function(r){
-      return '<tr><th>' + r.campo + '</th><td>' + r.valore + '</td></tr>';
-    }).join('');
+    table.innerHTML = renderEditableRows(rows);
   }
 
   document.getElementById('discardBtn').addEventListener('click', function(){
@@ -329,12 +382,14 @@
     const saveBtn = document.getElementById('saveBtn');
     saveBtn.disabled = true;
     try{
+      const editedRows = collectEditedRows(document.getElementById('resultTable'));
+      const finalExtracted = applyEditedRowsToExtracted(lastExtracted.extracted, editedRows);
       const { error } = await client.from('immonova_voice_notes').insert({
         collaborator_id: lastCollaboratorId,
         collaborator_name: lastCollaboratorName || null,
         category: lastCategory,
         transcript: lastTranscript,
-        extracted: lastExtracted.extracted,
+        extracted: finalExtracted,
         status: 'processed'
       });
       if(error){
@@ -358,6 +413,32 @@
   });
 
   // --- Lista note ---
+  const catLabel = { visita_immobile: 'Visita immobile', nota_cliente: 'Nota cliente', generico: 'Generico' };
+  let notesCache = {}; // id -> nota (per poter ricostruire la tabella in modalità modifica)
+  let editingNoteId = null;
+
+  function renderNoteItem(n){
+    const date = new Date(n.created_at).toLocaleString('it-IT');
+    const rows = (n.extracted && n.extracted.table) ? n.extracted.table : [];
+    const isEditing = editingNoteId === n.id;
+    const tableHtml = isEditing ? renderEditableRows(rows) : rows.map(function(r){ return '<tr><th>' + escapeHtml(r.campo) + '</th><td>' + escapeHtml(r.valore) + '</td></tr>'; }).join('');
+    const actionsHtml = isEditing
+      ? '<div class="note-actions">' +
+          '<button type="button" class="secondary" onclick="window.cancelEditNote()">Annulla</button>' +
+          '<button type="button" class="primary" onclick="window.saveEditedNote(\'' + n.id + '\')">Salva modifiche</button>' +
+        '</div>'
+      : '<div class="note-actions">' +
+          '<button type="button" class="secondary" onclick="window.editNote(\'' + n.id + '\')">Modifica</button>' +
+          '<button type="button" class="secondary" onclick="window.deleteVoiceNote(\'' + n.id + '\')">Elimina</button>' +
+        '</div>';
+    return '<div class="list-item" data-note-id="' + n.id + '"><span class="badge">' + (catLabel[n.category]||n.category) + '</span><div class="meta">' + date + '</div>' +
+      '<div style="margin:6px 0;font-size:12px;color:#4a4330">' + escapeHtml(n.transcript.slice(0,160)) + (n.transcript.length>160?'…':'') + '</div>' +
+      (isEditing ? '<p class="edit-hint">Correggi i campi e premi "Salva modifiche".</p>' : '') +
+      '<table class="result">' + tableHtml + '</table>' +
+      actionsHtml +
+      '</div>';
+  }
+
   async function loadNotes(){
     const listEl = document.getElementById('notesList');
     const { data: sessData } = await client.auth.getSession();
@@ -370,20 +451,41 @@
       .limit(30);
     if(error || !data || !data.length){
       listEl.innerHTML = '<p class="hint">Nessuna nota registrata ancora.</p>';
+      notesCache = {};
       return;
     }
-    const catLabel = { visita_immobile: 'Visita immobile', nota_cliente: 'Nota cliente', generico: 'Generico' };
-    listEl.innerHTML = data.map(function(n){
-      const date = new Date(n.created_at).toLocaleString('it-IT');
-      const rows = (n.extracted && n.extracted.table) ? n.extracted.table : [];
-      const tableHtml = rows.map(function(r){ return '<tr><th>' + r.campo + '</th><td>' + r.valore + '</td></tr>'; }).join('');
-      return '<div class="list-item"><span class="badge">' + (catLabel[n.category]||n.category) + '</span><div class="meta">' + date + '</div>' +
-        '<div style="margin:6px 0;font-size:12px;color:#4a4330">' + n.transcript.slice(0,160) + (n.transcript.length>160?'…':'') + '</div>' +
-        '<table class="result">' + tableHtml + '</table>' +
-        '<button type="button" class="secondary" style="margin-top:10px;width:100%" onclick="deleteVoiceNote(\'' + n.id + '\')">Elimina nota</button>' +
-        '</div>';
-    }).join('');
+    notesCache = {};
+    data.forEach(function(n){ notesCache[n.id] = n; });
+    editingNoteId = null;
+    listEl.innerHTML = data.map(renderNoteItem).join('');
   }
+
+  window.editNote = function(id){
+    editingNoteId = id;
+    const listEl = document.getElementById('notesList');
+    listEl.innerHTML = Object.keys(notesCache).map(function(k){ return notesCache[k]; })
+      .sort(function(a,b){ return new Date(b.created_at) - new Date(a.created_at); })
+      .map(renderNoteItem).join('');
+  };
+
+  window.cancelEditNote = function(){
+    editingNoteId = null;
+    loadNotes();
+  };
+
+  window.saveEditedNote = async function(id){
+    const item = document.querySelector('.list-item[data-note-id="' + id + '"]');
+    if(!item) return;
+    const tableEl = item.querySelector('table.result');
+    const n = notesCache[id];
+    if(!n || !tableEl) return;
+    const editedRows = collectEditedRows(tableEl);
+    const finalExtracted = applyEditedRowsToExtracted(n.extracted, editedRows);
+    const { error } = await client.from('immonova_voice_notes').update({ extracted: finalExtracted }).eq('id', id);
+    if(error){ window.alert('Errore durante il salvataggio delle modifiche: ' + error.message); return; }
+    editingNoteId = null;
+    loadNotes();
+  };
 
   window.deleteVoiceNote = async function(id){
     if(!window.confirm('Eliminare definitivamente questa nota e la tabella associata?')) return;
