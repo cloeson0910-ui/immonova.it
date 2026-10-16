@@ -5001,18 +5001,44 @@ function clearFolderImport(){
 
 var watermarkPreviewEntries = [];
 
-function buildWatermarkPreviewEntries(){
+async function urlToBlob(url){
+  var res = await fetch(url);
+  if(!res.ok) throw new Error("HTTP " + res.status);
+  return await res.blob();
+}
+
+// Se non è stato scelto un nuovo file nell'input, l'anteprima usa la foto
+// già salvata (copertina/gallery esistenti) scaricandola come blob: in
+// modifica di un annuncio esistente i file input sono vuoti anche se la
+// foto c'è già, e prima l'anteprima si bloccava su "carica prima copertina"
+// anche con la copertina visibilmente presente in pagina.
+async function buildWatermarkPreviewEntries(){
   var entries = [];
   var coverInput = document.getElementById("coverFile");
   var galleryInput = document.getElementById("galleryFiles");
 
   if(coverInput && coverInput.files && coverInput.files[0]){
     entries.push({ key:"cover", label:"Copertina", file:coverInput.files[0] });
+  }else if(typeof currentCoverUrl !== "undefined" && currentCoverUrl && !coverRemoved){
+    try{
+      entries.push({ key:"cover", label:"Copertina", file:await urlToBlob(currentCoverUrl) });
+    }catch(coverFetchError){
+      console.warn("Impossibile caricare la copertina esistente per l'anteprima watermark:", coverFetchError);
+    }
   }
+
   if(galleryInput && galleryInput.files && galleryInput.files.length){
     Array.prototype.forEach.call(galleryInput.files, function(file, idx){
       entries.push({ key:"gallery:" + idx, label:"Gallery #" + (idx + 1), file:file });
     });
+  }else if(typeof galleryImages !== "undefined" && galleryImages.length){
+    for(var gi = 0; gi < galleryImages.length; gi++){
+      try{
+        entries.push({ key:"gallery:" + gi, label:"Gallery #" + (gi + 1), file:await urlToBlob(galleryImages[gi]) });
+      }catch(galleryFetchError){
+        console.warn("Impossibile caricare foto gallery #" + (gi + 1) + " per l'anteprima watermark:", galleryFetchError);
+      }
+    }
   }
   return entries;
 }
@@ -5097,7 +5123,8 @@ function renderWatermarkPreviewGrid(){
 
 async function generateWatermarkPreview(){
   var statusEl = document.getElementById("watermarkPreviewStatus");
-  watermarkPreviewEntries = buildWatermarkPreviewEntries();
+  if(statusEl) statusEl.textContent = "Carico le foto...";
+  watermarkPreviewEntries = await buildWatermarkPreviewEntries();
 
   if(!watermarkPreviewEntries.length){
     if(statusEl) statusEl.textContent = "Carica prima copertina e/o gallery qui sotto, poi genera l'anteprima.";
