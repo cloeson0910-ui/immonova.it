@@ -2292,7 +2292,7 @@ function renderInvestmentThesisPage(){
          appartamento con 2 stanze al 50% di occupazione risulterebbe con 365 pernottamenti/
          anno (come se fosse pieno al 100%), invece dei ~182 realistici. Solo per Hotel/Resort
          le camere si vendono singolarmente e vanno davvero moltiplicate. */
-      var units=isHospitalityCategory()?getAssetUnits():1;
+      var units=isPerUnitRentalEnabled()?getAssetUnits():1;
       var demandTotals=getTourismDemandTotals();
       var roomNightsAtOcc=headline.occValue*365*units;
       if(demandTotals && demandTotals.pernottamenti>0){
@@ -3425,6 +3425,19 @@ function isHospitalityCategory(){
   var c=String(getCategory()||"").toLowerCase();
   return c.indexOf("hotel")>=0 || c.indexOf("resort")>=0;
 }
+// Flag dedicato SOLO al calcolo del ricavo (ADR x unita'): di default il
+// ricavo viene sempre calcolato per unita', indipendentemente dalla
+// categoria. L'utente puo' escludere scheda per scheda impostando
+// rental_mode="whole_property" in Opportunity Edit. Non tocca la parte
+// fiscale/ZES, che resta legata a isHospitalityCategory().
+// ALLINEATO manualmente a dossier-send.html.
+function isPerUnitRentalEnabled(){
+  var o=opportunity||{};
+  var mode=o.rental_mode;
+  if(mode==="whole_property") return false;
+  if(mode==="per_unit") return true;
+  return isHospitalityCategory();
+}
 function isFiscalLuxuryOverride(){
   /* SOLO categoria Hotel/Resort attiva il trattamento fiscale da struttura alberghiera
      (tassazione societaria 27,9%, break-even netto, note fiscali dedicate). isLuxuryProperty()
@@ -3559,7 +3572,7 @@ function buildCashflowProjections(){
      l'ADR per getAssetUnits() (che conta le camere/bedroom) per queste categorie gonfiava
      artificialmente il ricavo, come se ogni stanza si affittasse a parte. Solo per Hotel/Resort
      il ricavo \u00e8 davvero ADR \u00d7 occupazione \u00d7 numero di camere vendibili singolarmente. */
-  var revenueUnits = isHospitalityCategory() ? units : 1;
+  var revenueUnits = isPerUnitRentalEnabled() ? units : 1;
 
   function projFor(adrMetric, label){
     if(!adrMetric) return null;
@@ -3785,7 +3798,7 @@ function renderTourismDemandPage(){
      corpo intero, non camera per camera -- le notti vendute/anno sono occupazione×365, non
      moltiplicate per il numero di camere/bedroom. Solo per Hotel/Resort le camere si vendono
      singolarmente. */
-  var units=isHospitalityCategory()?getAssetUnits():1;
+  var units=isPerUnitRentalEnabled()?getAssetUnits():1;
   var demandTotals=getTourismDemandTotals();
   var adrMin=metricFromDossier("adr","average_daily_rate_min");
   var adrMax=metricFromDossier("adr","average_daily_rate_max");

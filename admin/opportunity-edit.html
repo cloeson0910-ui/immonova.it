@@ -1809,6 +1809,15 @@ button.danger{
         <div class="room-inventory-total" id="roomInventoryTotal"></div>
       </div>
 
+      <div class="field full">
+        <label for="rental_mode" data-i18n="label_rental_mode">Modalità di ricavo (dossier)</label>
+        <select id="rental_mode">
+          <option value="per_unit" data-i18n="rental_mode_per_unit">Per unità (ADR × camere/posti letto totali)</option>
+          <option value="whole_property" data-i18n="rental_mode_whole_property">A corpo intero (ADR × 1, immobile unico)</option>
+        </select>
+        <div class="room-inventory-note" data-i18n="note_rental_mode">Di default il ricavo nel dossier viene sempre calcolato moltiplicando l'ADR per il numero totale di camere/unità (dai corpi di fabbrica o, se vuoti, dal campo "Camere"). Scegli "A corpo intero" solo per le schede che vendi/affitti come immobile unico e non vuoi che il ricavo venga moltiplicato per le singole unità.</div>
+      </div>
+
       <div class="field">
         <label for="internal_size" data-i18n="label_internal_size">Mq Interni</label>
         <input type="number" id="internal_size">
@@ -5222,6 +5231,8 @@ var UI_STRINGS = {
   documents_note:"Carica i documenti necessari alla verifica dell\u2019immobile. La proposta può essere salvata anche con documenti mancanti: la pubblicazione resta sempre soggetta a validazione admin. Spunta \"Includi nel dossier\" solo per i documenti che vuoi davvero mandare all'investitore nel libro stampato \u2014 di default nessuno è incluso.",
   documents_missing:"Mancanti",
   section_technical_data:"Dati tecnici immobile", label_bedrooms:"Camere", label_bathrooms:"Bagni",
+  label_rental_mode:"Modalità di ricavo (dossier)", rental_mode_per_unit:"Per unità (ADR × camere/posti letto totali)", rental_mode_whole_property:"A corpo intero (ADR × 1, immobile unico)",
+  note_rental_mode:"Di default il ricavo nel dossier viene sempre calcolato moltiplicando l'ADR per il numero totale di camere/unità (dai corpi di fabbrica o, se vuoti, dal campo \"Camere\"). Scegli \"A corpo intero\" solo per le schede che vendi/affitti come immobile unico e non vuoi che il ricavo venga moltiplicato per le singole unità.",
   label_internal_size:"Mq Interni", label_land_size:"Mq Terreno", label_construction_year:"Anno costruzione",
   label_energy_class:"Classe energetica", opt_select:"Seleziona", opt_not_available:"Non disponibile",
   label_property_condition:"Stato immobile",
@@ -5522,6 +5533,7 @@ async function loadOpportunity(){
 
   setValue("bedrooms", data.bedrooms);
   setValue("bathrooms", data.bathrooms);
+  setValue("rental_mode", data.rental_mode || "per_unit");
   loadRoomInventoryFromOpportunity(data);
   setValue("internal_size", data.internal_size);
   setValue("land_size", data.land_size);
@@ -6454,6 +6466,7 @@ form.addEventListener("submit", async function(e){
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
+      rental_mode:(textOrNull("rental_mode") === "whole_property" ? "whole_property" : "per_unit"),
       room_inventory:getRoomInventoryPayload(),
       internal_size:numberOrNull("internal_size"),
       land_size:numberOrNull("land_size"),
