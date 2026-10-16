@@ -3072,7 +3072,16 @@ function updateMapPreview(){
    query, dalla più specifica alla più generica, finché una non restituisce un risultato —
    così l'indirizzo si trova comunque anche quando la combinazione esatta dei campi non
    coincide con come Nominatim indicizza quella zona. ---- */
-function buildAddressQueryCandidates(){
+/* ---- Prima usavamo una query testuale libera (q=) passata a Nominatim: con indirizzi
+   precisi (via + civico) Nominatim applica un matching "fuzzy" per token e, quando il
+   civico esatto non è indicizzato, può restituire con sicurezza una frazione/contrada
+   vicina ma sbagliata (es. CAP e località diversi da quelli digitati) senza segnalare
+   nulla — è il bug per cui un indirizzo corretto veniva geolocalizzato altrove. La
+   ricerca STRUTTURATA (parametri street/city/county/state/postalcode separati, con
+   countrycodes=it) è molto più vincolata e riduce questi falsi match; in più ora
+   confrontiamo il CAP del risultato con quello digitato e avvisiamo se non coincidono,
+   invece di dare per buono il primo risultato senza controllo. ---- */
+function buildStructuredGeoCandidates(){
   var address = textOrNull("address");
   var postal = textOrNull("postal_code");
   var locality = textOrNull("locality");
@@ -3080,23 +3089,30 @@ function buildAddressQueryCandidates(){
   var province = textOrNull("province");
   var region = textOrNull("region");
 
+  var city = municipality || locality;
+
   var variants = [
-    [address, postal, locality, municipality, province, region],
-    [address, locality, municipality, province, region],
-    [address, postal, municipality, province, region],
-    [address, municipality, province, region],
-    [locality, municipality, province, region],
-    [municipality, province, region]
+    { street: address, city: city, county: province, state: region, postalcode: postal },
+    { street: address, city: city, county: province, state: region },
+    { street: address, city: municipality, state: region, postalcode: postal },
+    { street: address, city: municipality, state: region },
+    { city: city, county: province, state: region, postalcode: postal },
+    { city: municipality || locality, state: region }
   ];
 
   var seen = {};
   var candidates = [];
-  variants.forEach(function(parts){
-    var joined = parts.filter(Boolean).join(", ");
-    var query = joined ? (joined + ", Italia") : "";
-    if(query && query !== "Italia" && !seen[query]){
-      seen[query] = true;
-      candidates.push(query);
+  variants.forEach(function(v){
+    var params = {};
+    var hasAny = false;
+    Object.keys(v).forEach(function(k){
+      if(v[k]){ params[k] = v[k]; hasAny = true; }
+    });
+    if(!hasAny) return;
+    var key = JSON.stringify(params);
+    if(!seen[key]){
+      seen[key] = true;
+      candidates.push(params);
     }
   });
 
@@ -3104,7 +3120,8 @@ function buildAddressQueryCandidates(){
 }
 
 async function geocodeAddress(){
-  var candidates = buildAddressQueryCandidates();
+  var candidates = buildStructuredGeoCandidates();
+  var typedPostal = textOrNull("postal_code");
 
   if(!candidates.length){
     setGeoStatus("Inserisci almeno indirizzo/località/comune prima di geolocalizzare.", "error");
@@ -3114,16 +3131,21 @@ async function geocodeAddress(){
   setGeoStatus("Geolocalizzazione indirizzo in corso...", "");
 
   try{
-    var usedQuery = null;
+    var usedIndex = -1;
     var item = null;
 
     for(var i = 0; i < candidates.length; i++){
-      var query = candidates[i];
       if(i > 0){
         setGeoStatus("Nessun risultato con l'indirizzo completo, provo una versione più generica (" + (i+1) + "/" + candidates.length + ")...", "");
       }
 
-      var url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=" + encodeURIComponent(query);
+      var params = candidates[i];
+      var qs = ["format=json", "limit=3", "addressdetails=1", "countrycodes=it"];
+      Object.keys(params).forEach(function(k){
+        qs.push(k + "=" + encodeURIComponent(params[k]));
+      });
+
+      var url = "https://nominatim.openstreetmap.org/search?" + qs.join("&");
       var response = await fetch(url, { headers:{ "Accept":"application/json" } });
 
       if(!response.ok){
@@ -3133,8 +3155,15 @@ async function geocodeAddress(){
       var data = await response.json();
 
       if(data && data.length){
-        item = data[0];
-        usedQuery = query;
+        // Se abbiamo un CAP digitato, preferiamo tra i risultati quello il cui CAP
+        // coincide, invece di prendere alla cieca il primo (il più "importante" per
+        // Nominatim non è sempre quello giusto).
+        var match = null;
+        if(typedPostal){
+          match = data.find(function(d){ return d.address && d.address.postcode === typedPostal; });
+        }
+        item = match || data[0];
+        usedIndex = i;
         break;
       }
     }
@@ -3145,15 +3174,23 @@ async function geocodeAddress(){
 
     setValue("latitude", item.lat);
     setValue("longitude", item.lon);
-    setValue("formatted_address", item.display_name || usedQuery);
+    setValue("formatted_address", item.display_name || "");
 
     updateMapPreview();
-    setGeoStatus(
-      usedQuery === candidates[0]
-        ? "Coordinate trovate e mappa aggiornata."
-        : "Coordinate trovate (con una versione semplificata dell'indirizzo) e mappa aggiornata. Verifica che la posizione sulla mappa sia corretta.",
-      "success"
-    );
+
+    var resultPostal = item.address && item.address.postcode;
+    var postalMismatch = typedPostal && resultPostal && resultPostal !== typedPostal;
+
+    if(postalMismatch){
+      setGeoStatus(
+        "Attenzione: il CAP trovato (" + resultPostal + ") non corrisponde a quello digitato (" + typedPostal + "). Controlla la posizione sulla mappa prima di salvare.",
+        "error"
+      );
+    }else if(usedIndex === 0){
+      setGeoStatus("Coordinate trovate e mappa aggiornata.", "success");
+    }else{
+      setGeoStatus("Coordinate trovate (con una versione semplificata dell'indirizzo) e mappa aggiornata. Verifica che la posizione sulla mappa sia corretta.", "success");
+    }
   }catch(error){
     setGeoStatus(error.message || "Errore geolocalizzazione.", "error");
   }
