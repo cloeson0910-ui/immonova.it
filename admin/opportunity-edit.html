@@ -1764,7 +1764,7 @@ button.danger{
           <img id="coverPreview" class="preview-cover" alt="Copertina attuale" style="display:block">
           <img id="watermarkOverlayPreview" alt="" style="position:absolute;pointer-events:none;display:none">
         </div>
-        <a id="downloadCoverBtn" class="soft" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none;margin-bottom:10px" data-i18n="btn_download_cover">Scarica copertina attuale (per modificarla e togliere il logo)</a>
+        <button type="button" id="downloadCoverBtn" class="soft" style="display:none;margin-bottom:10px" data-i18n="btn_download_cover">Scarica copertina attuale (per modificarla e togliere il logo)</button>
         <div id="noCoverText" class="file-note" data-i18n="no_cover_text">Nessuna copertina caricata.</div>
         <div class="room-inventory-note" id="watermarkPreviewNote" style="display:none">Anteprima: così apparirà il watermark live nel dossier con le impostazioni qui sotto.</div>
         <button type="button" class="soft" id="removeCoverBtn" data-i18n="btn_remove_cover">Rimuovi Copertina</button>
@@ -4108,13 +4108,16 @@ function renderCover(){
     coverPreviewWrap.style.display = "block";
     noCoverText.style.display = "none";
     removeCoverBtn.style.display = "inline-block";
-    if(downloadCoverBtn){ downloadCoverBtn.href = currentCoverUrl; downloadCoverBtn.style.display = "inline-block"; }
+    if(downloadCoverBtn){
+      downloadCoverBtn.style.display = "inline-block";
+      downloadCoverBtn.onclick = function(){ downloadImageFile(currentCoverUrl, "copertina.jpg"); };
+    }
   }else{
     coverPreview.removeAttribute("src");
     coverPreviewWrap.style.display = "none";
     noCoverText.style.display = "block";
     removeCoverBtn.style.display = "none";
-    if(downloadCoverBtn){ downloadCoverBtn.removeAttribute("href"); downloadCoverBtn.style.display = "none"; }
+    if(downloadCoverBtn){ downloadCoverBtn.onclick = null; downloadCoverBtn.style.display = "none"; }
   }
   updateWatermarkOverlayPreview();
 }
@@ -4210,7 +4213,7 @@ function renderGallery(){
           <button type="button" title="Sposta indietro" onclick="moveGalleryImage(${i}, ${i - 1})" ${i === 0 ? "disabled" : ""}>◀</button>
           <button type="button" title="Sposta avanti" onclick="moveGalleryImage(${i}, ${i + 1})" ${i === last ? "disabled" : ""}>▶</button>
         </div>
-        <a href="${galleryImages[i]}" target="_blank" rel="noopener" class="download-gallery-link" title="Scarica questa foto (per modificarla e togliere il logo)" style="display:block;text-align:center;font-size:11px;letter-spacing:.04em;color:#8f7643;text-decoration:underline;margin-top:4px">Scarica</a>
+        <button type="button" class="download-gallery-link" title="Scarica questa foto (per modificarla e togliere il logo)" onclick="downloadImageFile('${galleryImages[i]}', 'gallery-${i + 1}.jpg')" style="display:block;width:100%;text-align:center;font-size:11px;letter-spacing:.04em;color:#8f7643;background:none;border:none;text-decoration:underline;cursor:pointer;margin-top:4px;padding:4px 0">Scarica</button>
         <button type="button" class="remove-gallery-btn" onclick="removeGalleryImage(${i})">Rimuovi</button>
       </div>
     `;
@@ -4218,6 +4221,28 @@ function renderGallery(){
 
   galleryPreview.innerHTML = html;
   bindGalleryDragEvents();
+}
+
+/* Download "vero" (fetch + blob) invece di aprire solo una nuova scheda: il browser propone
+   direttamente il salvataggio del file, anche per immagini su un dominio diverso (Supabase
+   Storage), perché i bucket pubblici rispondono con CORS aperto in lettura. */
+async function downloadImageFile(url, suggestedName){
+  try{
+    var response = await fetch(url, { mode:"cors" });
+    if(!response.ok) throw new Error("HTTP " + response.status);
+    var blob = await response.blob();
+    var objectUrl = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = suggestedName || "foto.jpg";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(objectUrl); }, 4000);
+  }catch(downloadError){
+    console.warn("Download diretto non riuscito, apro la foto in una nuova scheda:", downloadError);
+    window.open(url, "_blank", "noopener");
+  }
 }
 
 function removeGalleryImage(index){
