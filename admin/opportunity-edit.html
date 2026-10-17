@@ -1698,6 +1698,18 @@ button.danger{
       </div>
 
       <div class="field full">
+        <label data-i18n="label_dossier_partner_logo">Logo partner per il dossier (sostituisce IMMONOVA)</label>
+        <div class="room-inventory-note" data-i18n="note_dossier_partner_logo">Se carichi un logo qui, il dossier PDF di QUESTA scheda userà quel logo in copertina e nel footer di ogni pagina, invece del brand IMMONOVA (che non comparirà più). Lascia vuoto per il comportamento normale (brand IMMONOVA). Utile per dossier white-label realizzati per un partner.</div>
+        <img id="partnerLogoPreview" class="preview-cover" alt="Logo partner attuale" style="display:none;max-height:80px;width:auto">
+        <div id="noPartnerLogoText" class="file-note" data-i18n="no_partner_logo_text">Nessun logo partner caricato: il dossier userà il brand IMMONOVA.</div>
+        <button type="button" class="soft" id="removePartnerLogoBtn" data-i18n="btn_remove_partner_logo">Rimuovi logo partner (torna a IMMONOVA)</button>
+        <label for="partnerLogoFile" data-i18n="label_upload_partner_logo" style="margin-top:10px">Carica / sostituisci logo partner</label>
+        <input type="file" id="partnerLogoFile" accept="image/*">
+        <label for="partnerName" data-i18n="label_partner_name" style="margin-top:10px">Nome partner (facoltativo, sostituisce la scritta "IMMONOVA" nel footer)</label>
+        <input type="text" id="partnerName" placeholder="Es. Nome Agenzia Partner">
+      </div>
+
+      <div class="field full">
         <label data-i18n="label_current_cover">Copertina attuale</label>
         <img id="coverPreview" class="preview-cover" alt="Copertina attuale">
         <div id="noCoverText" class="file-note" data-i18n="no_cover_text">Nessuna copertina caricata.</div>
@@ -2386,6 +2398,13 @@ var galleryImages = [];
 var renovationImages = [];
 var renderImages = [];
 var coverRemoved = false;
+var currentPartnerLogoUrl = "";
+var partnerLogoRemoved = false;
+/* Quando questa scheda ha un logo partner, il watermark applicato a copertina/gallery deve
+   usare QUEL logo invece del logo IMMONOVA -- coerenza richiesta dall'utente: non avrebbe
+   senso mostrare il brand IMMONOVA nel watermark delle foto se poi il dossier lo esclude.
+   Viene risolto all'inizio del salvataggio, prima di qualsiasi upload con watermark. */
+var partnerWatermarkLogoImg = null;
 var aiGenerated = false;
 var loadedOpportunity = null;
 var currentUser = null;
@@ -4041,6 +4060,25 @@ function renderCover(){
   }
 }
 
+function renderPartnerLogo(){
+  var preview = document.getElementById("partnerLogoPreview");
+  var noText = document.getElementById("noPartnerLogoText");
+  var removeBtn = document.getElementById("removePartnerLogoBtn");
+  if(!preview) return;
+
+  if(currentPartnerLogoUrl && !partnerLogoRemoved){
+    preview.src = currentPartnerLogoUrl;
+    preview.style.display = "block";
+    noText.style.display = "none";
+    removeBtn.style.display = "inline-block";
+  }else{
+    preview.removeAttribute("src");
+    preview.style.display = "none";
+    noText.style.display = "block";
+    removeBtn.style.display = "none";
+  }
+}
+
 function renderGallery(){
   var galleryPreview = document.getElementById("galleryPreview");
   var noGalleryText = document.getElementById("noGalleryText");
@@ -4529,6 +4567,7 @@ function watermarkLogoSrcForVariant(variant){
 }
 
 function loadImmonovaWatermarkLogo(variant){
+  if(partnerWatermarkLogoImg) return Promise.resolve(partnerWatermarkLogoImg);
   var key = variant || "gold";
   if(immonovaWatermarkLogoImgCache[key]) return Promise.resolve(immonovaWatermarkLogoImgCache[key]);
   return new Promise(function(resolve, reject){
@@ -4648,6 +4687,30 @@ async function uploadImage(file, path, watermarkKey){
     .upload(path, watermarkedFile, {
       cacheControl:"3600",
       upsert:false
+    });
+
+  if(result.error){
+    throw result.error;
+  }
+
+  var publicUrl = client
+    .storage
+    .from("opportunities")
+    .getPublicUrl(path);
+
+  return publicUrl.data.publicUrl;
+}
+
+/* Upload "grezzo" SENZA watermark IMMONOVA: usato per il logo del partner (dossier white-label
+   per scheda) -- applicare il watermark IMMONOVA sul logo di un partner non avrebbe senso, e
+   il punto di questa funzionalita' e' proprio ESCLUDERE il brand IMMONOVA da quel dossier. */
+async function uploadImageNoWatermark(file, path){
+  var result = await client
+    .storage
+    .from("opportunities")
+    .upload(path, file, {
+      cacheControl:"3600",
+      upsert:true
     });
 
   if(result.error){
@@ -5233,6 +5296,12 @@ var UI_STRINGS = {
   section_technical_data:"Dati tecnici immobile", label_bedrooms:"Camere", label_bathrooms:"Bagni",
   label_rental_mode:"Modalità di ricavo (dossier)", rental_mode_per_unit:"Per unità (ADR × camere/posti letto totali)", rental_mode_whole_property:"A corpo intero (ADR × 1, immobile unico)",
   note_rental_mode:"Di default il ricavo nel dossier viene sempre calcolato moltiplicando l'ADR per il numero totale di camere/unità (dai corpi di fabbrica o, se vuoti, dal campo \"Camere\"). Scegli \"A corpo intero\" solo per le schede che vendi/affitti come immobile unico e non vuoi che il ricavo venga moltiplicato per le singole unità.",
+  label_dossier_partner_logo:"Logo partner per il dossier (sostituisce IMMONOVA)",
+  note_dossier_partner_logo:"Se carichi un logo qui, il dossier PDF di QUESTA scheda userà quel logo in copertina e nel footer di ogni pagina, invece del brand IMMONOVA (che non comparirà più). Lascia vuoto per il comportamento normale (brand IMMONOVA). Utile per dossier white-label realizzati per un partner.",
+  no_partner_logo_text:"Nessun logo partner caricato: il dossier userà il brand IMMONOVA.",
+  btn_remove_partner_logo:"Rimuovi logo partner (torna a IMMONOVA)",
+  label_upload_partner_logo:"Carica / sostituisci logo partner",
+  label_partner_name:"Nome partner (facoltativo, sostituisce la scritta \"IMMONOVA\" nel footer)",
   label_internal_size:"Mq Interni", label_land_size:"Mq Terreno", label_construction_year:"Anno costruzione",
   label_energy_class:"Classe energetica", opt_select:"Seleziona", opt_not_available:"Non disponibile",
   label_property_condition:"Stato immobile",
@@ -5587,9 +5656,12 @@ async function loadOpportunity(){
 
   currentCoverUrl = data.cover_image || "";
   galleryImages = normalizeGallery(data.gallery_images);
+  currentPartnerLogoUrl = data.dossier_partner_logo_url || "";
+  setValue("partnerName", data.dossier_partner_name || "");
 
   renderCover();
   renderGallery();
+  renderPartnerLogo();
   syncRenovationRequired();
   calculateRenovationBudget();
   await loadRenovationImages();
@@ -6393,6 +6465,13 @@ document.getElementById("removeCoverBtn").addEventListener("click", function(){
   renderCover();
 });
 
+document.getElementById("removePartnerLogoBtn").addEventListener("click", function(){
+  partnerLogoRemoved = true;
+  currentPartnerLogoUrl = "";
+  document.getElementById("partnerLogoFile").value = "";
+  renderPartnerLogo();
+});
+
 form.addEventListener("submit", async function(e){
   e.preventDefault();
 
@@ -6412,6 +6491,27 @@ form.addEventListener("submit", async function(e){
        scelta esplicitamente una nell'importazione, le foto di gallery
        importate si aggiungono a quelle caricate manualmente (se presenti). */
     await resolveFolderImportSelection();
+
+    /* Risolvere il logo partner PRIMA di qualsiasi upload con watermark (copertina/gallery
+       qui sotto): se questa scheda ha un logo partner, il watermark deve usare quello invece
+       del logo IMMONOVA -- coerenza richiesta dall'utente, dato che il dossier di questa
+       scheda esclude il brand IMMONOVA. */
+    var finalPartnerLogoUrl = currentPartnerLogoUrl;
+    var partnerLogoFile = document.getElementById("partnerLogoFile").files[0];
+    if(partnerLogoFile){
+      setStatus("Caricamento logo partner...", "");
+      var partnerLogoPath = "partner-logo/" + folder + "/" + cleanFileName(partnerLogoFile.name);
+      finalPartnerLogoUrl = await uploadImageNoWatermark(partnerLogoFile, partnerLogoPath);
+    }
+    partnerWatermarkLogoImg = null;
+    if(finalPartnerLogoUrl){
+      try{
+        var partnerLogoBlobForWatermark = await urlToBlob(finalPartnerLogoUrl);
+        partnerWatermarkLogoImg = await loadImageFromBlob(partnerLogoBlobForWatermark);
+      }catch(e){
+        partnerWatermarkLogoImg = null;
+      }
+    }
 
     var finalCoverUrl = currentCoverUrl;
     var coverFile = folderImportCoverOverrideBlob || document.getElementById("coverFile").files[0];
@@ -6463,6 +6563,8 @@ form.addEventListener("submit", async function(e){
 
       cover_image:finalCoverUrl,
       gallery_images:galleryImages,
+      dossier_partner_logo_url:finalPartnerLogoUrl || null,
+      dossier_partner_name:textOrNull("partnerName"),
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
