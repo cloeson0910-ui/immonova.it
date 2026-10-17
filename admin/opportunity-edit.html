@@ -1707,6 +1707,10 @@ button.danger{
         <input type="file" id="partnerLogoFile" accept="image/*">
         <label for="partnerName" data-i18n="label_partner_name" style="margin-top:10px">Nome partner (facoltativo, sostituisce la scritta "IMMONOVA" nel footer)</label>
         <input type="text" id="partnerName" placeholder="Es. Nome Agenzia Partner">
+        <label class="checkbox-label" style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+          <input type="checkbox" id="partnerCobrand" style="margin-top:3px">
+          <span data-i18n="label_partner_cobrand">Co-brand: mostra ENTRAMBI i loghi (IMMONOVA + partner) in copertina e footer, invece di sostituire IMMONOVA. In questo caso il watermark sulle foto resta comunque solo IMMONOVA (il logo partner non viene mai usato per il watermark).</span>
+        </label>
       </div>
 
       <div class="field full">
@@ -4678,8 +4682,13 @@ async function applyImmonovaWatermark(file, watermarkKey){
   }
 }
 
+/* Il watermark NON viene piu' "cotto" nei pixel in upload: viene sovrapposto live (overlay
+   CSS) a video/stampa nel dossier (dossier-send.html / report-view.html), in base al logo
+   partner/co-brand impostato su questa scheda in quel momento. Cosi' cambiare il logo partner
+   non richiede mai piu' di rielaborare le foto gia' salvate. Qui carichiamo quindi il file
+   originale, senza alterarlo. */
 async function uploadImage(file, path, watermarkKey){
-  var watermarkedFile = await applyImmonovaWatermark(file, watermarkKey);
+  var watermarkedFile = file;
 
   var result = await client
     .storage
@@ -5302,6 +5311,7 @@ var UI_STRINGS = {
   btn_remove_partner_logo:"Rimuovi logo partner (torna a IMMONOVA)",
   label_upload_partner_logo:"Carica / sostituisci logo partner",
   label_partner_name:"Nome partner (facoltativo, sostituisce la scritta \"IMMONOVA\" nel footer)",
+  label_partner_cobrand:"Co-brand: mostra ENTRAMBI i loghi (IMMONOVA + partner) in copertina e footer, invece di sostituire IMMONOVA. In questo caso il watermark sulle foto resta comunque solo IMMONOVA (il logo partner non viene mai usato per il watermark).",
   label_internal_size:"Mq Interni", label_land_size:"Mq Terreno", label_construction_year:"Anno costruzione",
   label_energy_class:"Classe energetica", opt_select:"Seleziona", opt_not_available:"Non disponibile",
   label_property_condition:"Stato immobile",
@@ -5658,6 +5668,7 @@ async function loadOpportunity(){
   galleryImages = normalizeGallery(data.gallery_images);
   currentPartnerLogoUrl = data.dossier_partner_logo_url || "";
   setValue("partnerName", data.dossier_partner_name || "");
+  document.getElementById("partnerCobrand").checked = data.dossier_cobrand === true;
 
   renderCover();
   renderGallery();
@@ -6493,9 +6504,11 @@ form.addEventListener("submit", async function(e){
     await resolveFolderImportSelection();
 
     /* Risolvere il logo partner PRIMA di qualsiasi upload con watermark (copertina/gallery
-       qui sotto): se questa scheda ha un logo partner, il watermark deve usare quello invece
-       del logo IMMONOVA -- coerenza richiesta dall'utente, dato che il dossier di questa
-       scheda esclude il brand IMMONOVA. */
+       qui sotto). Il watermark usa il logo partner SOLO in modalita' "sostituzione totale"
+       (checkbox co-brand NON spuntata): in quel caso il brand IMMONOVA e' escluso ovunque,
+       quindi anche dal watermark, per coerenza. In modalita' co-brand (checkbox spuntata) il
+       dossier mostra entrambi i loghi ma il watermark resta SEMPRE e SOLO IMMONOVA -- richiesta
+       esplicita dell'utente. */
     var finalPartnerLogoUrl = currentPartnerLogoUrl;
     var partnerLogoFile = document.getElementById("partnerLogoFile").files[0];
     if(partnerLogoFile){
@@ -6503,8 +6516,9 @@ form.addEventListener("submit", async function(e){
       var partnerLogoPath = "partner-logo/" + folder + "/" + cleanFileName(partnerLogoFile.name);
       finalPartnerLogoUrl = await uploadImageNoWatermark(partnerLogoFile, partnerLogoPath);
     }
+    var isCobrand = document.getElementById("partnerCobrand").checked;
     partnerWatermarkLogoImg = null;
-    if(finalPartnerLogoUrl){
+    if(finalPartnerLogoUrl && !isCobrand){
       try{
         var partnerLogoBlobForWatermark = await urlToBlob(finalPartnerLogoUrl);
         partnerWatermarkLogoImg = await loadImageFromBlob(partnerLogoBlobForWatermark);
@@ -6565,6 +6579,7 @@ form.addEventListener("submit", async function(e){
       gallery_images:galleryImages,
       dossier_partner_logo_url:finalPartnerLogoUrl || null,
       dossier_partner_name:textOrNull("partnerName"),
+      dossier_cobrand:isCobrand,
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
