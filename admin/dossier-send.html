@@ -4910,19 +4910,44 @@ async function copyDossierLangLink(inputId, feedbackId){
     if(feedback) feedback.textContent="Seleziona e copia manualmente (Ctrl/Cmd+C)";
   }
 }
+/* PROBLEMA REALE segnalato dall'utente: non e' solo il primo invio (admin -> contatto) a dover
+   essere tracciato, ma anche il caso in cui QUEL contatto, dal SUO WhatsApp, rigira lo stesso
+   link a un altro cliente. WhatsApp non passa mai alcun referrer/metadato in nessuno dei due
+   passaggi, e il link resta l'URL identico per ogni ulteriore rimbalzo -- quindi non esiste
+   modo di "rilevare" tecnicamente chi lo ha reinoltrato una seconda volta: nessuna pagina web
+   puo' sapere se e attraverso quante chat WhatsApp e' passato un link prima di essere aperto.
+   L'unico punto in cui possiamo effettivamente agganciare un'identita' e' QUESTO, quando il
+   link viene generato/copiato la prima volta dall'admin: se invece di taggarlo con l'identita'
+   dell'admin (sempre la stessa, inutile per distinguere i contatti) lo tagghiamo con il nome
+   del CONTATTO a cui lo si sta per inviare, quel nome resta scritto nell'URL e sopravvive a
+   qualsiasi rimbalzo successivo via WhatsApp, perche' l'URL non cambia mai. Cosi', quando il
+   destinatario finale (il cliente del contatto) apre il link e arriva al modulo OTP, il campo
+   "Inviato da" si precompila da solo con il nome del contatto che gliel'ha girato -- anche se
+   l'admin non ha mai parlato direttamente con quel cliente finale. L'unico input manuale resta
+   questo: all'admin viene chiesto UNA volta, al momento dell'invio, "a chi lo stai mandando" --
+   da li' in poi tutto il resto (anche i rimbalzi successivi) e' automatico. */
+function dossierShareUrlForSending(){
+  var url = currentDossierPdfUrl;
+  if(!url) return url;
+  var fallback = currentUser && currentUser.email ? currentUser.email : "IMMONOVA";
+  var contact = window.prompt("A chi stai inviando questo link? (il nome resterà visibile anche se questo contatto lo rigira a un'altra persona)", "");
+  var who = (contact && contact.trim()) ? contact.trim() : fallback;
+  var sep = url.indexOf("?") === -1 ? "?" : "&";
+  return url + sep + "by=" + encodeURIComponent(who);
+}
 /* Apre WhatsApp (app se su telefono, WhatsApp Web se su desktop) con il messaggio già scritto
    -- titolo del dossier + link con anteprima. Senza numero: wa.me con solo "text" apre la
    schermata di scelta del contatto a cui mandarlo. */
 function sendDossierWhatsApp(){
   if(!currentDossierPdfUrl) return;
-  var message = getTitle()+" — Dossier IMMONOVA\n"+currentDossierPdfUrl;
+  var message = getTitle()+" — Dossier IMMONOVA\n"+dossierShareUrlForSending();
   window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
 }
 async function copyDossierLink(){
   var input = document.getElementById("dossierLinkInput");
   var feedback = document.getElementById("copyFeedback");
   if(!input) return;
-  var url = input.value;
+  var url = dossierShareUrlForSending() || input.value;
   try{
     if(navigator.clipboard && navigator.clipboard.writeText){
       await navigator.clipboard.writeText(url);
