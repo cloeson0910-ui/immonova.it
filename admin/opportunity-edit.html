@@ -1711,6 +1711,44 @@ button.danger{
           <input type="checkbox" id="partnerCobrand" style="margin-top:3px">
           <span data-i18n="label_partner_cobrand">Co-brand: mostra ENTRAMBI i loghi (IMMONOVA + partner) in copertina e footer, invece di sostituire IMMONOVA. In questo caso il watermark sulle foto resta comunque solo IMMONOVA (il logo partner non viene mai usato per il watermark).</span>
         </label>
+
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(166,127,52,.18)">
+          <label data-i18n="label_watermark_settings" style="margin-top:0">Watermark sulle foto del dossier (regolabile)</label>
+          <div class="room-inventory-note" data-i18n="note_watermark_settings">Il logo mostrato sopra le foto (overlay live, non più "cotto" nei pixel) è regolabile in posizione, dimensione e opacità per questa scheda.</div>
+
+          <label for="watermarkPosition" data-i18n="label_watermark_position" style="margin-top:10px">Posizione sulla foto</label>
+          <select id="watermarkPosition">
+            <option value="center" data-i18n="watermark_pos_center">Centro</option>
+            <option value="top-left" data-i18n="watermark_pos_top_left">In alto a sinistra</option>
+            <option value="top-right" data-i18n="watermark_pos_top_right">In alto a destra</option>
+            <option value="bottom-left" data-i18n="watermark_pos_bottom_left">In basso a sinistra</option>
+            <option value="bottom-right" data-i18n="watermark_pos_bottom_right">In basso a destra</option>
+          </select>
+
+          <label for="watermarkScaleSlider" data-i18n="label_watermark_scale" style="margin-top:10px">Dimensione logo watermark</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="watermarkScaleSlider" min="10" max="90" value="35" step="1" style="flex:1">
+            <span id="watermarkScaleLabel" style="font-size:12.5px;color:#7f6430;min-width:42px">35%</span>
+          </div>
+
+          <label for="watermarkOpacitySlider2" data-i18n="label_watermark_opacity" style="margin-top:10px">Opacità watermark</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="watermarkOpacitySlider2" min="5" max="100" value="50" step="5" style="flex:1">
+            <span id="watermarkOpacityLabel2" style="font-size:12.5px;color:#7f6430;min-width:42px">50%</span>
+          </div>
+
+          <label for="coverLogoScaleSlider" data-i18n="label_cover_logo_scale" style="margin-top:14px">Dimensione logo in copertina (in alto)</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="coverLogoScaleSlider" min="50" max="250" value="100" step="5" style="flex:1">
+            <span id="coverLogoScaleLabel" style="font-size:12.5px;color:#7f6430;min-width:42px">100%</span>
+          </div>
+
+          <label for="footerLogoScaleSlider" data-i18n="label_footer_logo_scale" style="margin-top:10px">Dimensione logo nel footer (in basso a destra)</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="footerLogoScaleSlider" min="50" max="300" value="100" step="5" style="flex:1">
+            <span id="footerLogoScaleLabel" style="font-size:12.5px;color:#7f6430;min-width:42px">100%</span>
+          </div>
+        </div>
       </div>
 
       <div class="field full">
@@ -5312,6 +5350,14 @@ var UI_STRINGS = {
   label_upload_partner_logo:"Carica / sostituisci logo partner",
   label_partner_name:"Nome partner (facoltativo, sostituisce la scritta \"IMMONOVA\" nel footer)",
   label_partner_cobrand:"Co-brand: mostra ENTRAMBI i loghi (IMMONOVA + partner) in copertina e footer, invece di sostituire IMMONOVA. In questo caso il watermark sulle foto resta comunque solo IMMONOVA (il logo partner non viene mai usato per il watermark).",
+  label_watermark_settings:"Watermark sulle foto del dossier (regolabile)",
+  note_watermark_settings:"Il logo mostrato sopra le foto (overlay live, non più \"cotto\" nei pixel) è regolabile in posizione, dimensione e opacità per questa scheda.",
+  label_watermark_position:"Posizione sulla foto",
+  watermark_pos_center:"Centro", watermark_pos_top_left:"In alto a sinistra", watermark_pos_top_right:"In alto a destra", watermark_pos_bottom_left:"In basso a sinistra", watermark_pos_bottom_right:"In basso a destra",
+  label_watermark_scale:"Dimensione logo watermark",
+  label_watermark_opacity:"Opacità watermark",
+  label_cover_logo_scale:"Dimensione logo in copertina (in alto)",
+  label_footer_logo_scale:"Dimensione logo nel footer (in basso a destra)",
   label_internal_size:"Mq Interni", label_land_size:"Mq Terreno", label_construction_year:"Anno costruzione",
   label_energy_class:"Classe energetica", opt_select:"Seleziona", opt_not_available:"Non disponibile",
   label_property_condition:"Stato immobile",
@@ -5669,6 +5715,22 @@ async function loadOpportunity(){
   currentPartnerLogoUrl = data.dossier_partner_logo_url || "";
   setValue("partnerName", data.dossier_partner_name || "");
   document.getElementById("partnerCobrand").checked = data.dossier_cobrand === true;
+
+  (function(){
+    var scalePct = Math.round((typeof data.dossier_watermark_scale === "number" ? data.dossier_watermark_scale : 0.35) * 100);
+    var opacityPct = Math.round((typeof data.dossier_watermark_opacity === "number" ? data.dossier_watermark_opacity : 0.5) * 100);
+    var coverPct = Math.round((typeof data.dossier_cover_logo_scale === "number" ? data.dossier_cover_logo_scale : 1) * 100);
+    var footerPct = Math.round((typeof data.dossier_footer_logo_scale === "number" ? data.dossier_footer_logo_scale : 1) * 100);
+    document.getElementById("watermarkPosition").value = data.dossier_watermark_position || "center";
+    document.getElementById("watermarkScaleSlider").value = scalePct;
+    document.getElementById("watermarkScaleLabel").textContent = scalePct + "%";
+    document.getElementById("watermarkOpacitySlider2").value = opacityPct;
+    document.getElementById("watermarkOpacityLabel2").textContent = opacityPct + "%";
+    document.getElementById("coverLogoScaleSlider").value = coverPct;
+    document.getElementById("coverLogoScaleLabel").textContent = coverPct + "%";
+    document.getElementById("footerLogoScaleSlider").value = footerPct;
+    document.getElementById("footerLogoScaleLabel").textContent = footerPct + "%";
+  })();
 
   renderCover();
   renderGallery();
@@ -6483,6 +6545,19 @@ document.getElementById("removePartnerLogoBtn").addEventListener("click", functi
   renderPartnerLogo();
 });
 
+document.getElementById("watermarkScaleSlider").addEventListener("input", function(){
+  document.getElementById("watermarkScaleLabel").textContent = this.value + "%";
+});
+document.getElementById("watermarkOpacitySlider2").addEventListener("input", function(){
+  document.getElementById("watermarkOpacityLabel2").textContent = this.value + "%";
+});
+document.getElementById("coverLogoScaleSlider").addEventListener("input", function(){
+  document.getElementById("coverLogoScaleLabel").textContent = this.value + "%";
+});
+document.getElementById("footerLogoScaleSlider").addEventListener("input", function(){
+  document.getElementById("footerLogoScaleLabel").textContent = this.value + "%";
+});
+
 form.addEventListener("submit", async function(e){
   e.preventDefault();
 
@@ -6580,6 +6655,11 @@ form.addEventListener("submit", async function(e){
       dossier_partner_logo_url:finalPartnerLogoUrl || null,
       dossier_partner_name:textOrNull("partnerName"),
       dossier_cobrand:isCobrand,
+      dossier_watermark_position:document.getElementById("watermarkPosition").value || "center",
+      dossier_watermark_scale:parseInt(document.getElementById("watermarkScaleSlider").value, 10) / 100,
+      dossier_watermark_opacity:parseInt(document.getElementById("watermarkOpacitySlider2").value, 10) / 100,
+      dossier_cover_logo_scale:parseInt(document.getElementById("coverLogoScaleSlider").value, 10) / 100,
+      dossier_footer_logo_scale:parseInt(document.getElementById("footerLogoScaleSlider").value, 10) / 100,
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
