@@ -2340,11 +2340,15 @@ function getWatermarkScale(){var o=opportunity||{};var v=o.dossier_watermark_sca
 function getWatermarkOpacityValue(){var o=opportunity||{};var v=o.dossier_watermark_opacity;return (typeof v==="number"&&v>=0)?v:0.5;}
 function getWatermarkPositionValue(){var o=opportunity||{};return o.dossier_watermark_position||"center";}
 function getWatermarkColorValue(){var o=opportunity||{};return o.dossier_watermark_color||"original";}
-function watermarkColorFilterStyle(){
-  var color=getWatermarkColorValue();
+function getCoverLogoColorValue(){var o=opportunity||{};return o.dossier_cover_logo_color||"original";}
+function getFooterLogoColorValue(){var o=opportunity||{};return o.dossier_footer_logo_color||"original";}
+function colorFilterStyleFor(color){
   if(color==="white") return "filter:brightness(0) invert(1);";
   if(color==="black") return "filter:brightness(0);";
   return "";
+}
+function watermarkColorFilterStyle(){
+  return colorFilterStyleFor(getWatermarkColorValue());
 }
 function getCoverLogoScale(){var o=opportunity||{};var v=o.dossier_cover_logo_scale;return (typeof v==="number"&&v>0)?v:1;}
 function getFooterLogoScale(){var o=opportunity||{};var v=o.dossier_footer_logo_scale;return (typeof v==="number"&&v>0)?v:1;}
@@ -2369,7 +2373,7 @@ function photoWatermarkOverlayHTML(){
 function renderCoverBrandHtml(){
   var logo=getPartnerLogoUrl();
   var coverScale=getCoverLogoScale();
-  var logoStyle='max-height:'+(52*coverScale)+'px;max-width:'+(260*coverScale)+'px';
+  var logoStyle='max-height:'+(52*coverScale)+'px;max-width:'+(260*coverScale)+'px;'+colorFilterStyleFor(getCoverLogoColorValue());
   if(!logo) return '<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>';
   var name=getPartnerName();
   if(isCobrandDossier()){
@@ -2832,7 +2836,7 @@ function injectFolio(html,n,total,onImage){
   var brandLabel=getFooterBrandLabel();
   var logo=getPartnerLogoUrl();
   var footerScale=getFooterLogoScale();
-  var footerLogoStyle='height:'+(16*footerScale)+'px;max-width:'+(90*footerScale)+'px';
+  var footerLogoStyle='height:'+(16*footerScale)+'px;max-width:'+(90*footerScale)+'px;'+colorFilterStyleFor(getFooterLogoColorValue());
   var logoHTML=logo?'<img class="footer-logo" style="'+footerLogoStyle+'" src="'+escapeHTML(logo)+'" alt="">':'';
   var folio='<div class="page-folio'+(onImage?' on-image':'')+'"><span>'+(brandLabel?escapeHTML(brandLabel)+' · ':'')+escapeHTML(getTitle())+'</span><span class="page-folio-right">'+logoHTML+'<span>'+n+' / '+total+'</span></span></div>';
   return html.replace(/<\/article>\s*$/,folio+'</article>');

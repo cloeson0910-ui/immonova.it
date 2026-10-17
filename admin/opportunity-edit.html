@@ -1749,12 +1749,24 @@ button.danger{
             <input type="range" id="coverLogoScaleSlider" min="50" max="250" value="100" step="5" style="flex:1">
             <span id="coverLogoScaleLabel" style="font-size:12.5px;color:#7f6430;min-width:42px">100%</span>
           </div>
+          <label for="coverLogoColorSelect" data-i18n="label_cover_logo_color" style="margin-top:10px">Colore logo in copertina</label>
+          <select id="coverLogoColorSelect">
+            <option value="original" data-i18n="watermark_color_original">Originale (colori del logo caricato)</option>
+            <option value="white" data-i18n="watermark_color_white">Bianco</option>
+            <option value="black" data-i18n="watermark_color_black">Nero</option>
+          </select>
 
           <label for="footerLogoScaleSlider" data-i18n="label_footer_logo_scale" style="margin-top:10px">Dimensione logo nel footer (in basso a destra)</label>
           <div style="display:flex;align-items:center;gap:10px">
             <input type="range" id="footerLogoScaleSlider" min="50" max="300" value="100" step="5" style="flex:1">
             <span id="footerLogoScaleLabel" style="font-size:12.5px;color:#7f6430;min-width:42px">100%</span>
           </div>
+          <label for="footerLogoColorSelect" data-i18n="label_footer_logo_color" style="margin-top:10px">Colore logo nel footer</label>
+          <select id="footerLogoColorSelect">
+            <option value="original" data-i18n="watermark_color_original">Originale (colori del logo caricato)</option>
+            <option value="white" data-i18n="watermark_color_white">Bianco</option>
+            <option value="black" data-i18n="watermark_color_black">Nero</option>
+          </select>
         </div>
       </div>
 
@@ -5451,7 +5463,9 @@ var UI_STRINGS = {
   label_watermark_scale:"Dimensione logo watermark",
   label_watermark_opacity:"Opacità watermark",
   label_cover_logo_scale:"Dimensione logo in copertina (in alto)",
+  label_cover_logo_color:"Colore logo in copertina",
   label_footer_logo_scale:"Dimensione logo nel footer (in basso a destra)",
+  label_footer_logo_color:"Colore logo nel footer",
   label_internal_size:"Mq Interni", label_land_size:"Mq Terreno", label_construction_year:"Anno costruzione",
   label_energy_class:"Classe energetica", opt_select:"Seleziona", opt_not_available:"Non disponibile",
   label_property_condition:"Stato immobile",
@@ -5823,8 +5837,18 @@ async function loadOpportunity(){
     document.getElementById("watermarkOpacityLabel2").textContent = opacityPct + "%";
     document.getElementById("coverLogoScaleSlider").value = coverPct;
     document.getElementById("coverLogoScaleLabel").textContent = coverPct + "%";
+    document.getElementById("coverLogoColorSelect").value = data.dossier_cover_logo_color || "original";
+    (function(){
+      var preview = document.getElementById("partnerLogoPreview");
+      var v = data.dossier_cover_logo_color || "original";
+      if(preview){
+        preview.style.filter = v === "white" ? "brightness(0) invert(1)" : (v === "black" ? "brightness(0)" : "none");
+        preview.style.background = (v === "white") ? "rgba(60,50,30,.55)" : "none";
+      }
+    })();
     document.getElementById("footerLogoScaleSlider").value = footerPct;
     document.getElementById("footerLogoScaleLabel").textContent = footerPct + "%";
+    document.getElementById("footerLogoColorSelect").value = data.dossier_footer_logo_color || "original";
   })();
 
   renderCover();
@@ -6651,6 +6675,13 @@ document.getElementById("watermarkOpacitySlider2").addEventListener("input", fun
 document.getElementById("watermarkPosition").addEventListener("change", updateWatermarkOverlayPreview);
 document.getElementById("watermarkColorSelect").addEventListener("change", updateWatermarkOverlayPreview);
 document.getElementById("partnerCobrand").addEventListener("change", updateWatermarkOverlayPreview);
+document.getElementById("coverLogoColorSelect").addEventListener("change", function(){
+  var preview = document.getElementById("partnerLogoPreview");
+  if(!preview) return;
+  var v = this.value;
+  preview.style.filter = v === "white" ? "brightness(0) invert(1)" : (v === "black" ? "brightness(0)" : "none");
+  preview.style.background = (v === "white") ? "rgba(60,50,30,.55)" : "none";
+});
 document.getElementById("coverLogoScaleSlider").addEventListener("input", function(){
   document.getElementById("coverLogoScaleLabel").textContent = this.value + "%";
 });
@@ -6760,7 +6791,9 @@ form.addEventListener("submit", async function(e){
       dossier_watermark_scale:parseInt(document.getElementById("watermarkScaleSlider").value, 10) / 100,
       dossier_watermark_opacity:parseInt(document.getElementById("watermarkOpacitySlider2").value, 10) / 100,
       dossier_cover_logo_scale:parseInt(document.getElementById("coverLogoScaleSlider").value, 10) / 100,
+      dossier_cover_logo_color:document.getElementById("coverLogoColorSelect").value || "original",
       dossier_footer_logo_scale:parseInt(document.getElementById("footerLogoScaleSlider").value, 10) / 100,
+      dossier_footer_logo_color:document.getElementById("footerLogoColorSelect").value || "original",
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
