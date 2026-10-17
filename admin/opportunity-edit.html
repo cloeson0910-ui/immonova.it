@@ -1725,6 +1725,13 @@ button.danger{
             <option value="bottom-right" data-i18n="watermark_pos_bottom_right">In basso a destra</option>
           </select>
 
+          <label for="watermarkColorSelect" data-i18n="label_watermark_color" style="margin-top:10px">Colore logo watermark</label>
+          <select id="watermarkColorSelect">
+            <option value="original" data-i18n="watermark_color_original">Originale (colori del logo caricato)</option>
+            <option value="white" data-i18n="watermark_color_white">Bianco</option>
+            <option value="black" data-i18n="watermark_color_black">Nero</option>
+          </select>
+
           <label for="watermarkScaleSlider" data-i18n="label_watermark_scale" style="margin-top:10px">Dimensione logo watermark</label>
           <div style="display:flex;align-items:center;gap:10px">
             <input type="range" id="watermarkScaleSlider" min="10" max="90" value="35" step="1" style="flex:1">
@@ -1753,8 +1760,12 @@ button.danger{
 
       <div class="field full">
         <label data-i18n="label_current_cover">Copertina attuale</label>
-        <img id="coverPreview" class="preview-cover" alt="Copertina attuale">
+        <div id="coverPreviewWrap" style="position:relative;display:none">
+          <img id="coverPreview" class="preview-cover" alt="Copertina attuale" style="display:block">
+          <img id="watermarkOverlayPreview" alt="" style="position:absolute;pointer-events:none;display:none">
+        </div>
         <div id="noCoverText" class="file-note" data-i18n="no_cover_text">Nessuna copertina caricata.</div>
+        <div class="room-inventory-note" id="watermarkPreviewNote" style="display:none">Anteprima: così apparirà il watermark live nel dossier con le impostazioni qui sotto.</div>
         <button type="button" class="soft" id="removeCoverBtn" data-i18n="btn_remove_cover">Rimuovi Copertina</button>
       </div>
 
@@ -4085,21 +4096,70 @@ function normalizeGallery(value){
 }
 
 function renderCover(){
+  var coverPreviewWrap = document.getElementById("coverPreviewWrap");
   var coverPreview = document.getElementById("coverPreview");
   var noCoverText = document.getElementById("noCoverText");
   var removeCoverBtn = document.getElementById("removeCoverBtn");
 
   if(currentCoverUrl && !coverRemoved){
     coverPreview.src = currentCoverUrl;
-    coverPreview.style.display = "block";
+    coverPreviewWrap.style.display = "block";
     noCoverText.style.display = "none";
     removeCoverBtn.style.display = "inline-block";
   }else{
     coverPreview.removeAttribute("src");
-    coverPreview.style.display = "none";
+    coverPreviewWrap.style.display = "none";
     noCoverText.style.display = "block";
     removeCoverBtn.style.display = "none";
   }
+  updateWatermarkOverlayPreview();
+}
+
+/* Anteprima live (nell'editor) di come apparira' il watermark overlay nel dossier, con le
+   impostazioni correnti (posizione/dimensione/opacita' + logo partner/co-brand). Non e' un
+   watermark reale cotto nei pixel: e' solo un'anteprima visiva per orientarsi con gli slider. */
+function getWatermarkPreviewLogoSrc(){
+  var partnerUrl = currentPartnerLogoUrl;
+  var isCobrand = document.getElementById("partnerCobrand").checked;
+  if(partnerUrl && !isCobrand) return partnerUrl;
+  return IMMONOVA_WATERMARK_LOGO_SRC;
+}
+function watermarkPreviewColorFilterStyle(){
+  var color = document.getElementById("watermarkColorSelect").value || "original";
+  if(color === "white") return "filter:brightness(0) invert(1);";
+  if(color === "black") return "filter:brightness(0);";
+  return "filter:none;";
+}
+function watermarkPreviewPositionStyle(){
+  var pos = document.getElementById("watermarkPosition").value || "center";
+  var map = {
+    "center":"top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);",
+    "top-left":"top:4%;left:4%;right:auto;bottom:auto;transform:none;",
+    "top-right":"top:4%;right:4%;left:auto;bottom:auto;transform:none;",
+    "bottom-left":"bottom:4%;left:4%;right:auto;top:auto;transform:none;",
+    "bottom-right":"bottom:4%;right:4%;left:auto;top:auto;transform:none;"
+  };
+  return map[pos] || map.center;
+}
+function updateWatermarkOverlayPreview(){
+  var overlay = document.getElementById("watermarkOverlayPreview");
+  var note = document.getElementById("watermarkPreviewNote");
+  if(!overlay) return;
+  if(!currentCoverUrl || coverRemoved){
+    overlay.style.display = "none";
+    if(note) note.style.display = "none";
+    return;
+  }
+  var scalePct = parseInt(document.getElementById("watermarkScaleSlider").value, 10);
+  var opacityPct = parseInt(document.getElementById("watermarkOpacitySlider2").value, 10);
+  overlay.src = getWatermarkPreviewLogoSrc();
+  overlay.style.width = scalePct + "%";
+  overlay.style.maxWidth = scalePct + "%";
+  overlay.style.height = "auto";
+  overlay.style.opacity = (opacityPct / 100);
+  overlay.style.cssText += ";" + watermarkPreviewPositionStyle() + watermarkPreviewColorFilterStyle();
+  overlay.style.display = "block";
+  if(note) note.style.display = "block";
 }
 
 function renderPartnerLogo(){
@@ -4119,6 +4179,7 @@ function renderPartnerLogo(){
     noText.style.display = "block";
     removeBtn.style.display = "none";
   }
+  if(typeof updateWatermarkOverlayPreview === "function") updateWatermarkOverlayPreview();
 }
 
 function renderGallery(){
@@ -5353,6 +5414,8 @@ var UI_STRINGS = {
   label_watermark_settings:"Watermark sulle foto del dossier (regolabile)",
   note_watermark_settings:"Il logo mostrato sopra le foto (overlay live, non più \"cotto\" nei pixel) è regolabile in posizione, dimensione e opacità per questa scheda.",
   label_watermark_position:"Posizione sulla foto",
+  label_watermark_color:"Colore logo watermark",
+  watermark_color_original:"Originale (colori del logo caricato)", watermark_color_white:"Bianco", watermark_color_black:"Nero",
   watermark_pos_center:"Centro", watermark_pos_top_left:"In alto a sinistra", watermark_pos_top_right:"In alto a destra", watermark_pos_bottom_left:"In basso a sinistra", watermark_pos_bottom_right:"In basso a destra",
   label_watermark_scale:"Dimensione logo watermark",
   label_watermark_opacity:"Opacità watermark",
@@ -5722,6 +5785,7 @@ async function loadOpportunity(){
     var coverPct = Math.round((typeof data.dossier_cover_logo_scale === "number" ? data.dossier_cover_logo_scale : 1) * 100);
     var footerPct = Math.round((typeof data.dossier_footer_logo_scale === "number" ? data.dossier_footer_logo_scale : 1) * 100);
     document.getElementById("watermarkPosition").value = data.dossier_watermark_position || "center";
+    document.getElementById("watermarkColorSelect").value = data.dossier_watermark_color || "original";
     document.getElementById("watermarkScaleSlider").value = scalePct;
     document.getElementById("watermarkScaleLabel").textContent = scalePct + "%";
     document.getElementById("watermarkOpacitySlider2").value = opacityPct;
@@ -6547,10 +6611,15 @@ document.getElementById("removePartnerLogoBtn").addEventListener("click", functi
 
 document.getElementById("watermarkScaleSlider").addEventListener("input", function(){
   document.getElementById("watermarkScaleLabel").textContent = this.value + "%";
+  updateWatermarkOverlayPreview();
 });
 document.getElementById("watermarkOpacitySlider2").addEventListener("input", function(){
   document.getElementById("watermarkOpacityLabel2").textContent = this.value + "%";
+  updateWatermarkOverlayPreview();
 });
+document.getElementById("watermarkPosition").addEventListener("change", updateWatermarkOverlayPreview);
+document.getElementById("watermarkColorSelect").addEventListener("change", updateWatermarkOverlayPreview);
+document.getElementById("partnerCobrand").addEventListener("change", updateWatermarkOverlayPreview);
 document.getElementById("coverLogoScaleSlider").addEventListener("input", function(){
   document.getElementById("coverLogoScaleLabel").textContent = this.value + "%";
 });
@@ -6656,6 +6725,7 @@ form.addEventListener("submit", async function(e){
       dossier_partner_name:textOrNull("partnerName"),
       dossier_cobrand:isCobrand,
       dossier_watermark_position:document.getElementById("watermarkPosition").value || "center",
+      dossier_watermark_color:document.getElementById("watermarkColorSelect").value || "original",
       dossier_watermark_scale:parseInt(document.getElementById("watermarkScaleSlider").value, 10) / 100,
       dossier_watermark_opacity:parseInt(document.getElementById("watermarkOpacitySlider2").value, 10) / 100,
       dossier_cover_logo_scale:parseInt(document.getElementById("coverLogoScaleSlider").value, 10) / 100,
