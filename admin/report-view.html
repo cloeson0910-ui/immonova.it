@@ -1402,6 +1402,29 @@ async function ensureDossier(){
     setStatus("Discovery Engine non ha restituito dati territoriali. Causa: "+(lastDiscoveryFetchError||"sconosciuta, controlla i log della edge function su Supabase.")+" — salvato come verificato, quindi NON verrà richiesto di nuovo automaticamente alle prossime aperture (eviti di rispendere). Il dossier verrà comunque generato con le sole sezioni disponibili (dati interni, immobile, documenti).","error");
   }
 }
+/* v2: prima di leggere lo storico (discovery-air-traffic, che e' SOLO lettura e risponde
+   "no_history_yet" se nessuno ha mai sincronizzato quell'aeroporto) si chiama davvero
+   sync-aerodatabox-arrivals, che interroga AeroDataBox in tempo reale e scrive lo storico
+   per QUALSIASI aeroporto ICAO passato -- cosi' il click funziona al primo colpo per
+   qualunque scheda, non solo per gli aeroporti gia' sincronizzati in passato. Si richiama
+   piu' volte di seguito (ogni chiamata copre max 10 giorni, 20 finestre da 12h) finche'
+   risponde done:true o si ferma per errore/quota, fino a un numero massimo di chiamate per
+   non scaricare mesi di storico ad ogni click. */
+var AIR_TRAFFIC_SYNC_MAX_CALLS = 6; // 6 chiamate * 10 giorni = fino a 60 giorni di storico per click
+async function syncAirTrafficLive(icaoAirport){
+  var url=String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/sync-aerodatabox-arrivals";
+  var lastResult=null;
+  for(var i=0;i<AIR_TRAFFIC_SYNC_MAX_CALLS;i++){
+    setStatus("Recupero dati reali traffico aereo da AeroDataBox... ("+(i+1)+"/"+AIR_TRAFFIC_SYNC_MAX_CALLS+")","");
+    var res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+SUPABASE_ANON_KEY,"apikey":SUPABASE_ANON_KEY},body:JSON.stringify({icao_airport:icaoAirport,backfill_from_days_ago:60,max_windows_per_call:20})});
+    var body=await res.json();
+    if(!res.ok || !body.success){ return {ok:false,error:(body&&body.error)||("HTTP "+res.status)}; }
+    lastResult=body;
+    if(body.error){ return {ok:false,error:body.error,partial:true}; }
+    if(body.done) break;
+  }
+  return {ok:true,result:lastResult};
+}
 async function refreshAirTraffic(){
   var confirmed=confirm(T.air_traffic_refresh_confirm);
   if(!confirmed) return;
@@ -1410,6 +1433,12 @@ async function refreshAirTraffic(){
     var lat=opportunity&&opportunity.latitude, lon=opportunity&&opportunity.longitude;
     var airport=nearestIcaoAirport(lat,lon);
     if(!airport){ setStatus(T.air_traffic_refresh_none,"error"); return; }
+
+    var sync=await syncAirTrafficLive(airport.icao);
+    if(!sync.ok){
+      setStatus("Recupero dati reali non riuscito ("+sync.error+"). Provo comunque a mostrare lo storico eventualmente già presente.","error");
+    }
+
     var url=String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/discovery-air-traffic";
     var res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+SUPABASE_ANON_KEY,"apikey":SUPABASE_ANON_KEY},body:JSON.stringify({icao_airport:airport.icao})});
     var body=await res.json();
