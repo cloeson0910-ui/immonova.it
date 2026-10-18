@@ -962,6 +962,9 @@ function fmt(template, vars){
 
 function escapeHTML(value){return String(value===null||value===undefined?"":value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;");}
 function number(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG).format(n);}
+/* Formatta una distanza in km con la virgola decimale (it-IT) invece del punto grezzo
+   di String(number) -- "0,82 km" non "0.82 km". Max 2 decimali, niente zeri superflui. */
+function distanceKm(value){var n=Number(value);if(!Number.isFinite(n))return null;return new Intl.NumberFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG,{maximumFractionDigits:2}).format(n);}
 function euro(value){var n=Number(value);if(!Number.isFinite(n))return "-";return new Intl.NumberFormat(CURRENT_LANG==="it"?"it-IT":CURRENT_LANG,{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);}
 function percent(value){var n=Number(value);if(!Number.isFinite(n))return "-";return n.toFixed(1).replace(".",CURRENT_LANG==="it"?",":".")+"%";}
 function clean(v){return String(v||"").trim();}
@@ -1923,7 +1926,8 @@ function selectedNearbyCitiesPage2(){
 }
 function nearbyCityCardsHTML(list){
   return list.map(function(c){
-    return '<div class="metric-card"><div class="metric-label">'+escapeHTML(c.name||"-")+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(number(c.population))+'</div><div class="metric-note">'+escapeHTML(T.label_nearby_city_population)+' · '+escapeHTML(String(c.distance_km!=null?c.distance_km:"-"))+' km</div></div>';
+    var distTxt=distanceKm(c.distance_km);
+    return '<div class="metric-card"><div class="metric-label">'+escapeHTML(c.name||"-")+'</div><div class="metric-value" style="font-size:17px">'+escapeHTML(number(c.population))+' '+escapeHTML(T.label_nearby_city_population)+'</div><div class="metric-note">'+escapeHTML(T.label_nearby_city_distance)+': '+(distTxt!=null?(escapeHTML(distTxt)+' km'):'-')+'</div></div>';
   }).join('');
 }
 function renderNearbyCitiesPage(){
@@ -2440,16 +2444,27 @@ function photoWatermarkOverlayHTML(){
   return '<img class="photo-watermark-overlay" style="'+style+'" src="'+escapeHTML(getWatermarkLogoSrc())+'" alt="">';
 }
 
+/* Il nome del partner/agenzia sotto il logo in copertina deve seguire lo stesso
+   colore scelto per il logo (originale/bianco/nero) -- richiesta esplicita
+   dell'utente, cosi' testo e logo restano sempre coerenti e leggibili insieme,
+   qualunque sia lo sfondo della copertina. */
+function nameColorStyleFor(color){
+  if(color==="white") return "color:#ffffff;";
+  if(color==="black") return "color:#1a1a1a;";
+  return "";
+}
 function renderCoverBrandHtml(){
   var logo=getPartnerLogoUrl();
   var coverScale=getCoverLogoScale();
-  var logoStyle='max-height:'+(52*coverScale)+'px;max-width:'+(260*coverScale)+'px;'+colorFilterStyleFor(getCoverLogoColorValue());
+  var coverLogoColor=getCoverLogoColorValue();
+  var logoStyle='max-height:'+(52*coverScale)+'px;max-width:'+(260*coverScale)+'px;'+colorFilterStyleFor(coverLogoColor);
+  var nameStyle=nameColorStyleFor(coverLogoColor);
   if(!logo) return '<div><div class="brand">IMMONOVA</div><div class="brand-sub">Off Market • Consulting</div></div>';
   var name=getPartnerName();
   if(isCobrandDossier()){
-    return '<div class="cover-cobrand"><div class="cover-cobrand-row"><div class="brand cobrand-immonova">IMMONOVA</div><span class="cobrand-sep">×</span><img class="cover-partner-logo" style="'+logoStyle+'" src="'+escapeHTML(logo)+'" alt=""></div>'+(name?'<div class="brand-sub">Off Market • Consulting · '+escapeHTML(name)+'</div>':'<div class="brand-sub">Off Market • Consulting</div>')+'</div>';
+    return '<div class="cover-cobrand"><div class="cover-cobrand-row"><div class="brand cobrand-immonova">IMMONOVA</div><span class="cobrand-sep">×</span><img class="cover-partner-logo" style="'+logoStyle+'" src="'+escapeHTML(logo)+'" alt=""></div>'+(name?'<div class="brand-sub" style="'+nameStyle+'">Off Market • Consulting · '+escapeHTML(name)+'</div>':'<div class="brand-sub">Off Market • Consulting</div>')+'</div>';
   }
-  return '<div><img class="cover-partner-logo" style="'+logoStyle+'" src="'+escapeHTML(logo)+'" alt="">'+(name?'<div class="brand-sub">'+escapeHTML(name)+'</div>':'')+'</div>';
+  return '<div><img class="cover-partner-logo" style="'+logoStyle+'" src="'+escapeHTML(logo)+'" alt="">'+(name?'<div class="brand-sub" style="'+nameStyle+'">'+escapeHTML(name)+'</div>':'')+'</div>';
 }
 function getFooterBrandLabel(){
   var logo=getPartnerLogoUrl();
