@@ -2246,7 +2246,7 @@ function renderScorePage(){
   var rows=res.components.map(function(c){
     return '<div class="cost-row"><span>'+escapeHTML(c.label)+' ('+c.weight+'%)</span><strong>'+(c.score==null?'N/D':Math.round(c.score))+'</strong></div>';
   }).join("");
-  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_analytical_assessment)+'</div><h2 class="section-title">'+escapeHTML(T.title_immonova_evaluation)+'</h2><div class="lux-rule"></div><div class="grade-layout"><div class="grade-box"><div class="grade-label">'+escapeHTML(T.synthetic_score_label)+'</div><div class="grade-value">'+res.total+'</div><div class="grade-sub">'+escapeHTML(gradeLabel(res.total))+'</div><div class="score-bar"><div class="score-fill" style="width:'+res.total+'%"></div></div></div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.composition_prefix)+res.available+escapeHTML(T.composition_mid)+res.totalAreas+escapeHTML(T.composition_suffix)+'</div>'+rows+'</div></div><p class="info-text">'+escapeHTML(T.score_disclaimer)+'</p></div></article>';
+  return '<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_analytical_assessment)+'</div><h2 class="section-title">'+escapeHTML(evaluationScoreTitle())+'</h2><div class="lux-rule"></div><div class="grade-layout"><div class="grade-box"><div class="grade-label">'+escapeHTML(T.synthetic_score_label)+'</div><div class="grade-value">'+res.total+'</div><div class="grade-sub">'+escapeHTML(gradeLabel(res.total))+'</div><div class="score-bar"><div class="score-fill" style="width:'+res.total+'%"></div></div></div><div class="cost-box"><div class="cost-title">'+escapeHTML(T.composition_prefix)+res.available+escapeHTML(T.composition_mid)+res.totalAreas+escapeHTML(T.composition_suffix)+'</div>'+rows+'</div></div><p class="info-text">'+escapeHTML(T.score_disclaimer)+'</p></div></article>';
 }
 
 /* ---- Dati economici interni (invariati) ---- */
@@ -2405,6 +2405,17 @@ function getFooterBrandLabel(){
   }
   return getPartnerName()||"";
 }
+/* v2: "Valutazione IMMONOVA" (titolo capitolo, pagina divisore, pagina punteggio) e'
+   un testo fisso col brand scritto dentro -- bypassava la logica white-label che riguarda
+   gia' il logo (renderCoverBrandHtml). Quando il dossier e' in sostituzione totale (logo
+   partner caricato, checkbox co-brand NON spuntata), questi titoli diventano solo
+   "Valutazione", senza IMMONOVA -- stessa regola gia' applicata al logo/nome in copertina. */
+function isWhiteLabelExclusive(){
+  return !!getPartnerLogoUrl() && !isCobrandDossier();
+}
+function evaluationChapterLabel(){ return isWhiteLabelExclusive() ? "Valutazione" : T.chapter_evaluation; }
+function evaluationDividerTitle(){ return isWhiteLabelExclusive() ? "Valutazione" : T.divider_evaluation_title; }
+function evaluationScoreTitle(){ return isWhiteLabelExclusive() ? "Valutazione" : T.title_immonova_evaluation; }
 function renderCover(){var cover=getCoverImage();var withImage=!!cover;return '<article class="report-page '+(withImage?'':'pattern')+' cover '+(withImage?'with-image':'')+'">'+(withImage?'<img class="cover-bg" src="'+escapeHTML(cover)+'" alt="">'+photoWatermarkOverlayHTML():'')+'<div class="page-inner cover">'+renderCoverBrandHtml()+'<div><div class="cover-kicker">'+escapeHTML(T.cover_kicker)+'</div><h1 class="cover-title">'+escapeHTML(getTitle())+'</h1></div>'+'<div class="cover-meta">'+[getLocation(),getCategory(),T.generated_prefix+getGeneratedDate()].filter(Boolean).map(escapeHTML).join('<br>')+'</div>'+'</div></article>';}
 function renderInternalFacts(){
   var f=buildFinance();
@@ -3884,10 +3895,11 @@ function renderBook(){
   var narrHtml=renderNarrativePage();
   var scoreHtml=renderScorePage();
   if(narrHtml||scoreHtml){
-    push(T.chapter_evaluation, dividerPageHTML(T.divider_evaluation_title,T.divider_evaluation_kicker), true);
-    push(T.chapter_evaluation, narrHtml);
-    push(T.chapter_evaluation, scoreHtml);
-    renderAdPagesForPosition("after_evaluation").forEach(function(p){ push(T.chapter_evaluation, p.html, p.divider); });
+    var evalChapterLabel=evaluationChapterLabel();
+    push(evalChapterLabel, dividerPageHTML(evaluationDividerTitle(),T.divider_evaluation_kicker), true);
+    push(evalChapterLabel, narrHtml);
+    push(evalChapterLabel, scoreHtml);
+    renderAdPagesForPosition("after_evaluation").forEach(function(p){ push(evalChapterLabel, p.html, p.divider); });
   }
 
   push(T.chapter_sources, dividerPageHTML(T.divider_sources_title,T.divider_sources_kicker), true);
