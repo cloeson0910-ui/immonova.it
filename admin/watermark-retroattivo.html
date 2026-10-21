@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
+<link rel="stylesheet" href="../css/immonova-text-theme.css">
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Watermark Retroattivo | IMMONOVA Admin</title>
@@ -12,7 +14,7 @@ html,body{width:100%;min-height:100%}
 body{
   background:#f4ecdf;
   font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
-  color:#7f6430;
+  color:var(--c-46371a);
 }
 
 body::before{
@@ -42,7 +44,7 @@ body::before{
   font-size:24px;
   font-weight:300;
   letter-spacing:.35em;
-  color:#a58139;
+  color:var(--c-5b471f);
 }
 
 h1{
@@ -50,12 +52,12 @@ h1{
   font-weight:500;
   letter-spacing:.04em;
   margin-bottom:6px;
-  color:#5c4a20;
+  color:var(--c-5c4a20);
 }
 
 .subtitle{
   font-size:13px;
-  color:#8f7643;
+  color:var(--c-4f4125);
   margin-bottom:26px;
   line-height:1.6;
 }
@@ -63,7 +65,7 @@ h1{
 .warning-box{
   border:1px solid rgba(156,47,47,.35);
   background:rgba(156,47,47,.06);
-  color:#9c2f2f;
+  color:var(--c-561a1a);
   padding:18px 20px;
   font-size:13px;
   line-height:1.7;
@@ -82,7 +84,7 @@ h1{
   font-size:13px;
   letter-spacing:.12em;
   text-transform:uppercase;
-  color:#a58139;
+  color:var(--c-5b471f);
   font-weight:600;
   margin-bottom:12px;
 }
@@ -100,13 +102,13 @@ label{
   display:flex;
   align-items:center;
   gap:8px;
-  color:#7f6430;
+  color:var(--c-46371a);
 }
 
 button{
   border:1px solid rgba(165,129,57,.5);
   background:#a58139;
-  color:#fff;
+  color:var(--c-ffffff);
   padding:10px 20px;
   font-size:12px;
   letter-spacing:.08em;
@@ -115,7 +117,7 @@ button{
 }
 button.secondary{
   background:transparent;
-  color:#a58139;
+  color:var(--c-5b471f);
 }
 button.danger{
   background:#9c2f2f;
@@ -125,7 +127,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 .status-box{
   font-size:12.5px;
-  color:#8f7643;
+  color:var(--c-4f4125);
   min-height:20px;
   margin:10px 0;
 }
@@ -155,9 +157,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
   line-height:1.7;
 }
 .log-line{white-space:pre-wrap;word-break:break-all}
-.log-line.ok{color:#4f7f45}
-.log-line.err{color:#9c2f2f}
-.log-line.info{color:#8f7643}
+.log-line.ok{color:var(--c-2b4626)}
+.log-line.err{color:var(--c-561a1a)}
+.log-line.info{color:var(--c-4f4125)}
 </style>
 </head>
 <body>
@@ -188,6 +190,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
       <button id="loadOppsBtn" type="button">Carica opportunità</button>
       <div id="loadStatus" class="status-box"></div>
     </div>
+    <div class="row">
+      <label for="oppFilterSelect" style="flex:0 0 auto">Applica a</label>
+      <select id="oppFilterSelect" style="flex:1 1 260px;min-width:220px;padding:8px 10px">
+        <option value="">Tutte le opportunità</option>
+      </select>
+    </div>
   </div>
 
   <div class="card">
@@ -199,7 +207,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
     <div class="row">
       <label for="opacitySlider" style="flex:0 0 auto">Opacità watermark</label>
       <input type="range" id="opacitySlider" min="5" max="100" value="50" step="5" style="flex:1 1 220px">
-      <span id="opacityValueLabel" style="font-size:12.5px;color:#7f6430;min-width:42px">50%</span>
+      <span id="opacityValueLabel" style="font-size:12.5px;color:var(--c-46371a);min-width:42px">50%</span>
     </div>
     <div class="row">
       <button id="previewBtn" type="button" class="secondary" disabled>Genera anteprima</button>
@@ -385,9 +393,35 @@ async function checkAuth(){
   return true;
 }
 
+function getSelectedOpportunityFilter(){
+  var sel = document.getElementById("oppFilterSelect");
+  return sel && sel.value ? sel.value : "";
+}
+
+function populateOppFilterSelect(){
+  var sel = document.getElementById("oppFilterSelect");
+  var previous = sel.value;
+  sel.innerHTML = "";
+  var allOpt = document.createElement("option");
+  allOpt.value = "";
+  allOpt.textContent = "Tutte le opportunità (" + opportunitiesData.length + ")";
+  sel.appendChild(allOpt);
+  opportunitiesData.forEach(function(o){
+    var opt = document.createElement("option");
+    opt.value = String(o.id);
+    opt.textContent = o.title || ("Opportunità #" + o.id);
+    sel.appendChild(opt);
+  });
+  if(previous && opportunitiesData.some(function(o){ return String(o.id) === previous; })){
+    sel.value = previous;
+  }
+}
+
 function buildFlatPhotoList(){
   var allUrls = [];
-  opportunitiesData.forEach(function(o){
+  var filterId = getSelectedOpportunityFilter();
+  var opps = filterId ? opportunitiesData.filter(function(o){ return String(o.id) === filterId; }) : opportunitiesData;
+  opps.forEach(function(o){
     /* Scheda white-label (logo partner impostato, co-brand NON spuntato): il watermark deve
        usare il logo del partner, non IMMONOVA. In co-brand (entrambi i loghi nel dossier) il
        watermark resta IMMONOVA per scelta esplicita dell'utente -- vedi opportunity-edit.html. */
@@ -432,6 +466,7 @@ async function loadOpportunities(){
   statusEl.textContent = opportunitiesData.length + " opportunità trovate, " + totalPhotos + " foto totali (copertina + gallery).";
   statusEl.style.color = "#4f7f45";
   document.getElementById("runBtn").disabled = false;
+  populateOppFilterSelect();
   populatePreviewSelect();
 }
 
@@ -517,6 +552,7 @@ async function runWatermarkBatch(){
 }
 
 document.getElementById("loadOppsBtn").addEventListener("click", loadOpportunities);
+document.getElementById("oppFilterSelect").addEventListener("change", populatePreviewSelect);
 document.getElementById("runBtn").addEventListener("click", runWatermarkBatch);
 document.getElementById("stopBtn").addEventListener("click", function(){ stopRequested = true; });
 document.getElementById("previewBtn").addEventListener("click", generatePreview);

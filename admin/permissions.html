@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<link rel="stylesheet" href="../css/immonova-text-theme.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMMONOVA | Permessi</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:var(--c-46371a);
+  overflow-x:hidden;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.3;
+}
+.header{
+  padding:24px 42px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.14);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+  flex-wrap:wrap;
+  gap:14px;
+}
+.header h1{font-size:22px;font-weight:200;letter-spacing:.06em;color:var(--c-5b461d);font-family:Georgia,"Times New Roman",serif;}
+.header-actions{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.nav-link{
+  padding:11px 18px;
+  border:1px solid rgba(166,127,52,.28);
+  background:rgba(255,255,255,.26);
+  color:var(--c-5b461d);
+  text-decoration:none;
+  cursor:pointer;
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+.nav-link:hover{background:#a67f34;color:var(--c-ffffff)}
+.container{max-width:1200px;margin:0 auto;padding:42px 28px 90px}
+.intro{color:var(--c-554321);font-size:14px;line-height:1.8;margin-bottom:30px;max-width:860px}
+.section{background:rgba(255,255,255,.5);border:1px solid rgba(166,127,52,.22);border-radius:4px;padding:26px;margin-bottom:28px}
+.section h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;color:var(--c-5b461d);margin:0 0 6px;font-size:20px;}
+.section .sub{color:var(--c-7d6a43);font-size:12.5px;margin:0 0 20px;line-height:1.6}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:10px 8px;border-bottom:1px solid rgba(166,127,52,.18);text-align:left;vertical-align:top}
+th{color:var(--c-7d6a43);font-weight:600;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em}
+th.resource-label{min-width:230px}
+td.resource-label{color:var(--c-46371a)}
+td.resource-label .desc{color:var(--c-8a7a5a);font-size:11px;margin-top:3px;line-height:1.4}
+select{
+  background:#fffdf8;color:var(--c-46371a);border:1px solid rgba(166,127,52,.35);border-radius:4px;
+  padding:7px 9px;font-size:12.5px;min-width:130px;font-family:inherit;
+}
+select.lvl-none{color:var(--c-8a7a5a)}
+select.lvl-read{color:var(--c-2f5a8f)}
+select.lvl-write{color:var(--c-8f5b28)}
+select.lvl-both{color:var(--c-2b6b33)}
+.groups-row{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.groups-row input{background:#fffdf8;border:1px solid rgba(166,127,52,.35);color:var(--c-46371a);padding:10px 12px;border-radius:4px;font-size:13px;flex:1;min-width:200px;font-family:inherit}
+.btn{background:#a67f34;color:var(--c-ffffff);border:none;padding:10px 20px;border-radius:4px;font-weight:600;cursor:pointer;font-size:12.5px;letter-spacing:.04em;white-space:nowrap}
+.btn:hover{background:#8f6d2c}
+.msg{margin-top:12px;font-size:12.5px;padding:10px 12px;border-radius:4px;display:none}
+.msg.success{display:block;background:rgba(79,127,69,.14);color:var(--c-2b4626)}
+.msg.error{display:block;background:rgba(156,47,47,.12);color:var(--c-561a1a)}
+.users-table select.group-select{min-width:200px}
+.owner-badge{display:inline-block;background:rgba(166,127,52,.18);color:var(--c-5b461d);font-size:10.5px;padding:2px 8px;border-radius:10px;margin-left:8px;}
+.owner-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--c-554321)}
+.empty{color:var(--c-8a7a5a);font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Permessi per tipo di utente</h1>
+  <div class="header-actions">
+    <a href="dashboard.html" class="nav-link">Dashboard</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="intro">
+    Per ogni gruppo (tipo di persona registrata) imposta cosa può vedere/modificare dei dati <strong>di altri utenti</strong> —
+    i propri dati restano sempre visibili e modificabili da chi li ha creati. Gli account marcati "owner piattaforma"
+    vedono sempre tutto, indipendentemente dalla matrice. Assegna poi ogni utente a un gruppo nella tabella in basso.
+  </div>
+
+  <div class="section">
+    <h2>Gruppi</h2>
+    <p class="sub">Crea un nuovo gruppo (es. "Agenzia BHHS") se vuoi permessi diversi da quelli esistenti, oppure riusa uno di quelli già presenti.</p>
+    <div class="groups-row">
+      <input type="text" id="newGroupName" placeholder="Nome tecnico (es. bhhs_partner)">
+      <input type="text" id="newGroupLabel" placeholder="Etichetta visibile (es. Agenzia BHHS)">
+      <button class="btn" onclick="createGroup()">Crea gruppo</button>
+    </div>
+    <div class="msg" id="groupMsg"></div>
+  </div>
+
+  <div class="section">
+    <h2>Matrice permessi</h2>
+    <p class="sub">"Lettura" = può vedere. "Scrittura" = può modificare. "Entrambi" = può vedere e modificare. "Nessuno" = non vede/non tocca.</p>
+    <div id="matrixWrap"><span class="empty">Caricamento...</span></div>
+    <div class="msg" id="matrixMsg"></div>
+  </div>
+
+  <div class="section">
+    <h2>Utenti registrati</h2>
+    <p class="sub">Assegna il gruppo a ogni account. "Owner piattaforma" bypassa sempre la matrice e vede tutto.</p>
+    <div id="usersWrap"><span class="empty">Caricamento...</span></div>
+    <div class="msg" id="usersMsg"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+var ACCESS_LEVELS = [
+  {value:"none", label:"Nessuno"},
+  {value:"read", label:"Lettura"},
+  {value:"write", label:"Scrittura"},
+  {value:"both", label:"Entrambi"}
+];
+
+var state = { groups: [], resources: [], matrix: [], users: [], isOwner: false };
+
+function escapeHTML(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c];
+  });
+}
+
+function showMsg(id, text, type){
+  var el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "msg " + type;
+}
+
+async function requireAuth(){
+  var { data } = await client.auth.getUser();
+  if(!data.user){
+    window.location.href = "login.html";
+    return null;
+  }
+  return data.user;
+}
+
+async function loadAll(){
+  var user = await requireAuth();
+  if(!user) return;
+
+  var { data: myProfile } = await client.from("profiles").select("is_platform_owner").eq("id", user.id).single();
+  state.isOwner = !!(myProfile && myProfile.is_platform_owner);
+
+  var [groupsRes, resourcesRes, matrixRes, usersRes] = await Promise.all([
+    client.from("immonova_permission_groups").select("*").order("created_at"),
+    client.from("immonova_permission_resources").select("*").order("sort_order"),
+    client.from("immonova_permission_matrix").select("*"),
+    client.from("profiles").select("id, email, role, permission_group, is_platform_owner").order("email")
+  ]);
+
+  state.groups = groupsRes.data || [];
+  state.resources = resourcesRes.data || [];
+  state.matrix = matrixRes.data || [];
+  state.users = usersRes.data || [];
+
+  renderMatrix();
+  renderUsers();
+
+  if(!state.isOwner){
+    showMsg("matrixMsg", "Il tuo account non è owner piattaforma: puoi vedere la matrice ma non salvare modifiche.", "error");
+    showMsg("usersMsg", "Il tuo account non è owner piattaforma: puoi vedere gli utenti ma non riassegnare i gruppi.", "error");
+  }
+}
+
+function accessFor(groupName, resourceKey){
+  var row = state.matrix.find(function(m){ return m.group_name === groupName && m.resource_key === resourceKey; });
+  return row ? row.access : "none";
+}
+
+function renderMatrix(){
+  var wrap = document.getElementById("matrixWrap");
+  if(state.groups.length === 0 || state.resources.length === 0){
+    wrap.innerHTML = '<span class="empty">Nessun gruppo o risorsa configurata.</span>';
+    return;
+  }
+  var html = '<table><thead><tr><th class="resource-label">Risorsa</th>';
+  state.groups.forEach(function(g){
+    html += '<th>' + escapeHTML(g.label) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  state.resources.forEach(function(r){
+    html += '<tr><td class="resource-label">' + escapeHTML(r.label) + '<div class="desc">' + escapeHTML(r.description || "") + '</div></td>';
+    state.groups.forEach(function(g){
+      var current = accessFor(g.name, r.key);
+      html += '<td><select class="lvl-' + current + '" data-group="' + escapeHTML(g.name) + '" data-resource="' + escapeHTML(r.key) + '" onchange="onMatrixChange(this)"' + (state.isOwner ? '' : ' disabled') + '>';
+      ACCESS_LEVELS.forEach(function(lvl){
+        html += '<option value="' + lvl.value + '"' + (lvl.value === current ? ' selected' : '') + '>' + lvl.label + '</option>';
+      });
+      html += '</select></td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+async function onMatrixChange(selectEl){
+  var groupName = selectEl.getAttribute("data-group");
+  var resourceKey = selectEl.getAttribute("data-resource");
+  var access = selectEl.value;
+  selectEl.className = "lvl-" + access;
+  selectEl.disabled = true;
+  try{
+    var { error } = await client.from("immonova_permission_matrix").upsert({
+      group_name: groupName,
+      resource_key: resourceKey,
+      access: access,
+      updated_at: new Date().toISOString()
+    });
+    if(error) throw error;
+    var row = state.matrix.find(function(m){ return m.group_name === groupName && m.resource_key === resourceKey; });
+    if(row) row.access = access; else state.matrix.push({group_name: groupName, resource_key: resourceKey, access: access});
+    showMsg("matrixMsg", "Permesso aggiornato.", "success");
+  }catch(e){
+    showMsg("matrixMsg", "Errore: " + (e.message || e), "error");
+  }finally{
+    selectEl.disabled = !state.isOwner;
+  }
+}
+
+async function createGroup(){
+  clearGroupMsg();
+  var nameInput = document.getElementById("newGroupName");
+  var labelInput = document.getElementById("newGroupLabel");
+  var name = nameInput.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  var label = labelInput.value.trim();
+  if(!name || !label){
+    showMsg("groupMsg", "Inserisci nome tecnico ed etichetta.", "error");
+    return;
+  }
+  try{
+    var { error } = await client.from("immonova_permission_groups").insert({ name: name, label: label });
+    if(error) throw error;
+    state.groups.push({ name: name, label: label });
+    nameInput.value = "";
+    labelInput.value = "";
+    renderMatrix();
+    renderUsers();
+    showMsg("groupMsg", "Gruppo creato. Imposta i permessi nella matrice qui sopra.", "success");
+  }catch(e){
+    showMsg("groupMsg", "Errore: " + (e.message || e), "error");
+  }
+}
+
+function clearGroupMsg(){
+  var el = document.getElementById("groupMsg");
+  el.className = "msg";
+  el.textContent = "";
+}
+
+function renderUsers(){
+  var wrap = document.getElementById("usersWrap");
+  if(state.users.length === 0){
+    wrap.innerHTML = '<span class="empty">Nessun utente trovato.</span>';
+    return;
+  }
+  var html = '<table class="users-table"><thead><tr><th>Email</th><th>Ruolo</th><th>Gruppo permessi</th><th>Owner piattaforma</th></tr></thead><tbody>';
+  state.users.forEach(function(u){
+    html += '<tr><td>' + escapeHTML(u.email || "-") + (u.is_platform_owner ? '<span class="owner-badge">OWNER</span>' : '') + '</td>';
+    html += '<td>' + escapeHTML(u.role || "-") + '</td>';
+    html += '<td><select class="group-select" data-user="' + escapeHTML(u.id) + '" onchange="onUserGroupChange(this)"' + (state.isOwner ? '' : ' disabled') + '>';
+    state.groups.forEach(function(g){
+      html += '<option value="' + escapeHTML(g.name) + '"' + (g.name === u.permission_group ? ' selected' : '') + '>' + escapeHTML(g.label) + '</option>';
+    });
+    html += '</select></td>';
+    html += '<td><label class="owner-toggle"><input type="checkbox" data-user="' + escapeHTML(u.id) + '" ' + (u.is_platform_owner ? 'checked' : '') + ' onchange="onOwnerToggle(this)"' + (state.isOwner ? '' : ' disabled') + '> vede sempre tutto</label></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+async function onUserGroupChange(selectEl){
+  var userId = selectEl.getAttribute("data-user");
+  var newGroup = selectEl.value;
+  selectEl.disabled = true;
+  try{
+    var { error } = await client.from("profiles").update({ permission_group: newGroup }).eq("id", userId);
+    if(error) throw error;
+    var u = state.users.find(function(x){ return x.id === userId; });
+    if(u) u.permission_group = newGroup;
+    showMsg("usersMsg", "Gruppo aggiornato.", "success");
+  }catch(e){
+    showMsg("usersMsg", "Errore: " + (e.message || e), "error");
+  }finally{
+    selectEl.disabled = !state.isOwner;
+  }
+}
+
+async function onOwnerToggle(checkboxEl){
+  var userId = checkboxEl.getAttribute("data-user");
+  var newVal = checkboxEl.checked;
+  checkboxEl.disabled = true;
+  try{
+    var { error } = await client.from("profiles").update({ is_platform_owner: newVal }).eq("id", userId);
+    if(error) throw error;
+    var u = state.users.find(function(x){ return x.id === userId; });
+    if(u) u.is_platform_owner = newVal;
+    renderUsers();
+    showMsg("usersMsg", "Aggiornato.", "success");
+  }catch(e){
+    checkboxEl.checked = !newVal;
+    showMsg("usersMsg", "Errore: " + (e.message || e), "error");
+  }finally{
+    checkboxEl.disabled = !state.isOwner;
+  }
+}
+
+loadAll();
+</script>
+
+</body>
+</html>
