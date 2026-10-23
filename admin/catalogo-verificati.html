@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catalogo Immobili Verificati — IMMONOVA</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<style>
+  :root{
+    --cream:#F6F2EA;
+    --cream-dark:#EFE8D8;
+    --gold:#a9824a;
+    --gold-dark:#8f6f2c;
+    --ink:#1f2e4a;
+    --text:#2a2a28;
+    --muted:#6b6459;
+    --border: rgba(169,130,74,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:#ded7c8;
+    color:var(--text);
+    font-family:'Avenir Next', 'Segoe UI', Arial, sans-serif;
+  }
+
+  /* ---------- toolbar (hidden on print) ---------- */
+  .toolbar{
+    position:sticky; top:0; z-index:50;
+    background:var(--ink);
+    color:#fff;
+    padding:14px 24px;
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:12px;
+  }
+  .toolbar h1{font-size:16px; margin:0; font-weight:600;}
+  .toolbar .count{color:#c9bda0; font-size:13px; margin-left:10px;}
+  .toolbar button{
+    background:var(--gold);
+    color:#1a1407;
+    border:none;
+    padding:10px 20px;
+    border-radius:6px;
+    font-weight:bold;
+    font-size:14px;
+    cursor:pointer;
+  }
+  .toolbar button:hover{background:#c0994f}
+  .toolbar button:disabled{opacity:.5;cursor:default}
+  .toolbar .status{font-size:13px; color:#c9bda0;}
+  .lang-switch{
+    padding:9px 12px;
+    border-radius:6px;
+    border:1px solid rgba(255,255,255,.3);
+    background:#28395c;
+    color:#fff;
+    font-size:13px;
+    font-family:inherit;
+  }
+
+  /* ---------- printable sheet(s) ---------- */
+  .sheet-wrap{
+    padding:24px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:24px;
+  }
+  .sheet{
+    background:var(--cream);
+    width:297mm;
+    min-height:210mm;
+    padding:14mm 14mm 12mm;
+    box-shadow:0 6px 24px rgba(0,0,0,.25);
+  }
+
+  .sheet-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:2px solid var(--gold);
+    padding-bottom:10px;
+    margin-bottom:14px;
+  }
+  .brand{
+    font-size:22px;
+    letter-spacing:.08em;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .brand small{
+    display:block;
+    font-size:10px;
+    letter-spacing:.25em;
+    color:var(--gold-dark);
+    font-weight:600;
+    margin-top:2px;
+  }
+  .sheet-title{
+    text-align:right;
+  }
+  .sheet-title .t1{
+    font-size:19px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .sheet-title .t2{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:2px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(5, 1fr);
+    gap:8mm 6mm;
+  }
+  .card{
+    break-inside:avoid;
+    page-break-inside:avoid;
+    display:flex;
+    flex-direction:column;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:6px;
+    overflow:hidden;
+  }
+  .card .num-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:5px 8px 3px;
+  }
+  .card .num{
+    font-size:9px;
+    font-weight:700;
+    color:var(--gold-dark);
+    letter-spacing:.05em;
+  }
+  .card .price{
+    font-size:11px;
+    font-weight:700;
+    color:var(--ink);
+  }
+  .card .cover{
+    width:100%;
+    height:34mm;
+    object-fit:cover;
+    background:var(--cream-dark);
+    display:block;
+  }
+  .card .cover.placeholder{
+    display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:9px;
+  }
+  .card .body{
+    padding:6px 8px 8px;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+  }
+  .card .title{
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--ink);
+    line-height:1.25;
+    margin-bottom:2px;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .card .loc{
+    font-size:8.5px;
+    color:var(--muted);
+    margin-bottom:5px;
+  }
+  .card .stats{
+    display:flex;
+    gap:8px;
+    font-size:8.5px;
+    color:var(--text);
+    margin-bottom:5px;
+    flex-wrap:wrap;
+  }
+  .card .stats span{display:flex;align-items:center;gap:2px}
+  .card .badges{
+    display:flex;
+    flex-wrap:wrap;
+    gap:3px;
+    margin-top:auto;
+  }
+  .card .badge{
+    font-size:7.5px;
+    background:var(--cream-dark);
+    color:var(--ink);
+    padding:2px 6px;
+    border-radius:10px;
+    border:1px solid var(--border);
+  }
+
+  .sheet-footer{
+    margin-top:12px;
+    padding-top:8px;
+    border-top:1px solid var(--border);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:9px;
+    color:var(--muted);
+  }
+  .sheet-footer .brand-mini{
+    font-weight:700;
+    color:var(--gold-dark);
+    letter-spacing:.1em;
+  }
+
+  .empty{
+    text-align:center;
+    color:var(--muted);
+    padding:40px;
+    font-size:14px;
+  }
+
+  @media print{
+    @page{ size:A4 landscape; margin:0; }
+    body{background:#fff;}
+    .toolbar{display:none !important;}
+    .sheet-wrap{padding:0; gap:0;}
+    .sheet{
+      box-shadow:none;
+      width:297mm;
+      min-height:210mm;
+      page-break-after:always;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    }
+    .sheet:last-child{page-break-after:auto;}
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div>
+    <h1 data-i18n="page_title">Catalogo Immobili Verificati</h1>
+    <span class="count" id="countLabel" data-i18n="loading">Caricamento…</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <select id="quickLangSwitch" class="lang-switch" title="Traduci a schermo il catalogo — nessun costo aggiuntivo oltre la prima volta per lingua">
+      <option value="it">IT · Italiano</option>
+      <option value="en">EN · English</option>
+      <option value="fr">FR · Français</option>
+      <option value="de">DE · Deutsch</option>
+      <option value="es">ES · Español</option>
+      <option value="ar">AR · العربية</option>
+    </select>
+    <span class="status" id="statusLabel"></span>
+    <button id="genBtn" onclick="window.print()" disabled data-i18n="btn_generate_pdf">📄 Genera PDF</button>
+  </div>
+</div>
+
+<div class="sheet-wrap" id="sheetWrap">
+  <div class="empty" data-i18n="loading_properties">Caricamento immobili verificati…</div>
+</div>
+
+<script>
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const PER_PAGE = 10; // 5 colonne x 2 righe per foglio A4 orizzontale
+const params = new URLSearchParams(window.location.search);
+
+let rawItems = [];
+let CURRENT_LANG = "it";
+
+/* ========================================================================
+   i18n — stesso meccanismo (robusto, una chiamata per testo) usato in
+   report-view.html: traduzione tramite l'edge function
+   "translate-public-content", cache per lingua in localStorage, protezione
+   dei placeholder {xxx} e scarto di traduzioni "sospette" (lunghezza
+   implausibile o placeholder perso) con fallback automatico all'italiano.
+   ======================================================================== */
+const UI_STRINGS = {
+  page_title:"Catalogo Immobili Verificati",
+  loading:"Caricamento…",
+  loading_properties:"Caricamento immobili verificati…",
+  btn_generate_pdf:"📄 Genera PDF",
+  sheet_title:"Immobili Verificati",
+  page_of:"pagina",
+  footer_note:"Documento riservato — selezione di immobili verificati e disponibili su immonova-consulting.it",
+  price_on_request:"Prezzo su richiesta",
+  no_image:"Nessuna immagine",
+  no_properties:"Nessun immobile verificato e disponibile al momento.",
+  properties_count_suffix:"immobili verificati e disponibili",
+  status_ready_prefix:"pronta — usa “Salva come PDF” nella finestra di stampa",
+  status_ready_prefix_plural:"pronte — usa “Salva come PDF” nella finestra di stampa",
+  error_loading:"Errore nel caricamento:",
+  badge_sea_view:"Vista mare",
+  badge_pool:"Piscina",
+  badge_garden:"Giardino",
+  badge_terrace:"Terrazza",
+  badge_historic_center:"Centro storico",
+  badge_beachfront:"Fronte mare"
+};
+let T = UI_STRINGS;
+
+function i18nCacheKey(lang){ return "immonova_i18n_catalogo_verificati_" + lang + "_v1"; }
+
+function protectPlaceholders(text){
+  var tokens = [];
+  var protectedText = String(text).replace(/\{[a-zA-Z0-9_]+\}/g, function(m){
+    tokens.push(m);
+    return "§" + (tokens.length-1) + "§";
+  });
+  return { text: protectedText, tokens: tokens };
+}
+function restorePlaceholders(text, tokens){
+  if(!tokens.length) return text;
+  return String(text).replace(/§(\d+)§/g, function(m, idx){
+    var t = tokens[Number(idx)];
+    return t != null ? t : m;
+  });
+}
+function translationLooksSuspicious(source, candidate){
+  if(candidate == null) return true;
+  var srcTokens = (String(source).match(/\{[a-zA-Z0-9_]+\}/g) || []);
+  for(var i=0;i<srcTokens.length;i++){ if(String(candidate).indexOf(srcTokens[i]) === -1) return true; }
+  var srcLen = String(source).length;
+  var candLen = String(candidate).length;
+  if(srcLen > 20 && (candLen > srcLen*4 || candLen < srcLen*0.2)) return true;
+  return false;
+}
+async function translateOneText(lang, text, context){
+  var protectedItem = protectPlaceholders(text);
+  var result = null;
+  try{
+    var url = String(SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/translate-public-content";
+    var res = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+SUPABASE_ANON_KEY},body:JSON.stringify({
+      language: lang,
+      source_language: "it",
+      context: context || "",
+      texts: [protectedItem.text]
+    })});
+    if(!res.ok){
+      console.warn("[i18n] translate-public-content ha risposto con errore HTTP",res.status,"per il testo:",text.slice(0,60));
+      return null;
+    }
+    result = await res.json();
+  }catch(e){
+    console.warn("[i18n] errore di rete nella traduzione:", e);
+    return null;
+  }
+  if(!result || !result.success || !Array.isArray(result.translations) || result.translations[0] == null) return null;
+  return restorePlaceholders(result.translations[0], protectedItem.tokens);
+}
+async function translateTextsSafe(lang, keys, texts, fallbackByKey, context){
+  var CONCURRENCY = 6;
+  var translated = {};
+  var index = 0;
+  async function worker(){
+    while(index < keys.length){
+      var i = index++;
+      var k = keys[i];
+      var source = texts[i];
+      var result = await translateOneText(lang, source, context);
+      translated[k] = translationLooksSuspicious(source, result) ? fallbackByKey[k] : result;
+    }
+  }
+  var workers = [];
+  for(var w=0; w<Math.min(CONCURRENCY, keys.length); w++) workers.push(worker());
+  await Promise.all(workers);
+  return translated;
+}
+async function loadTranslatedStrings(lang){
+  if(lang === "it") return UI_STRINGS;
+  var cacheKey = i18nCacheKey(lang);
+  try{
+    var cached = localStorage.getItem(cacheKey);
+    if(cached){
+      var parsed = JSON.parse(cached);
+      var hasAllKeys = parsed && typeof parsed === "object" &&
+        Object.keys(UI_STRINGS).every(function(k){ return Object.prototype.hasOwnProperty.call(parsed, k) && parsed[k] != null; });
+      if(hasAllKeys) return parsed;
+    }
+  }catch(e){}
+
+  var keys = Object.keys(UI_STRINGS);
+  var texts = keys.map(function(k){ return UI_STRINGS[k]; });
+  var translated = await translateTextsSafe(lang, keys, texts, UI_STRINGS,
+    "IMMONOVA luxury real estate investment website. This is a printable one-sheet catalogue of verified available properties: page title, toolbar labels, property badges (sea view, pool, garden...), footer legal note.");
+  try{ localStorage.setItem(cacheKey, JSON.stringify(translated)); }catch(e){}
+  return translated;
+}
+function renderTranslatedStaticText(){
+  document.querySelectorAll("[data-i18n]").forEach(function(el){
+    var key = el.getAttribute("data-i18n");
+    if(T[key]) el.textContent = T[key];
+  });
+}
+function setLangInUrl(lang){
+  try{
+    var url = new URL(window.location.href);
+    url.searchParams.set("lang", lang);
+    window.history.replaceState({}, "", url);
+  }catch(e){}
+}
+async function applyLanguage(lang){
+  CURRENT_LANG = lang || "it";
+  document.documentElement.lang = CURRENT_LANG;
+  T = await loadTranslatedStrings(CURRENT_LANG);
+  renderTranslatedStaticText();
+}
+
+/* ======================================================================== */
+
+function formatPrice(raw){
+  if(!raw) return T.price_on_request;
+  const digits = String(raw).replace(/[^0-9]/g, "");
+  if(!digits) return T.price_on_request;
+  const n = parseInt(digits, 10);
+  return n.toLocaleString(CURRENT_LANG === "it" ? "it-IT" : CURRENT_LANG) + " €";
+}
+
+function escapeHTML(s){
+  return String(s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function buildBadges(p){
+  const map = [
+    ["has_sea_view","badge_sea_view"],
+    ["has_pool","badge_pool"],
+    ["has_garden","badge_garden"],
+    ["has_terrace","badge_terrace"],
+    ["has_historic_center","badge_historic_center"],
+    ["has_beachfront","badge_beachfront"],
+  ];
+  return map.filter(([k]) => p[k]).map(([,key]) => `<span class="badge">${escapeHTML(T[key])}</span>`).join("");
+}
+
+function buildStats(p){
+  const parts = [];
+  if(p.bedrooms) parts.push(`<span>🛏 ${p.bedrooms}</span>`);
+  if(p.bathrooms) parts.push(`<span>🛁 ${p.bathrooms}</span>`);
+  if(p.internal_size) parts.push(`<span>📐 ${p.internal_size} m²</span>`);
+  return parts.join("");
+}
+
+function buildCard(p, index){
+  const cover = p.cover_image
+    ? `<img class="cover" src="${escapeHTML(p.cover_image)}" alt="">`
+    : `<div class="cover placeholder">${escapeHTML(T.no_image)}</div>`;
+  return `
+    <div class="card">
+      <div class="num-row">
+        <span class="num">${String(index).padStart(2,"0")}</span>
+        <span class="price">${formatPrice(p.price)}</span>
+      </div>
+      ${cover}
+      <div class="body">
+        <div class="title">${escapeHTML(p.title || "")}</div>
+        <div class="loc">${escapeHTML(p.location || p.municipality || "")}</div>
+        <div class="stats">${buildStats(p)}</div>
+        <div class="badges">${buildBadges(p)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function buildSheet(items, pageNum, totalPages){
+  const cards = items.map((p, i) => buildCard(p, (pageNum - 1) * PER_PAGE + i + 1)).join("");
+  const localeMap = { it:"it-IT", en:"en-GB", fr:"fr-FR", de:"de-DE", es:"es-ES", ar:"ar" };
+  const today = new Date().toLocaleDateString(localeMap[CURRENT_LANG] || "it-IT", { year:"numeric", month:"long", day:"numeric" });
+  return `
+    <div class="sheet">
+      <div class="sheet-header">
+        <div class="brand">IMMONOVA<small>OFF MARKET • CONSULTING</small></div>
+        <div class="sheet-title">
+          <div class="t1">${escapeHTML(T.sheet_title)}</div>
+          <div class="t2">${today}${totalPages > 1 ? ` — ${escapeHTML(T.page_of)} ${pageNum}/${totalPages}` : ""}</div>
+        </div>
+      </div>
+      <div class="grid">${cards}</div>
+      <div class="sheet-footer">
+        <span>${escapeHTML(T.footer_note)}</span>
+        <span class="brand-mini">IMMONOVA</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderCatalog(){
+  const wrap = document.getElementById("sheetWrap");
+  const countLabel = document.getElementById("countLabel");
+  const statusLabel = document.getElementById("statusLabel");
+  const genBtn = document.getElementById("genBtn");
+
+  if(rawItems.length === 0){
+    wrap.innerHTML = `<div class="empty">${escapeHTML(T.no_properties)}</div>`;
+    countLabel.textContent = "0";
+    return;
+  }
+
+  countLabel.textContent = `${rawItems.length} ${T.properties_count_suffix}`;
+
+  const pages = [];
+  for(let i = 0; i < rawItems.length; i += PER_PAGE){
+    pages.push(rawItems.slice(i, i + PER_PAGE));
+  }
+  const totalPages = pages.length;
+
+  wrap.innerHTML = pages.map((pageItems, idx) => buildSheet(pageItems, idx + 1, totalPages)).join("");
+
+  genBtn.disabled = false;
+  statusLabel.textContent = `${totalPages} ${totalPages > 1 ? T.status_ready_prefix_plural : T.status_ready_prefix}`;
+}
+
+async function init(){
+  const wrap = document.getElementById("sheetWrap");
+  const statusLabel = document.getElementById("statusLabel");
+
+  const quickLangSwitch = document.getElementById("quickLangSwitch");
+  const initialLang = params.get("lang") || "it";
+  quickLangSwitch.value = initialLang;
+  await applyLanguage(initialLang);
+
+  quickLangSwitch.addEventListener("change", async function(){
+    const chosen = quickLangSwitch.value;
+    statusLabel.textContent = "...";
+    await applyLanguage(chosen);
+    setLangInUrl(chosen);
+    renderCatalog();
+  });
+
+  const { data, error } = await supabaseClient
+    .from("opportunities")
+    .select("id,title,location,municipality,price,cover_image,bedrooms,bathrooms,internal_size,has_sea_view,has_pool,has_garden,has_terrace,has_historic_center,has_beachfront")
+    .eq("review_status", "approvato")
+    .eq("published", true)
+    .eq("commercial_status", "available")
+    .order("created_at", { ascending:false });
+
+  if(error){
+    wrap.innerHTML = `<div class="empty">${escapeHTML(T.error_loading)} ${escapeHTML(error.message)}</div>`;
+    statusLabel.textContent = "!";
+    return;
+  }
+
+  rawItems = data || [];
+  renderCatalog();
+}
+
+init();
+</script>
+
+</body>
+</html>
