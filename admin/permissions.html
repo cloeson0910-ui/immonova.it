@@ -175,7 +175,12 @@ var ACCESS_LEVELS = [
 // Per aggiungerne altre in futuro basta aggiungere una riga qui (la RLS corrispondente
 // va creata lato database con lo stesso resource_key).
 var MANAGED_RESOURCES = [
-  {key:"contacts", label:"Contatti / Investitori"}
+  {key:"contacts", label:"Contatti / Investitori"},
+  {key:"valuations", label:"Valutazioni immobiliari"},
+  {key:"search_mandates", label:"Mandati di ricerca"},
+  {key:"documents", label:"Documenti"},
+  {key:"offers", label:"Offerte"},
+  {key:"news", label:"Notizie / Articoli"}
 ];
 
 var state = { groups: [], resources: [], matrix: [], users: [], isOwner: false, managedAccess: [] };
@@ -212,7 +217,7 @@ async function loadAll(){
     client.from("immonova_permission_groups").select("*").order("created_at"),
     client.from("immonova_permission_resources").select("*").order("sort_order"),
     client.from("immonova_permission_matrix").select("*"),
-    client.from("profiles").select("id, email, full_name, role, permission_group, is_platform_owner, managed_by").order("email"),
+    client.from("profiles").select("id, email, full_name, role, permission_group, is_platform_owner, managed_by, is_master").order("email"),
     client.from("immonova_managed_access").select("*")
   ]);
 
@@ -324,9 +329,9 @@ function renderUsers(){
     wrap.innerHTML = '<span class="empty">Nessun utente trovato.</span>';
     return;
   }
-  var html = '<table class="users-table"><thead><tr><th>Email</th><th>Ruolo</th><th>Gruppo permessi</th><th>Owner piattaforma</th></tr></thead><tbody>';
+  var html = '<table class="users-table"><thead><tr><th>Email</th><th>Ruolo</th><th>Gruppo permessi</th><th>Owner piattaforma</th><th>Master (agenzia autonoma)</th></tr></thead><tbody>';
   state.users.forEach(function(u){
-    html += '<tr><td>' + escapeHTML(u.email || "-") + (u.is_platform_owner ? '<span class="owner-badge">OWNER</span>' : '') + '</td>';
+    html += '<tr><td>' + escapeHTML(u.email || "-") + (u.is_platform_owner ? '<span class="owner-badge">OWNER</span>' : '') + (u.is_master ? '<span class="owner-badge">MASTER</span>' : '') + '</td>';
     html += '<td>' + escapeHTML(u.role || "-") + '</td>';
     html += '<td><select class="group-select" data-user="' + escapeHTML(u.id) + '" onchange="onUserGroupChange(this)"' + (state.isOwner ? '' : ' disabled') + '>';
     state.groups.forEach(function(g){
@@ -334,6 +339,7 @@ function renderUsers(){
     });
     html += '</select></td>';
     html += '<td><label class="owner-toggle"><input type="checkbox" data-user="' + escapeHTML(u.id) + '" ' + (u.is_platform_owner ? 'checked' : '') + ' onchange="onOwnerToggle(this)"' + (state.isOwner ? '' : ' disabled') + '> vede sempre tutto</label></td>';
+    html += '<td><label class="owner-toggle"><input type="checkbox" data-user="' + escapeHTML(u.id) + '" ' + (u.is_master ? 'checked' : '') + ' onchange="onMasterToggle(this)"' + (state.isOwner ? '' : ' disabled') + '> gestisce una sua agenzia</label></td>';
     html += '</tr>';
   });
   html += '</tbody></table>';
@@ -366,6 +372,25 @@ async function onOwnerToggle(checkboxEl){
     if(error) throw error;
     var u = state.users.find(function(x){ return x.id === userId; });
     if(u) u.is_platform_owner = newVal;
+    renderUsers();
+    showMsg("usersMsg", "Aggiornato.", "success");
+  }catch(e){
+    checkboxEl.checked = !newVal;
+    showMsg("usersMsg", "Errore: " + (e.message || e), "error");
+  }finally{
+    checkboxEl.disabled = !state.isOwner;
+  }
+}
+
+async function onMasterToggle(checkboxEl){
+  var userId = checkboxEl.getAttribute("data-user");
+  var newVal = checkboxEl.checked;
+  checkboxEl.disabled = true;
+  try{
+    var { error } = await client.from("profiles").update({ is_master: newVal }).eq("id", userId);
+    if(error) throw error;
+    var u = state.users.find(function(x){ return x.id === userId; });
+    if(u) u.is_master = newVal;
     renderUsers();
     showMsg("usersMsg", "Aggiornato.", "success");
   }catch(e){
