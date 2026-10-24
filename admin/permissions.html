@@ -88,6 +88,7 @@ select.lvl-both{color:var(--c-2b6b33)}
 .groups-row input{background:#fffdf8;border:1px solid rgba(166,127,52,.35);color:var(--c-46371a);padding:10px 12px;border-radius:4px;font-size:13px;flex:1;min-width:200px;font-family:inherit}
 .btn{background:#a67f34;color:var(--c-ffffff);border:none;padding:10px 20px;border-radius:4px;font-weight:600;cursor:pointer;font-size:12.5px;letter-spacing:.04em;white-space:nowrap}
 .btn:hover{background:#8f6d2c}
+.btn.small{padding:7px 12px;font-size:11.5px}
 .msg{margin-top:12px;font-size:12.5px;padding:10px 12px;border-radius:4px;display:none}
 .msg.success{display:block;background:rgba(79,127,69,.14);color:var(--c-2b4626)}
 .msg.error{display:block;background:rgba(156,47,47,.12);color:var(--c-561a1a)}
@@ -95,6 +96,15 @@ select.lvl-both{color:var(--c-2b6b33)}
 .owner-badge{display:inline-block;background:rgba(166,127,52,.18);color:var(--c-5b461d);font-size:10.5px;padding:2px 8px;border-radius:10px;margin-left:8px;}
 .owner-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--c-554321)}
 .empty{color:var(--c-8a7a5a);font-size:13px}
+.master-card{border:1px solid rgba(166,127,52,.22);border-radius:4px;padding:16px 18px;margin-bottom:14px;background:rgba(255,255,255,.4)}
+.master-card h3{font-size:15px;font-weight:600;color:var(--c-5b461d);margin:0 0 2px}
+.master-card .master-email{color:var(--c-8a7a5a);font-size:11.5px;margin-bottom:12px}
+.sub-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 0;border-top:1px dashed rgba(166,127,52,.2)}
+.sub-row:first-of-type{border-top:none}
+.sub-name{min-width:200px;font-size:13px}
+.sub-name .email{display:block;color:var(--c-8a7a5a);font-size:11px}
+.sub-perm{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--c-7d6a43)}
+.add-sub-row{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -137,6 +147,16 @@ select.lvl-both{color:var(--c-2b6b33)}
     <div id="usersWrap"><span class="empty">Caricamento...</span></div>
     <div class="msg" id="usersMsg"></div>
   </div>
+
+  <div class="section">
+    <h2>Collaboratori gestiti (master → sotto-agente)</h2>
+    <p class="sub">Cerca un master per nome o email: vedi i suoi sotto-collaboratori (assegnati con "gestito da") e per ognuno imposti permessi specifici SOLO sulle informazioni caricate da quel master — in aggiunta al gruppo generale, non al suo posto. Oggi è attivo per "Contatti / Investitori"; altre risorse verranno aggiunte qui senza cambiare questa schermata.</p>
+    <div class="groups-row">
+      <input type="text" id="masterSearchInput" placeholder="Cerca master per nome o email..." oninput="renderManagedSection()">
+    </div>
+    <div id="masterResultsWrap"></div>
+    <div class="msg" id="managedMsg"></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -151,7 +171,14 @@ var ACCESS_LEVELS = [
   {value:"both", label:"Entrambi"}
 ];
 
-var state = { groups: [], resources: [], matrix: [], users: [], isOwner: false };
+// Risorse "del master" gestibili ad personam per ogni sotto-collaboratore.
+// Per aggiungerne altre in futuro basta aggiungere una riga qui (la RLS corrispondente
+// va creata lato database con lo stesso resource_key).
+var MANAGED_RESOURCES = [
+  {key:"contacts", label:"Contatti / Investitori"}
+];
+
+var state = { groups: [], resources: [], matrix: [], users: [], isOwner: false, managedAccess: [] };
 
 function escapeHTML(s){
   return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
@@ -181,20 +208,23 @@ async function loadAll(){
   var { data: myProfile } = await client.from("profiles").select("is_platform_owner").eq("id", user.id).single();
   state.isOwner = !!(myProfile && myProfile.is_platform_owner);
 
-  var [groupsRes, resourcesRes, matrixRes, usersRes] = await Promise.all([
+  var [groupsRes, resourcesRes, matrixRes, usersRes, managedAccessRes] = await Promise.all([
     client.from("immonova_permission_groups").select("*").order("created_at"),
     client.from("immonova_permission_resources").select("*").order("sort_order"),
     client.from("immonova_permission_matrix").select("*"),
-    client.from("profiles").select("id, email, role, permission_group, is_platform_owner").order("email")
+    client.from("profiles").select("id, email, full_name, role, permission_group, is_platform_owner, managed_by").order("email"),
+    client.from("immonova_managed_access").select("*")
   ]);
 
   state.groups = groupsRes.data || [];
   state.resources = resourcesRes.data || [];
   state.matrix = matrixRes.data || [];
   state.users = usersRes.data || [];
+  state.managedAccess = managedAccessRes.data || [];
 
   renderMatrix();
   renderUsers();
+  renderManagedSection();
 
   if(!state.isOwner){
     showMsg("matrixMsg", "Il tuo account non è owner piattaforma: puoi vedere la matrice ma non salvare modifiche.", "error");
@@ -343,6 +373,142 @@ async function onOwnerToggle(checkboxEl){
     showMsg("usersMsg", "Errore: " + (e.message || e), "error");
   }finally{
     checkboxEl.disabled = !state.isOwner;
+  }
+}
+
+/* ---- Collaboratori gestiti (master -> sotto-agente) ---- */
+
+function userLabel(u){
+  return (u.full_name && u.full_name.trim()) ? u.full_name : (u.email || "(senza nome)");
+}
+
+function managedAccessFor(masterId, subId, resourceKey){
+  var row = state.managedAccess.find(function(m){
+    return m.manager_id === masterId && m.collaborator_id === subId && m.resource_key === resourceKey;
+  });
+  return row ? row.access : "none";
+}
+
+function renderManagedSection(){
+  var wrap = document.getElementById("masterResultsWrap");
+  var query = (document.getElementById("masterSearchInput").value || "").trim().toLowerCase();
+
+  if(query.length < 2){
+    wrap.innerHTML = '<span class="empty">Digita almeno 2 caratteri del nome o dell\'email di un master per iniziare.</span>';
+    return;
+  }
+
+  var masters = state.users.filter(function(u){
+    return userLabel(u).toLowerCase().indexOf(query) !== -1 || (u.email || "").toLowerCase().indexOf(query) !== -1;
+  });
+
+  if(masters.length === 0){
+    wrap.innerHTML = '<span class="empty">Nessun utente trovato con questo nome/email.</span>';
+    return;
+  }
+
+  var html = "";
+  masters.forEach(function(master){
+    var subs = state.users.filter(function(u){ return u.managed_by === master.id; });
+    var otherUsers = state.users.filter(function(u){ return u.id !== master.id && u.managed_by !== master.id; });
+
+    html += '<div class="master-card">';
+    html += '<h3>' + escapeHTML(userLabel(master)) + (master.is_platform_owner ? '<span class="owner-badge">OWNER</span>' : '') + '</h3>';
+    html += '<div class="master-email">' + escapeHTML(master.email || "") + '</div>';
+
+    if(subs.length === 0){
+      html += '<div class="empty">Nessun sotto-collaboratore assegnato a questo master.</div>';
+    }else{
+      subs.forEach(function(sub){
+        html += '<div class="sub-row">';
+        html += '<div class="sub-name">' + escapeHTML(userLabel(sub)) + '<span class="email">' + escapeHTML(sub.email || "") + '</span></div>';
+        MANAGED_RESOURCES.forEach(function(res){
+          var current = managedAccessFor(master.id, sub.id, res.key);
+          html += '<div class="sub-perm">' + escapeHTML(res.label) + ': <select class="lvl-' + current + '" data-master="' + escapeHTML(master.id) + '" data-sub="' + escapeHTML(sub.id) + '" data-resource="' + escapeHTML(res.key) + '" onchange="onManagedAccessChange(this)"' + (state.isOwner ? '' : ' disabled') + '>';
+          ACCESS_LEVELS.forEach(function(lvl){
+            html += '<option value="' + lvl.value + '"' + (lvl.value === current ? ' selected' : '') + '>' + lvl.label + '</option>';
+          });
+          html += '</select></div>';
+        });
+        html += '<button class="btn small" onclick="removeManagedLink(\'' + sub.id + '\')"' + (state.isOwner ? '' : ' disabled') + '>Rimuovi dal team</button>';
+        html += '</div>';
+      });
+    }
+
+    html += '<div class="add-sub-row">';
+    html += '<select id="addSubSelect_' + escapeHTML(master.id) + '">';
+    html += '<option value="">Aggiungi sotto-collaboratore...</option>';
+    otherUsers.forEach(function(u){
+      html += '<option value="' + escapeHTML(u.id) + '">' + escapeHTML(userLabel(u)) + ' (' + escapeHTML(u.email || "") + ')</option>';
+    });
+    html += '</select>';
+    html += '<button class="btn small" onclick="addManagedLink(\'' + master.id + '\')"' + (state.isOwner ? '' : ' disabled') + '>Assegna a questo master</button>';
+    html += '</div>';
+
+    html += '</div>';
+  });
+
+  wrap.innerHTML = html;
+}
+
+async function addManagedLink(masterId){
+  var select = document.getElementById("addSubSelect_" + masterId);
+  var subId = select.value;
+  if(!subId){
+    showMsg("managedMsg", "Scegli prima un utente da assegnare.", "error");
+    return;
+  }
+  try{
+    var { error } = await client.from("profiles").update({ managed_by: masterId }).eq("id", subId);
+    if(error) throw error;
+    var u = state.users.find(function(x){ return x.id === subId; });
+    if(u) u.managed_by = masterId;
+    renderManagedSection();
+    showMsg("managedMsg", "Sotto-collaboratore assegnato. Ora imposta i suoi permessi specifici.", "success");
+  }catch(e){
+    showMsg("managedMsg", "Errore: " + (e.message || e), "error");
+  }
+}
+
+async function removeManagedLink(subId){
+  try{
+    var { error } = await client.from("profiles").update({ managed_by: null }).eq("id", subId);
+    if(error) throw error;
+    var u = state.users.find(function(x){ return x.id === subId; });
+    if(u) u.managed_by = null;
+    renderManagedSection();
+    showMsg("managedMsg", "Collaboratore rimosso dal team del master.", "success");
+  }catch(e){
+    showMsg("managedMsg", "Errore: " + (e.message || e), "error");
+  }
+}
+
+async function onManagedAccessChange(selectEl){
+  var masterId = selectEl.getAttribute("data-master");
+  var subId = selectEl.getAttribute("data-sub");
+  var resourceKey = selectEl.getAttribute("data-resource");
+  var access = selectEl.value;
+  selectEl.className = "lvl-" + access;
+  selectEl.disabled = true;
+  try{
+    var { error } = await client.from("immonova_managed_access").upsert({
+      manager_id: masterId,
+      collaborator_id: subId,
+      resource_key: resourceKey,
+      access: access,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "manager_id,collaborator_id,resource_key" });
+    if(error) throw error;
+    var row = state.managedAccess.find(function(m){
+      return m.manager_id === masterId && m.collaborator_id === subId && m.resource_key === resourceKey;
+    });
+    if(row) row.access = access;
+    else state.managedAccess.push({ manager_id: masterId, collaborator_id: subId, resource_key: resourceKey, access: access });
+    showMsg("managedMsg", "Permesso aggiornato.", "success");
+  }catch(e){
+    showMsg("managedMsg", "Errore: " + (e.message || e), "error");
+  }finally{
+    selectEl.disabled = !state.isOwner;
   }
 }
 
