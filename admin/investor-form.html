@@ -1325,6 +1325,43 @@ async function showAuthorshipBadge(createdBy, createdAt){
   el.textContent = "Creato da: " + who + (dateStr ? " · " + dateStr : "");
 }
 
+/* Stessa logica di investors.html: proprietario del record, admin/owner, oppure accesso
+   "write"/"both" concesso esplicitamente dal master -- altrimenti e' sola lettura. */
+async function canEditThisInvestor(createdBy){
+  if(!investorId) return true; // nuovo contatto: chiunque arrivi qui sta creando il proprio
+  if(currentProfile && (currentProfile.is_platform_owner || currentProfile.role === "admin")) return true;
+  if(createdBy && String(createdBy) === String(currentUser.id)) return true;
+  if(!createdBy) return false;
+
+  const { data, error } = await client
+    .from("immonova_managed_access")
+    .select("access")
+    .eq("collaborator_id", currentUser.id)
+    .eq("manager_id", createdBy)
+    .eq("resource_key", "contacts")
+    .maybeSingle();
+
+  if(error){
+    console.warn("Verifica permesso modifica non riuscita (non bloccante):", error.message);
+    return false;
+  }
+
+  return !!data && (data.access === "write" || data.access === "both");
+}
+
+function lockFormAsReadOnly(){
+  form.querySelectorAll("input,select,textarea,button:not(#saveBtn)").forEach(el => {
+    if(el.type === "button" || el.tagName === "A") return;
+    el.disabled = true;
+  });
+  saveBtn.style.display = "none";
+
+  var notice = document.createElement("div");
+  notice.style.cssText = "margin-top:14px;padding:10px 14px;border:1px solid rgba(166,127,52,.35);color:var(--c-46371a);background:rgba(166,127,52,.08);font-size:12px;letter-spacing:.04em";
+  notice.textContent = "Accesso in sola lettura: questo contatto non è tuo e non hai il permesso di modificarlo.";
+  form.insertBefore(notice, form.firstChild);
+}
+
 async function loadInvestor(){
   if(!investorId) return;
 
@@ -1351,6 +1388,15 @@ async function loadInvestor(){
      caso lo segnaliamo chiaramente invece di nasconderlo, cosi' resta visibile che manca. ---- */
   if(currentProfile && currentProfile.is_platform_owner){
     showAuthorshipBadge(data.created_by, data.created_at);
+  }
+
+  /* ---- PROBLEMA SEGNALATO 25/10/2026: un collaboratore con accesso in sola lettura poteva
+     aprire direttamente questa pagina via URL (anche se investors.html gli nasconde il link
+     "Modifica"), scrivere nei campi e provare a salvare -- il salvataggio falliva solo dopo,
+     per via della RLS. Qui si blocca il form PRIMA, appena si scopre che l'accesso e' read-only. ---- */
+  const editable = await canEditThisInvestor(data.created_by);
+  if(!editable){
+    lockFormAsReadOnly();
   }
 
   var fullNameForTitle = [data.first_name, data.last_name].filter(Boolean).join(" ");

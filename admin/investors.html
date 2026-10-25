@@ -484,7 +484,9 @@ let currentProfile = null;
 let allInvestors = [];
 let currentUserLanguage = "it";
 let isOwner = false;
+let isAdmin = false;
 let authorEmailsById = {}; // created_by uuid -> "nome (email)" oppure "email" -- popolata solo se isOwner
+let myContactsGrants = {}; // manager_id (master) -> access ("read"/"write"/"both") per resource_key="contacts"
 
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). loadProfile() qui
    caricava gia' il profilo per il controllo ruolo admin; estesa per includere anche "language"
@@ -526,6 +528,7 @@ var UI_STRINGS = {
   empty_none:"Nessun investitore trovato.",
   lang_prefix:"Lingua: ",
   action_edit:"Modifica", action_email:"Email", action_whatsapp:"WhatsApp", action_delete:"Elimina",
+  action_readonly:"Solo lettura", action_readonly_title:"Accesso in sola lettura: non puoi modificare o eliminare questo contatto",
   confirm_delete_investor:"Eliminare definitivamente questo investitore?",
   msg_deleting:"Eliminazione contatto...", msg_deleted:"Contatto eliminato."
 };
@@ -688,6 +691,7 @@ async function loadProfile(){
      correttezza tra colleghi -- nessun master o collaboratore deve vederla, come richiesto
      esplicitamente. */
   isOwner = !!currentProfile.is_platform_owner;
+  isAdmin = currentProfile.role === "admin";
   if(isOwner){
     document.getElementById("thAuthorship").style.display = "";
   }
@@ -722,10 +726,47 @@ async function loadInvestors(){
   if(isOwner){
     await loadAuthorEmails();
   }
+  if(!isOwner && !isAdmin){
+    await loadMyContactsGrants();
+  }
 
   buildFilters();
   renderStats();
   applyFilters();
+}
+
+/* ---- PROBLEMA SEGNALATO 25/10/2026: un collaboratore con accesso in SOLA LETTURA ai contatti
+   di un suo master poteva comunque cliccare "Modifica", scrivere nei campi e provare a salvare
+   -- il salvataggio falliva silenziosamente per via della RLS, ma il pulsante non doveva
+   nemmeno essere cliccabile. Qui si recupera il livello di accesso reale (read/write/both) per
+   ogni master che ha esteso i contatti a questo collaboratore, cosi' da poter mostrare
+   "Modifica" SOLO quando il permesso lo consente davvero. ---- */
+async function loadMyContactsGrants(){
+  const { data, error } = await client
+    .from("immonova_managed_access")
+    .select("manager_id,access")
+    .eq("collaborator_id", currentUser.id)
+    .eq("resource_key", "contacts");
+
+  if(error){
+    console.warn("Caricamento permessi contatti non riuscito (non bloccante):", error.message);
+    return;
+  }
+
+  myContactsGrants = {};
+  (data || []).forEach(row => { myContactsGrants[row.manager_id] = row.access; });
+}
+
+/* Puo' modificare/eliminare un contatto se: e' il proprietario del record, se e' admin/owner,
+   oppure se il master che glielo ha concesso ha scelto "write" o "both" (non solo "read"). */
+function canEditInvestor(inv){
+  if(isOwner || isAdmin) return true;
+  if(inv.created_by && String(inv.created_by) === String(currentUser.id)) return true;
+  if(inv.created_by){
+    const access = myContactsGrants[inv.created_by];
+    if(access === "write" || access === "both") return true;
+  }
+  return false;
 }
 
 /* ---- Solo per te (is_platform_owner): recupera email/nome di chi ha creato ogni contatto,
@@ -960,10 +1001,12 @@ function renderTable(data){
 
         <td>
           <div class="actions">
-            <a href="investor-form.html?id=${encodeURIComponent(inv.id)}">${esc(T.action_edit)}</a>
+            ${canEditInvestor(inv)
+              ? `<a href="investor-form.html?id=${encodeURIComponent(inv.id)}">${esc(T.action_edit)}</a>`
+              : `<span class="badge" title="${esc(T.action_readonly_title)}">${esc(T.action_readonly)}</span>`}
             <a href="mailto:${encodeURIComponent(inv.email || "")}">${esc(T.action_email)}</a>
             ${inv.whatsapp ? `<a href="https://wa.me/${encodeURIComponent(String(inv.whatsapp).replace(/[^0-9]/g,""))}" target="_blank">${esc(T.action_whatsapp)}</a>` : ""}
-            <button class="danger" onclick="deleteInvestor('${inv.id}')">${esc(T.action_delete)}</button>
+            ${canEditInvestor(inv) ? `<button class="danger" onclick="deleteInvestor('${inv.id}')">${esc(T.action_delete)}</button>` : ""}
           </div>
         </td>
       </tr>
