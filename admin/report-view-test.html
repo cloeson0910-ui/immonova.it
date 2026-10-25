@@ -4443,6 +4443,37 @@ function closeCustomizeSectionsPanel(){
    numeri combaciano su abbastanza dossier reali, questa chiamata sostituirà
    il calcolo locale nella versione definitiva; fino ad allora il dossier
    continua a mostrare SOLO i numeri calcolati localmente come sempre. */
+function investmentMetricsJumpBoxInit(){
+  if(document.getElementById("investmentMetricsJumpBox")) return;
+  var box = document.createElement("div");
+  box.id = "investmentMetricsJumpBox";
+  box.style.cssText = "position:fixed;right:14px;bottom:84px;z-index:99999;display:flex;gap:6px;align-items:center;background:#20201c;padding:8px 10px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);font:12px/1.4 monospace";
+  var label = document.createElement("span");
+  label.textContent = "ID:";
+  label.style.color = "#f3ead8";
+  var input = document.createElement("input");
+  input.id = "investmentMetricsJumpInput";
+  input.type = "text";
+  input.placeholder = opportunityId || "es. 65";
+  input.style.cssText = "width:70px;padding:4px 6px;border-radius:4px;border:1px solid #555;background:#111;color:#f3ead8;font:12px monospace";
+  var go = function(){
+    var v = (input.value||"").trim();
+    if(!v) return;
+    var url = new URL(window.location.href);
+    url.searchParams.set("id", v);
+    window.location.href = url.toString();
+  };
+  input.addEventListener("keydown", function(e){ if(e.key==="Enter") go(); });
+  var btn = document.createElement("button");
+  btn.textContent = "Vai";
+  btn.type = "button";
+  btn.style.cssText = "padding:4px 10px;border-radius:4px;border:0;background:#8a6d3b;color:#fff;cursor:pointer;font:12px monospace";
+  btn.addEventListener("click", go);
+  box.appendChild(label);
+  box.appendChild(input);
+  box.appendChild(btn);
+  document.body.appendChild(box);
+}
 function investmentMetricsShadowBanner(text, ok){
   var el = document.getElementById("investmentMetricsShadowBanner");
   if(!el){
@@ -4509,6 +4540,7 @@ async function runInvestmentMetricsShadowCheck(){
 }
 
 async function init(){
+  investmentMetricsJumpBoxInit();
   try{
     await applyLanguage(params.get("lang") || "it");
     var quickLangSwitch=document.getElementById("quickLangSwitch");
