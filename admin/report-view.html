@@ -4855,6 +4855,13 @@ function renderDossierLinkRow(){
     return;
   }
   var genStamp = formatDossierLinkTimestamp(url);
+  /* RICHIESTO 25/10/2026: chi copia il link selezionandolo direttamente dal campo (clic +
+     Ctrl/Cmd+C), invece di premere il pulsante "Copia link", bypassava del tutto la logica che
+     aggiunge ?by=<email del master> -- perche' quella veniva applicata solo dentro
+     copyDossierLink(), MAI al valore mostrato nel campo stesso. Ora il parametro e' gia'
+     "cotto dentro" il valore del campo fin dal render: chiunque lo selezioni a mano porta
+     comunque con se' l'attribuzione corretta. */
+  var urlWithSender = dossierShareUrlWithSender(url);
   /* Bloccati per davvero (disabled), non solo avvisati, finche' dossierLinkVerified non e'
      true: prima si poteva copiare/aprire il link anche a deploy GitHub Pages non ancora
      concluso, servendo la pagina precedente. */
@@ -4862,7 +4869,7 @@ function renderDossierLinkRow(){
   dossierLinkRow.style.display="flex";
   dossierLinkRow.innerHTML =
     "<span class=\"link-label\">Link diretto al dossier:</span>"+
-    "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\">"+
+    "<input type=\"text\" id=\"dossierLinkInput\" readonly value=\""+escapeHTML(urlWithSender)+"\" onclick=\"this.select()\">"+
     "<button type=\"button\" class=\"copy-btn\""+lockedAttrs+" onclick=\"copyDossierLink()\">Copia link</button>"+
     "<button type=\"button\" class=\"copy-btn\""+lockedAttrs+" onclick=\"sendDossierWhatsApp()\">Invia su WhatsApp</button>"+
     "<span class=\"copy-feedback\" id=\"copyFeedback\"></span>"+
@@ -4935,18 +4942,22 @@ function renderDossierLangLinksBox(){
     var name = DOSSIER_LANG_NAMES[lang] || lang.toUpperCase();
     var isCurrent = lang === (CURRENT_LANG||"it");
     var genStamp = formatDossierLinkTimestamp(url);
+    /* Stesso fix di renderDossierLinkRow(): ?by=<email del master> va "cotto dentro" il
+       valore mostrato/copiato/aperto, non aggiunto solo dentro un pulsante -- altrimenti
+       selezionare il campo a mano o premere "Apri" perde l'attribuzione. */
+    var urlWithSender = dossierShareUrlWithSender(url);
     /* Se questa riga e' proprio la lingua appena rigenerata e non ancora confermata online
        (pendingUnverifiedLang), blocchiamo Copia/Apri per davvero: altrimenti si puo' copiare o
        aprire un link che GitHub Pages non ha ancora finito di pubblicare, servendo ancora la
        pagina precedente -- esattamente il bug segnalato. */
     var isPending = (lang === pendingUnverifiedLang);
     var lockedAttrs = isPending ? " disabled title=\"In attesa di conferma pubblicazione: non ancora utilizzabile\"" : "";
-    var openHref = isPending ? "javascript:void(0)" : escapeHTML(url);
+    var openHref = isPending ? "javascript:void(0)" : escapeHTML(urlWithSender);
     var openAttrs = isPending ? " aria-disabled=\"true\" style=\"text-decoration:none;display:inline-block;pointer-events:none;opacity:.35\"" : " style=\"text-decoration:none;display:inline-block\" target=\"_blank\" rel=\"noopener\"";
     return "<div class=\"dossier-lang-link-row"+(isCurrent?" current":"")+"\">"+
       "<span class=\"lang-badge\">"+escapeHTML(lang)+"</span>"+
       "<span class=\"lang-name\">"+escapeHTML(name)+"</span>"+
-      "<input type=\"text\" readonly value=\""+escapeHTML(url)+"\" onclick=\"this.select()\" id=\"dossierLangLinkInput"+idx+"\">"+
+      "<input type=\"text\" readonly value=\""+escapeHTML(urlWithSender)+"\" onclick=\"this.select()\" id=\"dossierLangLinkInput"+idx+"\">"+
       (isPending?"<span style=\"font-size:11px;color:var(--c-6f4319);font-weight:600;white-space:nowrap\">Pubblicazione in corso...</span>":(genStamp?("<span style=\"font-size:11px;color:var(--c-2b4626);font-weight:600;white-space:nowrap\">Generato il "+escapeHTML(genStamp)+"</span>"):""))+
       "<button type=\"button\" class=\"copy-btn\""+lockedAttrs+" onclick=\"copyDossierLangLink('dossierLangLinkInput"+idx+"','dossierLangLinkFeedback"+idx+"')\">Copia</button>"+
       "<a class=\"copy-btn\""+openAttrs+" href=\""+openHref+"\">Apri</a>"+
@@ -5033,7 +5044,9 @@ async function copyDossierLink(){
   var input = document.getElementById("dossierLinkInput");
   var feedback = document.getElementById("copyFeedback");
   if(!input) return;
-  var url = dossierShareUrlWithSender(input.value);
+  // input.value ha già ?by=<email del master> incorporato fin dal render (vedi renderDossierLinkRow):
+  // non lo si aggiunge di nuovo qui, altrimenti comparirebbe due volte nello stesso link.
+  var url = input.value;
   try{
     if(navigator.clipboard && navigator.clipboard.writeText){
       await navigator.clipboard.writeText(url);
