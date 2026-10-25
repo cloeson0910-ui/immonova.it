@@ -27,6 +27,7 @@
   p.lead{font-size:13px;line-height:1.5;color:#6b6353;margin:0 0 16px}
   label.field-label{display:block;font-size:11px;font-weight:600;color:#8a7a56;letter-spacing:.03em;margin:0 0 4px}
   input[type=email],input[type=text]{width:100%;font-size:15px;padding:12px 14px;border:1px solid #ddd3bd;border-radius:6px;margin-bottom:12px;box-sizing:border-box;font-family:inherit}
+  input[type=text][readonly]{background:#f1ead9;color:#6b6353;cursor:default}
   input#otpCode{font-size:22px;letter-spacing:5px;text-align:center}
   label.nda{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.5;color:#6b6353;margin:0 0 16px;cursor:pointer}
   label.nda input{margin-top:2px;flex:0 0 auto}
@@ -50,8 +51,8 @@
 
       <div class="step" id="stepEmail">
         <p class="lead">Per accedere al dossier riservato, inserisci la tua email: ti invieremo un codice di verifica valido 60 minuti.</p>
-        <label class="field-label" for="otpName">Inviato da (facoltativo)</label>
-        <input type="text" id="otpName" placeholder="Il tuo nome o di chi ti ha condiviso il link" autocomplete="name">
+        <label class="field-label" for="otpName">Condiviso da</label>
+        <input type="text" id="otpName" readonly tabindex="-1">
         <input type="email" id="otpEmail" placeholder="La tua email" autocomplete="email">
         <label class="nda"><input type="checkbox" id="ndaCheck">Ho letto e accetto l&#039;<a href="https://immonova-consulting.it/nda.html" target="_blank" rel="noopener">accordo di riservatezza (NDA)</a></label>
         <button type="button" class="btn" id="sendCodeBtn" disabled>Invia codice</button>
@@ -69,10 +70,10 @@
 
 <script>
 (function(){
-  var S = {"sendLabel":"Invia codice","sendingLabel":"Invio in corso...","sentNotice":"Codice inviato. Controlla la tua email (anche spam) e inseriscilo qui sotto.","codeLabel":"Codice di verifica","verifyLabel":"Verifica e scarica","verifyingLabel":"Verifica in corso...","wrongCode":"Codice errato.","expired":"Codice scaduto, richiedine uno nuovo.","maxAttempts":"Troppi tentativi errati. Richiedi un nuovo codice.","sendError":"Non siamo riusciti a inviare il codice. Riprova tra poco.","verifyError":"Errore durante la verifica, riprova.","invalidEmail":"Inserisci un indirizzo email valido.","ndaRequired":"Devi accettare l'accordo di riservatezza per continuare."};
+  var S = {"sendLabel":"Invia codice","sendingLabel":"Invio in corso...","sentNotice":"Codice inviato. Controlla la tua email (anche spam) e inseriscilo qui sotto.","codeLabel":"Codice di verifica","verifyLabel":"Verifica e scarica","verifyingLabel":"Verifica in corso...","wrongCode":"Codice errato.","expired":"Codice scaduto, richiedine uno nuovo.","maxAttempts":"Troppi tentativi errati. Richiedi un nuovo codice.","sendError":"Non siamo riusciti a inviare il codice. Riprova tra poco.","verifyError":"Errore durante la verifica, riprova.","invalidEmail":"Inserisci un indirizzo email valido.","ndaRequired":"Devi accettare l'accordo di riservatezza per continuare.","nameFallback":"IMMONOVA"};
   var FN_BASE = "https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1";
   var ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwenptaXRtYmF2Y21jYXNzd2J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDk1ODQsImV4cCI6MjA5NzM4NTU4NH0.SkPicFpfYe69rI0JmASqm-jif-Ov3gQ0Mu20UbrYawY";
-  var PDF_URL = "https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/dossier-pdfs/opportunity-65/1792347940833_dossier_IMMONOVA_Castello_Lesa_Lago_Maggiore_it.pdf";
+  var PDF_URL = "https://bpzzmitmbavcmcasswbu.supabase.co/storage/v1/object/public/dossier-pdfs/opportunity-65/1792964403460_dossier_IMMONOVA_Castello_Lesa_Lago_Maggiore_it.pdf";
   var OPPORTUNITY_ID = "65";
   var otpId = null;
 
@@ -84,16 +85,12 @@
   var ndaCheck = document.getElementById("ndaCheck");
   var nameInput = document.getElementById("otpName");
 
-  /* Automatico: se chi ha condiviso il link ha usato il pulsante "Copia link"/"Invia su
-     WhatsApp" dell'admin, l'URL contiene già ?by=<email dell'admin loggato> (vedi
-     dossierShareUrlForSending() in dossier-send.html). Lo leggiamo qui e precompiliamo da
-     soli il campo "Inviato da": nessuno deve scrivere nulla a mano. Resta comunque
-     modificabile per i link condivisi senza quel parametro (es. link più vecchi già in
-     circolazione prima di questa modifica). */
   try{
     var byParam = new URLSearchParams(location.search).get("by");
-    if(byParam && nameInput && !nameInput.value) nameInput.value = byParam;
-  }catch(e){}
+    if(nameInput) nameInput.value = byParam || S.nameFallback;
+  }catch(e){
+    if(nameInput) nameInput.value = S.nameFallback;
+  }
 
   ndaCheck.addEventListener("change", function(){ sendBtn.disabled = !ndaCheck.checked; });
 
