@@ -996,14 +996,33 @@ function applyLimitedProfessionalRestrictions(){
     if(el) el.style.display="none";
   });
 }
+/* RICHIESTO 25/10/2026: il campo "Condiviso da" sulla pagina pubblica del dossier deve sempre
+   mostrare l'email del MASTER (chi gestisce la struttura), mai l'email personale del
+   collaboratore che materialmente copia/invia il link -- se sei tu o un master a mandarlo, la
+   propria email; se e' un suo collaboratore a mandarlo, l'email del SUO master (non la sua). */
+var dossierSenderEmail=null;
 async function loadSuperUserFlag(){
   if(!currentUser) return;
-  var res=await client.from("profiles").select("role,is_super_user,professional_role").eq("id",currentUser.id).single();
+  dossierSenderEmail=currentUser.email||null; // fallback di sicurezza finché non risolviamo quella giusta sotto
+  var res=await client.from("profiles").select("role,is_super_user,professional_role,is_platform_owner,managed_by,email").eq("id",currentUser.id).single();
   if(res.error||!res.data){console.warn("Profilo non caricato per il controllo super user:",res.error&&res.error.message);return;}
   isSuperUser=!!res.data.is_super_user;
   if(isSuperUser&&refreshDossierBtn){refreshDossierBtn.style.display="none";}
   isLimitedProfessional=res.data.role!=="admin"&&LIMITED_PROFESSIONAL_ROLES.indexOf(res.data.professional_role)!==-1;
   applyLimitedProfessionalRestrictions();
+
+  if(res.data.is_platform_owner||res.data.is_super_user){
+    // tu (owner) o un master: e' giusto che compaia la propria email, sei tu che lo mandi.
+    dossierSenderEmail=res.data.email||currentUser.email||null;
+  }else if(res.data.managed_by){
+    // un collaboratore normale: deve comparire l'email del SUO master, non la propria.
+    var masterRes=await client.from("profiles").select("email").eq("id",res.data.managed_by).single();
+    if(!masterRes.error&&masterRes.data&&masterRes.data.email){
+      dossierSenderEmail=masterRes.data.email;
+    }else{
+      console.warn("Email del master non trovata, uso quella del collaboratore come fallback:",masterRes.error&&masterRes.error.message);
+    }
+  }
 }
 async function loadOpportunity(){if(!opportunityId)throw new Error("ID opportunità mancante nella URL.");var res=await client.from("opportunities").select("*").eq("id",opportunityId).single();if(res.error)throw res.error;opportunity=res.data;if(editLink)editLink.href="opportunity-edit.html?id="+encodeURIComponent(opportunityId);}
 async function loadLatestReport(){
@@ -4996,7 +5015,7 @@ function waitForDossierPageLive(url, expectedSubstring, onProgress){
    nessuno deve scriverlo a mano, né può toglierlo o modificarlo. */
 function dossierShareUrlWithSender(baseUrl){
   if(!baseUrl) return baseUrl;
-  var senderEmail = (currentUser && currentUser.email) ? currentUser.email : "";
+  var senderEmail = dossierSenderEmail || (currentUser && currentUser.email) || "";
   if(!senderEmail) return baseUrl;
   var sep = baseUrl.indexOf("?") >= 0 ? "&" : "?";
   return baseUrl + sep + "by=" + encodeURIComponent(senderEmail);

@@ -611,6 +611,7 @@ body::after{
 <script>
 const client=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser=null,currentProfile=null,isAdmin=false;
+let myContactsGrants={}; // manager_id (master) -> access ("read"/"write"/"both") per resource_key="contacts", solo per chi non è owner
 let allOpportunities=[],latestReports=[],investorRequests=[],allInvestors=[],allEvents=[],contactHistory=[],allProfiles=[];
 let selectedOwnerId="";
 let activeDashboardView="total";
@@ -987,10 +988,37 @@ document.getElementById("logoutBtn").addEventListener("click",async()=>{await cl
 // invece funzionavano perché popolati dentro una funzione async chiamata più tardi, a pagina
 // già completamente caricata. Fix: agganciare i listener DENTRO la funzione, la prima volta
 // che viene eseguita (a quel punto il markup esiste di sicuro), non a livello di script.
+/* RICHIESTO 25/10/2026: il popup "clienti da completare" deve comparire SOLO a chi può
+   davvero intervenire su quella scheda -- tu (owner) sempre; un master sempre per i PROPRI
+   contatti; un collaboratore SOLO se il suo master gli ha concesso i contatti in lettura E
+   scrittura ("write"/"both"), mai con sola lettura e mai senza nessun permesso. Altrimenti il
+   popup non deve comparire affatto (non ha senso disturbare qualcuno che non può completare
+   nulla). */
+async function loadMyContactsGrantsForPopup(){
+  if(currentProfile && currentProfile.is_platform_owner) return; // owner: bypass totale, non serve la mappa
+  try{
+    const {data,error}=await client.from("immonova_managed_access").select("manager_id,access").eq("collaborator_id",currentUser.id).eq("resource_key","contacts");
+    if(error){ console.warn("Caricamento permessi contatti (popup) non riuscito:",error.message); return; }
+    myContactsGrants={};
+    (data||[]).forEach(function(row){ myContactsGrants[row.manager_id]=row.access; });
+  }catch(e){ console.warn("Caricamento permessi contatti (popup) non riuscito:",e); }
+}
+function canEditInvestorForPopup(inv){
+  if(currentProfile && currentProfile.is_platform_owner) return true;
+  if(inv.created_by && String(inv.created_by)===String(currentUser&&currentUser.id)) return true;
+  if(inv.created_by){
+    const access=myContactsGrants[inv.created_by];
+    if(access==="write"||access==="both") return true;
+  }
+  return false;
+}
+
 var incompleteListenersBound = false;
 async function loadIncompleteInvestorsPopup(){
   try{
-    const {data,error}=await client.from("investors").select("id,first_name,last_name,profile_incomplete_reason").eq("profile_incomplete",true).order("created_at",{ascending:false});
+    await loadMyContactsGrantsForPopup();
+    const {data:rawData,error}=await client.from("investors").select("id,first_name,last_name,profile_incomplete_reason,created_by").eq("profile_incomplete",true).order("created_at",{ascending:false});
+    const data=(rawData||[]).filter(canEditInvestorForPopup);
     if(error||!data||!data.length){ await loadPendingRequestsPopup(); return; }
     const overlay=document.getElementById("incompleteOverlay");
     const list=document.getElementById("incompleteList");
