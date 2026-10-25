@@ -4986,20 +4986,35 @@ function waitForDossierPageLive(url, expectedSubstring, onProgress){
     tryOnce();
   });
 }
+/* RICHIESTO 25/10/2026: nella pagina di accesso al dossier (il modulo email+OTP che il
+   cliente vede) il campo "Inviato da" deve SEMPRE contenere chi ha condiviso il link -- mai
+   vuoto, mai scrivibile dal cliente. La pagina di destinazione (publish-dossier-page) già
+   sapeva precompilarlo da solo leggendo ?by=<email> dall'URL, ma QUI (dove il link viene
+   effettivamente copiato o mandato su WhatsApp) quel parametro non veniva mai aggiunto --
+   quindi arrivava sempre vuoto. Lo aggiungiamo qui, in automatico, con l'email di chi ha
+   effettuato l'accesso in questo momento (tu, o il master che ha generato/condiviso il link):
+   nessuno deve scriverlo a mano, né può toglierlo o modificarlo. */
+function dossierShareUrlWithSender(baseUrl){
+  if(!baseUrl) return baseUrl;
+  var senderEmail = (currentUser && currentUser.email) ? currentUser.email : "";
+  if(!senderEmail) return baseUrl;
+  var sep = baseUrl.indexOf("?") >= 0 ? "&" : "?";
+  return baseUrl + sep + "by=" + encodeURIComponent(senderEmail);
+}
 /* Apre WhatsApp (app se su telefono, WhatsApp Web se su desktop) con il messaggio già scritto
    -- titolo del dossier + link con anteprima. Senza numero: wa.me con solo "text" apre la
    schermata di scelta del contatto a cui mandarlo, dato che qui non abbiamo un cliente
    specifico collegato (a differenza di dossier-send, questa pagina non ha un investorRequest). */
 function sendDossierWhatsApp(){
   if(!currentDossierPdfUrl) return;
-  var message = getTitle()+" — Dossier IMMONOVA\n"+currentDossierPdfUrl;
+  var message = getTitle()+" — Dossier IMMONOVA\n"+dossierShareUrlWithSender(currentDossierPdfUrl);
   window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
 }
 async function copyDossierLink(){
   var input = document.getElementById("dossierLinkInput");
   var feedback = document.getElementById("copyFeedback");
   if(!input) return;
-  var url = input.value;
+  var url = dossierShareUrlWithSender(input.value);
   try{
     if(navigator.clipboard && navigator.clipboard.writeText){
       await navigator.clipboard.writeText(url);
