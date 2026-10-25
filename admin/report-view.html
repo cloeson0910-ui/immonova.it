@@ -2233,7 +2233,7 @@ function gradeLabel(total){
   if(total>=35)return T.grade_fragile;
   return T.grade_weak;
 }
-function computeScore(){
+function computeScoreLocal(){
   var f=buildFinance();
   var projs=buildCashflowProjections();
   var proj=null;
@@ -2417,7 +2417,7 @@ function getRenovationRange(){
   var max=firstFinite(o.renovation_cost_max);
   return {min:min||0, max:max||0};
 }
-function buildFinance(){
+function buildFinanceLocal(){
   var j=getReportJson();var a=getAsset();var sr=(report&&report.short_rental_data)||j.short_rental_data||j.short_rental||j.economics||{};
   var purchase=getPurchasePrice();
   var renovation=getRenovationAvg();
@@ -3681,7 +3681,7 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
   var be=computeBreakEvenYear(rows, total, baseRevenue, ratio);
   return {rows:rows, revenueSource:revenueSource, adrVerified:adrVerified, total:total, breakEvenYear:be.year, breakEvenExtrapolated:be.extrapolated, opexRatio:ratio};
 }
-function buildCashflowProjections(){
+function buildCashflowProjectionsLocal(){
   var f=buildFinance();
 
   if(isCommercialCategory()){
@@ -4434,6 +4434,40 @@ function closeCustomizeSectionsPanel(){
   });
 })();
 
+/* ---- SOLO IN QUESTO FILE DI TEST: confronto "ombra" tra i numeri calcolati
+   localmente (come oggi) e quelli restituiti dalla nuova edge function
+   immonova-investment-metrics (dove si sta spostando la logica di calcolo,
+   per non lasciarla leggibile lato client -- vedi conversazione 25/10/2026).
+   Non cambia nulla di quello che vedi nel dossier: gira in parallelo, in
+   background, e mostra solo un banner di verifica in basso a destra. Se i
+   numeri combaciano su abbastanza dossier reali, questa chiamata sostituirà
+   il calcolo locale nella versione definitiva; fino ad allora il dossier
+   continua a mostrare SOLO i numeri calcolati localmente come sempre. */
+/* investmentMetricsRemote: la finanza/punteggio/cashflow di questo dossier sono calcolati
+   dall'edge function "immonova-investment-metrics" (le formule non sono piu' leggibili nel
+   sorgente di questa pagina). Se la chiamata fallisce per qualunque motivo (rete, timeout,
+   funzione non raggiungibile), si ricade in automatico e silenziosamente sul calcolo locale
+   di sempre (buildFinanceLocal/computeScoreLocal/buildCashflowProjectionsLocal): il dossier
+   non si rompe mai e continua a mostrare numeri corretti. */
+var remoteMetrics = null;
+async function fetchRemoteInvestmentMetrics(){
+  try{
+    var res = await client.functions.invoke("immonova-investment-metrics", {
+      body: { opportunity: opportunity, report: report, dossier_data: dossierData, lang: CURRENT_LANG }
+    });
+    if(!res.error && res.data && res.data.ok === true){
+      remoteMetrics = res.data;
+    }else{
+      console.warn("[investment-metrics] edge non disponibile, uso calcolo locale:", res.error || res.data);
+    }
+  }catch(e){
+    console.warn("[investment-metrics] edge non disponibile (eccezione), uso calcolo locale:", e);
+  }
+}
+function buildFinance(){ return (remoteMetrics && remoteMetrics.finance) ? remoteMetrics.finance : buildFinanceLocal(); }
+function computeScore(){ return (remoteMetrics && remoteMetrics.score) ? remoteMetrics.score : computeScoreLocal(); }
+function buildCashflowProjections(){ return (remoteMetrics && remoteMetrics.cashflow) ? remoteMetrics.cashflow : buildCashflowProjectionsLocal(); }
+
 async function init(){
   try{
     await applyLanguage(params.get("lang") || "it");
@@ -4468,6 +4502,11 @@ async function init(){
     destinationPhotoIndex = 0;
     await ensureDossier();
     if(dossierCancelledByUser) return; // Annulla premuto: redirect già in corso, non disegnare nulla.
+    /* Va atteso QUI, prima di renderBook(), perche' da questo momento in poi buildFinance()/
+       computeScore()/buildCashflowProjections() (usate dal rendering sotto) restituiscono i
+       numeri dell'edge function se la chiamata e' andata a buon fine, altrimenti ricadono in
+       automatico e silenziosamente sul calcolo locale di sempre. */
+    await fetchRemoteInvestmentMetrics();
     var manualOverridesChanged=false;
     if(dossierData && !dossierData._no_territorial_data){
       manualOverridesChanged=await applyManualOverridesClient();
