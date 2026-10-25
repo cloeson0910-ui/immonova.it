@@ -213,6 +213,15 @@ async function loadAll(){
   var { data: myProfile } = await client.from("profiles").select("is_platform_owner").eq("id", user.id).single();
   state.isOwner = !!(myProfile && myProfile.is_platform_owner);
 
+  /* Pagina riservata all'owner: prima vista mostrava comunque la matrice e
+     l'elenco utenti (email, ruoli, agenzie) a chiunque fosse loggato, solo
+     disabilitando il salvataggio. Blocco l'accesso del tutto a chi non è
+     owner, invece di mostrare dati riservati in sola lettura. */
+  if(!state.isOwner){
+    window.location.href = "dashboard.html";
+    return;
+  }
+
   var [groupsRes, resourcesRes, matrixRes, usersRes, managedAccessRes] = await Promise.all([
     client.from("immonova_permission_groups").select("*").order("created_at"),
     client.from("immonova_permission_resources").select("*").order("sort_order"),

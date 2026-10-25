@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<link rel="stylesheet" href="../css/immonova-text-theme.css">
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autorizzazioni Pagine | IMMONOVA Admin</title>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+
+body{
+  background:#f4ecdf;
+  font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;
+  color:var(--c-46371a);
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  background:
+    radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),
+    #f4ecdf;
+}
+
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  background:
+    repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),
+    repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),
+    repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);
+  background-size:230px 199px;
+  opacity:.30;
+}
+
+.header{
+  padding:24px 42px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid rgba(166,127,52,.14);
+  background:rgba(244,236,223,.72);
+  backdrop-filter:blur(14px);
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+
+.logo{
+  text-decoration:none;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+
+.logo-svg{
+  width:230px;
+  height:auto;
+  display:block;
+}
+
+.logo-fill{
+  fill:none;
+  stroke:url(#goldGradientHeader);
+  stroke-width:3.2;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+
+.logo-i{
+  fill:url(#goldGradientHeader);
+}
+
+.logo-line{
+  width:78%;
+  height:1px;
+  margin:5px auto 0;
+  background:linear-gradient(to right,transparent,rgba(197,157,72,.78),transparent);
+}
+
+.logo-sub{
+  margin-top:5px;
+  color:var(--c-5b461d);
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  text-align:center;
+}
+
+.header-actions{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.header-actions a,
+.logout{
+  padding:11px 18px;
+  border:1px solid rgba(166,127,52,.28);
+  background:rgba(255,255,255,.26);
+  cursor:pointer;
+  color:var(--c-5b461d);
+  text-decoration:none;
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+
+.header-actions a:hover,
+.logout:hover{
+  background:#a67f34;
+  color:var(--c-ffffff);
+}
+
+.container{
+  max-width:1180px;
+  margin:auto;
+  padding:40px;
+}
+
+.kicker{
+  font-size:11px;
+  letter-spacing:.32em;
+  text-transform:uppercase;
+  color:var(--c-554321);
+  margin-bottom:12px;
+}
+
+.title{
+  font-size:42px;
+  font-weight:200;
+  letter-spacing:.05em;
+  color:var(--c-5b461d);
+  margin-bottom:18px;
+}
+
+.subtitle{
+  font-size:15px;
+  line-height:1.8;
+  color:var(--c-4f4125);
+  max-width:900px;
+  margin-bottom:34px;
+}
+
+.tabs{
+  display:flex;
+  gap:10px;
+  margin-bottom:26px;
+  border-bottom:1px solid rgba(166,127,52,.18);
+}
+
+.tab-btn{
+  padding:12px 20px;
+  border:none;
+  background:none;
+  cursor:pointer;
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--c-7d6a43);
+  border-bottom:2px solid transparent;
+}
+
+.tab-btn.active{
+  color:var(--c-5b461d);
+  border-bottom-color:#a67f34;
+}
+
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-width:480px;
+  margin-bottom:28px;
+}
+
+label{
+  font-size:10px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--c-5b471f);
+}
+
+select{
+  width:100%;
+  padding:15px 16px;
+  border:1px solid rgba(165,129,57,.25);
+  background:rgba(255,252,244,.35);
+  color:var(--c-46371a);
+  font-size:14px;
+  outline:none;
+  font-family:inherit;
+}
+
+.field-hint{
+  font-size:11.5px;
+  color:var(--c-7d6a43);
+  line-height:1.5;
+}
+
+.accordion{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.acc-panel{
+  background:rgba(255,255,255,.20);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(166,127,52,.15);
+  box-shadow:0 18px 50px rgba(127,100,48,.06);
+  overflow:hidden;
+}
+
+.acc-head{
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:18px 24px;
+  background:rgba(166,127,52,.08);
+  border:none;
+  cursor:pointer;
+  text-align:left;
+}
+
+.acc-head-title{
+  font-size:13px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--c-5b461d);
+  font-weight:600;
+}
+
+.acc-head-count{
+  font-size:11px;
+  color:var(--c-7d6a43);
+  letter-spacing:.08em;
+}
+
+.acc-head .chevron{
+  transition:transform .2s ease;
+  color:var(--c-7d6a43);
+}
+
+.acc-panel.open .chevron{
+  transform:rotate(180deg);
+}
+
+.acc-body{
+  display:none;
+  padding:6px 0;
+}
+
+.acc-panel.open .acc-body{
+  display:block;
+}
+
+.page-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 24px;
+  border-top:1px solid rgba(166,127,52,.08);
+  gap:16px;
+}
+
+.page-row-label{
+  font-size:14px;
+  color:var(--c-46371a);
+}
+
+.page-row-sub{
+  font-size:11px;
+  color:var(--c-9c8a63);
+  margin-top:2px;
+}
+
+.switch{
+  position:relative;
+  width:46px;
+  height:26px;
+  flex-shrink:0;
+}
+
+.switch input{
+  opacity:0;
+  width:0;
+  height:0;
+}
+
+.slider{
+  position:absolute;
+  cursor:pointer;
+  inset:0;
+  background:rgba(166,127,52,.25);
+  border-radius:20px;
+  transition:.2s;
+}
+
+.slider::before{
+  content:"";
+  position:absolute;
+  height:20px;
+  width:20px;
+  left:3px;
+  bottom:3px;
+  background:#fff;
+  border-radius:50%;
+  transition:.2s;
+}
+
+input:checked + .slider{
+  background:#a67f34;
+}
+
+input:checked + .slider::before{
+  transform:translateX(20px);
+}
+
+input:disabled + .slider{
+  opacity:.35;
+  cursor:not-allowed;
+}
+
+.empty{
+  padding:34px;
+  text-align:center;
+  opacity:.7;
+}
+
+.status{
+  margin-top:18px;
+  min-height:20px;
+  font-size:13px;
+  line-height:1.6;
+}
+
+.success{color:var(--c-2b4626)}
+.error{color:var(--c-561a1a)}
+
+.readonly-note{
+  font-size:11.5px;
+  color:var(--c-7d6a43);
+  margin-bottom:18px;
+  padding:12px 16px;
+  border:1px solid rgba(166,127,52,.2);
+  background:rgba(255,255,255,.18);
+}
+
+@media(max-width:600px){
+  .container{padding:28px 22px}
+  .title{font-size:34px}
+  .header{flex-direction:column;gap:18px}
+  .logo{align-items:center}
+  .header-actions{justify-content:center}
+}
+</style>
+</head>
+
+<body>
+
+<header class="header">
+
+<a href="../index.html" class="logo" aria-label="IMMONOVA Home">
+  <svg class="logo-svg" viewBox="0 0 1120 135" xmlns="http://www.w3.org/2000/svg" aria-label="IMMONOVA">
+    <defs>
+      <linearGradient id="goldGradientHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#8f6f2c"/>
+        <stop offset="42%" stop-color="#c79c43"/>
+        <stop offset="58%" stop-color="#f1d27a"/>
+        <stop offset="100%" stop-color="#a77d31"/>
+      </linearGradient>
+    </defs>
+
+    <rect class="logo-i" x="35" y="20" width="5" height="95" rx="2.5"/>
+    <path class="logo-fill" d="M105 115 L105 20 L155 115 L205 20 L205 115" />
+    <path class="logo-fill" d="M265 115 L265 20 L315 115 L365 20 L365 115" />
+    <ellipse class="logo-fill" cx="465" cy="67.5" rx="48" ry="48" />
+    <path class="logo-fill" d="M555 115 L555 20 L635 115 L635 20" />
+    <ellipse class="logo-fill" cx="735" cy="67.5" rx="48" ry="48" />
+    <path class="logo-fill" d="M810 20 L860 115 L910 20" />
+    <path class="logo-fill" d="M915 115 L965 20 L1015 115" />
+  </svg>
+
+  <div class="logo-line"></div>
+  <span class="logo-sub">OFF MARKET • CONSULTING</span>
+</a>
+
+<div class="header-actions">
+  <a href="dashboard.html">Dashboard</a>
+  <button class="logout" id="logoutBtn">Logout</button>
+</div>
+
+</header>
+
+<main class="container">
+
+  <div class="kicker">Area Admin</div>
+  <h1 class="title">Autorizzazioni Pagine</h1>
+
+  <p class="subtitle">
+    Decidi quali voci della dashboard può aprire ogni admin o master. Un master vede lo stesso
+    pannello limitato alle pagine che tu gli hai concesso, e può a sua volta autorizzare i propri
+    collaboratori solo per quelle stesse pagine.
+  </p>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div id="panels"></div>
+
+  <div id="status" class="status"></div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/site-branding.js"></script>
+
+<script>
+var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+var currentUser = null;
+var currentProfile = null;
+var isAdmin = false;
+var isMaster = false;
+
+var statusBox = document.getElementById("status");
+var tabsEl = document.getElementById("tabs");
+var panelsEl = document.getElementById("panels");
+
+/* ---- Catalogo pagine della dashboard, raggruppato per pannello (nome
+   sezione del menu). page_key è una chiave stabile indipendente dal nome
+   del file reale, così la matrice di permessi non si rompe se un file
+   viene rinominato -- quando si collega l'enforcement reale a ciascuna
+   pagina, si userà questa stessa chiave. ---- */
+var SECTIONS = [
+  {
+    title: "Strumenti",
+    pages: ["Catalogo Verificati", "Import Fonti Estero", "Permessi", "Watermark Retroattivo"]
+  },
+  {
+    title: "Operatività",
+    pages: [
+      "Acquisizione Immobile", "Articoli / Blog Sito", "Contatti", "Documenti", "Eventi",
+      "Immobili", "Mandati di Ricerca", "Note Vocali Collaboratori", "Notizie",
+      "Nuovo Mandato di Ricerca", "Proposte", "Short Rent", "Success Stories", "Team",
+      "Valutazioni Immobiliari", "Videochiamate"
+    ]
+  },
+  {
+    title: "Dati",
+    pages: ["Dati Verificati", "Fonti Dati", "Foto Destinazioni"]
+  },
+  {
+    title: "Amministrazione",
+    pages: [
+      "Anteprima Responsive", "Comunicazioni", "Contabilità", "Impostazioni Sito",
+      "Notifiche Broadcast", "Post Social", "Pubblicità", "Richieste", "Social",
+      "Statistiche", "Test A/B Meta Ads", "Utenti"
+    ]
+  }
+];
+
+function slugify(label){
+  return label.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+/* appiattisce il catalogo in {page_key, label, section} per uso rapido */
+var PAGE_INDEX = [];
+SECTIONS.forEach(function(sec){
+  sec.pages.forEach(function(label){
+    PAGE_INDEX.push({ page_key: slugify(label), label: label, section: sec.title });
+  });
+});
+
+function escapeHTML(value){
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+
+function setStatus(message, type){
+  statusBox.className = "status " + (type || "");
+  statusBox.textContent = message || "";
+}
+
+async function checkAuth(){
+  var result = await client.auth.getSession();
+  if(result.error || !result.data.session){
+    window.location.href = "login.html";
+    return false;
+  }
+  currentUser = result.data.session.user;
+  return true;
+}
+
+async function loadProfile(){
+  var result = await client
+    .from("profiles")
+    .select("id,role,is_super_user,managed_by,full_name,email,agency_name")
+    .eq("id", currentUser.id)
+    .single();
+
+  if(result.error || !result.data){
+    window.location.href = "dashboard.html";
+    return false;
+  }
+
+  currentProfile = result.data;
+  isAdmin = currentProfile.role === "admin";
+  isMaster = !!currentProfile.is_super_user;
+
+  if(!isAdmin && !isMaster){
+    window.location.href = "dashboard.html";
+    return false;
+  }
+  return true;
+}
+
+function agencyLabel(u){
+  return u.agency_name || u.full_name || u.email || u.id;
+}
+
+/* ---- Costruisce un pannello a fisarmonica per un dato set di page_key
+   già concesse. editable=true mostra toggle attivi/disattivi; se
+   allowedKeys è passato, i toggle per pagine fuori da quel set sono
+   disabilitati (usato dal master: non può concedere ciò che non ha). ---- */
+function renderAccordion(containerId, grantedSet, opts){
+  opts = opts || {};
+  var editable = !!opts.editable;
+  var allowedKeys = opts.allowedKeys || null; // null = tutto permesso (admin)
+  var onToggle = opts.onToggle;
+
+  var html = '<div class="accordion">';
+  SECTIONS.forEach(function(sec, idx){
+    var keys = sec.pages.map(slugify);
+    var activeCount = keys.filter(function(k){ return grantedSet.has(k); }).length;
+
+    html += '<div class="acc-panel' + (idx === 0 ? " open" : "") + '" data-section="' + escapeHTML(sec.title) + '">';
+    html += '<button type="button" class="acc-head">' +
+      '<span class="acc-head-title">' + escapeHTML(sec.title) + '</span>' +
+      '<span style="display:flex;align-items:center;gap:14px">' +
+        '<span class="acc-head-count">' + activeCount + ' / ' + keys.length + '</span>' +
+        '<span class="chevron">▾</span>' +
+      '</span>' +
+    '</button>';
+    html += '<div class="acc-body">';
+
+    sec.pages.forEach(function(label){
+      var key = slugify(label);
+      var checked = grantedSet.has(key);
+      var disabled = !editable || (allowedKeys && !allowedKeys.has(key));
+      html += '<div class="page-row">' +
+        '<div><div class="page-row-label">' + escapeHTML(label) + '</div>' +
+          (disabled && editable ? '<div class="page-row-sub">non disponibile — non è tra le tue pagine autorizzate</div>' : '') +
+        '</div>' +
+        '<label class="switch">' +
+          '<input type="checkbox" data-key="' + key + '" data-section="' + escapeHTML(sec.title) + '" ' +
+            (checked ? "checked " : "") + (disabled ? "disabled" : "") + '>' +
+          '<span class="slider"></span>' +
+        '</label>' +
+      '</div>';
+    });
+
+    html += '</div></div>';
+  });
+  html += '</div>';
+
+  var container = document.getElementById(containerId);
+  container.innerHTML = html;
+
+  container.querySelectorAll(".acc-head").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      btn.closest(".acc-panel").classList.toggle("open");
+    });
+  });
+
+  if(editable && onToggle){
+    container.querySelectorAll('input[type="checkbox"]').forEach(function(input){
+      input.addEventListener("change", function(){
+        onToggle(input.dataset.key, input.dataset.section, input.checked, input);
+      });
+    });
+  }
+}
+
+async function fetchGrantedSet(userId){
+  var result = await client
+    .from("immonova_page_grants")
+    .select("page_key")
+    .eq("user_id", userId);
+
+  if(result.error){
+    setStatus("Errore caricamento permessi: " + result.error.message, "error");
+    return new Set();
+  }
+  return new Set((result.data || []).map(function(r){ return r.page_key; }));
+}
+
+async function grantPage(userId, pageKey, section){
+  var result = await client.from("immonova_page_grants").insert({
+    user_id: userId,
+    page_key: pageKey,
+    section: section,
+    granted_by: currentUser.id
+  });
+  return result;
+}
+
+async function revokePage(userId, pageKey){
+  var result = await client.from("immonova_page_grants")
+    .delete()
+    .eq("user_id", userId)
+    .eq("page_key", pageKey);
+  return result;
+}
+
+/* =========================================================================
+   VISTA ADMIN: seleziona un admin o un master, concede/toglie qualsiasi
+   pagina senza restrizioni.
+   ========================================================================= */
+async function initAdminView(){
+  var result = await client
+    .from("profiles")
+    .select("id,full_name,email,role,is_super_user,agency_name")
+    .or("role.eq.admin,is_super_user.eq.true")
+    .order("full_name");
+
+  if(result.error){
+    setStatus("Errore caricamento utenti: " + result.error.message, "error");
+    return;
+  }
+
+  var users = result.data || [];
+
+  var wrap = document.createElement("div");
+  wrap.innerHTML =
+    '<div class="field">' +
+      '<label for="targetUser">Admin o Master</label>' +
+      '<select id="targetUser"></select>' +
+      '<div class="field-hint">Scegli l\'account a cui concedere o togliere pagine. Nessun limite: puoi dare o togliere qualsiasi voce.</div>' +
+    '</div>' +
+    '<div id="adminAccordion"></div>';
+  panelsEl.appendChild(wrap);
+
+  var select = wrap.querySelector("#targetUser");
+  select.innerHTML = users.map(function(u){
+    var type = u.role === "admin" ? "Admin" : "Master";
+    var label = agencyLabel(u) + " — " + type;
+    return '<option value="' + u.id + '">' + escapeHTML(label) + '</option>';
+  }).join("");
+
+  async function loadForSelected(){
+    var userId = select.value;
+    if(!userId) return;
+    setStatus("Caricamento…", "");
+    var granted = await fetchGrantedSet(userId);
+    renderAccordion("adminAccordion", granted, {
+      editable: true,
+      allowedKeys: null,
+      onToggle: async function(key, section, checked, input){
+        input.disabled = true;
+        var res = checked ? await grantPage(userId, key, section) : await revokePage(userId, key);
+        input.disabled = false;
+        if(res.error){
+          input.checked = !checked;
+          setStatus("Errore: " + res.error.message, "error");
+          return;
+        }
+        setStatus("Salvato.", "success");
+        updateCount(select.selectedOptions[0]);
+      }
+    });
+    setStatus("", "");
+  }
+
+  function updateCount(){ /* no-op placeholder, counts auto-refresh on re-render */ }
+
+  select.addEventListener("change", loadForSelected);
+  if(users.length){
+    select.value = users[0].id;
+    await loadForSelected();
+  } else {
+    document.getElementById("adminAccordion").innerHTML = '<div class="empty">Nessun admin o master trovato.</div>';
+  }
+}
+
+/* =========================================================================
+   VISTA MASTER: tab "Le mie pagine" (sola lettura: concesse da Claudio) +
+   tab "I miei collaboratori" (può concedere solo le pagine che lui stesso
+   possiede, enforcement anche lato database tramite RLS).
+   ========================================================================= */
+async function initMasterView(){
+  tabsEl.innerHTML =
+    '<button class="tab-btn active" data-tab="mine">Le mie pagine</button>' +
+    '<button class="tab-btn" data-tab="team">I miei collaboratori</button>';
+
+  var panelMine = document.createElement("div");
+  panelMine.className = "tab-panel active";
+  panelMine.id = "panel-mine";
+  panelMine.innerHTML =
+    '<div class="readonly-note">Queste sono le pagine che Claudio ti ha autorizzato. Solo lui può modificarle da questo pannello.</div>' +
+    '<div id="mineAccordion"></div>';
+
+  var panelTeam = document.createElement("div");
+  panelTeam.className = "tab-panel";
+  panelTeam.id = "panel-team";
+  panelTeam.innerHTML =
+    '<div class="field">' +
+      '<label for="teamUser">Collaboratore</label>' +
+      '<select id="teamUser"></select>' +
+      '<div class="field-hint">Puoi autorizzare un tuo collaboratore solo per le pagine che possiedi anche tu.</div>' +
+    '</div>' +
+    '<div id="teamAccordion"></div>';
+
+  panelsEl.appendChild(panelMine);
+  panelsEl.appendChild(panelTeam);
+
+  tabsEl.querySelectorAll(".tab-btn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      tabsEl.querySelectorAll(".tab-btn").forEach(function(b){ b.classList.remove("active"); });
+      btn.classList.add("active");
+      document.querySelectorAll(".tab-panel").forEach(function(p){ p.classList.remove("active"); });
+      document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  var ownGranted = await fetchGrantedSet(currentUser.id);
+  renderAccordion("mineAccordion", ownGranted, { editable: false });
+
+  var teamResult = await client
+    .from("profiles")
+    .select("id,full_name,email")
+    .eq("managed_by", currentUser.id)
+    .order("full_name");
+
+  if(teamResult.error){
+    setStatus("Errore caricamento collaboratori: " + teamResult.error.message, "error");
+    return;
+  }
+
+  var team = teamResult.data || [];
+  var teamSelect = document.getElementById("teamUser");
+
+  if(team.length === 0){
+    teamSelect.innerHTML = "";
+    document.getElementById("teamAccordion").innerHTML = '<div class="empty">Non hai ancora collaboratori assegnati.</div>';
+    return;
+  }
+
+  teamSelect.innerHTML = team.map(function(u){
+    return '<option value="' + u.id + '">' + escapeHTML(u.full_name || u.email || u.id) + '</option>';
+  }).join("");
+
+  async function loadForSelectedCollaborator(){
+    var userId = teamSelect.value;
+    if(!userId) return;
+    setStatus("Caricamento…", "");
+    var granted = await fetchGrantedSet(userId);
+    renderAccordion("teamAccordion", granted, {
+      editable: true,
+      allowedKeys: ownGranted,
+      onToggle: async function(key, section, checked, input){
+        input.disabled = true;
+        var res = checked ? await grantPage(userId, key, section) : await revokePage(userId, key);
+        input.disabled = false;
+        if(res.error){
+          input.checked = !checked;
+          setStatus("Errore: " + res.error.message, "error");
+          return;
+        }
+        setStatus("Salvato.", "success");
+      }
+    });
+    setStatus("", "");
+  }
+
+  teamSelect.addEventListener("change", loadForSelectedCollaborator);
+  teamSelect.value = team[0].id;
+  await loadForSelectedCollaborator();
+}
+
+document.getElementById("logoutBtn").addEventListener("click", async function(){
+  await client.auth.signOut();
+  window.location.href = "../index.html";
+});
+
+(async function init(){
+  var logged = await checkAuth();
+  if(!logged) return;
+
+  var ok = await loadProfile();
+  if(!ok) return;
+
+  if(isAdmin){
+    await initAdminView();
+  } else {
+    await initMasterView();
+  }
+})();
+</script>
+
+</body>
+</html>
