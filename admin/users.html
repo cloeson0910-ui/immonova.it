@@ -524,28 +524,22 @@ td{
           </select>
         </div>
 
-        <div class="field" id="agencyBlock">
-          <label style="display:flex;align-items:center;gap:8px;font-weight:400">
-            <input type="checkbox" id="is_super_user" style="width:auto">
-            <span data-i18n="label_is_super_user">È un Super User (gestisce un'agenzia partner esterna)</span>
-          </label>
+        <div class="field">
+          <label for="professional_role" data-i18n="label_professional_role">Incarico operativo</label>
+          <select id="professional_role" required></select>
+          <div class="perm-note" data-i18n="note_master_creates_substructure">Scegliendo "Master" questa persona potrà creare e gestire una propria sottostruttura di collaboratori (sarà visibile chiaramente in tabella).</div>
         </div>
 
         <div class="field" id="newAgencyNameBlock" style="display:none">
-          <label for="agency_name" data-i18n="label_agency_name">Nome agenzia</label>
+          <label for="agency_name" data-i18n="label_agency_name">Nome agenzia / struttura</label>
           <input type="text" id="agency_name" placeholder="Es. Studio Immobiliare Rossi">
         </div>
 
         <div class="field" id="belongsToAgencyBlock">
-          <label for="managed_by" data-i18n="label_managed_by">Agenzia di appartenenza</label>
+          <label for="managed_by" data-i18n="label_managed_by">Appartiene alla struttura di</label>
           <select id="managed_by">
-            <option value="" data-i18n="opt_immonova_direct">IMMONOVA — personale diretto (nessuna agenzia)</option>
+            <option value="" data-i18n="opt_immonova_direct">IMMONOVA — personale diretto (nessuna struttura)</option>
           </select>
-        </div>
-
-        <div class="field">
-          <label for="professional_role" data-i18n="label_professional_role">Incarico operativo</label>
-          <select id="professional_role" required></select>
         </div>
 
         <div class="field">
@@ -584,7 +578,7 @@ td{
               <th data-i18n="th_name">Nome</th>
               <th data-i18n="th_email">Email</th>
               <th data-i18n="th_phone">Telefono</th>
-              <th data-i18n="th_is_super_user">Super User</th>
+              <th data-i18n="th_is_super_user">Struttura</th>
               <th data-i18n="th_agency_name">Agenzia</th>
               <th data-i18n="th_super_user">Gestito da</th>
               <th data-i18n="th_access">Accesso</th>
@@ -638,16 +632,34 @@ var professionalRoles = [];
    in page-access.html, ora unificato dentro users.html). Ogni voce: page_key stabile +
    etichetta leggibile + sezione di raggruppamento. ---- */
 var PAGE_CATALOG = [
+  {section:"Attività", key:"calendar.html", label:"Calendario"},
+  {section:"Attività", key:"opportunities.html", label:"Immobili"},
   {section:"Attività", key:"opportunity-form.html", label:"Nuova Opportunità"},
-  {section:"Attività", key:"investor-form.html", label:"Nuovo Investitore"},
-  {section:"Attività", key:"event-form.html", label:"Nuovo Evento"},
+  {section:"Attività", key:"valuations.html", label:"Valutazioni Immobiliari"},
+  {section:"Attività", key:"video-calls.html", label:"Videochiamate"},
+  {section:"Attività", key:"voice-notes.html", label:"Note Vocali Collaboratori"},
+  {section:"Attività", key:"short-rent.html", label:"Short Rent"},
+  {section:"Attività", key:"search-mandates.html", label:"Mandati di Ricerca"},
+  {section:"Attività", key:"search-mandate-form.html", label:"Nuovo Mandato di Ricerca"},
   {section:"Attività", key:"property-acquisition-form.html", label:"Acquisizione Immobile"},
+  {section:"Attività", key:"documenti.html", label:"Documenti"},
+  {section:"Attività", key:"opportunities-pipeline.html", label:"Proposte / Pipeline"},
+  {section:"Attività", key:"investors.html", label:"Contatti / Investitori"},
+  {section:"Attività", key:"investor-form.html", label:"Nuovo Investitore"},
+  {section:"Attività", key:"events.html", label:"Eventi"},
+  {section:"Attività", key:"event-form.html", label:"Nuovo Evento"},
+  {section:"Attività", key:"success-stories.html", label:"Success Stories"},
+  {section:"Attività", key:"notizie.html", label:"Notizie"},
   {section:"Dati", key:"data-sources.html", label:"Fonti Dati"},
   {section:"Dati", key:"manual-overrides.html", label:"Dati Verificati"},
   {section:"Dati", key:"destination-photos.html", label:"Foto Destinazioni"},
   {section:"Dati", key:"catalogo-verificati.html", label:"Catalogo Verificati"},
+  {section:"Gestione", key:"inquiries.html", label:"Richieste"},
   {section:"Gestione", key:"users.html", label:"Utenti"},
   {section:"Gestione", key:"social-composer.html", label:"Post Social"},
+  {section:"Gestione", key:"site-settings.html", label:"Impostazioni Sito"},
+  {section:"Gestione", key:"broadcast-notifications.html", label:"Notifiche Broadcast"},
+  {section:"Gestione", key:"responsive-preview.html", label:"Anteprima Responsive"},
   {section:"Owner", key:"articoli.html", label:"Articoli / Blog Sito"},
   {section:"Owner", key:"team-admin.html", label:"Team"},
   {section:"Owner", key:"email-composer.html", label:"Comunicazioni"},
@@ -716,7 +728,7 @@ var UI_STRINGS = {
   filter_all_super_users: "Tutti",
   filter_no_super_user: "Senza Super User assegnato",
   opt_no_super_user: "Nessuno",
-  th_is_super_user: "Super User",
+  th_is_super_user: "Struttura",
   th_agency_name: "Agenzia",
   opt_is_super_user: "Sì, Super User",
   opt_not_super_user: "No",
@@ -1043,6 +1055,15 @@ function agencyLabel(su){
   return su.agency_name || su.full_name || su.email || su.id;
 }
 
+/* ---- Quanti collaboratori diretti ha una persona nella propria sottostruttura
+   (managed_by punta a lei). Usato per il badge MASTER in tabella, cosi' si vede subito
+   "chi è master di chi" senza dover aprire il filtro. ---- */
+function countDirectReports(userId){
+  var count = 0;
+  allUsersData.forEach(function(u){ if(u.managed_by === userId) count++; });
+  return count;
+}
+
 /* ---- Popola il filtro "Filtra per Super User" con la lista dei super user esistenti,
    ognuno con il conteggio di quanti collaboratori gestisce -- cosi' si vede subito chi
    gestisce quanti utenti, senza doverli contare a mano riga per riga. ---- */
@@ -1141,10 +1162,10 @@ function renderUsersTable(){
         </td>
 
         <td>
-          <select class="small-select" onchange="updateUserField('${user.id}', 'is_super_user', this.value === 'true')">
-            <option value="false" ${!user.is_super_user ? "selected" : ""}>${escapeHTML(T.opt_not_super_user)}</option>
-            <option value="true" ${user.is_super_user ? "selected" : ""}>${escapeHTML(T.opt_is_super_user)}</option>
-          </select>
+          ${user.is_super_user
+            ? `<span class="badge">MASTER · ${countDirectReports(user.id)} collab.</span>`
+            : `<span style="opacity:.45">—</span>`
+          }
         </td>
 
         <td>
@@ -1168,7 +1189,7 @@ function renderUsersTable(){
         </td>
 
         <td>
-          <select class="small-select professional-role-select" data-value="${escapeHTML(user.professional_role || "")}" onchange="handleProfessionalRoleChange(this, function(key){ updateUserField('${user.id}', 'professional_role', key); })">
+          <select class="small-select professional-role-select" data-value="${escapeHTML(user.professional_role || "")}" onchange="handleProfessionalRoleChange(this, function(key){ updateUserRoleAndStructure('${user.id}', key); })">
             ${professionalRoleOptionsHTML(user.professional_role)}
           </select>
         </td>
@@ -1250,6 +1271,35 @@ async function updateUserField(userId, field, value){
    Il valore vuoto ("Nessuno") va salvato come null, non come stringa vuota. ---- */
 async function updateUserManagedBy(userId, value){
   await updateUserField(userId, "managed_by", value || null);
+}
+
+/* ---- Cambiando l'incarico operativo di una riga esistente, se diventa (o smette di
+   essere) "Master" aggiorna anche is_super_user di conseguenza -- cosi' la sottostruttura
+   si attiva/disattiva sempre insieme all'incarico, senza un secondo passaggio separato. ---- */
+async function updateUserRoleAndStructure(userId, newRole){
+  var wasMaster = false;
+  allUsersData.forEach(function(u){ if(u.id === userId) wasMaster = !!u.is_super_user; });
+  var willBeMaster = newRole === "master";
+
+  setStatus(T.msg_updating, "");
+  var result = await client.from("profiles").update({
+    professional_role: newRole,
+    is_super_user: willBeMaster
+  }).eq("id", userId);
+
+  if(result.error){
+    setStatus(result.error.message, "error");
+    alert("SALVATAGGIO NON RIUSCITO: " + result.error.message);
+    await loadUsers();
+    return;
+  }
+
+  if(wasMaster && !willBeMaster){
+    alert("Attenzione: questa persona non è più Master. Se aveva collaboratori nella propria struttura, controlla la colonna \"Appartiene alla struttura di\" dei suoi ex-collaboratori -- restano assegnati a lei finché non li riassegni tu.");
+  }
+
+  setStatus(T.msg_updated, "success");
+  await loadUsers();
 }
 
 async function updateUserEmail(userId, newEmail, inputEl){
@@ -1344,8 +1394,13 @@ var myOwnedDataGrants = null; // { resource_key: access } che IO possiedo come d
 
 async function loadMyOwnedPages(){
   if(myOwnedPages) return myOwnedPages;
-  if(currentProfile && currentProfile.role === "admin"){
-    // L'admin/owner possiede per definizione tutte le pagine: nessuna restrizione da applicare.
+  /* FIX 25/10/2026: il bypass "vedo/possiedo tutte le pagine" deve scattare SOLO per
+     is_platform_owner (tu, e solo tu) -- non per role="admin", perche' esistono altri account
+     con role="admin" che non sono te e NON devono poter concedere pagine che non possiedono
+     davvero. Prima questo controllo usava role="admin", quindi un account non-admin (anche se
+     per errore flaggato is_platform_owner) non vedeva l'elenco completo, mentre un account
+     admin-ma-non-owner lo avrebbe visto per sbaglio: entrambi i casi sono ora corretti. */
+  if(currentProfile && currentProfile.is_platform_owner){
     myOwnedPages = new Set(PAGE_CATALOG.map(function(p){ return p.key; }));
     return myOwnedPages;
   }
@@ -1476,7 +1531,7 @@ userForm.addEventListener("submit", async function(e){
   var role = document.getElementById("role").value;
   var professional_role = document.getElementById("professional_role").value;
   var language = document.getElementById("language").value;
-  var is_super_user = document.getElementById("is_super_user").checked && role !== "admin";
+  var is_super_user = (professional_role === "master") && role !== "admin";
   var agency_name = document.getElementById("agency_name").value.trim();
   var managed_by = document.getElementById("managed_by").value;
 
@@ -1532,28 +1587,35 @@ userForm.addEventListener("submit", async function(e){
    è la radice della propria agenzia, non può appartenere a un'altra). Se il ruolo accesso
    è Admin, il blocco Super User/agenzia viene nascosto del tutto (un admin non appartiene
    mai a un'agenzia esterna, vede/gestisce tutto per definizione). ---- */
+/* ---- "Master" = chi puo' creare/gestire una propria sottostruttura di collaboratori.
+   Non e' piu' un checkbox separato da ricordarsi: deriva direttamente dalla scelta
+   dell'incarico operativo. Scegli "Master" -> diventa automaticamente capostruttura
+   (is_super_user=true lato database); qualunque altro incarico -> normale collaboratore
+   appartenente alla struttura di qualcun altro. ---- */
+function isMasterRoleSelected(){
+  return document.getElementById("professional_role").value === "master";
+}
+
 function syncAgencyFieldsVisibility(){
   var roleValue = document.getElementById("role").value;
-  var isSuperUserChecked = document.getElementById("is_super_user").checked;
-  var agencyBlock = document.getElementById("agencyBlock");
+  var isMaster = isMasterRoleSelected();
   var newAgencyNameBlock = document.getElementById("newAgencyNameBlock");
   var belongsToAgencyBlock = document.getElementById("belongsToAgencyBlock");
 
   var isAdminRole = roleValue === "admin";
 
-  agencyBlock.style.display = isAdminRole ? "none" : "";
-  newAgencyNameBlock.style.display = (!isAdminRole && isSuperUserChecked) ? "" : "none";
-  belongsToAgencyBlock.style.display = (!isAdminRole && !isSuperUserChecked) ? "" : "none";
+  newAgencyNameBlock.style.display = (!isAdminRole && isMaster) ? "" : "none";
+  belongsToAgencyBlock.style.display = (!isAdminRole && !isMaster) ? "" : "none";
 
-  document.getElementById("agency_name").required = (!isAdminRole && isSuperUserChecked);
+  document.getElementById("agency_name").required = (!isAdminRole && isMaster);
 }
 
 document.getElementById("role").addEventListener("change", syncAgencyFieldsVisibility);
-document.getElementById("is_super_user").addEventListener("change", syncAgencyFieldsVisibility);
 syncAgencyFieldsVisibility();
 
 document.getElementById("professional_role").addEventListener("change", function(){
-  handleProfessionalRoleChange(this, function(){});
+  var el = this;
+  handleProfessionalRoleChange(el, function(){ syncAgencyFieldsVisibility(); });
 });
 
 document.getElementById("logoutBtn").addEventListener("click", async function(){

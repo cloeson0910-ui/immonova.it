@@ -726,7 +726,7 @@ async function loadInvestors(){
   if(isOwner){
     await loadAuthorEmails();
   }
-  if(!isOwner && !isAdmin){
+  if(!isOwner){
     await loadMyContactsGrants();
   }
 
@@ -760,7 +760,10 @@ async function loadMyContactsGrants(){
 /* Puo' modificare/eliminare un contatto se: e' il proprietario del record, se e' admin/owner,
    oppure se il master che glielo ha concesso ha scelto "write" o "both" (non solo "read"). */
 function canEditInvestor(inv){
-  if(isOwner || isAdmin) return true;
+  /* SOLO is_platform_owner ha il bypass totale -- role="admin" da solo NON basta, altrimenti
+     i 3 account admin non-owner scoperti nell'audit (non master di questi dati) potrebbero
+     modificare contatti altrui senza alcun permesso esplicito. */
+  if(isOwner) return true;
   if(inv.created_by && String(inv.created_by) === String(currentUser.id)) return true;
   if(inv.created_by){
     const access = myContactsGrants[inv.created_by];
