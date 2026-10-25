@@ -303,8 +303,112 @@ td{
   opacity:.7;
 }
 
+.perm-row td{
+  background:rgba(166,127,52,.05);
+  padding:0;
+  border-bottom:1px solid rgba(166,127,52,.15);
+}
+
+.perm-panel{
+  padding:22px 26px 26px;
+  display:none;
+}
+
+.perm-panel.open{
+  display:block;
+}
+
+.perm-cols{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:26px;
+}
+
+.perm-col-title{
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--c-554321);
+  margin-bottom:12px;
+}
+
+.perm-section{
+  margin-bottom:14px;
+}
+
+.perm-section-label{
+  font-size:10px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--c-6b5636);
+  opacity:.75;
+  margin-bottom:6px;
+}
+
+.perm-toggle-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.perm-toggle{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:7px 11px;
+  border:1px solid rgba(166,127,52,.25);
+  background:rgba(255,255,255,.3);
+  font-size:11px;
+  cursor:pointer;
+  user-select:none;
+}
+
+.perm-toggle input{
+  width:auto;
+}
+
+.perm-toggle.granted{
+  background:#a67f34;
+  color:white;
+  border-color:#a67f34;
+}
+
+.perm-data-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 0;
+  border-bottom:1px solid rgba(166,127,52,.08);
+  font-size:12px;
+}
+
+.perm-data-row label{
+  flex:1;
+  font-size:12px;
+  letter-spacing:0;
+  text-transform:none;
+  color:var(--c-46371a);
+}
+
+.perm-data-row select{
+  width:auto;
+  padding:7px 10px;
+  font-size:11px;
+}
+
+.perm-note{
+  font-size:11px;
+  opacity:.7;
+  margin-top:10px;
+  line-height:1.6;
+}
+
 @media(max-width:980px){
   .grid{
+    grid-template-columns:1fr;
+  }
+
+  .perm-cols{
     grid-template-columns:1fr;
   }
 
@@ -382,8 +486,7 @@ td{
   <h1 class="title" data-i18n="title">Utenti</h1>
 
   <p class="subtitle" data-i18n="subtitle">
-    Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori.
-    Il ruolo accesso regola i permessi; l'incarico operativo identifica la funzione professionale.
+    Gestisci gli accessi, i ruoli operativi, le pagine e i dati di ogni collaboratore in un unico posto.
   </p>
 
   <div class="grid">
@@ -442,13 +545,7 @@ td{
 
         <div class="field">
           <label for="professional_role" data-i18n="label_professional_role">Incarico operativo</label>
-          <select id="professional_role" required>
-            <option value="collaboratore" data-i18n="prof_collaboratore">Collaboratore</option>
-            <option value="segnalatore" data-i18n="prof_segnalatore">Segnalatore</option>
-            <option value="affiliato" data-i18n="prof_affiliato">Affiliato</option>
-            <option value="tecnico" data-i18n="prof_tecnico">Tecnico</option>
-            <option value="legale" data-i18n="prof_legale">Legale</option>
-          </select>
+          <select id="professional_role" required></select>
         </div>
 
         <div class="field">
@@ -496,13 +593,14 @@ td{
               <th data-i18n="th_status">Stato</th>
               <th data-i18n="th_password">Password</th>
               <th data-i18n="th_created">Creato</th>
+              <th data-i18n="th_permissions">Permessi</th>
               <th data-i18n="th_actions">Azioni</th>
             </tr>
           </thead>
 
           <tbody id="usersTable">
             <tr>
-              <td colspan="13" class="empty" data-i18n="empty_loading">Caricamento...</td>
+              <td colspan="14" class="empty" data-i18n="empty_loading">Caricamento...</td>
             </tr>
           </tbody>
         </table>
@@ -530,9 +628,57 @@ var usersTable = document.getElementById("usersTable");
 var superUserFilter = document.getElementById("superUserFilter");
 
 var currentUser = null;
+var currentProfile = null;
 var currentUserLanguage = "it";
 var allUsersData = [];
 var superUserFilterValue = "";
+var professionalRoles = [];
+
+/* ---- Catalogo delle PAGINE che si possono concedere da qui (stesso elenco usato prima
+   in page-access.html, ora unificato dentro users.html). Ogni voce: page_key stabile +
+   etichetta leggibile + sezione di raggruppamento. ---- */
+var PAGE_CATALOG = [
+  {section:"Attività", key:"opportunity-form.html", label:"Nuova Opportunità"},
+  {section:"Attività", key:"investor-form.html", label:"Nuovo Investitore"},
+  {section:"Attività", key:"event-form.html", label:"Nuovo Evento"},
+  {section:"Attività", key:"property-acquisition-form.html", label:"Acquisizione Immobile"},
+  {section:"Dati", key:"data-sources.html", label:"Fonti Dati"},
+  {section:"Dati", key:"manual-overrides.html", label:"Dati Verificati"},
+  {section:"Dati", key:"destination-photos.html", label:"Foto Destinazioni"},
+  {section:"Dati", key:"catalogo-verificati.html", label:"Catalogo Verificati"},
+  {section:"Gestione", key:"users.html", label:"Utenti"},
+  {section:"Gestione", key:"social-composer.html", label:"Post Social"},
+  {section:"Owner", key:"articoli.html", label:"Articoli / Blog Sito"},
+  {section:"Owner", key:"team-admin.html", label:"Team"},
+  {section:"Owner", key:"email-composer.html", label:"Comunicazioni"},
+  {section:"Owner", key:"contabilita.html", label:"Contabilità"},
+  {section:"Owner", key:"ads-manager.html", label:"Pubblicità"},
+  {section:"Owner", key:"settings.html", label:"Social"},
+  {section:"Owner", key:"statistics.html", label:"Statistiche"},
+  {section:"Owner", key:"meta-ads-planner.html", label:"Test A/B Meta Ads"},
+  {section:"Owner", key:"watermark-retroattivo.html", label:"Watermark Retroattivo"},
+  {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero"}
+];
+
+/* ---- Catalogo delle RISORSE DATI concedibili per utente specifico (immonova_managed_access,
+   resource_key). Queste sono le categorie che Claudio ha chiesto: notizie, note vocali,
+   valutazioni, acquisizioni, documenti, contatti, investitori. Le richieste (lead dal sito)
+   NON sono qui apposta: restano visibili a tutti per policy, non sono un permesso
+   concedibile singolarmente. ---- */
+var DATA_RESOURCE_CATALOG = [
+  {key:"contacts", label:"Contatti / Investitori"},
+  {key:"documents", label:"Documenti"},
+  {key:"valuations", label:"Valutazioni"},
+  {key:"notes", label:"Notizie / Note vocali"},
+  {key:"acquisitions", label:"Acquisizioni"}
+];
+
+var ACCESS_LEVELS = [
+  {value:"", label:"Nessuno"},
+  {value:"read", label:"Sola lettura"},
+  {value:"write", label:"Lettura e scrittura"},
+  {value:"both", label:"Lettura e scrittura"}
+];
 
 /* ---- i18n: dizionario delle stringhe statiche italiane di questa pagina. Vedi
    /js/i18n.js (da estrarre in futuro in un file condiviso) per riusare lo stesso
@@ -546,7 +692,7 @@ var UI_STRINGS = {
   logout: "Logout",
   kicker: "Area Admin",
   title: "Utenti",
-  subtitle: "Gestisci gli accessi, i ruoli operativi e i dati di contatto dei collaboratori. Il ruolo accesso regola i permessi; l\u2019incarico operativo identifica la funzione professionale.",
+  subtitle: "Gestisci gli accessi, i ruoli operativi, le pagine e i dati di ogni collaboratore in un unico posto.",
   panel_new_user: "Nuovo Utente",
   label_full_name: "Nome completo",
   label_email: "Email",
@@ -558,14 +704,10 @@ var UI_STRINGS = {
   label_managed_by: "Agenzia di appartenenza",
   opt_immonova_direct: "IMMONOVA — personale diretto (nessuna agenzia)",
   label_professional_role: "Incarico operativo",
+  opt_add_new_role: "+ Aggiungi nuova posizione...",
   label_language: "Lingua",
   role_user: "User",
   role_admin: "Admin",
-  prof_collaboratore: "Collaboratore",
-  prof_segnalatore: "Segnalatore",
-  prof_affiliato: "Affiliato",
-  prof_tecnico: "Tecnico",
-  prof_legale: "Legale",
   btn_create: "Crea Utente",
   btn_creating: "Creazione...",
   panel_existing_users: "Utenti Esistenti",
@@ -587,8 +729,13 @@ var UI_STRINGS = {
   th_status: "Stato",
   th_password: "Password",
   th_created: "Creato",
+  th_permissions: "Permessi",
   th_actions: "Azioni",
   btn_delete: "Elimina",
+  btn_permissions: "Pagine e Dati",
+  perm_col_pages: "Pagine concesse",
+  perm_col_data: "Dati concessi",
+  perm_note: "Puoi concedere solo le pagine e i dati che possiedi tu stesso, solo ai tuoi collaboratori diretti. Le modifiche si salvano subito, una per una.",
   confirm_delete_user: "Vuoi eliminare definitivamente l'accesso di",
   msg_deleting: "Eliminazione in corso...",
   msg_deleted: "Utente eliminato correttamente.",
@@ -612,10 +759,11 @@ var UI_STRINGS = {
   msg_create_error: "Errore durante la creazione utente.",
   msg_reset_error: "Errore durante il reset password.",
   msg_translate_error: "Traduzione non disponibile al momento: interfaccia mostrata in italiano.",
-  prompt_new_password: "Inserisci nuova password temporanea per "
+  prompt_new_password: "Inserisci nuova password temporanea per ",
+  prompt_new_role_label: "Nome della nuova posizione (es. Architetto, Geometra...)"
 };
 
-var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 
 /* T contiene sempre le stringhe da usare per RENDERIZZARE (italiano finché la traduzione
    non è pronta, poi sostituito con la versione tradotta). Le funzioni che costruiscono
@@ -755,7 +903,7 @@ async function checkAuth(){
 async function checkAdmin(){
   var result = await client
     .from("profiles")
-    .select("id,role,language")
+    .select("id,role,language,is_super_user,is_platform_owner")
     .eq("id", currentUser.id)
     .single();
 
@@ -763,6 +911,8 @@ async function checkAdmin(){
     window.location.href = "dashboard.html";
     return false;
   }
+
+  currentProfile = result.data;
 
   await applyLanguage(result.data.language || "it");
 
@@ -775,6 +925,87 @@ function languageOptionsHTML(selected){
     out += '<option value="' + code + '" ' + (selected === code ? "selected" : "") + '>' + LANGUAGE_LABELS[code] + '</option>';
   });
   return out;
+}
+
+/* ---- Posizioni professionali: caricate da immonova_professional_roles, non piu'
+   hardcoded. "+ Aggiungi nuova posizione..." in fondo al menu permette di crearne una
+   nuova al volo, senza mai dover toccare il codice di questa pagina. ---- */
+async function loadProfessionalRoles(){
+  var result = await client
+    .from("immonova_professional_roles")
+    .select("key,label")
+    .order("label", { ascending:true });
+
+  if(!result.error && Array.isArray(result.data)){
+    professionalRoles = result.data;
+  }else{
+    professionalRoles = [
+      {key:"collaboratore", label:"Collaboratore"},
+      {key:"segnalatore", label:"Segnalatore"},
+      {key:"tecnico", label:"Tecnico"}
+    ];
+  }
+}
+
+function professionalRoleOptionsHTML(selected){
+  var out = "";
+  professionalRoles.forEach(function(r){
+    out += '<option value="' + escapeHTML(r.key) + '" ' + (selected === r.key ? "selected" : "") + '>' + escapeHTML(r.label) + '</option>';
+  });
+  out += '<option value="__new__" data-i18n="opt_add_new_role">' + escapeHTML(T.opt_add_new_role) + '</option>';
+  return out;
+}
+
+function renderProfessionalRoleSelect(){
+  var select = document.getElementById("professional_role");
+  var currentValue = select.value;
+  select.innerHTML = professionalRoleOptionsHTML(currentValue);
+  if(currentValue && currentValue !== "__new__") select.value = currentValue;
+}
+
+/* ---- Gestisce la creazione al volo di una nuova posizione da QUALSIASI select di
+   incarico operativo (sia nel form "Nuovo Utente" sia nelle righe della tabella). Se
+   l'utente sceglie "+ Aggiungi nuova posizione...", chiede il nome, la salva nel database
+   e la seleziona subito -- cosi' e' disponibile ovunque da quel momento in poi. ---- */
+async function handleProfessionalRoleChange(selectEl, onResolved){
+  if(selectEl.value !== "__new__"){
+    onResolved(selectEl.value);
+    return;
+  }
+
+  var label = prompt(T.prompt_new_role_label);
+  if(!label || !label.trim()){
+    selectEl.value = professionalRoles[0] ? professionalRoles[0].key : "";
+    return;
+  }
+
+  var key = label.trim().toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+  var insertResult = await client
+    .from("immonova_professional_roles")
+    .insert({ key:key, label:label.trim(), created_by:currentUser.id })
+    .select()
+    .single();
+
+  if(insertResult.error){
+    alert("Non sono riuscito a creare la posizione: " + insertResult.error.message);
+    selectEl.value = professionalRoles[0] ? professionalRoles[0].key : "";
+    return;
+  }
+
+  await loadProfessionalRoles();
+  document.querySelectorAll(".professional-role-select").forEach(function(el){
+    var val = el.getAttribute("data-value") || "";
+    el.innerHTML = professionalRoleOptionsHTML(val);
+  });
+  renderProfessionalRoleSelect();
+
+  var newSelect = document.getElementById("professional_role");
+  if(newSelect) newSelect.value = key;
+
+  onResolved(key);
 }
 
 async function loadUsers(){
@@ -795,7 +1026,7 @@ async function loadUsers(){
   }
 
   if(result.error){
-    usersTable.innerHTML = '<tr><td colspan="13" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="14" class="empty">' + escapeHTML(T.empty_error) + '</td></tr>';
     return;
   }
 
@@ -871,7 +1102,7 @@ function renderUsersTable(){
   });
 
   if(data.length === 0){
-    usersTable.innerHTML = '<tr><td colspan="13" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
+    usersTable.innerHTML = '<tr><td colspan="14" class="empty">' + escapeHTML(T.empty_none) + '</td></tr>';
     return;
   }
 
@@ -937,12 +1168,8 @@ function renderUsersTable(){
         </td>
 
         <td>
-          <select class="small-select" onchange="updateUserField('${user.id}', 'professional_role', this.value)">
-            <option value="collaboratore" ${user.professional_role === "collaboratore" ? "selected" : ""}>${escapeHTML(T.prof_collaboratore)}</option>
-            <option value="segnalatore" ${user.professional_role === "segnalatore" ? "selected" : ""}>${escapeHTML(T.prof_segnalatore)}</option>
-            <option value="affiliato" ${user.professional_role === "affiliato" ? "selected" : ""}>${escapeHTML(T.prof_affiliato)}</option>
-            <option value="tecnico" ${user.professional_role === "tecnico" ? "selected" : ""}>${escapeHTML(T.prof_tecnico)}</option>
-            <option value="legale" ${user.professional_role === "legale" ? "selected" : ""}>${escapeHTML(T.prof_legale)}</option>
+          <select class="small-select professional-role-select" data-value="${escapeHTML(user.professional_role || "")}" onchange="handleProfessionalRoleChange(this, function(key){ updateUserField('${user.id}', 'professional_role', key); })">
+            ${professionalRoleOptionsHTML(user.professional_role)}
           </select>
         </td>
 
@@ -968,9 +1195,20 @@ function renderUsersTable(){
         <td>${formatDate(user.created_at)}</td>
 
         <td>
+          <button class="small-btn" onclick="togglePermissionsPanel('${user.id}')">
+            ${escapeHTML(T.btn_permissions)}
+          </button>
+        </td>
+
+        <td>
           <button class="small-btn" onclick="deleteUser('${user.id}', '${escapeHTML(user.full_name || user.email || "")}')" ${user.id === currentUser.id ? "disabled" : ""}>
             ${escapeHTML(T.btn_delete)}
           </button>
+        </td>
+      </tr>
+      <tr class="perm-row" id="permRow_${user.id}">
+        <td colspan="14">
+          <div class="perm-panel" id="permPanel_${user.id}"></div>
         </td>
       </tr>
     `;
@@ -1092,6 +1330,138 @@ async function resetPassword(userId, email){
   setStatus(T.msg_reset_done, "success");
 }
 
+/* =====================================================================================
+   PANNELLO PERMESSI PER RIGA -- sostituisce permissions.html e page-access.html: tutto
+   qui, nella riga del collaboratore. Due colonne: Pagine (immonova_page_grants) e Dati
+   (immonova_managed_access). Chi guarda puo' concedere SOLO cio' che possiede lui stesso
+   (le pagine/i tipi di dato marcati "posseduti" sotto), e SOLO ai propri diretti
+   sotto-collaboratori -- la stessa regola gia' imposta lato server dalle policy RLS, qui
+   replicata anche in UI cosi' non si vedono controlli che poi il server rifiuterebbe.
+   ===================================================================================== */
+var openPermUserId = null;
+var myOwnedPages = null;      // Set di page_key che IO possiedo (null finche' non caricato)
+var myOwnedDataGrants = null; // { resource_key: access } che IO possiedo come dato MIO
+
+async function loadMyOwnedPages(){
+  if(myOwnedPages) return myOwnedPages;
+  if(currentProfile && currentProfile.role === "admin"){
+    // L'admin/owner possiede per definizione tutte le pagine: nessuna restrizione da applicare.
+    myOwnedPages = new Set(PAGE_CATALOG.map(function(p){ return p.key; }));
+    return myOwnedPages;
+  }
+  var result = await client.from("immonova_page_grants").select("page_key").eq("user_id", currentUser.id);
+  myOwnedPages = new Set((!result.error && result.data) ? result.data.map(function(r){ return r.page_key; }) : []);
+  return myOwnedPages;
+}
+
+async function togglePermissionsPanel(userId){
+  var panel = document.getElementById("permPanel_" + userId);
+  if(!panel) return;
+
+  if(openPermUserId === userId){
+    panel.classList.remove("open");
+    panel.innerHTML = "";
+    openPermUserId = null;
+    return;
+  }
+
+  // Chiude un eventuale pannello gia' aperto su un'altra riga.
+  if(openPermUserId){
+    var prevPanel = document.getElementById("permPanel_" + openPermUserId);
+    if(prevPanel){ prevPanel.classList.remove("open"); prevPanel.innerHTML = ""; }
+  }
+
+  openPermUserId = userId;
+  panel.classList.add("open");
+  panel.innerHTML = '<div class="perm-note">Caricamento permessi...</div>';
+
+  await loadMyOwnedPages();
+
+  var pagesResult = await client.from("immonova_page_grants").select("page_key").eq("user_id", userId);
+  var grantedPages = new Set((!pagesResult.error && pagesResult.data) ? pagesResult.data.map(function(r){ return r.page_key; }) : []);
+
+  var dataResult = await client.from("immonova_managed_access").select("resource_key,access").eq("manager_id", currentUser.id).eq("collaborator_id", userId);
+  var grantedData = {};
+  if(!dataResult.error && dataResult.data){
+    dataResult.data.forEach(function(r){ grantedData[r.resource_key] = r.access; });
+  }
+
+  renderPermissionsPanel(panel, userId, grantedPages, grantedData);
+}
+
+function renderPermissionsPanel(panel, userId, grantedPages, grantedData){
+  var bySection = {};
+  PAGE_CATALOG.forEach(function(p){
+    if(!bySection[p.section]) bySection[p.section] = [];
+    bySection[p.section].push(p);
+  });
+
+  var pagesHTML = "";
+  Object.keys(bySection).forEach(function(section){
+    pagesHTML += '<div class="perm-section"><div class="perm-section-label">' + escapeHTML(section) + '</div><div class="perm-toggle-list">';
+    bySection[section].forEach(function(p){
+      var owned = myOwnedPages.has(p.key);
+      var granted = grantedPages.has(p.key);
+      pagesHTML += '<label class="perm-toggle ' + (granted ? "granted" : "") + '" style="' + (owned ? "" : "opacity:.35;cursor:not-allowed") + '">'
+        + '<input type="checkbox" ' + (granted ? "checked" : "") + ' ' + (owned ? "" : "disabled")
+        + ' onchange="togglePageGrant(\'' + userId + '\', \'' + p.key + '\', this.checked)"> '
+        + escapeHTML(p.label) + '</label>';
+    });
+    pagesHTML += '</div></div>';
+  });
+
+  var dataHTML = "";
+  DATA_RESOURCE_CATALOG.forEach(function(r){
+    var current = grantedData[r.key] || "";
+    dataHTML += '<div class="perm-data-row"><label>' + escapeHTML(r.label) + '</label>'
+      + '<select onchange="updateDataGrant(\'' + userId + '\', \'' + r.key + '\', this.value)">'
+      + ['', 'read', 'both'].map(function(level){
+          var levelLabel = level === "" ? "Nessuno" : (level === "read" ? "Sola lettura" : "Lettura e scrittura");
+          return '<option value="' + level + '" ' + (current === level ? "selected" : "") + '>' + escapeHTML(levelLabel) + '</option>';
+        }).join("")
+      + '</select></div>';
+  });
+
+  panel.innerHTML = '<div class="perm-cols">'
+    + '<div><div class="perm-col-title">' + escapeHTML(T.perm_col_pages) + '</div>' + pagesHTML + '</div>'
+    + '<div><div class="perm-col-title">' + escapeHTML(T.perm_col_data) + '</div>' + dataHTML + '</div>'
+    + '</div>'
+    + '<div class="perm-note">' + escapeHTML(T.perm_note) + '</div>';
+}
+
+async function togglePageGrant(userId, pageKey, checked){
+  if(checked){
+    var result = await client.from("immonova_page_grants").insert({
+      user_id:userId, page_key:pageKey, section:(PAGE_CATALOG.find(function(p){ return p.key === pageKey; }) || {}).section || "",
+      granted_by:currentUser.id
+    });
+    if(result.error){
+      alert("Non sono riuscito a concedere la pagina: " + result.error.message);
+      togglePermissionsPanel(userId); togglePermissionsPanel(userId);
+      return;
+    }
+  }else{
+    var delResult = await client.from("immonova_page_grants").delete().eq("user_id", userId).eq("page_key", pageKey);
+    if(delResult.error){
+      alert("Non sono riuscito a revocare la pagina: " + delResult.error.message);
+      return;
+    }
+  }
+}
+
+async function updateDataGrant(userId, resourceKey, access){
+  if(!access){
+    var delResult = await client.from("immonova_managed_access").delete()
+      .eq("manager_id", currentUser.id).eq("collaborator_id", userId).eq("resource_key", resourceKey);
+    if(delResult.error){ alert("Non sono riuscito a revocare: " + delResult.error.message); }
+    return;
+  }
+  var result = await client.from("immonova_managed_access").upsert({
+    manager_id:currentUser.id, collaborator_id:userId, resource_key:resourceKey, access:access
+  }, { onConflict:"manager_id,collaborator_id,resource_key" });
+  if(result.error){ alert("Non sono riuscito a salvare il permesso: " + result.error.message); }
+}
+
 userForm.addEventListener("submit", async function(e){
   e.preventDefault();
 
@@ -1152,6 +1522,7 @@ userForm.addEventListener("submit", async function(e){
   createBtn.disabled = false;
   createBtn.textContent = T.btn_create;
   syncAgencyFieldsVisibility();
+  renderProfessionalRoleSelect();
 
   await loadUsers();
 });
@@ -1181,6 +1552,10 @@ document.getElementById("role").addEventListener("change", syncAgencyFieldsVisib
 document.getElementById("is_super_user").addEventListener("change", syncAgencyFieldsVisibility);
 syncAgencyFieldsVisibility();
 
+document.getElementById("professional_role").addEventListener("change", function(){
+  handleProfessionalRoleChange(this, function(){});
+});
+
 document.getElementById("logoutBtn").addEventListener("click", async function(){
   await client.auth.signOut();
   window.location.href = "../index.html";
@@ -1198,6 +1573,8 @@ superUserFilter.addEventListener("change", function(){
     var admin = await checkAdmin();
 
     if(admin){
+      await loadProfessionalRoles();
+      renderProfessionalRoleSelect();
       await loadUsers();
     }
   }
