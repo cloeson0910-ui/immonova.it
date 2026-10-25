@@ -449,6 +449,7 @@ td{
           <th data-i18n="th_areas">Aree</th>
           <th data-i18n="th_categories">Categorie</th>
           <th data-i18n="th_consents">Consensi</th>
+          <th id="thAuthorship" data-i18n="th_authorship" style="display:none">Creato da</th>
           <th data-i18n="th_actions">Azioni</th>
         </tr>
       </thead>
@@ -482,6 +483,8 @@ let currentUser = null;
 let currentProfile = null;
 let allInvestors = [];
 let currentUserLanguage = "it";
+let isOwner = false;
+let authorEmailsById = {}; // created_by uuid -> "nome (email)" oppure "email" -- popolata solo se isOwner
 
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). loadProfile() qui
    caricava gia' il profilo per il controllo ruolo admin; estesa per includere anche "language"
@@ -509,6 +512,7 @@ var UI_STRINGS = {
   seller_status_mandato_firmato:"Mandato firmato", seller_status_venduto:"Venduto",
   th_investor:"Investitore", th_contacts:"Contatti", th_profile:"Profilo", th_budget:"Budget",
   th_areas:"Aree", th_categories:"Categorie", th_consents:"Consensi", th_actions:"Azioni",
+  th_authorship:"Creato da", authorship_unknown:"Non disponibile (record storico)",
   area_map_badge:"🗺 Zona su mappa", area_map_badge_title:"Clicca per vedere la zona di interesse disegnata sulla mappa",
   loading:"Caricamento investitori...",
   budget_from:"Da ", budget_to:"Fino a ", budget_not_indicated:"Non indicato",
@@ -526,7 +530,7 @@ var UI_STRINGS = {
   msg_deleting:"Eliminazione contatto...", msg_deleted:"Contatto eliminato."
 };
 
-var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 var T = UI_STRINGS;
 
 function i18nCacheKey(lang){ return "immonova_i18n_investors_" + lang + "_v1"; }
@@ -657,7 +661,7 @@ async function checkAuth(){
 async function loadProfile(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,role,language,is_super_user")
+    .select("id,email,full_name,role,language,is_super_user,is_platform_owner")
     .eq("id", currentUser.id)
     .single();
 
@@ -667,7 +671,7 @@ async function loadProfile(){
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
-      result = await client.from("profiles").select("id,email,full_name,role,is_super_user").eq("id", currentUser.id).single();
+      result = await client.from("profiles").select("id,email,full_name,role,is_super_user,is_platform_owner").eq("id", currentUser.id).single();
     }
   }
 
@@ -680,14 +684,21 @@ async function loadProfile(){
   currentProfile = result.data;
   await applyLanguage(currentProfile.language || "it");
 
-  /* Il super user (checkbox is_super_user su profiles) puo' accedere alla pagina investitori
-     esattamente come un admin: non deve piu' vedere il messaggio "Accesso riservato agli admin". */
-  if(currentProfile.role !== "admin" && !currentProfile.is_super_user){
-    setStatus(T.msg_access_denied, "error");
-    table.innerHTML = '<tr><td colspan="8" class="empty">'+esc(T.empty_unauthorized)+'</td></tr>';
-    return false;
+  /* Colonna "Creato da": visibile SOLO a te (is_platform_owner), per garantire sicurezza e
+     correttezza tra colleghi -- nessun master o collaboratore deve vederla, come richiesto
+     esplicitamente. */
+  isOwner = !!currentProfile.is_platform_owner;
+  if(isOwner){
+    document.getElementById("thAuthorship").style.display = "";
   }
 
+  /* FIX 25/10/2026: prima questa pagina si bloccava del tutto (nemmeno la query partiva) per
+     chiunque non fosse admin o master (is_super_user) -- quindi anche un collaboratore a cui
+     il suo master aveva esplicitamente concesso accesso ai contatti (immonova_managed_access,
+     resource_key='contacts') veniva comunque respinto qui, PRIMA che quel permesso venisse mai
+     controllato. Ora chiunque sia autenticato puo' aprire la pagina: a decidere QUALI contatti
+     vede davvero ci pensa la RLS sul database (i propri + quelli che gli sono stati estesi),
+     non piu' questo blocco lato pagina. Se non vede nulla, la lista sara' semplicemente vuota. */
   return true;
 }
 
@@ -707,9 +718,37 @@ async function loadInvestors(){
   }
 
   allInvestors = data || [];
+
+  if(isOwner){
+    await loadAuthorEmails();
+  }
+
   buildFilters();
   renderStats();
   applyFilters();
+}
+
+/* ---- Solo per te (is_platform_owner): recupera email/nome di chi ha creato ogni contatto,
+   cosi' da poter vedere sempre la paternita' reale -- requisito esplicito di sicurezza tra
+   colleghi. Non viene mai esposta a master o collaboratori. ---- */
+async function loadAuthorEmails(){
+  const ids = [...new Set(allInvestors.map(i => i.created_by).filter(Boolean))];
+  if(!ids.length) return;
+
+  const { data, error } = await client
+    .from("profiles")
+    .select("id,email,full_name")
+    .in("id", ids);
+
+  if(error){
+    console.warn("Caricamento paternità contatti non riuscito (non bloccante):", error.message);
+    return;
+  }
+
+  authorEmailsById = {};
+  (data || []).forEach(p => {
+    authorEmailsById[p.id] = p.full_name ? (p.full_name + " (" + p.email + ")") : p.email;
+  });
 }
 
 function buildFilters(){
@@ -916,6 +955,8 @@ function renderTable(data){
           <span class="badge ${inv.email_opt_in ? "optin" : "noopt"}">Email ${inv.email_opt_in ? "OK" : "NO"}</span>
           <span class="badge ${inv.whatsapp_opt_in ? "optin" : "noopt"}">WA ${inv.whatsapp_opt_in ? "OK" : "NO"}</span>
         </td>
+
+        ${isOwner ? `<td class="muted">${esc(inv.created_by ? (authorEmailsById[inv.created_by] || inv.created_by) : T.authorship_unknown)}</td>` : ""}
 
         <td>
           <div class="actions">

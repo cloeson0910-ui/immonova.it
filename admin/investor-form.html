@@ -347,6 +347,7 @@ textarea{
     <div>
       <h1 class="title" id="pageTitle" data-i18n="title_new">Nuovo Contatto</h1>
       <div id="pendingNewsBadge" style="display:none;margin-top:10px;padding:8px 14px;border:1px solid rgba(196,140,20,.5);color:var(--c-5b3e07);background:rgba(196,140,20,.08);font-size:11px;letter-spacing:.1em;text-transform:uppercase"></div>
+      <div id="authorshipBadge" style="display:none;margin-top:10px;padding:8px 14px;border:1px solid rgba(166,127,52,.35);color:var(--c-46371a);background:rgba(166,127,52,.08);font-size:11px;letter-spacing:.06em"></div>
     </div>
     <a class="secondary-link" href="investors.html" data-i18n="btn_back_to_investors">Torna ai Contatti</a>
   </div>
@@ -819,7 +820,7 @@ async function checkAuth(){
 async function loadProfile(){
   var result = await client
     .from("profiles")
-    .select("id,email,full_name,role,language")
+    .select("id,email,full_name,role,language,is_platform_owner")
     .eq("id", currentUser.id)
     .single();
 
@@ -827,7 +828,7 @@ async function loadProfile(){
     var looksLikeMissingLanguageColumn = /language/i.test(result.error.message || "") || result.error.code === "42703";
     if(looksLikeMissingLanguageColumn){
       console.warn("Colonna profiles.language non trovata: esegui la migrazione SQL (alter table profiles add column if not exists language text not null default 'it';). Interfaccia mostrata in italiano nel frattempo.");
-      result = await client.from("profiles").select("id,email,full_name,role").eq("id", currentUser.id).single();
+      result = await client.from("profiles").select("id,email,full_name,role,is_platform_owner").eq("id", currentUser.id).single();
     }
   }
 
@@ -1298,6 +1299,32 @@ async function loadInvestorActivity(id){
   }
 }
 
+async function showAuthorshipBadge(createdBy, createdAt){
+  var el = document.getElementById("authorshipBadge");
+  if(!el) return;
+
+  var dateStr = createdAt ? new Date(createdAt).toLocaleString("it-IT") : "";
+
+  if(!createdBy){
+    el.textContent = "Paternità: non disponibile (record storico precedente alla registrazione automatica dell'autore)" + (dateStr ? " · " + dateStr : "");
+    el.style.display = "";
+    return;
+  }
+
+  el.textContent = "Caricamento paternità...";
+  el.style.display = "";
+
+  var result = await client.from("profiles").select("email,full_name").eq("id", createdBy).single();
+
+  if(result.error || !result.data){
+    el.textContent = "Creato da: utente non trovato (id " + createdBy + ")" + (dateStr ? " · " + dateStr : "");
+    return;
+  }
+
+  var who = result.data.full_name ? (result.data.full_name + " (" + result.data.email + ")") : result.data.email;
+  el.textContent = "Creato da: " + who + (dateStr ? " · " + dateStr : "");
+}
+
 async function loadInvestor(){
   if(!investorId) return;
 
@@ -1316,6 +1343,14 @@ async function loadInvestor(){
   if(error || !data){
     setProgress(T.msg_investor_not_found, 100, "error");
     return;
+  }
+
+  /* ---- Paternità visibile SOLO a te (is_platform_owner): nessun collaboratore o master deve
+     poterla vedere, per garantire sicurezza e correttezza tra colleghi, come richiesto esplicitamente.
+     Il record potrebbe non avere created_by (dati storici antecedenti a questa logica): in quel
+     caso lo segnaliamo chiaramente invece di nasconderlo, cosi' resta visibile che manca. ---- */
+  if(currentProfile && currentProfile.is_platform_owner){
+    showAuthorshipBadge(data.created_by, data.created_at);
   }
 
   var fullNameForTitle = [data.first_name, data.last_name].filter(Boolean).join(" ");
