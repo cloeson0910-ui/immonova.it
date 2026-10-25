@@ -2233,7 +2233,7 @@ function gradeLabel(total){
   if(total>=35)return T.grade_fragile;
   return T.grade_weak;
 }
-function computeScore(){
+function computeScoreLocal(){
   var f=buildFinance();
   var projs=buildCashflowProjections();
   var proj=null;
@@ -2417,7 +2417,7 @@ function getRenovationRange(){
   var max=firstFinite(o.renovation_cost_max);
   return {min:min||0, max:max||0};
 }
-function buildFinance(){
+function buildFinanceLocal(){
   var j=getReportJson();var a=getAsset();var sr=(report&&report.short_rental_data)||j.short_rental_data||j.short_rental||j.economics||{};
   var purchase=getPurchasePrice();
   var renovation=getRenovationAvg();
@@ -3681,7 +3681,7 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
   var be=computeBreakEvenYear(rows, total, baseRevenue, ratio);
   return {rows:rows, revenueSource:revenueSource, adrVerified:adrVerified, total:total, breakEvenYear:be.year, breakEvenExtrapolated:be.extrapolated, opexRatio:ratio};
 }
-function buildCashflowProjections(){
+function buildCashflowProjectionsLocal(){
   var f=buildFinance();
 
   if(isCommercialCategory()){
@@ -4491,22 +4491,44 @@ function roundCmp(a,b){
   if(a==null || b==null) return false;
   return Math.abs(Number(a)-Number(b)) < 0.5;
 }
-async function runInvestmentMetricsShadowCheck(){
+/* remoteMetrics: cache del risultato dell'edge function per questo dossier, popolata da
+   fetchRemoteInvestmentMetrics() in init() PRIMA di renderBook(). Se presente, buildFinance/
+   computeScore/buildCashflowProjections (i wrapper sotto) usano questi numeri invece di
+   ricalcolarli in locale -- quindi quello che vedi nel dossier stampato/renderizzato arriva
+   dall'edge function. Se la chiamata fallisce, resta null e si ricade sul calcolo locale di
+   sempre (buildFinanceLocal/computeScoreLocal/buildCashflowProjectionsLocal), cosi' il dossier
+   non si rompe mai per un problema di rete. */
+var remoteMetrics = null;
+async function fetchRemoteInvestmentMetrics(){
   try{
-    var localFinance = buildFinance();
-    var localScore = computeScore();
-    var localCashflow = buildCashflowProjections();
-
     var res = await client.functions.invoke("immonova-investment-metrics", {
       body: { opportunity: opportunity, report: report, dossier_data: dossierData, lang: CURRENT_LANG }
     });
+    if(!res.error && res.data && res.data.ok === true){
+      remoteMetrics = res.data;
+    }else{
+      console.warn("[TEST] edge function metrics non disponibile, uso calcolo locale:", res.error || res.data);
+    }
+  }catch(e){
+    console.warn("[TEST] edge function metrics non disponibile (eccezione), uso calcolo locale:", e);
+  }
+}
+function buildFinance(){ return (remoteMetrics && remoteMetrics.finance) ? remoteMetrics.finance : buildFinanceLocal(); }
+function computeScore(){ return (remoteMetrics && remoteMetrics.score) ? remoteMetrics.score : computeScoreLocal(); }
+function buildCashflowProjections(){ return (remoteMetrics && remoteMetrics.cashflow) ? remoteMetrics.cashflow : buildCashflowProjectionsLocal(); }
 
-    if(res.error || !res.data || res.data.ok !== true){
-      investmentMetricsShadowBanner("[TEST edge function] Chiamata fallita: " + (res.error ? (res.error.message||String(res.error)) : "risposta non valida"), false);
+function runInvestmentMetricsShadowCheck(){
+  try{
+    var localFinance = buildFinanceLocal();
+    var localScore = computeScoreLocal();
+    var localCashflow = buildCashflowProjectionsLocal();
+
+    if(!remoteMetrics){
+      investmentMetricsShadowBanner("[TEST edge function] Edge non disponibile: il dossier sta usando il calcolo locale di sempre (fallback automatico).", false);
       return;
     }
 
-    var remote = res.data;
+    var remote = remoteMetrics;
     var diffs = [];
 
     ["total","net","revenue","costs","roi","breakEven","purchase"].forEach(function(k){
@@ -4574,7 +4596,13 @@ async function init(){
     destinationPhotoIndex = 0;
     await ensureDossier();
     if(dossierCancelledByUser) return; // Annulla premuto: redirect già in corso, non disegnare nulla.
-    runInvestmentMetricsShadowCheck(); // SOLO file di test: confronto in background, non blocca nulla
+    /* SOLO file di test: va atteso QUI, prima di renderBook(), perche' da questo momento in poi
+       buildFinance()/computeScore()/buildCashflowProjections() (usate dal rendering sotto)
+       restituiscono i numeri dell'edge function se la chiamata e' andata a buon fine, altrimenti
+       ricadono in automatico sul calcolo locale di sempre. */
+    setStatus("Verifica calcolo investimento (edge function)...","");
+    await fetchRemoteInvestmentMetrics();
+    runInvestmentMetricsShadowCheck();
     var manualOverridesChanged=false;
     if(dossierData && !dossierData._no_territorial_data){
       manualOverridesChanged=await applyManualOverridesClient();
