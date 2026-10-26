@@ -1576,7 +1576,7 @@ button.danger{
 
       <div class="field">
         <label for="category" data-i18n="label_category">Categoria</label>
-        <select id="category" required>
+        <select id="category" required onchange="handleCategoryChange(this)">
           <option value="" data-i18n="opt_loading_categories">Caricamento categorie...</option>
         </select>
       </div>
@@ -4691,7 +4691,47 @@ async function loadCategories(selectedCategory){
     html += '<option value="' + name + '"' + (name === selectedCategory ? " selected" : "") + '>' + name + '</option>';
   }
 
+  // Il valore salvato può non essere (più) tra le categorie attive del catalogo: lo si
+  // aggiunge comunque come opzione extra già selezionata, così il dato esistente resta
+  // visibile e non sparisce dalla scheda.
+  if(selectedCategory && !data.some(function(c){ return c.name === selectedCategory; })){
+    html += '<option value="' + escapeHTML(selectedCategory) + '" selected>' + escapeHTML(selectedCategory) + '</option>';
+  }
+
+  html += '<option value="__new__">+ Aggiungi nuova categoria...</option>';
+
   select.innerHTML = html;
+}
+
+/* ---- "+ Aggiungi nuova categoria..." (26/10/2026): chi usa questo form -- soprattutto un
+   master che ha esperienza su tipologie che il titolare non ha mai valutato personalmente
+   (es. "Maneggio") -- deve poter aggiungere al volo una categoria mancante al catalogo
+   condiviso "categories", disponibile per sempre e ovunque (anche in valuation-form.html e
+   opportunity-form.html, stessa tabella). Richiede solo di essere autenticati (vedi policy
+   SQL "authenticated_insert_categories"), non più riservato ai soli admin. ---- */
+async function handleCategoryChange(selectEl){
+  if(selectEl.value !== "__new__") return;
+
+  var name = prompt("Nome della nuova categoria (es. Maneggio, Palazzo Storico, Castello):");
+  if(!name || !name.trim()){
+    selectEl.value = "";
+    return;
+  }
+  name = name.trim();
+
+  var slug = name.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  var insertResult = await client.from("categories").insert({ name:name, slug:slug, active:true, created_by: currentUser ? currentUser.id : null }).select().single();
+
+  if(insertResult.error){
+    alert("Non sono riuscito a creare la categoria: " + insertResult.error.message);
+    selectEl.value = "";
+    return;
+  }
+
+  await loadCategories(name);
 }
 
 /* =========================================================================
