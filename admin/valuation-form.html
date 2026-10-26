@@ -249,17 +249,7 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
       <div class="grid">
         <div class="field">
           <label data-i18n="label_category">Categoria</label>
-          <select id="category">
-            <option value="" data-i18n="opt_select">Seleziona</option>
-            <option value="Ville" data-i18n="cat_villa">Ville</option>
-            <option value="Appartamenti" data-i18n="cat_apartment">Appartamenti</option>
-            <option value="Hotel" data-i18n="cat_hotel">Hotel</option>
-            <option value="Resort" data-i18n="cat_resort">Resort</option>
-            <option value="Villaggi" data-i18n="cat_village">Villaggi</option>
-            <option value="Nuove Edificazioni" data-i18n="cat_development">Nuove Edificazioni</option>
-            <option value="Commerciale" data-i18n="cat_commercial">Commerciale</option>
-            <option value="Terreni" data-i18n="cat_land">Terreni</option>
-          </select>
+          <select id="category" onchange="handleCategoryChange(this)"></select>
         </div>
         <div class="field">
           <label data-i18n="label_address">Indirizzo</label>
@@ -573,6 +563,9 @@ var UI_STRINGS = {
   cadastral_value_total_label:"Totale",
   cadastral_value_section_prefix:"Sezione",
   label_commercial_surface:"Superficie commerciale complessiva (ponderata)",
+  opt_add_new_category:"+ Aggiungi nuova categoria...",
+  prompt_new_category_label:"Nome della nuova categoria (es. Palazzo Storico, Castello):",
+  msg_category_create_error:"Non sono riuscito a creare la categoria: ",
   section_notes:"Note", ph_notes:"Dettagli emersi dal sopralluogo, richieste del venditore...",
   btn_calculate:"Calcola Valutazione", result_title:"Valore di mercato stimato",
   btn_cancel:"Annulla", btn_save:"Salva Valutazione", btn_update:"Salva Modifiche",
@@ -966,22 +959,41 @@ function classifyCadastralCategory(rawCategory, isPrimaCasa){
   return null;
 }
 
-/* ---- Peso commerciale per categoria catastale (26/10/2026): ogni sezione catastale
-   aggiuntiva entra nella superficie commerciale complessiva con un coefficiente diverso a
-   seconda di COSA è davvero (abitazione, garage, cantina/deposito, negozio/laboratorio...),
-   non più sempre al 100%. Stessa tabella di ragguaglio standard FIAIP/Borsino Immobiliare già
-   usata altrove nel form per garage (35%) e accessoria/deposito (35%):
+/* ---- Peso commerciale per categoria catastale (26/10/2026, corretto lo stesso giorno per le
+   categorie F): ogni sezione catastale aggiuntiva entra nella superficie commerciale
+   complessiva con un coefficiente diverso a seconda di COSA è davvero (abitazione, garage,
+   cantina/deposito, negozio/laboratorio...), non più sempre al 100%. Stessa tabella di
+   ragguaglio standard FIAIP/Borsino Immobiliare già usata altrove nel form per garage (35%) e
+   accessoria/deposito (35%):
    - A (abitazioni, incl. A/10 uffici), B, C/1 (negozi), C/3-C/5 (laboratori/sport/stabilimenti
      balneari), D, E: unità piena, 100%
    - C/2 (magazzini, cantine, soffitte): 35% (come l'accessoria/deposito della sezione
      principale)
    - C/6 (autorimesse, rimesse, scuderie — garage): 35% (come il garage della sezione principale)
    - C/7 (tettoie, posti auto coperti): 20%
-   Se la categoria non è riconoscibile (o il campo è vuoto), resta 100% per sicurezza/
-   retrocompatibilità -- nessuna sorpresa verso il basso su un dato mancante. ---- */
+   - F (categorie catastali FITTIZIE, non superficie commerciale vera): ESCLUSE di default, 0%,
+     mai 100%. Elenco verificato (prime due versioni di questo commento erano sbagliate sulla
+     numerazione F/2-F/3-F/6, corrette su segnalazione esplicita e doppio controllo):
+       F/1 area urbana (porzioni di corte o aree da demolizione, senza fabbricato): 0%
+       F/2 unità collabenti (fabbricati ruderi, diroccati, fatiscenti o inagibili, incapaci di
+           produrre reddito): 0%
+       F/3 unità in corso di costruzione (edifici non ancora ultimati nei lavori strutturali o
+           di finitura): 0%
+       F/4 unità in corso di definizione (porzioni/subalterni in fase di frazionamento o
+           fusione, identificazione catastale non ancora definitiva): 0%
+       F/5 lastrico solare (terrazze o coperture piane praticabili in sommità, censite in modo
+           autonomo -- non abitabile, come una terrazza scoperta): 20%
+       F/6 fabbricato in attesa di dichiarazione (immobile non ancora dichiarato al catasto o
+           in attesa di definizione procedurale): 0%
+       F/7 infrastrutture di reti pubbliche di comunicazione (spazi/manufatti per reti
+           tecnologiche, es. fibra ottica e banda larga -- non è superficie abitabile/
+           commerciale): 0%
+   Se la categoria non è riconoscibile (o il campo è vuoto): resta 100% SOLO per compatibilità
+   coi dati già inseriti su categorie A-E scritte in modo imprevisto -- non si applica più alla
+   lettera F, sempre riconosciuta esplicitamente qui sopra, mai lasciata al fallback. ---- */
 function cadastralSurfaceWeight(rawCategory){
   var txt = String(rawCategory || "").trim().toUpperCase();
-  var m = txt.match(/^([A-E])\s*\/?\s*(\d+)?/);
+  var m = txt.match(/^([A-F])\s*\/?\s*(\d+)?/);
   if(!m) return { weight:1, label:null };
   var letter = m[1], number = m[2] ? parseInt(m[2], 10) : null;
 
@@ -989,6 +1001,16 @@ function cadastralSurfaceWeight(rawCategory){
     if(number === 2) return { weight:0.35, label:"C/2, magazzino/cantina/soffitta — 35%" };
     if(number === 6) return { weight:0.35, label:"C/6, autorimessa/garage — 35%" };
     if(number === 7) return { weight:0.20, label:"C/7, tettoia/posto auto coperto — 20%" };
+  }
+  if(letter === "F"){
+    if(number === 5) return { weight:0.20, label:"F/5, lastrico solare — 20% (non abitabile, come una terrazza scoperta)" };
+    if(number === 1) return { weight:0, label:"F/1, area urbana — 0% (terreno/corte senza fabbricato, nessuna superficie commerciale)" };
+    if(number === 2) return { weight:0, label:"F/2, unità collabente — 0% (fabbricato rudere/inagibile allo stato attuale, esclusa dalla superficie commerciale)" };
+    if(number === 3) return { weight:0, label:"F/3, unità in corso di costruzione — 0% (da valutare a parte a fine lavori)" };
+    if(number === 4) return { weight:0, label:"F/4, unità in corso di definizione — 0% (categoria provvisoria, nessun dato catastale definitivo)" };
+    if(number === 6) return { weight:0, label:"F/6, fabbricato in attesa di dichiarazione — 0% (non ancora accatastato)" };
+    if(number === 7) return { weight:0, label:"F/7, infrastrutture di reti pubbliche di comunicazione — 0% (non è superficie abitabile/commerciale)" };
+    return { weight:0, label:"F (categoria catastale fittizia) — 0% (esclusa dalla superficie commerciale)" };
   }
   return { weight:1, label: letter + (number != null ? "/" + number : "") + " — 100%" };
 }
@@ -1791,6 +1813,12 @@ async function loadValuationForEdit(){
   document.getElementById("sellerPhone").value = data.seller_phone || "";
   document.getElementById("sellerEmail").value = data.seller_email || "";
   document.getElementById("propertyTitle").value = data.property_title || "";
+  // Il valore salvato può non essere (più) tra le categorie attive del catalogo (es. categoria
+  // nel frattempo disattivata): renderCategorySelect la aggiunge comunque come opzione extra
+  // già selezionata, così il dato esistente resta visibile e non sparisce dalla scheda.
+  if(data.category && !propertyCategories.some(function(c){ return c.name === data.category; })){
+    document.getElementById("category").insertAdjacentHTML("beforeend", '<option value="' + escapeHTML(data.category) + '">' + escapeHTML(data.category) + '</option>');
+  }
   document.getElementById("category").value = data.category || "";
   document.getElementById("address").value = data.address || "";
   document.getElementById("municipality").value = data.municipality || "";
@@ -2107,9 +2135,66 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   window.location.href = "../index.html";
 });
 
+/* ---- Categorie immobile (26/10/2026): caricate dalla tabella condivisa "categories" (già
+   usata altrove nel sito), non più hardcoded -- così mancano meno voci (es. "Palazzo Storico",
+   "Castello") e si possono aggiungere al volo da qui, disponibili per sempre e ovunque le usa
+   quella tabella. "+ Aggiungi nuova categoria..." in fondo al menu, stesso meccanismo già in
+   uso in users.html per le posizioni professionali. L'inserimento richiede un account admin
+   (stessa regola di sicurezza già in vigore sulla tabella "categories"): se chi è loggato non
+   lo è, il salvataggio fallisce con un messaggio chiaro invece di un errore criptico. ---- */
+var propertyCategories = [];
+
+async function loadPropertyCategories(){
+  var result = await client.from("categories").select("name,slug").eq("active", true).order("name", { ascending:true });
+  propertyCategories = (!result.error && result.data) ? result.data : [];
+}
+
+function categoryOptionsHTML(selected){
+  var out = '<option value="">' + escapeHTML(T.opt_select) + '</option>';
+  propertyCategories.forEach(function(c){
+    out += '<option value="' + escapeHTML(c.name) + '" ' + (selected === c.name ? "selected" : "") + '>' + escapeHTML(c.name) + '</option>';
+  });
+  out += '<option value="__new__">' + escapeHTML(T.opt_add_new_category) + '</option>';
+  return out;
+}
+
+function renderCategorySelect(selected){
+  var select = document.getElementById("category");
+  if(!select) return;
+  select.innerHTML = categoryOptionsHTML(selected);
+}
+
+async function handleCategoryChange(selectEl){
+  if(selectEl.value !== "__new__") return;
+
+  var name = prompt(T.prompt_new_category_label);
+  if(!name || !name.trim()){
+    renderCategorySelect("");
+    return;
+  }
+  name = name.trim();
+
+  var slug = name.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+  var insertResult = await client.from("categories").insert({ name:name, slug:slug, active:true }).select().single();
+
+  if(insertResult.error){
+    alert(T.msg_category_create_error + insertResult.error.message);
+    renderCategorySelect("");
+    return;
+  }
+
+  await loadPropertyCategories();
+  renderCategorySelect(name);
+}
+
 (async function init(){
   if(await checkAuth()){
     await loadUserLanguage();
+    await loadPropertyCategories();
+    renderCategorySelect("");
     await loadValuationForEdit();
     await importFromAcquisition();
     await importFromInvestor();
