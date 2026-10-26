@@ -865,7 +865,17 @@ async function renderDynamicNavMenu(){
     }
 
     groupEl.style.display = "";
-    menuEl.innerHTML = items.map(function(p){
+
+    /* Voci in ordine alfabetico sul testo visibile (già tradotto), non sull'ordine di
+       PAGE_CATALOG -- così chi apre il menu trova sempre le pagine in ordine A-Z, e una
+       nuova pagina aggiunta al catalogo si posiziona da sola senza doverla spostare a mano. */
+    var sortedItems = items.slice().sort(function(a, b){
+      var labelA = (a.i18nKey && T[a.i18nKey]) ? T[a.i18nKey] : a.label;
+      var labelB = (b.i18nKey && T[b.i18nKey]) ? T[b.i18nKey] : b.label;
+      return String(labelA).localeCompare(String(labelB), currentUserLanguage || "it", { sensitivity:"base" });
+    });
+
+    menuEl.innerHTML = sortedItems.map(function(p){
       var label = (p.i18nKey && T[p.i18nKey]) ? T[p.i18nKey] : p.label;
       var i18nAttr = p.i18nKey ? ' data-i18n="' + p.i18nKey + '"' : "";
       return '<a href="' + p.key + '"' + i18nAttr + '>' + escapeHTML(label) + '</a>';
