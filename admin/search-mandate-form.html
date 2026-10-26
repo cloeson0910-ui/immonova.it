@@ -176,6 +176,17 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 .listings-panel-head a:hover{background:#a67f34;color:var(--c-ffffff)}
 .listings-panel iframe{flex:1;width:100%;border:0;min-height:480px;background:#fdfaf3}
 .listings-panel-fallback-hint{padding:8px 14px;font-size:11px;color:var(--c-4f4125);font-style:italic;border-top:1px solid rgba(166,127,52,.15)}
+.opp-match-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.opp-match-card{display:flex;justify-content:space-between;gap:14px;align-items:center;border:1px solid rgba(166,127,52,.25);background:#fff;padding:14px 16px;flex-wrap:wrap}
+.opp-match-info{flex:1;min-width:220px}
+.opp-match-title{font-size:14px;font-weight:600;color:var(--c-4a3c1f)}
+.opp-match-meta{font-size:12px;color:var(--c-4f4125);margin-top:4px;line-height:1.6}
+.opp-match-badges{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}
+.opp-match-badge{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border:1px solid rgba(79,127,69,.34);background:rgba(79,127,69,.08);color:var(--c-2b4626)}
+.opp-match-score{font-size:22px;font-weight:700;color:var(--c-5b461d);text-align:center;min-width:56px}
+.opp-match-score span{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--c-4f4125);font-weight:400}
+.opp-match-open{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--c-5b461d);text-decoration:none;border:1px solid rgba(166,127,52,.4);padding:7px 10px;white-space:nowrap}
+.opp-match-open:hover{background:#a67f34;color:var(--c-ffffff)}
 .footer-actions{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-top:32px}
 .save-panel{min-width:340px;flex:1;max-width:560px}
 .progress-text{min-height:18px;margin-bottom:10px;font-size:13px;color:var(--c-4f4125)}
@@ -366,6 +377,14 @@ textarea{min-height:110px;resize:vertical;line-height:1.7}
 
   </form>
 
+  <div class="section" id="oppMatchSection" style="display:none">
+    <h2 class="section-title" data-i18n="section_opp_matches">Immobili compatibili in piattaforma</h2>
+    <p class="map-hint" data-i18n="hint_opp_matches">Immobili già presenti su IMMONOVA che corrispondono ai criteri di questo mandato, calcolati con lo stesso sistema di punteggio usato per l'incrocio immobile→investitori. Immobili venduti o ritirati non compaiono.</p>
+    <div id="oppMatchSummary" class="map-status"></div>
+    <div id="oppMatchList" class="opp-match-list"></div>
+    <button type="button" class="map-secondary-btn" id="rerunOppMatchBtn" data-i18n="btn_rerun_opp_match" style="margin-top:14px">Ricalcola ora</button>
+  </div>
+
   <div class="section" id="listingsSection" style="display:none">
     <h2 class="section-title" data-i18n="section_listings">Immobili trovati</h2>
     <p class="map-hint" data-i18n="hint_listings">Ricerca automatica su immobiliare.it, idealista.it, subito.it e casa.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link "Ricerca su ..." aprono il portale gi&agrave; filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.</p>
@@ -404,6 +423,31 @@ var MANDATE_FEATURES = [
   { elementId:"wantsHabitability", column:"wants_habitability" }
 ];
 
+/* ---- Mappa wants_* (mandato) -> has_* (opportunities), per il matching mandato->immobili
+   (vedi calculateOpportunityMatches piu' sotto). Stessa coppia di colonne, nomi diversi per
+   convenzione delle due tabelle. ---- */
+var MANDATE_FEATURE_MATCH_DEFS = [
+  { wants:"wantsPool", has:"has_pool", label:"Piscina" },
+  { wants:"wantsGarden", has:"has_garden", label:"Giardino" },
+  { wants:"wantsGarage", has:"has_garage", label:"Box auto" },
+  { wants:"wantsParkingSpot", has:"has_parking_spot", label:"Posto auto" },
+  { wants:"wantsTerrace", has:"has_terrace", label:"Terrazza" },
+  { wants:"wantsBalcony", has:"has_balcony", label:"Balcone" },
+  { wants:"wantsSeaView", has:"has_sea_view", label:"Vista mare" },
+  { wants:"wantsHistoricCenter", has:"has_historic_center", label:"Centro storico" },
+  { wants:"wantsAirConditioning", has:"has_air_conditioning", label:"Aria condizionata" },
+  { wants:"wantsElevator", has:"has_elevator", label:"Ascensore" },
+  { wants:"wantsFireplace", has:"has_fireplace", label:"Camino" },
+  { wants:"wantsBeachfront", has:"has_beachfront", label:"Fronte mare" },
+  { wants:"wantsPhotovoltaic", has:"has_photovoltaic", label:"Impianto fotovoltaico" },
+  { wants:"wantsCarCharger", has:"has_car_charger", label:"Colonnina ricarica auto" },
+  { wants:"wantsSolarThermal", has:"has_solar_thermal", label:"Solare termico" },
+  { wants:"wantsStorageBattery", has:"has_storage_battery", label:"Batterie di accumulo" },
+  { wants:"wantsArtesianWell", has:"has_artesian_well", label:"Pozzo artesiano" },
+  { wants:"wantsHeatingSystem", has:"has_heating_system", label:"Impianto di riscaldamento" },
+  { wants:"wantsHabitability", has:"has_habitability", label:"Agibilità" }
+];
+
 let currentUser = null;
 let currentUserLanguage = "it";
 
@@ -417,10 +461,10 @@ var UI_STRINGS = {
   section_search:"Cosa cerca", label_category:"Categoria", opt_any_category:"Qualsiasi",
   cat_villa:"Ville", cat_apartment:"Appartamenti", cat_hotel:"Hotel", cat_resort:"Resort", cat_village:"Villaggi",
   cat_development:"Nuove Edificazioni", cat_commercial:"Commerciale", cat_land:"Terreni", cat_off_market:"Off Market",
-  label_location_areas:"Zona / Aree di interesse", ph_areas:"Es. Salento, Valle d\u2019Itria, Costa Adriatica",
+  label_location_areas:"Zona / Aree di interesse", ph_areas:"Es. Salento, Valle d’Itria, Costa Adriatica",
   label_province:"Provincia", ph_province:"Es. Lecce",
   label_interest_area_map:"Disegna la zona di interesse sulla mappa (opzionale)",
-  hint_interest_area_map:"Definisce l'area in modo pi\u00f9 preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi \"Chiudi poligono\" per completarlo \u2014 puoi disegnare pi\u00f9 zone. Alla chiusura di ogni poligono i comuni al suo interno vengono rilevati automaticamente e aggiunti al campo \"Zona / Aree di interesse\" qui sopra. Serve a far emergere le opportunit\u00e0 che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
+  hint_interest_area_map:"Definisce l'area in modo più preciso di un nome di zona a testo libero: clicca sulla mappa per aggiungere un punto alla volta e disegnare un perimetro di forma libera, poi premi \"Chiudi poligono\" per completarlo — puoi disegnare più zone. Alla chiusura di ogni poligono i comuni al suo interno vengono rilevati automaticamente e aggiunti al campo \"Zona / Aree di interesse\" qui sopra. Serve a far emergere le opportunità che ricadono dentro quel perimetro, in aggiunta alla ricerca testuale qui sopra.",
   btn_clear_area_map:"Cancella zona disegnata",
   btn_undo_area_point:"Annulla ultimo punto",
   btn_finish_area:"Chiudi poligono",
@@ -430,6 +474,13 @@ var UI_STRINGS = {
   section_listings:"Immobili trovati",
   hint_listings:"Ricerca automatica su immobiliare.it, idealista.it, subito.it e casa.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link “Ricerca su ...” aprono il portale già filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.",
   btn_rerun_listings:"Cerca di nuovo ora",
+  section_opp_matches:"Immobili compatibili in piattaforma",
+  hint_opp_matches:"Immobili già presenti su IMMONOVA che corrispondono ai criteri di questo mandato, calcolati con lo stesso sistema di punteggio usato per l'incrocio immobile→investitori. Immobili venduti o ritirati non compaiono.",
+  btn_rerun_opp_match:"Ricalcola ora",
+  opp_match_calculating:"Calcolo immobili compatibili...",
+  opp_match_error_prefix:"Errore caricamento immobili: ",
+  opp_match_none:"Nessun immobile compatibile trovato con i criteri attuali.",
+  opp_match_open:"Apri",
   listings_status_searching:"Ricerca in corso sui portali…",
   listings_status_done:"Ultima ricerca completata.",
   listings_status_error:"Ricerca non riuscita, riprova tra poco.",
@@ -437,11 +488,11 @@ var UI_STRINGS = {
   btn_open_new_tab:"Apri in nuova scheda",
   listings_panel_fallback_hint:"Se il riquadro sopra resta vuoto, il portale sta bloccando la visualizzazione incorporata — usa \"Apri in nuova scheda\".",
   map_status_areas:"{n} zone disegnate",
-  map_status_detecting:"Ricerca comuni nella zona in corso\u2026",
-  map_status_detect_failed:"Zona salvata, ma non \u00e8 stato possibile rilevare automaticamente comuni/provincia (servizio esterno non raggiungibile in questo momento) \u2014 aggiungili manualmente qui sopra se vuoi, oppure riprova pi\u00f9 tardi.",
-  map_status_drawn:"Zona salvata: verr\u00e0 usata per il matching geografico.",
-  map_status_drawing:"{n} punti aggiunti \u2014 continua a cliccare o premi \"Chiudi poligono\" (minimo 3 punti).",
-  map_status_none:"Nessuna zona disegnata: clicca sulla mappa per iniziare (verr\u00e0 usato solo il testo qui sopra finch\u00e9 non disegni nulla).",
+  map_status_detecting:"Ricerca comuni nella zona in corso…",
+  map_status_detect_failed:"Zona salvata, ma non è stato possibile rilevare automaticamente comuni/provincia (servizio esterno non raggiungibile in questo momento) — aggiungili manualmente qui sopra se vuoi, oppure riprova più tardi.",
+  map_status_drawn:"Zona salvata: verrà usata per il matching geografico.",
+  map_status_drawing:"{n} punti aggiunti — continua a cliccare o premi \"Chiudi poligono\" (minimo 3 punti).",
+  map_status_none:"Nessuna zona disegnata: clicca sulla mappa per iniziare (verrà usato solo il testo qui sopra finché non disegni nulla).",
   label_budget_min:"Budget minimo €", label_budget_max:"Budget massimo €",
   label_sqm_min:"Metratura minima mq", label_sqm_max:"Metratura massima mq",
   label_bedrooms_min:"Camere (almeno)", label_bathrooms_min:"Bagni (almeno)",
@@ -464,7 +515,7 @@ var UI_STRINGS = {
   msg_save_error:"Errore durante il salvataggio."
 };
 
-var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 var T = UI_STRINGS;
 
 function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v3"; }
@@ -947,6 +998,182 @@ function loadAreaGeoJSONOntoMap(geojson){
   }
 }
 
+/* ============================================================================================
+   MATCHING MANDATO -> IMMOBILI IN PIATTAFORMA (aggiunto 26/10/2026)
+   Stesso sistema di punteggio gia' in produzione per il verso immobile->investitori
+   (calculateInvestorMatches in opportunity-edit.html): stessi pesi per budget/categoria/area,
+   piu' criteri aggiuntivi propri del mandato (metratura, camere, bagni, caratteristiche
+   richieste) confrontati con le colonne has_* di opportunities. Mostrato solo in modifica
+   (serve l'id del mandato gia' salvato), stesso pattern della sezione "Immobili trovati" sui
+   portali esterni qui sopra. ---- */
+function normalizeMandateText(value){
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+}
+
+function extractMandateMoney(value){
+  var raw = String(value || "")
+    .replace(/€/g, "")
+    .replace(/\s/g, "")
+    .replace(/\./g, "")
+    .replace(/,/g, ".");
+  var match = raw.match(/[0-9]+(\.[0-9]+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+function currentMandateForMatch(){
+  return {
+    category: val("category") || "",
+    locationAreas: val("locationAreas") || "",
+    province: val("province") || "",
+    budgetMin: numVal("budgetMin"),
+    budgetMax: numVal("budgetMax"),
+    sqmMin: numVal("sqmMin"),
+    sqmMax: numVal("sqmMax"),
+    bedroomsMin: numVal("bedroomsMin"),
+    bedroomsMax: numVal("bedroomsMax"),
+    bathroomsMin: numVal("bathroomsMin"),
+    bathroomsMax: numVal("bathroomsMax")
+  };
+}
+
+var opportunityMatches = [];
+
+async function loadOpportunitiesForMatch(){
+  var listEl = document.getElementById("oppMatchList");
+  var summaryEl = document.getElementById("oppMatchSummary");
+  if(!listEl) return;
+  summaryEl.textContent = T.opp_match_calculating;
+
+  var result = await client
+    .from("opportunities")
+    .select("id,title,category,location,municipality,province,region,locality,formatted_address,price,internal_size,bedrooms,bathrooms,commercial_status,published," +
+      "has_pool,has_garden,has_garage,has_parking_spot,has_terrace,has_balcony,has_sea_view,has_historic_center,has_air_conditioning,has_elevator,has_fireplace,has_beachfront," +
+      "has_photovoltaic,has_car_charger,has_solar_thermal,has_storage_battery,has_artesian_well,has_heating_system,has_habitability")
+    .not("commercial_status", "in", "(sold,withdrawn)")
+    .order("created_at", { ascending:false });
+
+  if(result.error){
+    summaryEl.textContent = T.opp_match_error_prefix + result.error.message;
+    return;
+  }
+
+  calculateOpportunityMatches(result.data || []);
+}
+
+/* ---- Stessa logica di punteggio di calculateInvestorMatches (opportunity-edit.html):
+   budget 40pt/12pt parziale, categoria 30pt, area 20pt -- piu' i criteri propri del mandato
+   (metratura 15pt, camere 10pt, bagni 10pt, 5pt per ogni caratteristica richiesta e presente). ---- */
+function calculateOpportunityMatches(opportunities){
+  var mandate = currentMandateForMatch();
+  var mCategory = normalizeMandateText(mandate.category);
+  var mAreas = (mandate.locationAreas + "," + mandate.province).split(",")
+    .map(normalizeMandateText).filter(Boolean);
+
+  opportunityMatches = opportunities.map(function(opp){
+    var score = 0;
+    var reasons = [];
+    var oppPrice = extractMandateMoney(opp.price);
+
+    if(oppPrice && ((!mandate.budgetMin || oppPrice >= mandate.budgetMin) && (!mandate.budgetMax || oppPrice <= mandate.budgetMax))){
+      score += 40;
+      reasons.push("Budget compatibile");
+    }else if(!oppPrice && (mandate.budgetMin || mandate.budgetMax)){
+      score += 12;
+      reasons.push("Budget richiesto, prezzo non verificabile");
+    }
+
+    if(mCategory && normalizeMandateText(opp.category) === mCategory){
+      score += 30;
+      reasons.push("Categoria compatibile");
+    }
+
+    var oppAreas = [opp.location, opp.municipality, opp.province, opp.region, opp.locality, opp.formatted_address]
+      .map(normalizeMandateText).filter(Boolean);
+    var areaMatch = mAreas.length && oppAreas.some(function(oppArea){
+      return mAreas.some(function(mArea){
+        return oppArea.indexOf(mArea) >= 0 || mArea.indexOf(oppArea) >= 0;
+      });
+    });
+    if(areaMatch){
+      score += 20;
+      reasons.push("Area geografica compatibile");
+    }
+
+    if((mandate.sqmMin || mandate.sqmMax) && opp.internal_size){
+      var sqmOk = (!mandate.sqmMin || opp.internal_size >= mandate.sqmMin) && (!mandate.sqmMax || opp.internal_size <= mandate.sqmMax);
+      if(sqmOk){ score += 15; reasons.push("Metratura compatibile"); }
+    }
+
+    if(mandate.bedroomsMin && opp.bedrooms != null){
+      var bedOk = opp.bedrooms >= mandate.bedroomsMin && (!mandate.bedroomsMax || opp.bedrooms <= mandate.bedroomsMax);
+      if(bedOk){ score += 10; reasons.push("Camere compatibili"); }
+    }
+
+    if(mandate.bathroomsMin && opp.bathrooms != null){
+      var bathOk = opp.bathrooms >= mandate.bathroomsMin && (!mandate.bathroomsMax || opp.bathrooms <= mandate.bathroomsMax);
+      if(bathOk){ score += 10; reasons.push("Bagni compatibili"); }
+    }
+
+    MANDATE_FEATURE_MATCH_DEFS.forEach(function(f){
+      if(boolVal(f.wants) && opp[f.has]){
+        score += 5;
+        reasons.push(f.label);
+      }
+    });
+
+    return { opportunity:opp, score:score, reasons:reasons };
+  }).filter(function(item){
+    return item.score > 0;
+  }).sort(function(a, b){
+    return b.score - a.score;
+  });
+
+  renderOpportunityMatches();
+}
+
+function escapeMandateHTML(value){
+  return String(value ?? "")
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+function renderOpportunityMatches(){
+  var listEl = document.getElementById("oppMatchList");
+  var summaryEl = document.getElementById("oppMatchSummary");
+  if(!listEl) return;
+
+  summaryEl.textContent = opportunityMatches.length
+    ? opportunityMatches.length + " immobili compatibili trovati in piattaforma."
+    : T.opp_match_none;
+
+  if(!opportunityMatches.length){
+    listEl.innerHTML = "";
+    return;
+  }
+
+  listEl.innerHTML = opportunityMatches.map(function(match){
+    var opp = match.opportunity;
+    return '' +
+      '<div class="opp-match-card">' +
+        '<div class="opp-match-info">' +
+          '<div class="opp-match-title">' + escapeMandateHTML(opp.title || ("Opportunità #" + opp.id)) + '</div>' +
+          '<div class="opp-match-meta">' +
+            escapeMandateHTML(opp.category || "") + (opp.category && opp.location ? " &middot; " : "") + escapeMandateHTML(opp.location || "") +
+          '</div>' +
+          '<div class="opp-match-badges">' +
+            match.reasons.map(function(r){ return '<span class="opp-match-badge">' + escapeMandateHTML(r) + '</span>'; }).join("") +
+          '</div>' +
+        '</div>' +
+        '<div class="opp-match-score">' + match.score + '<span>Score</span></div>' +
+        '<a class="opp-match-open" href="opportunity-edit.html?id=' + encodeURIComponent(opp.id) + '" target="_blank">' + escapeMandateHTML(T.opp_match_open) + '</a>' +
+      '</div>';
+  }).join("");
+}
+
 async function loadMandateForEdit(){
   if(!mandateId) return;
 
@@ -993,6 +1220,9 @@ async function loadMandateForEdit(){
       retryAreaDetection();
     }
   }
+
+  document.getElementById("oppMatchSection").style.display = "";
+  await loadOpportunitiesForMatch();
 
   document.getElementById("listingsSection").style.display = "";
   await renderMandateListings(mandateId);
@@ -1263,6 +1493,14 @@ document.getElementById("rerunListingsBtn").addEventListener("click", async func
     bathrooms_min: numVal("bathroomsMin")
   });
   await renderMandateListings(mandateId);
+  btn.disabled = false;
+});
+
+document.getElementById("rerunOppMatchBtn").addEventListener("click", async function(){
+  if(!mandateId) return;
+  var btn = document.getElementById("rerunOppMatchBtn");
+  btn.disabled = true;
+  await loadOpportunitiesForMatch();
   btn.disabled = false;
 });
 

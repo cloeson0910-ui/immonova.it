@@ -322,6 +322,16 @@ td{
 }
 .area-map-modal-close:hover{color:var(--c-5a480f)}
 #areaMapModalMap{width:100%;height:420px}
+.match-row td{padding-top:0;padding-bottom:12px;border-bottom:1px solid rgba(166,127,52,.08)}
+.inv-match-list{display:flex;gap:10px;flex-wrap:wrap;padding:8px 4px 2px}
+.inv-match-card{display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;border:1px solid rgba(166,127,52,.25);background:#fff;padding:6px 10px;max-width:230px}
+.inv-match-card:hover{border-color:#a67f34}
+.inv-match-card img{width:40px;height:40px;object-fit:cover;flex-shrink:0;border:1px solid rgba(166,127,52,.15)}
+.inv-match-noimg{width:40px;height:40px;flex-shrink:0;background:rgba(166,127,52,.1);border:1px solid rgba(166,127,52,.15)}
+.inv-match-info{min-width:0}
+.inv-match-title{font-size:11.5px;color:var(--c-4a3c1f);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.inv-match-price{font-size:11px;font-weight:600;color:var(--c-5b461d)}
+.inv-match-label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--c-4f4125);padding:4px 4px 0}
 </style>
 </head>
 
@@ -488,6 +498,113 @@ let isAdmin = false;
 let authorEmailsById = {}; // created_by uuid -> "nome (email)" oppure "email" -- popolata solo se isOwner
 let myContactsGrants = {}; // manager_id (master) -> access ("read"/"write"/"both") per resource_key="contacts"
 
+/* ---- Immobili compatibili per ogni contatto (26/10/2026): stesso sistema di punteggio usato
+   per il matching mandato->immobili in search-mandate-form.html (che a sua volta riprende
+   calculateInvestorMatches di opportunity-edit.html), qui applicato nel verso
+   contatto->immobili: budget (40pt/12pt parziale), categoria (30pt), area (20pt). Caricati UNA
+   SOLA VOLTA (non per ogni contatto) e poi incrociati in memoria per ciascun contatto in
+   renderTable(). ---- */
+var allOpportunitiesForMatch = [];
+var opportunitiesForMatchLoaded = false;
+
+function normalizeInvMatchText(value){
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim();
+}
+
+function extractInvMatchMoney(value){
+  var raw = String(value || "")
+    .replace(/€/g, "")
+    .replace(/\s/g, "")
+    .replace(/\./g, "")
+    .replace(/,/g, ".");
+  var match = raw.match(/[0-9]+(\.[0-9]+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+async function loadOpportunitiesForMatch(){
+  if(opportunitiesForMatchLoaded) return;
+
+  var result = await client
+    .from("opportunities")
+    .select("id,title,category,location,municipality,province,region,locality,formatted_address,price,cover_image,commercial_status")
+    .not("commercial_status", "in", "(sold,withdrawn)")
+    .order("created_at", { ascending:false });
+
+  if(result.error){
+    console.warn("Caricamento immobili per matching contatti non riuscito (non bloccante):", result.error.message);
+    allOpportunitiesForMatch = [];
+  }else{
+    allOpportunitiesForMatch = result.data || [];
+  }
+  opportunitiesForMatchLoaded = true;
+}
+
+function calculateInvestorOpportunityMatches(inv){
+  var budgetMin = inv.budget_min, budgetMax = inv.budget_max;
+  var categories = (inv.investor_categories || []).map(function(c){ return normalizeInvMatchText(c.category); }).filter(Boolean);
+  var areaNames = (inv.investor_areas || []).map(function(a){ return normalizeInvMatchText(a.area); }).filter(Boolean);
+  if(inv.country) areaNames.push(normalizeInvMatchText(inv.country));
+  if(inv.city) areaNames.push(normalizeInvMatchText(inv.city));
+
+  return allOpportunitiesForMatch.map(function(opp){
+    var score = 0;
+    var oppPrice = extractInvMatchMoney(opp.price);
+
+    if(oppPrice && ((!budgetMin || oppPrice >= budgetMin) && (!budgetMax || oppPrice <= budgetMax))){
+      score += 40;
+    }else if(!oppPrice && (budgetMin || budgetMax)){
+      score += 12;
+    }
+
+    var oppCategory = normalizeInvMatchText(opp.category);
+    if(categories.length && oppCategory && categories.indexOf(oppCategory) >= 0){
+      score += 30;
+    }
+
+    var oppAreas = [opp.location, opp.municipality, opp.province, opp.region, opp.locality, opp.formatted_address]
+      .map(normalizeInvMatchText).filter(Boolean);
+    var areaMatch = areaNames.length && oppAreas.some(function(oppArea){
+      return areaNames.some(function(invArea){
+        return oppArea.indexOf(invArea) >= 0 || invArea.indexOf(oppArea) >= 0;
+      });
+    });
+    if(areaMatch) score += 20;
+
+    return { opportunity:opp, score:score };
+  }).filter(function(m){
+    return m.score > 0;
+  }).sort(function(a, b){
+    return b.score - a.score;
+  });
+}
+
+function renderInvestorOpportunityMatches(inv){
+  var matches = calculateInvestorOpportunityMatches(inv);
+  if(!matches.length) return "";
+
+  return '<tr class="match-row"><td colspan="99">' +
+    '<div class="inv-match-label">'+esc(T.inv_match_label)+'</div>' +
+    '<div class="inv-match-list">' +
+    matches.slice(0, 8).map(function(m){
+      var opp = m.opportunity;
+      var img = opp.cover_image
+        ? '<img src="'+esc(opp.cover_image)+'" alt="">'
+        : '<div class="inv-match-noimg"></div>';
+      return '<a class="inv-match-card" href="opportunity-edit.html?id='+encodeURIComponent(opp.id)+'" target="_blank">' +
+        img +
+        '<div class="inv-match-info">' +
+          '<div class="inv-match-title">'+esc(opp.title || ("Opportunità #"+opp.id))+'</div>' +
+          '<div class="inv-match-price">'+esc(opp.price || "")+'</div>' +
+        '</div>' +
+      '</a>';
+    }).join("") +
+    '</div></td></tr>';
+}
+
 /* ---- i18n: stesso meccanismo delle altre pagine admin (vedi users.html). loadProfile() qui
    caricava gia' il profilo per il controllo ruolo admin; estesa per includere anche "language"
    invece di una chiamata separata. categoryFilter/areaFilter sono ricostruiti dinamicamente da
@@ -530,7 +647,8 @@ var UI_STRINGS = {
   action_edit:"Modifica", action_email:"Email", action_whatsapp:"WhatsApp", action_delete:"Elimina",
   action_readonly:"Solo lettura", action_readonly_title:"Accesso in sola lettura: non puoi modificare o eliminare questo contatto",
   confirm_delete_investor:"Eliminare definitivamente questo investitore?",
-  msg_deleting:"Eliminazione contatto...", msg_deleted:"Contatto eliminato."
+  msg_deleting:"Eliminazione contatto...", msg_deleted:"Contatto eliminato.",
+  inv_match_label:"Immobili compatibili"
 };
 
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
@@ -708,6 +826,8 @@ async function loadProfile(){
 
 async function loadInvestors(){
   setStatus("", "");
+
+  await loadOpportunitiesForMatch();
 
   const { data, error } = await client
     .from("investors")
@@ -1013,6 +1133,7 @@ function renderTable(data){
           </div>
         </td>
       </tr>
+      ${renderInvestorOpportunityMatches(inv)}
     `;
   }).join("");
 }
