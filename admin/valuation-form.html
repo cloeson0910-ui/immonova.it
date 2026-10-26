@@ -50,7 +50,7 @@ body::after{
 }
 .logo{text-decoration:none;color:var(--c-5b461d)}
 .logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}
-.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:var(--c-5b471f)}
+.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:var(--c-5b461d)}
 .header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .header-actions a,.logout{
   padding:10px 20px;
@@ -111,6 +111,31 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
 .cadastral-value-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--c-5b461d);margin-bottom:8px}
 .cadastral-value-amount{font-size:22px;color:var(--c-46371a);margin-bottom:6px}
 .cadastral-value-detail{font-size:12px;color:var(--c-4f4125);line-height:1.7}
+.cadastral-value-breakdown{font-size:12px;color:var(--c-4f4125);line-height:1.8;margin-bottom:8px;padding-left:0;list-style:none}
+.cadastral-value-breakdown li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dashed rgba(166,127,52,.2);padding:3px 0}
+.cadastral-section-extra{
+  background:rgba(166,127,52,.06);
+  border:1px solid rgba(166,127,52,.18);
+  padding:22px;
+  margin-top:14px;
+  position:relative;
+}
+.cadastral-section-extra .cadastral-section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.cadastral-section-extra .cadastral-section-label-field{flex:1;max-width:320px}
+.cadastral-section-extra .cadastral-section-label-field input{font-size:13px;font-weight:600}
+.remove-cadastral-section-btn{
+  padding:8px 14px;
+  border:1px solid rgba(156,47,47,.3);
+  background:rgba(255,255,255,.4);
+  color:var(--c-561a1a);
+  cursor:pointer;
+  font-size:10px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:inherit;
+  flex-shrink:0;
+}
+.remove-cadastral-section-btn:hover{background:#9c2f2f;color:var(--c-ffffff)}
 
 .result-box{
   margin-top:24px;
@@ -417,12 +442,41 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
           </div>
         </div>
         <label class="check" style="display:inline-flex;margin-top:6px"><input type="checkbox" id="cadastralIsPrimaCasa"> <span data-i18n="label_is_prima_casa">Prima casa (abitazione principale, non di lusso)</span></label>
-        <div class="cadastral-value-box" id="cadastralValueBox" style="display:none">
-          <div class="cadastral-value-title" data-i18n="label_cadastral_value">Valore catastale</div>
-          <div class="cadastral-value-amount" id="cadastralValueAmount">—</div>
-          <div class="cadastral-value-detail" id="cadastralValueDetail"></div>
-        </div>
       </div>
+
+      <div id="additionalCadastralSections"></div>
+
+      <button type="button" class="secondary-btn" id="addCadastralSectionBtn" style="margin-top:12px" data-i18n="btn_add_cadastral_section">+ Aggiungi sezione catastale</button>
+      <p class="section-note" style="margin-top:8px" data-i18n="section_cadastral_multi_note">Usa questo pulsante se stai valutando un intero stabile/podere con più particelle o subalterni distinti (es. una villa + una dependance, o una palazzina con più Sub): ogni sezione aggiunta ha i propri dati catastali e il valore catastale totale qui sotto somma tutte le sezioni.</p>
+
+      <div class="cadastral-value-box" id="cadastralValueBox" style="display:none">
+        <div class="cadastral-value-title" data-i18n="label_cadastral_value">Valore catastale</div>
+        <div class="cadastral-value-amount" id="cadastralValueAmount">—</div>
+        <div class="cadastral-value-detail" id="cadastralValueDetail"></div>
+      </div>
+
+      <div class="cadastral-value-box" id="commercialSurfaceBox" style="display:none">
+        <div class="cadastral-value-title" data-i18n="label_commercial_surface">Superficie commerciale complessiva (ponderata)</div>
+        <div class="cadastral-value-amount" id="commercialSurfaceAmount">—</div>
+        <div class="cadastral-value-detail" id="commercialSurfaceDetail"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Planimetria</h2>
+      <p class="section-note">Carica la planimetria catastale e cerchia direttamente sopra le differenze rispetto allo stato dei luoghi, aggiungendo una nota numerata per ognuna.</p>
+      <input type="file" id="floorplanInput" accept="image/*" style="display:none">
+      <button type="button" class="secondary-btn" id="floorplanUploadBtn">📐 Carica planimetria</button>
+      <div id="floorplanToolbar" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+        <button type="button" class="secondary-btn" id="floorplanToolCircle">◯ Cerchia</button>
+        <button type="button" class="secondary-btn" id="floorplanToolNote">📍 Nota</button>
+        <button type="button" class="secondary-btn" id="floorplanUndoBtn">↩ Annulla ultimo</button>
+        <button type="button" class="secondary-btn" id="floorplanClearBtn">🗑 Cancella tutto</button>
+      </div>
+      <div id="floorplanCanvasWrap" style="display:none;margin-top:12px;max-width:100%;overflow:auto;border:1px solid rgba(166,127,52,.28)">
+        <canvas id="floorplanCanvas" style="max-width:100%;display:block;touch-action:none;cursor:crosshair"></canvas>
+      </div>
+      <div id="floorplanNotesList"></div>
     </div>
 
     <div class="section">
@@ -512,6 +566,13 @@ var UI_STRINGS = {
   label_cadastral_sheet:"Foglio", label_cadastral_parcel:"Particella", label_cadastral_subalterno:"Subalterno",
   label_is_prima_casa:"Prima casa (abitazione principale, non di lusso)",
   label_cadastral_value:"Valore catastale",
+  btn_add_cadastral_section:"+ Aggiungi sezione catastale",
+  section_cadastral_multi_note:"Usa questo pulsante se stai valutando un intero stabile/podere con più particelle o subalterni distinti (es. una villa + una dependance, o una palazzina con più Sub): ogni sezione aggiunta ha i propri dati catastali e il valore catastale totale qui sotto somma tutte le sezioni.",
+  ph_cadastral_section_label:"Es. Dependance 1, Sub 4...", label_cadastral_section_label:"Identificativo sezione",
+  btn_remove_cadastral_section:"Rimuovi sezione",
+  cadastral_value_total_label:"Totale",
+  cadastral_value_section_prefix:"Sezione",
+  label_commercial_surface:"Superficie commerciale complessiva (ponderata)",
   section_notes:"Note", ph_notes:"Dettagli emersi dal sopralluogo, richieste del venditore...",
   btn_calculate:"Calcola Valutazione", result_title:"Valore di mercato stimato",
   btn_cancel:"Annulla", btn_save:"Salva Valutazione", btn_update:"Salva Modifiche",
@@ -905,37 +966,212 @@ function classifyCadastralCategory(rawCategory, isPrimaCasa){
   return null;
 }
 
-var lastCadastralCalc = null;
+/* ---- Peso commerciale per categoria catastale (26/10/2026): ogni sezione catastale
+   aggiuntiva entra nella superficie commerciale complessiva con un coefficiente diverso a
+   seconda di COSA è davvero (abitazione, garage, cantina/deposito, negozio/laboratorio...),
+   non più sempre al 100%. Stessa tabella di ragguaglio standard FIAIP/Borsino Immobiliare già
+   usata altrove nel form per garage (35%) e accessoria/deposito (35%):
+   - A (abitazioni, incl. A/10 uffici), B, C/1 (negozi), C/3-C/5 (laboratori/sport/stabilimenti
+     balneari), D, E: unità piena, 100%
+   - C/2 (magazzini, cantine, soffitte): 35% (come l'accessoria/deposito della sezione
+     principale)
+   - C/6 (autorimesse, rimesse, scuderie — garage): 35% (come il garage della sezione principale)
+   - C/7 (tettoie, posti auto coperti): 20%
+   Se la categoria non è riconoscibile (o il campo è vuoto), resta 100% per sicurezza/
+   retrocompatibilità -- nessuna sorpresa verso il basso su un dato mancante. ---- */
+function cadastralSurfaceWeight(rawCategory){
+  var txt = String(rawCategory || "").trim().toUpperCase();
+  var m = txt.match(/^([A-E])\s*\/?\s*(\d+)?/);
+  if(!m) return { weight:1, label:null };
+  var letter = m[1], number = m[2] ? parseInt(m[2], 10) : null;
 
+  if(letter === "C"){
+    if(number === 2) return { weight:0.35, label:"C/2, magazzino/cantina/soffitta — 35%" };
+    if(number === 6) return { weight:0.35, label:"C/6, autorimessa/garage — 35%" };
+    if(number === 7) return { weight:0.20, label:"C/7, tettoia/posto auto coperto — 20%" };
+  }
+  return { weight:1, label: letter + (number != null ? "/" + number : "") + " — 100%" };
+}
+
+var lastCadastralCalc = null;
+var cadastralSectionCount = 0; // contatore per id univoci delle sezioni aggiuntive
+
+/* ---- Sezioni catastali aggiuntive (26/10/2026): per valutare un intero stabile/podere con
+   più particelle/subalterni distinti (es. villa + dependance, o palazzina con più Sub), si
+   possono aggiungere N sezioni oltre a quella principale già presente nel form. Ogni sezione
+   extra ha la stessa struttura dati di quella principale più un'etichetta libera per
+   riconoscerla (es. "Dependance 1", "Sub 4"). Salvate come array JSON in
+   cadastral_additional_sections (vedi sql/cadastral_sezioni_multiple.sql). ---- */
+function cadastralSectionTemplate(idx, data){
+  data = data || {};
+  return '' +
+    '<div class="cadastral-section-extra" data-section-idx="' + idx + '">' +
+      '<div class="cadastral-section-head">' +
+        '<div class="field cadastral-section-label-field">' +
+          '<label>' + escapeHTML(T.label_cadastral_section_label) + '</label>' +
+          '<input type="text" id="cadastralExtraLabel_' + idx + '" placeholder="' + escapeHTML(T.ph_cadastral_section_label) + '" value="' + escapeHTML(data.label || "") + '">' +
+        '</div>' +
+        '<button type="button" class="remove-cadastral-section-btn" onclick="removeCadastralSection(' + idx + ')">' + escapeHTML(T.btn_remove_cadastral_section) + '</button>' +
+      '</div>' +
+      '<div class="grid-3">' +
+        '<div class="field">' +
+          '<label>' + escapeHTML(T.label_cadastral_municipality) + '</label>' +
+          '<input type="text" id="cadastralExtraMunicipality_' + idx + '" value="' + escapeHTML(data.municipality || "") + '">' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>' + escapeHTML(T.label_cadastral_category) + '</label>' +
+          '<input type="text" id="cadastralExtraCategory_' + idx + '" placeholder="' + escapeHTML(T.ph_cadastral_category) + '" value="' + escapeHTML(data.category || "") + '">' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>' + escapeHTML(T.label_cadastral_income) + '</label>' +
+          '<input type="number" min="0" step="0.01" id="cadastralExtraIncome_' + idx + '" value="' + (data.income ?? "") + '">' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>' + escapeHTML(T.label_cadastral_surface) + '</label>' +
+          '<input type="number" min="0" step="1" id="cadastralExtraSurface_' + idx + '" value="' + (data.surface ?? "") + '">' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>' + escapeHTML(T.label_cadastral_sheet) + '</label>' +
+          '<input type="text" id="cadastralExtraSheet_' + idx + '" value="' + escapeHTML(data.sheet || "") + '">' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>' + escapeHTML(T.label_cadastral_parcel) + '</label>' +
+          '<input type="text" id="cadastralExtraParcel_' + idx + '" value="' + escapeHTML(data.parcel || "") + '">' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>' + escapeHTML(T.label_cadastral_subalterno) + '</label>' +
+          '<input type="text" id="cadastralExtraSubalterno_' + idx + '" value="' + escapeHTML(data.subalterno || "") + '">' +
+        '</div>' +
+      '</div>' +
+      '<label class="check" style="display:inline-flex;margin-top:6px"><input type="checkbox" id="cadastralExtraIsPrimaCasa_' + idx + '" ' + (data.is_prima_casa ? "checked" : "") + '> <span>' + escapeHTML(T.label_is_prima_casa) + '</span></label>' +
+    '</div>';
+}
+
+function addCadastralSection(data){
+  cadastralSectionCount += 1;
+  var idx = cadastralSectionCount;
+  var container = document.getElementById("additionalCadastralSections");
+  container.insertAdjacentHTML("beforeend", cadastralSectionTemplate(idx, data));
+
+  var newBlock = container.querySelector('[data-section-idx="' + idx + '"]');
+  newBlock.querySelectorAll("input[type=text], input[type=number]").forEach(function(el){
+    el.addEventListener("input", function(){
+      computeAndRenderCadastralValue();
+      renderCommercialSurfaceBox();
+    });
+  });
+  newBlock.querySelector("input[type=checkbox]").addEventListener("change", computeAndRenderCadastralValue);
+}
+
+window.removeCadastralSection = function(idx){
+  var container = document.getElementById("additionalCadastralSections");
+  var block = container.querySelector('[data-section-idx="' + idx + '"]');
+  if(block) block.remove();
+  computeAndRenderCadastralValue();
+  renderCommercialSurfaceBox();
+};
+
+document.getElementById("addCadastralSectionBtn").addEventListener("click", function(){
+  addCadastralSection();
+  computeAndRenderCadastralValue();
+  renderCommercialSurfaceBox();
+});
+
+function collectAdditionalCadastralSections(){
+  var blocks = document.querySelectorAll("#additionalCadastralSections .cadastral-section-extra");
+  var sections = [];
+  blocks.forEach(function(block){
+    var idx = block.getAttribute("data-section-idx");
+    var getVal = function(prefix){ var el = document.getElementById(prefix + "_" + idx); return el ? el.value.trim() : ""; };
+    var getNum = function(prefix){ var v = getVal(prefix); return v === "" ? null : Number(v); };
+    sections.push({
+      label: getVal("cadastralExtraLabel") || null,
+      municipality: getVal("cadastralExtraMunicipality") || null,
+      category: getVal("cadastralExtraCategory") || null,
+      income: getNum("cadastralExtraIncome"),
+      surface: getNum("cadastralExtraSurface"),
+      sheet: getVal("cadastralExtraSheet") || null,
+      parcel: getVal("cadastralExtraParcel") || null,
+      subalterno: getVal("cadastralExtraSubalterno") || null,
+      is_prima_casa: document.getElementById("cadastralExtraIsPrimaCasa_" + idx).checked
+    });
+  });
+  return sections;
+}
+
+/* ---- Valore catastale TOTALE: somma la sezione principale (sempre presente nel form) con
+   tutte le sezioni aggiuntive valide (categoria riconosciuta + rendita presente). Una sezione
+   senza categoria/rendita valide viene semplicemente esclusa dal totale, non blocca le altre. ---- */
 function computeAndRenderCadastralValue(){
   var box = document.getElementById("cadastralValueBox");
-  var category = val("cadastralCategory");
-  var income = numVal("cadastralIncome");
-  var isPrimaCasa = document.getElementById("cadastralIsPrimaCasa").checked;
+  var breakdown = [];
+  var total = 0;
 
-  var classification = category ? classifyCadastralCategory(category, isPrimaCasa) : null;
+  var primaryCategory = val("cadastralCategory");
+  var primaryIncome = numVal("cadastralIncome");
+  var primaryIsPrimaCasa = document.getElementById("cadastralIsPrimaCasa").checked;
+  var primaryClassification = primaryCategory ? classifyCadastralCategory(primaryCategory, primaryIsPrimaCasa) : null;
 
-  if(!classification || !income){
+  if(primaryClassification && primaryIncome){
+    var primaryValue = primaryIncome * 1.05 * primaryClassification.multiplier;
+    total += primaryValue;
+    breakdown.push({
+      label: T.cadastral_value_section_prefix + " 1",
+      value: primaryValue,
+      detail: "Rendita " + formatEuro(primaryIncome) + " × 1,05 × " + primaryClassification.multiplier + " (cat. " + primaryClassification.group + (primaryIsPrimaCasa ? ", prima casa" : "") + ")"
+    });
+  }
+
+  document.querySelectorAll("#additionalCadastralSections .cadastral-section-extra").forEach(function(block){
+    var idx = block.getAttribute("data-section-idx");
+    var category = (document.getElementById("cadastralExtraCategory_" + idx).value || "").trim();
+    var incomeRaw = document.getElementById("cadastralExtraIncome_" + idx).value;
+    var income = incomeRaw === "" ? null : Number(incomeRaw);
+    var isPrimaCasa = document.getElementById("cadastralExtraIsPrimaCasa_" + idx).checked;
+    var label = (document.getElementById("cadastralExtraLabel_" + idx).value || "").trim();
+    var classification = category ? classifyCadastralCategory(category, isPrimaCasa) : null;
+
+    if(classification && income){
+      var value = income * 1.05 * classification.multiplier;
+      total += value;
+      breakdown.push({
+        label: label || (T.cadastral_value_section_prefix + " " + (breakdown.length + 1)),
+        value: value,
+        detail: "Rendita " + formatEuro(income) + " × 1,05 × " + classification.multiplier + " (cat. " + classification.group + (isPrimaCasa ? ", prima casa" : "") + ")"
+      });
+    }
+  });
+
+  if(!breakdown.length){
     box.style.display = "none";
     lastCadastralCalc = null;
     return;
   }
 
-  var revalued = income * 1.05;
-  var cadastralValue = revalued * classification.multiplier;
+  var roundedTotal = Math.round(total * 100) / 100;
 
   lastCadastralCalc = {
-    cadastral_value: Math.round(cadastralValue * 100) / 100,
-    cadastral_multiplier: classification.multiplier,
-    cadastral_is_prima_casa: isPrimaCasa
+    cadastral_value: roundedTotal,
+    cadastral_multiplier: primaryClassification ? primaryClassification.multiplier : null,
+    cadastral_is_prima_casa: primaryIsPrimaCasa
   };
 
   box.style.display = "block";
-  document.getElementById("cadastralValueAmount").textContent = formatEuro(cadastralValue);
-  document.getElementById("cadastralValueDetail").innerHTML =
-    "Rendita catastale " + formatEuro(income) + " × 1,05 (rivalutazione) × " + classification.multiplier +
-    " (moltiplicatore categoria " + escapeHTML(classification.group) + (isPrimaCasa ? ", prima casa" : "") + ")" +
-    "<br>Dato fiscale, usato per imposte e tasse: distinto dal valore di mercato calcolato sopra.";
+  document.getElementById("cadastralValueAmount").textContent = formatEuro(roundedTotal);
+
+  var detailHTML = "";
+  if(breakdown.length > 1){
+    detailHTML += '<ul class="cadastral-value-breakdown">' +
+      breakdown.map(function(b){
+        return "<li><span>" + escapeHTML(b.label) + " — " + escapeHTML(b.detail) + "</span><span>" + formatEuro(b.value) + "</span></li>";
+      }).join("") +
+      '<li><strong>' + escapeHTML(T.cadastral_value_total_label) + '</strong><strong>' + formatEuro(roundedTotal) + '</strong></li>' +
+      '</ul>';
+  }else{
+    detailHTML += breakdown[0].detail + "<br>";
+  }
+  detailHTML += "Dato fiscale, usato per imposte e tasse: distinto dal valore di mercato calcolato sopra.";
+  document.getElementById("cadastralValueDetail").innerHTML = detailHTML;
 }
 
 ["cadastralCategory","cadastralIncome"].forEach(function(id){
@@ -977,7 +1213,7 @@ async function findAiComparablesAndNarrative(category, municipality, province, r
 /* ---- Superficie commerciale equivalente: 100% la superficie principale, coefficienti
    prudenziali per le superfici accessorie (stessa logica della relazione professionale di
    riferimento: 35% per deposito/accessoria, qui applicata anche a garage/giardino con pesi
-   coerenti gia' in uso). ---- */
+   coerenti gia' in uso -- standard FIAIP/Borsino Immobiliare). ---- */
 function equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm){
   var total = (internalSize || 0) * 1.0;
   total += (accessorySize || 0) * 0.35;
@@ -985,6 +1221,87 @@ function equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm){
   total += (gardenSqm || 0) * 0.15;
   return total || null;
 }
+
+/* ---- Sezioni catastali aggiuntive (26/10/2026): quando si valuta uno stabile con più
+   ville/dependance/subalterni, ogni sezione aggiunta rappresenta un'ALTRA unità abitativa a
+   sé stante -- non un'accessoria della prima -- quindi la sua superficie catastale entra nel
+   totale al 100%, non ai coefficienti ridotti usati per garage/giardino/deposito. ---- */
+function additionalSectionsSurfaceBreakdown(){
+  var items = [];
+  document.querySelectorAll("#additionalCadastralSections .cadastral-section-extra").forEach(function(block, i){
+    var idx = block.getAttribute("data-section-idx");
+    var surfEl = document.getElementById("cadastralExtraSurface_" + idx);
+    var labelEl = document.getElementById("cadastralExtraLabel_" + idx);
+    var categoryEl = document.getElementById("cadastralExtraCategory_" + idx);
+    var surf = surfEl && surfEl.value !== "" ? Number(surfEl.value) : 0;
+    if(surf > 0){
+      var category = categoryEl ? categoryEl.value : "";
+      var weightInfo = cadastralSurfaceWeight(category);
+      items.push({
+        label: (labelEl.value || "").trim() || ("Sezione " + (i + 2)),
+        category: category || null,
+        surface: surf,
+        weight: weightInfo.weight,
+        weight_label: weightInfo.label,
+        weighted_surface: Math.round(surf * weightInfo.weight * 100) / 100
+      });
+    }
+  });
+  return items;
+}
+
+/* ---- Totale usato DAVVERO nel calcolo comparativo (sostituisce la sola "Superficie interna",
+   come richiesto esplicitamente): superficie commerciale ponderata della sezione principale +
+   superficie piena di ogni sezione catastale aggiuntiva. ---- */
+function computeTotalCommercialSurface(){
+  var internalSize = numVal("internalSize");
+  var accessorySize = numVal("accessorySize");
+  var garageSqm = numVal("garageSqm");
+  var gardenSqm = numVal("gardenSqm");
+  var base = equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm) || 0;
+  var extras = additionalSectionsSurfaceBreakdown();
+  var extrasTotal = extras.reduce(function(sum, e){ return sum + e.weighted_surface; }, 0);
+  return { total: (base + extrasTotal) || null, base: base, extras: extras };
+}
+
+function renderCommercialSurfaceBox(){
+  var box = document.getElementById("commercialSurfaceBox");
+  if(!box) return;
+
+  var result = computeTotalCommercialSurface();
+
+  // Mostrato SOLO quando c'è almeno una sezione aggiuntiva valorizzata: altrimenti il calcolo
+  // coincide esattamente con quello che il form faceva già prima, niente di nuovo da mostrare.
+  if(!result.total || !result.extras.length){
+    box.style.display = "none";
+    return;
+  }
+
+  var internalSize = numVal("internalSize");
+  var accessorySize = numVal("accessorySize");
+  var garageSqm = numVal("garageSqm");
+  var gardenSqm = numVal("gardenSqm");
+
+  var lines = [];
+  if(internalSize) lines.push("Superficie principale: " + internalSize + " mq × 100%");
+  if(accessorySize) lines.push("Accessoria/deposito: " + accessorySize + " mq × 35%");
+  if(garageSqm) lines.push("Garage/box: " + garageSqm + " mq × 35%");
+  if(gardenSqm) lines.push("Giardino: " + gardenSqm + " mq × 15%");
+  result.extras.forEach(function(e){
+    var categoryPart = e.weight_label ? " — cat. " + escapeHTML(e.weight_label) : " — categoria non indicata, considerata 100%";
+    lines.push(escapeHTML(e.label) + ": " + e.surface + " mq" + categoryPart + " = " + e.weighted_surface + " mq");
+  });
+
+  box.style.display = "block";
+  document.getElementById("commercialSurfaceAmount").textContent = (Math.round(result.total * 100) / 100) + " mq";
+  document.getElementById("commercialSurfaceDetail").innerHTML = lines.join("<br>") +
+    "<br>Sostituisce la sola \"Superficie interna\" nel calcolo comparativo di mercato qui sotto.";
+}
+
+["internalSize","accessorySize","garageSqm","gardenSqm"].forEach(function(id){
+  var el = document.getElementById(id);
+  if(el) el.addEventListener("input", renderCommercialSurfaceBox);
+});
 
 calculateBtn.addEventListener("click", async function(){
   var category = val("category");
@@ -1082,7 +1399,7 @@ calculateBtn.addEventListener("click", async function(){
       return (comparables||[]).filter(function(c){ return !c.price_per_sqm || !isPriceOutlier(c.price_per_sqm, pricesPerSqm); });
     }
 
-    var equivSurface = equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm);
+    var equivSurface = computeTotalCommercialSurface().total;
     var comparativoMin = null, comparativoMax = null;
 
     if(trimmedPricesPerSqm.length && equivSurface){
@@ -1184,6 +1501,7 @@ calculateBtn.addEventListener("click", async function(){
         market_geography_level: marketResult.geography_level,
         population_composition: populationComposition,
         equivalent_surface: equivSurface,
+        additional_cadastral_sections_surface: additionalSectionsSurfaceBreakdown(),
         generated_at: new Date().toISOString()
       },
       ai_comparables: dropPriceOutliers(aiResult.comparables),
@@ -1253,6 +1571,207 @@ calculateBtn.addEventListener("click", async function(){
 
   calculateBtn.disabled = false;
 });
+/* ================================ Planimetria annotata ================================
+   Carica un'immagine (planimetria catastale), la disegna su un <canvas> e permette di
+   cerchiare le differenze rispetto allo stato dei luoghi reale e aggiungere note numerate
+   direttamente sopra l'immagine. Le annotazioni restano DATI VETTORIALI (non vengono
+   "schiacciate" dentro l'immagine), cosi' restano modificabili riaprendo la valutazione.
+   L'immagine originale viene caricata su storage solo al salvataggio della valutazione. */
+var fpState = { naturalW:0, naturalH:0, actions:[], tool:null, dragging:false, dragStart:null, pendingFile:null, existingUrl:null };
+var fpCanvas, fpCtx, fpImg;
+
+function fpInit(){
+  fpCanvas = document.getElementById("floorplanCanvas");
+  fpCtx = fpCanvas.getContext("2d");
+  document.getElementById("floorplanInput").addEventListener("change", fpOnFileChange);
+  document.getElementById("floorplanUploadBtn").addEventListener("click", function(){ document.getElementById("floorplanInput").click(); });
+  document.getElementById("floorplanToolCircle").addEventListener("click", function(){ fpSetTool("circle"); });
+  document.getElementById("floorplanToolNote").addEventListener("click", function(){ fpSetTool("note"); });
+  document.getElementById("floorplanUndoBtn").addEventListener("click", fpUndo);
+  document.getElementById("floorplanClearBtn").addEventListener("click", fpClearAll);
+  fpCanvas.addEventListener("pointerdown", fpPointerDown);
+  fpCanvas.addEventListener("pointermove", fpPointerMove);
+  window.addEventListener("pointerup", fpPointerUp);
+}
+
+function fpSetTool(tool){
+  fpState.tool = (fpState.tool === tool) ? null : tool;
+  document.getElementById("floorplanToolCircle").style.outline = fpState.tool === "circle" ? "2px solid #a67f34" : "";
+  document.getElementById("floorplanToolNote").style.outline = fpState.tool === "note" ? "2px solid #a67f34" : "";
+}
+
+function fpOnFileChange(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  fpState.pendingFile = file;
+  fpState.existingUrl = null;
+  var reader = new FileReader();
+  reader.onload = function(ev){ fpState.actions = []; fpLoadImage(ev.target.result); fpRenderNotesList(); };
+  reader.readAsDataURL(file);
+}
+
+function fpLoadImage(src){
+  fpImg = new Image();
+  fpImg.onload = function(){
+    fpState.naturalW = fpImg.naturalWidth;
+    fpState.naturalH = fpImg.naturalHeight;
+    fpCanvas.width = fpState.naturalW;
+    fpCanvas.height = fpState.naturalH;
+    document.getElementById("floorplanToolbar").style.display = "flex";
+    document.getElementById("floorplanCanvasWrap").style.display = "block";
+    fpRedraw();
+  };
+  fpImg.src = src;
+}
+
+function fpCanvasPoint(evt){
+  var rect = fpCanvas.getBoundingClientRect();
+  var scaleX = fpCanvas.width / rect.width;
+  var scaleY = fpCanvas.height / rect.height;
+  return { x:(evt.clientX - rect.left) * scaleX, y:(evt.clientY - rect.top) * scaleY };
+}
+
+function fpPointerDown(evt){
+  if(!fpState.tool) return;
+  var p = fpCanvasPoint(evt);
+  if(fpState.tool === "note"){
+    var text = prompt("Nota su questo punto (es. differenza tra planimetria catastale e stato dei luoghi):");
+    if(text && text.trim()){
+      fpState.actions.push({ type:"note", x:p.x, y:p.y, text:text.trim() });
+      fpRedraw();
+      fpRenderNotesList();
+    }
+    return;
+  }
+  if(fpState.tool === "circle"){
+    fpState.dragging = true;
+    fpState.dragStart = p;
+  }
+}
+
+function fpPointerMove(evt){
+  if(!fpState.dragging) return;
+  var p = fpCanvasPoint(evt);
+  fpRedraw();
+  fpDrawEllipsePreview(fpState.dragStart, p);
+}
+
+function fpPointerUp(evt){
+  if(!fpState.dragging) return;
+  fpState.dragging = false;
+  var p = fpCanvasPoint(evt);
+  var x = Math.min(fpState.dragStart.x, p.x), y = Math.min(fpState.dragStart.y, p.y);
+  var w = Math.abs(p.x - fpState.dragStart.x), h = Math.abs(p.y - fpState.dragStart.y);
+  if(w > 4 && h > 4) fpState.actions.push({ type:"circle", x:x, y:y, w:w, h:h });
+  fpRedraw();
+}
+
+function fpDrawEllipsePreview(a, b){
+  var x = Math.min(a.x,b.x), y = Math.min(a.y,b.y), w = Math.abs(b.x-a.x), h = Math.abs(b.y-a.y);
+  fpCtx.save();
+  fpCtx.strokeStyle = "#e23b3b";
+  fpCtx.lineWidth = Math.max(3, fpState.naturalW/280);
+  fpCtx.setLineDash([10,6]);
+  fpCtx.beginPath();
+  fpCtx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2);
+  fpCtx.stroke();
+  fpCtx.restore();
+}
+
+function fpRedraw(){
+  if(!fpState.naturalW) return;
+  fpCtx.clearRect(0,0,fpCanvas.width,fpCanvas.height);
+  fpCtx.drawImage(fpImg, 0, 0, fpState.naturalW, fpState.naturalH);
+  fpState.actions.forEach(function(a){
+    if(a.type === "circle"){
+      fpCtx.save();
+      fpCtx.strokeStyle = "#e23b3b";
+      fpCtx.lineWidth = Math.max(3, fpState.naturalW/280);
+      fpCtx.beginPath();
+      fpCtx.ellipse(a.x+a.w/2, a.y+a.h/2, a.w/2, a.h/2, 0, 0, Math.PI*2);
+      fpCtx.stroke();
+      fpCtx.restore();
+    }
+  });
+  var noteNum = 0;
+  fpState.actions.forEach(function(a){
+    if(a.type === "note"){
+      noteNum++;
+      var r = Math.max(14, fpState.naturalW/60);
+      fpCtx.save();
+      fpCtx.fillStyle = "#a67f34";
+      fpCtx.beginPath();
+      fpCtx.arc(a.x, a.y, r, 0, Math.PI*2);
+      fpCtx.fill();
+      fpCtx.fillStyle = "#fff";
+      fpCtx.font = "bold " + Math.round(r*1.1) + "px sans-serif";
+      fpCtx.textAlign = "center";
+      fpCtx.textBaseline = "middle";
+      fpCtx.fillText(String(noteNum), a.x, a.y+1);
+      fpCtx.restore();
+    }
+  });
+}
+
+function fpRenderNotesList(){
+  var wrap = document.getElementById("floorplanNotesList");
+  var notes = fpState.actions.filter(function(a){ return a.type === "note"; });
+  if(notes.length === 0){ wrap.innerHTML = ""; return; }
+  var html = "";
+  notes.forEach(function(n, i){
+    html += '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px">' +
+      '<span style="min-width:22px;height:22px;border-radius:50%;background:#a67f34;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none">' + (i+1) + '</span>' +
+      '<span style="font-size:13.5px;flex:1">' + fpEscape(n.text) + '</span>' +
+      '</div>';
+  });
+  wrap.innerHTML = html;
+}
+
+function fpEscape(s){
+  return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; });
+}
+
+function fpUndo(){
+  fpState.actions.pop();
+  fpRedraw();
+  fpRenderNotesList();
+}
+
+function fpClearAll(){
+  if(fpState.actions.length && !confirm("Cancellare tutti i cerchi e le note sulla planimetria?")) return;
+  fpState.actions = [];
+  fpRedraw();
+  fpRenderNotesList();
+}
+
+function fpLoadExisting(imageUrl, annotations){
+  if(!imageUrl) return;
+  fpState.existingUrl = imageUrl;
+  fpState.actions = (annotations && annotations.actions) || [];
+  document.getElementById("floorplanToolbar").style.display = "flex";
+  document.getElementById("floorplanCanvasWrap").style.display = "block";
+  fpLoadImage(imageUrl);
+  fpRenderNotesList();
+}
+
+async function fpUploadIfNeeded(id){
+  if(!fpState.pendingFile) return fpState.existingUrl || null;
+  var ext = (fpState.pendingFile.name && fpState.pendingFile.name.includes(".")) ? fpState.pendingFile.name.split(".").pop() : "jpg";
+  var path = "valuations/" + (id || "new-" + Date.now()) + "/floorplan-" + Date.now() + "." + ext;
+  var up = await client.storage.from("acquisition-photos").upload(path, fpState.pendingFile, { cacheControl:"3600", upsert:false });
+  if(up.error) throw up.error;
+  var pub = client.storage.from("acquisition-photos").getPublicUrl(path);
+  fpState.pendingFile = null;
+  fpState.existingUrl = pub.data.publicUrl;
+  return fpState.existingUrl;
+}
+
+function fpGetAnnotations(){
+  return { actions: fpState.actions };
+}
+
+fpInit();
+
 async function loadValuationForEdit(){
   if(!valuationId) return;
 
@@ -1304,7 +1823,13 @@ async function loadValuationForEdit(){
   document.getElementById("pricePerSqmRangeMax").value = data.price_per_sqm_range_max ?? "";
   document.getElementById("notes").value = data.notes || "";
   document.getElementById("cadastralIsPrimaCasa").checked = !!data.cadastral_is_prima_casa;
+
+  (data.cadastral_additional_sections || []).forEach(function(section){
+    addCadastralSection(section);
+  });
+
   computeAndRenderCadastralValue();
+  renderCommercialSurfaceBox();
 
   if(data.latitude != null && data.longitude != null){
     lastGeocode = { lat: Number(data.latitude), lng: Number(data.longitude), precision: "saved" };
@@ -1332,6 +1857,8 @@ async function loadValuationForEdit(){
       ai_narrative: data.ai_narrative, ai_comparables: data.ai_comparables
     };
   }
+
+  fpLoadExisting(data.floorplan_image_url, data.floorplan_annotations);
 }
 
 /* ================================ Importa dati da un'acquisizione ================================
@@ -1475,6 +2002,13 @@ form.addEventListener("submit", async function(event){
   saveBtn.disabled = true;
   setProgress(T.msg_saving, 60, "");
 
+  var floorplanUrl = null;
+  try{
+    floorplanUrl = await fpUploadIfNeeded(valuationId);
+  }catch(fpErr){
+    console.warn("Caricamento planimetria non riuscito (non bloccante):", fpErr);
+  }
+
   var payload = {
     seller_first_name: sellerFirstName,
     seller_last_name: sellerLastName,
@@ -1500,6 +2034,7 @@ form.addEventListener("submit", async function(event){
     cadastral_sheet: val("cadastralSheet") || null,
     cadastral_parcel: val("cadastralParcel") || null,
     cadastral_subalterno: val("cadastralSubalterno") || null,
+    cadastral_additional_sections: collectAdditionalCadastralSections(),
     garage_sqm: numVal("garageSqm"),
     garden_sqm: numVal("gardenSqm"),
     accessory_size: numVal("accessorySize"),
@@ -1516,7 +2051,9 @@ form.addEventListener("submit", async function(event){
     cadastral_value: lastCadastralCalc ? lastCadastralCalc.cadastral_value : null,
     cadastral_multiplier: lastCadastralCalc ? lastCadastralCalc.cadastral_multiplier : null,
     latitude: lastGeocode && lastGeocode.lat != null ? lastGeocode.lat : null,
-    longitude: lastGeocode && lastGeocode.lng != null ? lastGeocode.lng : null
+    longitude: lastGeocode && lastGeocode.lng != null ? lastGeocode.lng : null,
+    floorplan_image_url: floorplanUrl,
+    floorplan_annotations: fpGetAnnotations()
   };
 
   PROPERTY_FEATURES.forEach(function(f){
