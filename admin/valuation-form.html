@@ -933,11 +933,19 @@ async function findMarketPricePerSqm(municipality, province, region){
    italiana, rendita catastale rivalutata del 5% x moltiplicatore per categoria catastale.
    Tabella moltiplicatori verificata su fonti pubbliche (D.L. 3/10/2006 n.262 art.2 c.45,
    conv. L. 24/11/2006 n.286 -- tuttora in vigore per imposta di registro/ipotecaria/catastale,
-   NON e' stata toccata dalla Legge di Stabilita' 2014 che riguardava altri moltiplicatori IMU):
-   - Categorie A (escluso A/10) e C (escluso C/1): 110 se prima casa, 120 altrimenti
+   NON e' stata toccata dalla Legge di Stabilita' 2014 che riguardava altri moltiplicatori IMU,
+   un set di coefficienti completamente diverso -- tutti i valori sotto verificati con fonti
+   indipendenti che concordano, inclusa la rivalutazione del 5%):
+   - Categoria A (escluso A/10): 110 se prima casa, 120 altrimenti
    - Categoria B: 140
    - Categoria A/10 e gruppo D (incluso D/5): 60
    - Categoria C/1 e gruppo E: 40,8
+   - Categoria C, escluso C/1: 120 SEMPRE, TRANNE C/2, C/6, C/7 quando sono pertinenza
+     dell'abitazione principale (box auto, cantina, tettoia di una prima casa) -- lì e SOLO lì
+     si applica 110, mai sulle altre sottocategorie C anche con "prima casa" selezionato (un
+     negozio C/3/C/4/C/5 non ha mai diritto al 110). Corretto su segnalazione esplicita: la
+     prima versione applicava 110 a QUALUNQUE categoria C quando "prima casa" era spuntato,
+     errore concettuale anche se il numero 110 in sé era giusto.
    Se la categoria inserita non e' riconoscibile, non si calcola nulla (niente numeri inventati). ---- */
 function classifyCadastralCategory(rawCategory, isPrimaCasa){
   var txt = String(rawCategory || "").trim().toUpperCase();
@@ -952,7 +960,11 @@ function classifyCadastralCategory(rawCategory, isPrimaCasa){
   if(letter === "B") return { group:"B", multiplier:140 };
   if(letter === "C"){
     if(number === 1) return { group:"C/1", multiplier:40.8 };
-    return { group:"C (escluso C/1)", multiplier: isPrimaCasa ? 110 : 120 };
+    var isPertinenzaPrimaCasa = isPrimaCasa && (number === 2 || number === 6 || number === 7);
+    return {
+      group: "C" + (number != null ? "/" + number : "") + (isPertinenzaPrimaCasa ? " (pertinenza prima casa)" : ""),
+      multiplier: isPertinenzaPrimaCasa ? 110 : 120
+    };
   }
   if(letter === "D") return { group:"D" + (number === 5 ? "/5" : ""), multiplier:60 };
   if(letter === "E") return { group:"E", multiplier:40.8 };
