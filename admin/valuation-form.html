@@ -1819,13 +1819,40 @@ document.getElementById("addBonusMalusBtn").addEventListener("click", function()
    suggestBonusMalusPct) una percentuale di partenza nella voce corrispondente. Giardino/box/
    terrazza ecc. NON toccano "pertinenze": sono gia' pesati a mq altrove nel form (vedi nota
    nella sezione Bonus/Malus), quindi collegarli anche qui conterebbe due volte lo stesso pregio. ---- */
-["hasSeaView", "hasBeachfront", "hasPanoramicView"].forEach(function(id){
-  var el = document.getElementById(id);
-  if(el) el.addEventListener("change", function(){ if(this.checked) suggestBonusMalusPct("vista", 10); });
+/* ---- Fix bug reale (27/10/2026): se spunto per sbaglio una checkbox e il suggerimento viene
+   scritto nel bonus/malus, DESELEZIONARLA deve far sparire quel suggerimento (non lasciarlo
+   "fantasma" nel calcolo) -- altrimenti una valutazione puo' uscire sbagliata senza che
+   l'agente se ne accorga. Vale solo se il valore e' ancora autoFilled: se l'agente ha gia'
+   scritto lui una percentuale propria, quella non viene mai toccata da nessuna checkbox. Piu'
+   checkbox mappano sulla stessa voce (es. "vista"): ricalcolo da zero leggendo lo stato
+   attuale di TUTTE, non solo quella appena cliccata, altrimenti deselezionarne una cancella
+   anche il contributo di un'altra ancora spuntata. ---- */
+var VISTA_CHECKS = [
+  { id:"hasSeaView", pct:10 }, { id:"hasBeachfront", pct:10 }, { id:"hasPanoramicView", pct:10 },
+  { id:"hasCourtyardFacing", pct:-5 }, { id:"hasStreetFacing", pct:-5 }
+];
+function recomputeAutoSuggestion(key, checksList){
+  var item = bonusMalusState.find(function(b){ return b.key === key; });
+  if(!item) return;
+  var checked = checksList.filter(function(c){ return document.getElementById(c.id).checked; });
+  if(!checked.length){
+    if(item.autoFilled){ item.pct = ""; item.autoFilled = false; renderBonusMalusList(); }
+    return;
+  }
+  if(item.pct !== "" && !item.autoFilled) return; // valore scritto a mano dall'agente: non si tocca
+  var hasPositive = checked.some(function(c){ return c.pct > 0; });
+  var pct = hasPositive ? Math.max.apply(null, checked.filter(function(c){ return c.pct > 0; }).map(function(c){ return c.pct; }))
+                        : Math.min.apply(null, checked.map(function(c){ return c.pct; }));
+  item.pct = pct;
+  item.autoFilled = true;
+  renderBonusMalusList();
+}
+VISTA_CHECKS.forEach(function(c){
+  var el = document.getElementById(c.id);
+  if(el) el.addEventListener("change", function(){ recomputeAutoSuggestion("vista", VISTA_CHECKS); });
 });
-document.getElementById("hasCourtyardFacing").addEventListener("change", function(){ if(this.checked) suggestBonusMalusPct("vista", -5); });
-document.getElementById("hasStreetFacing").addEventListener("change", function(){ if(this.checked) suggestBonusMalusPct("vista", -5); });
-document.getElementById("hasDoubleExposure").addEventListener("change", function(){ if(this.checked) suggestBonusMalusPct("esposizione", 5); });
+var ESPOSIZIONE_CHECKS = [{ id:"hasDoubleExposure", pct:5 }];
+document.getElementById("hasDoubleExposure").addEventListener("change", function(){ recomputeAutoSuggestion("esposizione", ESPOSIZIONE_CHECKS); });
 
 var HEATING_TYPE_PCT = { autonomo: 5, centralizzato_contabilizzato: 2, centralizzato: 0 };
 document.getElementById("hasHeatingSystem").addEventListener("change", function(){
