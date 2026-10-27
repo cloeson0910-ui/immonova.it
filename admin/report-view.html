@@ -317,6 +317,18 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
     </div>
   </div>
   <div id="dossierLinkRow" class="dossier-link-row"></div>
+  <!-- RICHIESTO 27/10/2026: solo claudio.romano@bluewin.ch (non tutti gli admin/master) deve
+       poter scrivere a mano l'email di chi risulta aver condiviso il link (?by=), per i casi
+       in cui genera il link per conto di un suo collaboratore e vuole che compaia il nome del
+       collaboratore, non il proprio. Nascosto di default; mostrato via JS solo per questo
+       utente specifico (vedi applySenderOverrideVisibility). -->
+  <div id="dossierSenderOverrideRow" class="dossier-link-row" style="display:none">
+    <span class="link-label">Mostra come inviato da (solo per te):</span>
+    <input type="email" id="dossierSenderOverrideInput" placeholder="email del collaboratore (lascia vuoto per usare la tua)">
+    <button type="button" class="copy-btn" id="dossierSenderOverrideApplyBtn">Applica</button>
+    <button type="button" class="copy-btn" id="dossierSenderOverrideClearBtn">Ripristina</button>
+    <span class="copy-feedback" id="dossierSenderOverrideFeedback"></span>
+  </div>
   <div id="dossierLinkProgress" class="dossier-link-progress" style="display:none">
     <div class="dossier-link-progress-label" id="dossierLinkProgressLabel"></div>
     <div class="dossier-link-progress-track"><div class="dossier-link-progress-fill" id="dossierLinkProgressFill"></div></div>
@@ -1001,8 +1013,48 @@ function applyLimitedProfessionalRestrictions(){
    collaboratore che materialmente copia/invia il link -- se sei tu o un master a mandarlo, la
    propria email; se e' un suo collaboratore a mandarlo, l'email del SUO master (non la sua). */
 var dossierSenderEmail=null;
+/* RICHIESTO 27/10/2026: override manuale del mittente, SOLO per claudio.romano@bluewin.ch (non
+   per tutti gli admin/master) -- serve a lui quando genera il link per conto di un suo
+   collaboratore e vuole che compaia il nome/email del collaboratore, non il proprio. Quando
+   valorizzato, vince su dossierSenderEmail in dossierShareUrlWithSender(). null = nessun
+   override attivo (comportamento identico a prima per chiunque altro). */
+var dossierSenderEmailOverride=null;
+var SENDER_OVERRIDE_ALLOWED_EMAIL="claudio.romano@bluewin.ch";
+function applySenderOverrideVisibility(){
+  var row=document.getElementById("dossierSenderOverrideRow");
+  if(!row) return;
+  var email=(currentUser&&currentUser.email?String(currentUser.email):"").trim().toLowerCase();
+  row.style.display=(email===SENDER_OVERRIDE_ALLOWED_EMAIL)?"flex":"none";
+}
+(function wireSenderOverrideControls(){
+  var applyBtn=document.getElementById("dossierSenderOverrideApplyBtn");
+  var clearBtn=document.getElementById("dossierSenderOverrideClearBtn");
+  var input=document.getElementById("dossierSenderOverrideInput");
+  var feedback=document.getElementById("dossierSenderOverrideFeedback");
+  if(applyBtn) applyBtn.addEventListener("click",function(){
+    var val=(input&&input.value?input.value.trim():"");
+    if(!val){
+      if(feedback){feedback.textContent="Scrivi un'email oppure premi \"Ripristina\".";feedback.style.color="#a8621f";}
+      return;
+    }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)){
+      if(feedback){feedback.textContent="Email non valida.";feedback.style.color="#a8621f";}
+      return;
+    }
+    dossierSenderEmailOverride=val;
+    if(typeof renderDossierLinkRow==="function") renderDossierLinkRow();
+    if(feedback){feedback.textContent="Applicato: il link ora mostrerà \""+val+"\" come mittente.";feedback.style.color="#4f7f45";}
+  });
+  if(clearBtn) clearBtn.addEventListener("click",function(){
+    dossierSenderEmailOverride=null;
+    if(input) input.value="";
+    if(typeof renderDossierLinkRow==="function") renderDossierLinkRow();
+    if(feedback){feedback.textContent="Ripristinato il mittente predefinito.";feedback.style.color="#5b471f";}
+  });
+})();
 async function loadSuperUserFlag(){
   if(!currentUser) return;
+  applySenderOverrideVisibility();
   dossierSenderEmail=currentUser.email||null; // fallback di sicurezza finché non risolviamo quella giusta sotto
   var res=await client.from("profiles").select("role,is_super_user,professional_role,is_platform_owner,managed_by,email").eq("id",currentUser.id).single();
   if(res.error||!res.data){console.warn("Profilo non caricato per il controllo super user:",res.error&&res.error.message);return;}
@@ -5026,7 +5078,9 @@ function waitForDossierPageLive(url, expectedSubstring, onProgress){
    nessuno deve scriverlo a mano, né può toglierlo o modificarlo. */
 function dossierShareUrlWithSender(baseUrl){
   if(!baseUrl) return baseUrl;
-  var senderEmail = dossierSenderEmail || (currentUser && currentUser.email) || "";
+  // L'override manuale (solo per claudio.romano@bluewin.ch, vedi dossierSenderEmailOverride)
+  // vince sempre quando valorizzato; altrimenti comportamento identico a prima.
+  var senderEmail = dossierSenderEmailOverride || dossierSenderEmail || (currentUser && currentUser.email) || "";
   if(!senderEmail) return baseUrl;
   var sep = baseUrl.indexOf("?") >= 0 ? "&" : "?";
   return baseUrl + sep + "by=" + encodeURIComponent(senderEmail);
