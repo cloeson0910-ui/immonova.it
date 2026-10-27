@@ -479,7 +479,13 @@ async function loadAndRender(){
      tramite quel campo). Ora replica la stessa identica priorità, e aggiunge anche il
      dettaglio di ogni sezione catastale aggiuntiva (prima assente qui, già mostrato nel form). ---- */
   var equivSurface = snap.equivalent_surface;
-  var extraSectionsForDisclaimer = Array.isArray(snap.additional_cadastral_sections_surface) ? snap.additional_cadastral_sections_surface : [];
+  /* ---- FIX (27/10/2026, secondo bug sullo stesso disclaimer: "ancora non esce il disclaimer!"):
+     prima leggeva snap.additional_cadastral_sections_surface, che pero' viene popolato SOLO
+     per le sezioni con superficie > 0 (vedi additionalSectionsSurfaceBreakdown() nel form) --
+     esattamente il caso che manca per un'unita' F2/F3, che non ha nulla da misurare. Ora legge
+     v.cadastral_additional_sections (l'elenco grezzo e completo salvato dal form, mai filtrato
+     per superficie), cosi' la categoria viene vista anche senza alcun dato di superficie. ---- */
+  var extraSectionsForDisclaimer = Array.isArray(v.cadastral_additional_sections) ? v.cadastral_additional_sections : [];
   if(equivSurface){
     var primaryRows;
     if(v.cadastral_surface){
@@ -523,9 +529,9 @@ async function loadAndRender(){
   if(/^F\s*\/?\s*[23]\b/i.test(String(v.cadastral_category || "").trim())){
     fNotEvaluable.push({ label: "Sezione principale", category: v.cadastral_category });
   }
-  extraSectionsForDisclaimer.forEach(function(e){
+  extraSectionsForDisclaimer.forEach(function(e, i){
     if(/^F\s*\/?\s*[23]\b/i.test(String(e.category || "").trim())){
-      fNotEvaluable.push({ label: e.label, category: e.category });
+      fNotEvaluable.push({ label: e.label || ("Sezione catastale " + (i + 2)), category: e.category });
     }
   });
   if(fNotEvaluable.length){
