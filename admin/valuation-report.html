@@ -273,6 +273,37 @@ function classifyCadastralCategory(rawCategory, isPrimaCasa){
   return null;
 }
 
+/* ---- Peso commerciale per categoria catastale (27/10/2026): stessa funzione, identica,
+   gia' in uso in valuation-form.html -- portata qui per lo stesso motivo di
+   classifyCadastralCategory sopra: il DB salva solo il totale finale della superficie
+   commerciale (equivalent_surface), non il dettaglio di come e' composto per ciascuna
+   sezione, quindi va ricalcolato qui dai dati grezzi per mostrare il dettaglio completo
+   invece di un "0 mq" fuorviante sulla sezione principale quando e' stata usata la
+   superficie catastale (pesata) al posto della superficie interna. ---- */
+function cadastralSurfaceWeight(rawCategory){
+  var txt = String(rawCategory || "").trim().toUpperCase();
+  var m = txt.match(/^([A-F])\s*\/?\s*(\d+)?/);
+  if(!m) return { weight:1, label:null };
+  var letter = m[1], number = m[2] ? parseInt(m[2], 10) : null;
+
+  if(letter === "C"){
+    if(number === 2) return { weight:0.35, label:"C/2, magazzino/cantina/soffitta — 35%" };
+    if(number === 6) return { weight:0.35, label:"C/6, autorimessa/garage — 35%" };
+    if(number === 7) return { weight:0.20, label:"C/7, tettoia/posto auto coperto — 20%" };
+  }
+  if(letter === "F"){
+    if(number === 5) return { weight:0.20, label:"F/5, lastrico solare — 20%" };
+    if(number === 1) return { weight:0, label:"F/1, area urbana — 0%" };
+    if(number === 2) return { weight:0, label:"F/2, unità collabente — 0%" };
+    if(number === 3) return { weight:0, label:"F/3, unità in corso di costruzione — 0%" };
+    if(number === 4) return { weight:0, label:"F/4, unità in corso di definizione — 0%" };
+    if(number === 6) return { weight:0, label:"F/6, fabbricato in attesa di dichiarazione — 0%" };
+    if(number === 7) return { weight:0, label:"F/7, infrastrutture di reti pubbliche — 0%" };
+    return { weight:0, label:"F (categoria catastale fittizia) — 0%" };
+  }
+  return { weight:1, label: letter + (number != null ? "/" + number : "") + " — 100%" };
+}
+
 async function checkAuth(){
   const { data:{ session } } = await client.auth.getSession();
   if(!session){ window.location.href = "login.html"; return false; }
@@ -381,17 +412,40 @@ async function loadAndRender(){
   }
 
   // 4. Superficie commerciale equivalente
+  /* ---- Fix (27/10/2026, segnalato: la sezione mostrava sempre "Superficie principale (100%):
+     0 mq" quando la sezione principale usava la superficie CATASTALE (pesata per categoria)
+     invece della "Superficie interna" -- stessa priorità corretta in valuation-form.html il
+     26/10/2026 (cadastral_surface vince sempre quando presente, internal_size resta solo il
+     fallback per il caso semplice). Il report qui leggeva solo v.internal_size, ignorando del
+     tutto che la sezione principale potesse venire dalla superficie catastale: risultato, un
+     fuorviante "0 mq" anche quando la superficie principale era in realtà usata (solo non
+     tramite quel campo). Ora replica la stessa identica priorità, e aggiunge anche il
+     dettaglio di ogni sezione catastale aggiuntiva (prima assente qui, già mostrato nel form). ---- */
   var equivSurface = snap.equivalent_surface;
   if(equivSurface){
+    var primaryRows;
+    if(v.cadastral_surface){
+      var primaryWeightInfo = cadastralSurfaceWeight(v.cadastral_category);
+      var primaryWeighted = Math.round(v.cadastral_surface * primaryWeightInfo.weight * 100) / 100;
+      primaryRows = infoItem("Superficie principale (da dato catastale)", v.cadastral_surface + " mq" + (primaryWeightInfo.label ? " — " + primaryWeightInfo.label : "") + " → " + primaryWeighted + " mq");
+    }else{
+      primaryRows = infoItem("Superficie principale (100%)", (v.internal_size||0) + " mq");
+    }
+    var extraSections = Array.isArray(snap.additional_cadastral_sections_surface) ? snap.additional_cadastral_sections_surface : [];
     html += '<div class="section">'
       + '<div class="section-kicker">4. Superficie Commerciale Equivalente</div>'
       + '<p class="method-text">Ai fini della valutazione parametrica, alle superfici accessorie (deposito, garage, giardino) non viene attribuito il medesimo valore unitario della superficie principale, ma coefficienti prudenziali.</p>'
       + '<div class="info-grid">'
-      + infoItem("Superficie principale (100%)", (v.internal_size||0) + " mq")
+      + primaryRows
       + (v.accessory_size ? infoItem("Superficie accessoria (35%)", v.accessory_size + " mq → " + (v.accessory_size*0.35).toFixed(2) + " mq") : "")
       + (v.garage_sqm ? infoItem("Garage (35%)", v.garage_sqm + " mq → " + (v.garage_sqm*0.35).toFixed(2) + " mq") : "")
       + (v.garden_sqm ? infoItem("Giardino (15%)", v.garden_sqm + " mq → " + (v.garden_sqm*0.15).toFixed(2) + " mq") : "")
       + '</div>'
+      + (extraSections.length
+          ? '<ul class="cadastral-value-breakdown" style="margin-top:12px">' + extraSections.map(function(e){
+              return '<li>' + escapeHTML(e.label) + ': ' + e.surface + ' mq' + (e.weight_label ? ' — ' + escapeHTML(e.weight_label) : '') + ' → ' + e.weighted_surface + ' mq</li>';
+            }).join("") + '</ul>'
+          : "")
       + '<p class="method-text" style="margin-top:14px"><strong>Superficie commerciale equivalente: ' + equivSurface.toFixed(2) + ' mq</strong></p>'
       + '</div>';
   }
