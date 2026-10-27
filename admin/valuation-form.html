@@ -436,7 +436,13 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
 
       <div id="additionalCadastralSections"></div>
 
-      <button type="button" class="secondary-btn" id="addCadastralSectionBtn" style="margin-top:12px" data-i18n="btn_add_cadastral_section">+ Aggiungi sezione catastale</button>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="secondary-btn" id="addCadastralSectionBtn" data-i18n="btn_add_cadastral_section">+ Aggiungi sezione catastale</button>
+        <button type="button" class="secondary-btn" id="extractVisuraBtn">📄 Carica visura catastale (estrazione automatica)</button>
+        <input type="file" id="visuraFileInput" accept="application/pdf,image/*" multiple style="display:none">
+        <span id="extractVisuraStatus" style="font-size:13px;color:#8a7458"></span>
+      </div>
+      <p class="section-note" style="margin-top:6px">Carica una o più pagine della visura catastale (PDF o foto): i dati vengono letti automaticamente e usati per riempire la sezione principale e, se la visura riporta più unità (es. abitazione + garage + cantina), per creare in automatico le sezioni catastali aggiuntive corrispondenti. Controlla sempre i dati estratti prima di salvare.</p>
       <p class="section-note" style="margin-top:8px" data-i18n="section_cadastral_multi_note">Usa questo pulsante se stai valutando un intero stabile/podere con più particelle o subalterni distinti (es. una villa + una dependance, o una palazzina con più Sub): ogni sezione aggiunta ha i propri dati catastali e il valore catastale totale qui sotto somma tutte le sezioni.</p>
 
       <div class="cadastral-value-box" id="cadastralValueBox" style="display:none">
@@ -974,9 +980,16 @@ function classifyCadastralCategory(rawCategory, isPrimaCasa){
 /* ---- Peso commerciale per categoria catastale (26/10/2026, corretto lo stesso giorno per le
    categorie F): ogni sezione catastale aggiuntiva entra nella superficie commerciale
    complessiva con un coefficiente diverso a seconda di COSA è davvero (abitazione, garage,
-   cantina/deposito, negozio/laboratorio...), non più sempre al 100%. Stessa tabella di
-   ragguaglio standard FIAIP/Borsino Immobiliare già usata altrove nel form per garage (35%) e
-   accessoria/deposito (35%):
+   cantina/deposito, negozio/laboratorio...), non più sempre al 100%.
+   NB sulla fonte (verificato con ricerca il 26/10/2026): NON esiste una tabella "FIAIP" o
+   "Borsino Immobiliare" ufficiale e unica di coefficienti di ragguaglio -- nessuna fonte
+   pubblica reperibile attribuisce a FIAIP una tabella di questo tipo, e piu' fonti indicano
+   esplicitamente che il metodo varia da Comune a Comune/agenzia e non e' standardizzato da un
+   ente unico. I valori sotto (35% garage/accessoria, 20% C/7) sono valori indicativi
+   comunemente usati nella prassi immobiliare italiana, dentro i range tipici citati (es.
+   accessoria/cantina 25%-50%, garage 30%-50%), ma NON sono "il" coefficiente di una fonte
+   specifica -- qui riportati solo come coerenti con gli stessi valori già in uso altrove nel
+   form per garage (35%) e accessoria/deposito (35%):
    - A (abitazioni, incl. A/10 uffici), B, C/1 (negozi), C/3-C/5 (laboratori/sport/stabilimenti
      balneari), D, E: unità piena, 100%
    - C/2 (magazzini, cantine, soffitte): 35% (come l'accessoria/deposito della sezione
@@ -1109,6 +1122,105 @@ document.getElementById("addCadastralSectionBtn").addEventListener("click", func
   addCadastralSection();
   computeAndRenderCadastralValue();
   renderCommercialSurfaceBox();
+});
+
+/* ---- Estrazione automatica da scansione visura catastale (27/10/2026): legge uno o piu' file
+   (PDF multipagina o foto) tramite la edge function "immonova-cadastral-extract" (modello AI
+   con lettura documenti, mai valori inventati -- campi non letti restano vuoti) e popola la
+   sezione principale con la PRIMA unita' trovata, creando una sezione catastale aggiuntiva per
+   ogni unita' successiva. Non sovrascrive mai dati gia' presenti nella sezione principale senza
+   chiedere conferma, per non perdere lavoro gia' fatto a mano. ---- */
+function fileToBase64(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var result = String(reader.result || "");
+      var idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = function(){ reject(reader.error || new Error("Lettura file fallita")); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function applyExtractedCadastralUnit(unit, targetIsPrimary){
+  if(targetIsPrimary){
+    if(unit.municipality) document.getElementById("cadastralMunicipality").value = unit.municipality;
+    if(unit.category) document.getElementById("cadastralCategory").value = unit.category;
+    if(unit.income != null) document.getElementById("cadastralIncome").value = unit.income;
+    if(unit.surface != null) document.getElementById("cadastralSurface").value = unit.surface;
+    if(unit.sheet) document.getElementById("cadastralSheet").value = unit.sheet;
+    if(unit.parcel) document.getElementById("cadastralParcel").value = unit.parcel;
+    if(unit.subalterno) document.getElementById("cadastralSubalterno").value = unit.subalterno;
+  }else{
+    addCadastralSection({
+      label: unit.label || "",
+      municipality: unit.municipality || "",
+      category: unit.category || "",
+      income: unit.income != null ? unit.income : "",
+      surface: unit.surface != null ? unit.surface : "",
+      sheet: unit.sheet || "",
+      parcel: unit.parcel || "",
+      subalterno: unit.subalterno || ""
+    });
+  }
+}
+
+document.getElementById("extractVisuraBtn").addEventListener("click", function(){
+  document.getElementById("visuraFileInput").click();
+});
+
+document.getElementById("visuraFileInput").addEventListener("change", async function(e){
+  var files = Array.from(e.target.files || []);
+  if(!files.length) return;
+  var statusEl = document.getElementById("extractVisuraStatus");
+  statusEl.textContent = "Lettura in corso (" + files.length + " file)...";
+
+  try{
+    var encoded = await Promise.all(files.map(async function(f){
+      return { base64: await fileToBase64(f), mime_type: f.type || "image/jpeg" };
+    }));
+
+    var result = await client.functions.invoke("immonova-cadastral-extract", { body: { files: encoded } });
+    if(result.error){
+      statusEl.textContent = "Errore: " + result.error.message;
+      return;
+    }
+    var data = result.data || {};
+    if(!data.ok){
+      statusEl.textContent = "Lettura non riuscita: " + (data.error || "errore sconosciuto");
+      return;
+    }
+    var units = Array.isArray(data.units) ? data.units : [];
+    if(!units.length){
+      statusEl.textContent = "Nessun dato catastale leggibile trovato nel documento caricato.";
+      return;
+    }
+
+    var primaryHasData = ["cadastralMunicipality","cadastralCategory","cadastralIncome","cadastralSurface","cadastralSheet","cadastralParcel","cadastralSubalterno"]
+      .some(function(id){ return document.getElementById(id).value.trim() !== ""; });
+    var overwritePrimary = true;
+    if(primaryHasData){
+      overwritePrimary = confirm("La sezione principale ha già dei dati catastali compilati. Vuoi sovrascriverli con quelli letti dalla visura caricata (" + units[0].label + " o prima unità trovata)? Annulla per lasciare la sezione principale invariata e aggiungere comunque tutte le unità trovate come nuove sezioni.");
+    }
+
+    units.forEach(function(unit, i){
+      var isPrimary = (i === 0 && overwritePrimary);
+      applyExtractedCadastralUnit(unit, isPrimary);
+    });
+
+    computeAndRenderCadastralValue();
+    renderCommercialSurfaceBox();
+
+    var warnings = Array.isArray(data.warnings) ? data.warnings : [];
+    statusEl.textContent = "Trovate " + units.length + " unità catastali (" + (data.pages_read || files.length) + " pagine lette)." +
+      (warnings.length ? " Attenzione: " + warnings.join("; ") : "") +
+      " Controlla i dati prima di salvare.";
+  }catch(err){
+    statusEl.textContent = "Errore durante la lettura: " + (err && err.message ? err.message : String(err));
+  }finally{
+    e.target.value = "";
+  }
 });
 
 function collectAdditionalCadastralSections(){
@@ -1245,9 +1357,13 @@ async function findAiComparablesAndNarrative(category, municipality, province, r
 }
 
 /* ---- Superficie commerciale equivalente: 100% la superficie principale, coefficienti
-   prudenziali per le superfici accessorie (stessa logica della relazione professionale di
-   riferimento: 35% per deposito/accessoria, qui applicata anche a garage/giardino con pesi
-   coerenti gia' in uso -- standard FIAIP/Borsino Immobiliare). ---- */
+   prudenziali per le superfici accessorie (35% deposito/accessoria e garage, 15% giardino).
+   NB sulla fonte (verificato con ricerca il 26/10/2026): non esiste una tabella "FIAIP" o
+   "Borsino Immobiliare" ufficiale di coefficienti di ragguaglio -- nessuna fonte pubblica
+   reperibile attribuisce a FIAIP una tabella di questo tipo, e il metodo varia da Comune a
+   Comune/agenzia, senza uno standard unico. Questi sono valori indicativi comunemente usati
+   nella prassi (dentro i range tipici: accessoria/cantina 25%-50%, garage 30%-50%, giardino
+   10%-30%), non "il" coefficiente di una fonte specifica. ---- */
 function equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm){
   var total = (internalSize || 0) * 1.0;
   total += (accessorySize || 0) * 0.35;
@@ -1287,15 +1403,55 @@ function additionalSectionsSurfaceBreakdown(){
 /* ---- Totale usato DAVVERO nel calcolo comparativo (sostituisce la sola "Superficie interna",
    come richiesto esplicitamente): superficie commerciale ponderata della sezione principale +
    superficie piena di ogni sezione catastale aggiuntiva. ---- */
-function computeTotalCommercialSurface(){
+/* ---- CORRETTO due volte lo stesso giorno (26/10/2026), stessa causa: la sezione principale
+   ha i suoi stessi dati catastali (categoria + superficie catastale) delle sezioni aggiuntive.
+   Prima versione del fix: li usava SOLO come fallback se "Superficie interna" era vuota --
+   sbagliato, perché se l'utente compila con cura tutti i dati catastali (caso complesso: più
+   subalterni, categorie diverse, ecc.) quel lavoro va usato, non scartato solo perché ha anche
+   un valore in "Superficie interna". PRIORITÀ CORRETTA ORA: se la superficie catastale della
+   sezione principale è compilata, è SEMPRE quella (pesata per la sua categoria) a contare --
+   "Superficie interna" diventa la scorciatoia SOLO per il caso semplice (es. un monolocale)
+   in cui i dati catastali dettagliati non sono stati trascritti. Le due cose non si sommano
+   mai: è sempre l'una O l'altra, mai entrambe, per evitare qualsiasi doppio conteggio della
+   stessa unità. ---- */
+function primarySectionCommercialSurface(){
   var internalSize = numVal("internalSize");
   var accessorySize = numVal("accessorySize");
   var garageSqm = numVal("garageSqm");
   var gardenSqm = numVal("gardenSqm");
-  var base = equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm) || 0;
+  var cadastralSurface = numVal("cadastralSurface");
+  var cadastralCategory = document.getElementById("cadastralCategory") ? document.getElementById("cadastralCategory").value : "";
+  if(cadastralSurface){
+    var weightInfo = cadastralSurfaceWeight(cadastralCategory);
+    var weighted = Math.round(cadastralSurface * weightInfo.weight * 100) / 100;
+    return {
+      surface_used: cadastralSurface,
+      source: "cadastral_surface",
+      category: cadastralCategory || null,
+      weight: weightInfo.weight,
+      weight_label: weightInfo.label,
+      value: (equivalentSurface(0, accessorySize, garageSqm, gardenSqm) || 0) + weighted
+    };
+  }
+  if(internalSize){
+    return {
+      surface_used: internalSize,
+      source: "internal_size",
+      value: equivalentSurface(internalSize, accessorySize, garageSqm, gardenSqm) || 0
+    };
+  }
+  return {
+    surface_used: 0, source: "none",
+    value: equivalentSurface(0, accessorySize, garageSqm, gardenSqm) || 0
+  };
+}
+
+function computeTotalCommercialSurface(){
+  var primary = primarySectionCommercialSurface();
+  var base = primary.value || 0;
   var extras = additionalSectionsSurfaceBreakdown();
   var extrasTotal = extras.reduce(function(sum, e){ return sum + e.weighted_surface; }, 0);
-  return { total: (base + extrasTotal) || null, base: base, extras: extras };
+  return { total: (base + extrasTotal) || null, base: base, primary: primary, extras: extras };
 }
 
 function renderCommercialSurfaceBox(){
@@ -1304,20 +1460,28 @@ function renderCommercialSurfaceBox(){
 
   var result = computeTotalCommercialSurface();
 
-  // Mostrato SOLO quando c'è almeno una sezione aggiuntiva valorizzata: altrimenti il calcolo
-  // coincide esattamente con quello che il form faceva già prima, niente di nuovo da mostrare.
-  if(!result.total || !result.extras.length){
+  // Mostrato quando c'è almeno una sezione aggiuntiva valorizzata, OPPURE quando la sezione
+  // principale sta usando la superficie catastale pesata per categoria (invece della semplice
+  // "Superficie interna") -- altrimenti il calcolo coincide con quello che il form faceva già
+  // prima, niente di nuovo da mostrare.
+  var primaryUsesCadastral = result.primary && result.primary.source === "cadastral_surface";
+  if(!result.total || (!result.extras.length && !primaryUsesCadastral)){
     box.style.display = "none";
     return;
   }
 
-  var internalSize = numVal("internalSize");
   var accessorySize = numVal("accessorySize");
   var garageSqm = numVal("garageSqm");
   var gardenSqm = numVal("gardenSqm");
 
   var lines = [];
-  if(internalSize) lines.push("Superficie principale: " + internalSize + " mq × 100%");
+  if(result.primary.source === "cadastral_surface"){
+    var pCatPart = result.primary.weight_label ? " — cat. " + escapeHTML(result.primary.weight_label) : " — categoria non indicata, considerata 100%";
+    lines.push("Superficie principale: " + result.primary.surface_used + " mq" + pCatPart +
+      " = " + (Math.round(result.primary.surface_used * result.primary.weight * 100) / 100) + " mq (superficie catastale della sezione principale, usata con priorità sulla \"Superficie interna\")");
+  } else if(result.primary.source === "internal_size"){
+    lines.push("Superficie principale: " + result.primary.surface_used + " mq × 100% (da \"Superficie interna\" — nessun dato di superficie catastale compilato)");
+  }
   if(accessorySize) lines.push("Accessoria/deposito: " + accessorySize + " mq × 35%");
   if(garageSqm) lines.push("Garage/box: " + garageSqm + " mq × 35%");
   if(gardenSqm) lines.push("Giardino: " + gardenSqm + " mq × 15%");
@@ -1332,7 +1496,7 @@ function renderCommercialSurfaceBox(){
     "<br>Sostituisce la sola \"Superficie interna\" nel calcolo comparativo di mercato qui sotto.";
 }
 
-["internalSize","accessorySize","garageSqm","gardenSqm"].forEach(function(id){
+["internalSize","accessorySize","garageSqm","gardenSqm","cadastralSurface","cadastralCategory"].forEach(function(id){
   var el = document.getElementById(id);
   if(el) el.addEventListener("input", renderCommercialSurfaceBox);
 });

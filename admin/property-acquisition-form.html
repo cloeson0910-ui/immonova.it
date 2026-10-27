@@ -134,9 +134,20 @@
       <div class="field span2"><label>Indirizzo immobile</label><input type="text" id="propertyAddress"></div>
       <div class="field"><label>Comune</label><input type="text" id="municipality"></div>
       <div class="field"><label>Provincia</label><input type="text" id="province"></div>
-      <div class="field span2"><label>Dati catastali (foglio/particella/sub, rendita)</label><input type="text" id="cadastralData"></div>
+      <div class="field span2"><label>Dati catastali (foglio/particella/sub, rendita) — nota libera, facoltativa se compili le unità catastali sotto</label><input type="text" id="cadastralData"></div>
       <div class="field"><label>Superficie commerciale (m²)</label><input type="number" id="commercialSqm" min="0"></div>
-      <div class="field"><label>Superficie catastale (m²)</label><input type="number" id="cadastralSqm" min="0"></div>
+      <div class="field"><label>Superficie catastale (m²) — totale, facoltativo se compili le unità catastali sotto</label><input type="number" id="cadastralSqm" min="0"></div>
+      <div class="field span2 cadastral-units">
+        <label>Unità catastali (una per ogni particella/subalterno collegato all'immobile)</label>
+        <div class="cadastral-units-note" style="font-size:12px;color:#8a7458;margin-bottom:6px">Aggiungi una sezione per ogni unità catastale distinta (es. abitazione principale, garage, cantina...): non c'è limite al numero.</div>
+        <div id="cadastralUnitsContainer"></div>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="soft" id="addCadastralUnitBtn">+ Aggiungi unità catastale</button>
+          <button type="button" class="soft" id="extractVisuraBtn">📄 Carica visura catastale (estrazione automatica)</button>
+          <input type="file" id="visuraFileInput" accept="application/pdf,image/*" multiple style="display:none">
+          <span id="extractVisuraStatus" style="font-size:13px;color:#8a7458"></span>
+        </div>
+      </div>
       <div class="field"><label>Vani</label><input type="number" id="rooms" min="0"></div>
       <div class="field"><label>Camere</label><input type="number" id="bedrooms" min="0"></div>
       <div class="field"><label>Bagni</label><input type="number" id="bathrooms" min="0"></div>
@@ -174,6 +185,23 @@
         <div class="toggle-row"><input type="checkbox" id="hasSeaView"><label for="hasSeaView">Vista mare</label></div>
       </div>
     </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Planimetria</h2>
+    <p class="section-hint">Carica la planimetria catastale e cerchia direttamente sopra le differenze rispetto allo stato dei luoghi, aggiungendo una nota numerata per ognuna.</p>
+    <input type="file" id="floorplanInput" accept="image/*" style="display:none">
+    <button type="button" class="secondary" id="floorplanUploadBtn">📐 Carica planimetria</button>
+    <div id="floorplanToolbar" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+      <button type="button" class="secondary" id="floorplanToolCircle">◯ Cerchia</button>
+      <button type="button" class="secondary" id="floorplanToolNote">📍 Nota</button>
+      <button type="button" class="secondary" id="floorplanUndoBtn">↩ Annulla ultimo</button>
+      <button type="button" class="secondary" id="floorplanClearBtn">🗑 Cancella tutto</button>
+    </div>
+    <div id="floorplanCanvasWrap" style="display:none;margin-top:12px;max-width:100%;overflow:auto;border:1px solid var(--line)">
+      <canvas id="floorplanCanvas" style="max-width:100%;display:block;touch-action:none;cursor:crosshair"></canvas>
+    </div>
+    <div id="floorplanNotesList"></div>
   </div>
 
   <div class="section" id="interviewSection">
@@ -489,6 +517,207 @@ async function loadPhotos(id){
   });
 }
 
+/* ================================ Planimetria annotata ================================
+   Carica un'immagine (planimetria catastale), la disegna su un <canvas> e permette di
+   cerchiare le differenze rispetto allo stato dei luoghi reale e aggiungere note numerate
+   direttamente sopra l'immagine. Le annotazioni restano DATI VETTORIALI (non vengono
+   "schiacciate" dentro l'immagine), cosi' restano modificabili riaprendo l'acquisizione.
+   L'immagine originale viene caricata su storage solo al salvataggio dell'acquisizione. */
+var fpState = { naturalW:0, naturalH:0, actions:[], tool:null, dragging:false, dragStart:null, pendingFile:null, existingUrl:null };
+var fpCanvas, fpCtx, fpImg;
+
+function fpInit(){
+  fpCanvas = document.getElementById("floorplanCanvas");
+  fpCtx = fpCanvas.getContext("2d");
+  document.getElementById("floorplanInput").addEventListener("change", fpOnFileChange);
+  document.getElementById("floorplanUploadBtn").addEventListener("click", function(){ document.getElementById("floorplanInput").click(); });
+  document.getElementById("floorplanToolCircle").addEventListener("click", function(){ fpSetTool("circle"); });
+  document.getElementById("floorplanToolNote").addEventListener("click", function(){ fpSetTool("note"); });
+  document.getElementById("floorplanUndoBtn").addEventListener("click", fpUndo);
+  document.getElementById("floorplanClearBtn").addEventListener("click", fpClearAll);
+  fpCanvas.addEventListener("pointerdown", fpPointerDown);
+  fpCanvas.addEventListener("pointermove", fpPointerMove);
+  window.addEventListener("pointerup", fpPointerUp);
+}
+
+function fpSetTool(tool){
+  fpState.tool = (fpState.tool === tool) ? null : tool;
+  document.getElementById("floorplanToolCircle").style.outline = fpState.tool === "circle" ? "2px solid #a67f34" : "";
+  document.getElementById("floorplanToolNote").style.outline = fpState.tool === "note" ? "2px solid #a67f34" : "";
+}
+
+function fpOnFileChange(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  fpState.pendingFile = file;
+  fpState.existingUrl = null;
+  var reader = new FileReader();
+  reader.onload = function(ev){ fpState.actions = []; fpLoadImage(ev.target.result); fpRenderNotesList(); };
+  reader.readAsDataURL(file);
+}
+
+function fpLoadImage(src){
+  fpImg = new Image();
+  fpImg.onload = function(){
+    fpState.naturalW = fpImg.naturalWidth;
+    fpState.naturalH = fpImg.naturalHeight;
+    fpCanvas.width = fpState.naturalW;
+    fpCanvas.height = fpState.naturalH;
+    document.getElementById("floorplanToolbar").style.display = "flex";
+    document.getElementById("floorplanCanvasWrap").style.display = "block";
+    fpRedraw();
+  };
+  fpImg.src = src;
+}
+
+function fpCanvasPoint(evt){
+  var rect = fpCanvas.getBoundingClientRect();
+  var scaleX = fpCanvas.width / rect.width;
+  var scaleY = fpCanvas.height / rect.height;
+  return { x:(evt.clientX - rect.left) * scaleX, y:(evt.clientY - rect.top) * scaleY };
+}
+
+function fpPointerDown(evt){
+  if(!fpState.tool) return;
+  var p = fpCanvasPoint(evt);
+  if(fpState.tool === "note"){
+    var text = prompt("Nota su questo punto (es. differenza tra planimetria catastale e stato dei luoghi):");
+    if(text && text.trim()){
+      fpState.actions.push({ type:"note", x:p.x, y:p.y, text:text.trim() });
+      fpRedraw();
+      fpRenderNotesList();
+    }
+    return;
+  }
+  if(fpState.tool === "circle"){
+    fpState.dragging = true;
+    fpState.dragStart = p;
+  }
+}
+
+function fpPointerMove(evt){
+  if(!fpState.dragging) return;
+  var p = fpCanvasPoint(evt);
+  fpRedraw();
+  fpDrawEllipsePreview(fpState.dragStart, p);
+}
+
+function fpPointerUp(evt){
+  if(!fpState.dragging) return;
+  fpState.dragging = false;
+  var p = fpCanvasPoint(evt);
+  var x = Math.min(fpState.dragStart.x, p.x), y = Math.min(fpState.dragStart.y, p.y);
+  var w = Math.abs(p.x - fpState.dragStart.x), h = Math.abs(p.y - fpState.dragStart.y);
+  if(w > 4 && h > 4) fpState.actions.push({ type:"circle", x:x, y:y, w:w, h:h });
+  fpRedraw();
+}
+
+function fpDrawEllipsePreview(a, b){
+  var x = Math.min(a.x,b.x), y = Math.min(a.y,b.y), w = Math.abs(b.x-a.x), h = Math.abs(b.y-a.y);
+  fpCtx.save();
+  fpCtx.strokeStyle = "#e23b3b";
+  fpCtx.lineWidth = Math.max(3, fpState.naturalW/280);
+  fpCtx.setLineDash([10,6]);
+  fpCtx.beginPath();
+  fpCtx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2);
+  fpCtx.stroke();
+  fpCtx.restore();
+}
+
+function fpRedraw(){
+  if(!fpState.naturalW) return;
+  fpCtx.clearRect(0,0,fpCanvas.width,fpCanvas.height);
+  fpCtx.drawImage(fpImg, 0, 0, fpState.naturalW, fpState.naturalH);
+  fpState.actions.forEach(function(a){
+    if(a.type === "circle"){
+      fpCtx.save();
+      fpCtx.strokeStyle = "#e23b3b";
+      fpCtx.lineWidth = Math.max(3, fpState.naturalW/280);
+      fpCtx.beginPath();
+      fpCtx.ellipse(a.x+a.w/2, a.y+a.h/2, a.w/2, a.h/2, 0, 0, Math.PI*2);
+      fpCtx.stroke();
+      fpCtx.restore();
+    }
+  });
+  var noteNum = 0;
+  fpState.actions.forEach(function(a){
+    if(a.type === "note"){
+      noteNum++;
+      var r = Math.max(14, fpState.naturalW/60);
+      fpCtx.save();
+      fpCtx.fillStyle = "#a67f34";
+      fpCtx.beginPath();
+      fpCtx.arc(a.x, a.y, r, 0, Math.PI*2);
+      fpCtx.fill();
+      fpCtx.fillStyle = "#fff";
+      fpCtx.font = "bold " + Math.round(r*1.1) + "px sans-serif";
+      fpCtx.textAlign = "center";
+      fpCtx.textBaseline = "middle";
+      fpCtx.fillText(String(noteNum), a.x, a.y+1);
+      fpCtx.restore();
+    }
+  });
+}
+
+function fpRenderNotesList(){
+  var wrap = document.getElementById("floorplanNotesList");
+  var notes = fpState.actions.filter(function(a){ return a.type === "note"; });
+  if(notes.length === 0){ wrap.innerHTML = ""; return; }
+  var html = "";
+  notes.forEach(function(n, i){
+    html += '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px">' +
+      '<span style="min-width:22px;height:22px;border-radius:50%;background:#a67f34;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none">' + (i+1) + '</span>' +
+      '<span style="font-size:13.5px;flex:1">' + fpEscape(n.text) + '</span>' +
+      '</div>';
+  });
+  wrap.innerHTML = html;
+}
+
+function fpEscape(s){
+  return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; });
+}
+
+function fpUndo(){
+  fpState.actions.pop();
+  fpRedraw();
+  fpRenderNotesList();
+}
+
+function fpClearAll(){
+  if(fpState.actions.length && !confirm("Cancellare tutti i cerchi e le note sulla planimetria?")) return;
+  fpState.actions = [];
+  fpRedraw();
+  fpRenderNotesList();
+}
+
+function fpLoadExisting(imageUrl, annotations){
+  if(!imageUrl) return;
+  fpState.existingUrl = imageUrl;
+  fpState.actions = (annotations && annotations.actions) || [];
+  document.getElementById("floorplanToolbar").style.display = "flex";
+  document.getElementById("floorplanCanvasWrap").style.display = "block";
+  fpLoadImage(imageUrl);
+  fpRenderNotesList();
+}
+
+async function fpUploadIfNeeded(id){
+  if(!fpState.pendingFile) return fpState.existingUrl || null;
+  var ext = (fpState.pendingFile.name && fpState.pendingFile.name.includes(".")) ? fpState.pendingFile.name.split(".").pop() : "jpg";
+  var path = "acquisitions/" + id + "/floorplan-" + Date.now() + "." + ext;
+  var up = await client.storage.from("acquisition-photos").upload(path, fpState.pendingFile, { cacheControl:"3600", upsert:false });
+  if(up.error) throw up.error;
+  var pub = client.storage.from("acquisition-photos").getPublicUrl(path);
+  fpState.pendingFile = null;
+  fpState.existingUrl = pub.data.publicUrl;
+  return fpState.existingUrl;
+}
+
+function fpGetAnnotations(){
+  return { actions: fpState.actions };
+}
+
+fpInit();
+
 /* ================================ Salvataggio / caricamento acquisizione ================================ */
 var params = new URLSearchParams(window.location.search);
 var currentId = params.get("id") ? Number(params.get("id")) : null;
@@ -497,6 +726,189 @@ var investorId = params.get("investor_id"); // import dati anagrafici dal client
 function val(id){ var el = document.getElementById(id); return el ? el.value : null; }
 function checked(id){ var el = document.getElementById(id); return el ? el.checked : false; }
 function numOrNull(v){ return (v === "" || v === null || v === undefined) ? null : Number(v); }
+
+function escapeHTML(value){
+  return String(value == null ? "" : value)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+function genLocalId(){ return "cu_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8); }
+
+/* ---- Unità catastali (27/10/2026): stessa struttura/colonna jsonb "cadastral_units" gia'
+   usata in opportunity-form.html/opportunity-edit.html, cosi' lo stesso immobile puo' passare
+   dall'acquisizione all'opportunity senza dover ritrascrivere i dati catastali. I due vecchi
+   campi "Dati catastali" (testo libero) e "Superficie catastale" restano per compatibilita'
+   con le acquisizioni gia' esistenti, ma sono ora facoltativi. ---- */
+var cadastralUnitsState = [];
+
+function addCadastralUnit(initial){
+  cadastralUnitsState.push(Object.assign({
+    id: genLocalId(), municipality:"", category:"", income:"", surface:"", sheet:"", parcel:"", subalterno:""
+  }, initial || {}));
+  renderCadastralUnits();
+}
+
+function removeCadastralUnit(unitId){
+  cadastralUnitsState = cadastralUnitsState.filter(function(u){ return u.id !== unitId; });
+  renderCadastralUnits();
+}
+
+function findCadastralUnit(unitId){
+  return cadastralUnitsState.find(function(u){ return u.id === unitId; });
+}
+
+function renderCadastralUnits(){
+  var container = document.getElementById("cadastralUnitsContainer");
+  if(!container) return;
+
+  container.innerHTML = cadastralUnitsState.map(function(u, idx){
+    return '' +
+      '<div class="cadastral-unit-card" data-unit-id="' + u.id + '" style="border:1px solid #e4d9c8;border-radius:8px;padding:10px;margin-bottom:8px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+          '<strong>Unità catastale ' + (idx+1) + '</strong>' +
+          '<button type="button" class="danger remove-cadastral-unit-btn" data-unit="' + u.id + '">Rimuovi</button>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">' +
+          '<label>Comune catastale<input type="text" class="cad-municipality" data-unit="' + u.id + '" value="' + escapeHTML(u.municipality || "") + '"></label>' +
+          '<label>Categoria (es. A/2)<input type="text" class="cad-category" data-unit="' + u.id + '" value="' + escapeHTML(u.category || "") + '"></label>' +
+          '<label>Rendita catastale (€)<input type="number" step="0.01" min="0" class="cad-income" data-unit="' + u.id + '" value="' + escapeHTML(u.income === "" ? "" : String(u.income)) + '"></label>' +
+          '<label>Superficie catastale (mq)<input type="number" step="1" min="0" class="cad-surface" data-unit="' + u.id + '" value="' + escapeHTML(u.surface === "" ? "" : String(u.surface)) + '"></label>' +
+          '<label>Foglio<input type="text" class="cad-sheet" data-unit="' + u.id + '" value="' + escapeHTML(u.sheet || "") + '"></label>' +
+          '<label>Particella / Mappale<input type="text" class="cad-parcel" data-unit="' + u.id + '" value="' + escapeHTML(u.parcel || "") + '"></label>' +
+          '<label>Subalterno<input type="text" class="cad-subalterno" data-unit="' + u.id + '" value="' + escapeHTML(u.subalterno || "") + '"></label>' +
+        '</div>' +
+      '</div>';
+  }).join("") || '<div style="font-size:13px;color:#8a7458">Nessuna unità catastale aggiunta.</div>';
+}
+
+function fileToBase64(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var result = String(reader.result || "");
+      var idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = function(){ reject(reader.error || new Error("Lettura file fallita")); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function bindVisuraExtraction(){
+  var btn = document.getElementById("extractVisuraBtn");
+  var input = document.getElementById("visuraFileInput");
+  if(!btn || !input) return;
+
+  btn.addEventListener("click", function(){ input.click(); });
+
+  input.addEventListener("change", async function(e){
+    var files = Array.from(e.target.files || []);
+    if(!files.length) return;
+    var statusEl = document.getElementById("extractVisuraStatus");
+    statusEl.textContent = "Lettura in corso (" + files.length + " file)...";
+
+    try{
+      var encoded = await Promise.all(files.map(async function(f){
+        return { base64: await fileToBase64(f), mime_type: f.type || "image/jpeg" };
+      }));
+
+      var result = await client.functions.invoke("immonova-cadastral-extract", { body: { files: encoded } });
+      if(result.error){
+        statusEl.textContent = "Errore: " + result.error.message;
+        return;
+      }
+      var data = result.data || {};
+      if(!data.ok){
+        statusEl.textContent = "Lettura non riuscita: " + (data.error || "errore sconosciuto");
+        return;
+      }
+      var units = Array.isArray(data.units) ? data.units : [];
+      if(!units.length){
+        statusEl.textContent = "Nessun dato catastale leggibile trovato nel documento caricato.";
+        return;
+      }
+
+      units.forEach(function(unit){
+        addCadastralUnit({
+          municipality: unit.municipality || "",
+          category: unit.category || "",
+          income: unit.income != null ? unit.income : "",
+          surface: unit.surface != null ? unit.surface : "",
+          sheet: unit.sheet || "",
+          parcel: unit.parcel || "",
+          subalterno: unit.subalterno || ""
+        });
+      });
+
+      var warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      statusEl.textContent = "Aggiunte " + units.length + " unità catastali (" + (data.pages_read || files.length) + " pagine lette)." +
+        (warnings.length ? " Attenzione: " + warnings.join("; ") : "") +
+        " Controlla i dati prima di salvare.";
+    }catch(err){
+      statusEl.textContent = "Errore durante la lettura: " + (err && err.message ? err.message : String(err));
+    }finally{
+      e.target.value = "";
+    }
+  });
+}
+
+function bindCadastralUnitEvents(){
+  var container = document.getElementById("cadastralUnitsContainer");
+  var addBtn = document.getElementById("addCadastralUnitBtn");
+  if(!container || !addBtn) return;
+
+  bindVisuraExtraction();
+
+  addBtn.addEventListener("click", function(){ addCadastralUnit(); });
+
+  container.addEventListener("click", function(e){
+    var removeBtn = e.target.closest(".remove-cadastral-unit-btn");
+    if(removeBtn){ removeCadastralUnit(removeBtn.dataset.unit); return; }
+  });
+
+  container.addEventListener("input", function(e){
+    var target = e.target;
+    var unitId = target.dataset.unit;
+    if(!unitId) return;
+    var u = findCadastralUnit(unitId);
+    if(!u) return;
+
+    if(target.classList.contains("cad-municipality")) u.municipality = target.value;
+    else if(target.classList.contains("cad-category")) u.category = target.value;
+    else if(target.classList.contains("cad-income")) u.income = target.value === "" ? "" : Number(target.value);
+    else if(target.classList.contains("cad-surface")) u.surface = target.value === "" ? "" : Number(target.value);
+    else if(target.classList.contains("cad-sheet")) u.sheet = target.value;
+    else if(target.classList.contains("cad-parcel")) u.parcel = target.value;
+    else if(target.classList.contains("cad-subalterno")) u.subalterno = target.value;
+  });
+}
+document.addEventListener("DOMContentLoaded", bindCadastralUnitEvents);
+
+function getCadastralUnitsPayload(){
+  return cadastralUnitsState
+    .map(function(u){
+      return {
+        municipality: (u.municipality || "").trim(),
+        category: (u.category || "").trim(),
+        income: (u.income === "" || u.income == null || isNaN(Number(u.income))) ? null : Number(u.income),
+        surface: (u.surface === "" || u.surface == null || isNaN(Number(u.surface))) ? null : Number(u.surface),
+        sheet: (u.sheet || "").trim(),
+        parcel: (u.parcel || "").trim(),
+        subalterno: (u.subalterno || "").trim()
+      };
+    })
+    .filter(function(u){ return u.municipality || u.category || u.income != null || u.surface != null || u.sheet || u.parcel || u.subalterno; });
+}
+
+function loadCadastralUnitsFromAcquisition(data){
+  var stored = Array.isArray(data && data.cadastral_units) ? data.cadastral_units : [];
+  cadastralUnitsState = [];
+  stored.forEach(function(u){ addCadastralUnit(u); });
+  renderCadastralUnits();
+}
 
 function buildPayload(){
   return {
@@ -520,6 +932,7 @@ function buildPayload(){
     cadastral_data: val("cadastralData") || null,
     commercial_sqm: numOrNull(val("commercialSqm")),
     cadastral_sqm: numOrNull(val("cadastralSqm")),
+    cadastral_units: getCadastralUnitsPayload(),
     rooms: numOrNull(val("rooms")),
     bedrooms: numOrNull(val("bedrooms")),
     bathrooms: numOrNull(val("bathrooms")),
@@ -568,6 +981,7 @@ function applyPayload(data){
   document.getElementById("cadastralData").value = data.cadastral_data || "";
   document.getElementById("commercialSqm").value = data.commercial_sqm ?? "";
   document.getElementById("cadastralSqm").value = data.cadastral_sqm ?? "";
+  loadCadastralUnitsFromAcquisition(data);
   document.getElementById("rooms").value = data.rooms ?? "";
   document.getElementById("bedrooms").value = data.bedrooms ?? "";
   document.getElementById("bathrooms").value = data.bathrooms ?? "";
@@ -590,6 +1004,8 @@ function applyPayload(data){
   applyInterviewAnswers(data.interview_answers);
   document.getElementById("notes").value = data.notes || "";
 
+  fpLoadExisting(data.floorplan_image_url, data.floorplan_annotations);
+
   document.getElementById("statusPill").textContent =
     data.status === "completata" ? "Completata" : data.status === "inviata" ? "Inviata" : "Bozza";
 }
@@ -602,6 +1018,11 @@ async function saveAcquisition(silent){
   var payload = buildPayload();
   try{
     if(currentId){
+      if(!silent){
+        var fpUrl = await fpUploadIfNeeded(currentId);
+        payload.floorplan_image_url = fpUrl;
+        payload.floorplan_annotations = fpGetAnnotations();
+      }
       var upd = await client.from("immonova_acquisitions").update(payload).eq("id", currentId).select().single();
       if(upd.error) throw upd.error;
     }else{
@@ -612,6 +1033,10 @@ async function saveAcquisition(silent){
       var url = new URL(window.location.href);
       url.searchParams.set("id", currentId);
       window.history.replaceState({}, "", url);
+      if(!silent && fpState.pendingFile){
+        var fpUrl2 = await fpUploadIfNeeded(currentId);
+        await client.from("immonova_acquisitions").update({ floorplan_image_url: fpUrl2, floorplan_annotations: fpGetAnnotations() }).eq("id", currentId);
+      }
     }
     if(!silent){
       msg.textContent = "Salvato ✓";

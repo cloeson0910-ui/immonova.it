@@ -1517,6 +1517,20 @@ button.danger{
         </select>
       </div>
 
+      <div class="section-title" data-i18n="section_cadastral_data">Dati catastali</div>
+
+      <div class="field full cadastral-units">
+        <label data-i18n="label_cadastral_units">Unità catastali (una per ogni particella/subalterno collegato all'immobile)</label>
+        <div class="cadastral-units-note" data-i18n="note_cadastral_units">Aggiungi una sezione per ogni unità catastale distinta (es. abitazione principale, garage, cantina...): non c'è limite al numero.</div>
+        <div id="cadastralUnitsContainer"></div>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="soft" id="addCadastralUnitBtn" data-i18n="btn_add_cadastral_unit">+ Aggiungi unità catastale</button>
+          <button type="button" class="soft" id="extractVisuraBtn">📄 Carica visura catastale (estrazione automatica)</button>
+          <input type="file" id="visuraFileInput" accept="application/pdf,image/*" multiple style="display:none">
+          <span id="extractVisuraStatus" style="font-size:13px;color:#8a7458"></span>
+        </div>
+      </div>
+
       <div class="field full">
         <label data-i18n="label_optional_features">Caratteristiche opzionali</label>
         <div class="checks" style="grid-column:1/-1;flex-wrap:wrap;gap:14px 22px">
@@ -1852,6 +1866,170 @@ function escapeHTML(value){
     .replaceAll(">","&gt;")
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
+}
+
+/* ---- Unità catastali (27/10/2026): stessa struttura/logica di opportunity-edit.html, cosi'
+   i dati restano compatibili con la colonna jsonb "cadastral_units" gia' usata li' e nella
+   tabella opportunities. ---- */
+var cadastralUnitsState = [];
+
+function addCadastralUnit(initial){
+  cadastralUnitsState.push(Object.assign({
+    id: genLocalId(), municipality:"", category:"", income:"", surface:"", sheet:"", parcel:"", subalterno:""
+  }, initial || {}));
+  renderCadastralUnits();
+}
+
+function removeCadastralUnit(unitId){
+  cadastralUnitsState = cadastralUnitsState.filter(function(u){ return u.id !== unitId; });
+  renderCadastralUnits();
+}
+
+function findCadastralUnit(unitId){
+  return cadastralUnitsState.find(function(u){ return u.id === unitId; });
+}
+
+function renderCadastralUnits(){
+  var container = document.getElementById("cadastralUnitsContainer");
+  if(!container) return;
+
+  container.innerHTML = cadastralUnitsState.map(function(u, idx){
+    return '' +
+      '<div class="cadastral-unit-card" data-unit-id="' + u.id + '">' +
+        '<div class="cadastral-unit-head">' +
+          '<strong>Unità catastale ' + (idx+1) + '</strong>' +
+          '<button type="button" class="danger remove-cadastral-unit-btn" data-unit="' + u.id + '">Rimuovi</button>' +
+        '</div>' +
+        '<div class="cadastral-unit-grid">' +
+          '<label>Comune catastale<input type="text" class="cad-municipality" data-unit="' + u.id + '" value="' + escapeHTML(u.municipality || "") + '"></label>' +
+          '<label>Categoria (es. A/2)<input type="text" class="cad-category" data-unit="' + u.id + '" value="' + escapeHTML(u.category || "") + '"></label>' +
+          '<label>Rendita catastale (€)<input type="number" step="0.01" min="0" class="cad-income" data-unit="' + u.id + '" value="' + escapeHTML(u.income === "" ? "" : String(u.income)) + '"></label>' +
+          '<label>Superficie catastale (mq)<input type="number" step="1" min="0" class="cad-surface" data-unit="' + u.id + '" value="' + escapeHTML(u.surface === "" ? "" : String(u.surface)) + '"></label>' +
+          '<label>Foglio<input type="text" class="cad-sheet" data-unit="' + u.id + '" value="' + escapeHTML(u.sheet || "") + '"></label>' +
+          '<label>Particella / Mappale<input type="text" class="cad-parcel" data-unit="' + u.id + '" value="' + escapeHTML(u.parcel || "") + '"></label>' +
+          '<label>Subalterno<input type="text" class="cad-subalterno" data-unit="' + u.id + '" value="' + escapeHTML(u.subalterno || "") + '"></label>' +
+        '</div>' +
+      '</div>';
+  }).join("") || '<div class="file-note">Nessuna unità catastale aggiunta.</div>';
+}
+
+function fileToBase64(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var result = String(reader.result || "");
+      var idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = function(){ reject(reader.error || new Error("Lettura file fallita")); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function bindVisuraExtraction(){
+  var btn = document.getElementById("extractVisuraBtn");
+  var input = document.getElementById("visuraFileInput");
+  if(!btn || !input) return;
+
+  btn.addEventListener("click", function(){ input.click(); });
+
+  input.addEventListener("change", async function(e){
+    var files = Array.from(e.target.files || []);
+    if(!files.length) return;
+    var statusEl = document.getElementById("extractVisuraStatus");
+    statusEl.textContent = "Lettura in corso (" + files.length + " file)...";
+
+    try{
+      var encoded = await Promise.all(files.map(async function(f){
+        return { base64: await fileToBase64(f), mime_type: f.type || "image/jpeg" };
+      }));
+
+      var result = await client.functions.invoke("immonova-cadastral-extract", { body: { files: encoded } });
+      if(result.error){
+        statusEl.textContent = "Errore: " + result.error.message;
+        return;
+      }
+      var data = result.data || {};
+      if(!data.ok){
+        statusEl.textContent = "Lettura non riuscita: " + (data.error || "errore sconosciuto");
+        return;
+      }
+      var units = Array.isArray(data.units) ? data.units : [];
+      if(!units.length){
+        statusEl.textContent = "Nessun dato catastale leggibile trovato nel documento caricato.";
+        return;
+      }
+
+      units.forEach(function(unit){
+        addCadastralUnit({
+          municipality: unit.municipality || "",
+          category: unit.category || "",
+          income: unit.income != null ? unit.income : "",
+          surface: unit.surface != null ? unit.surface : "",
+          sheet: unit.sheet || "",
+          parcel: unit.parcel || "",
+          subalterno: unit.subalterno || ""
+        });
+      });
+
+      var warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      statusEl.textContent = "Aggiunte " + units.length + " unità catastali (" + (data.pages_read || files.length) + " pagine lette)." +
+        (warnings.length ? " Attenzione: " + warnings.join("; ") : "") +
+        " Controlla i dati prima di salvare.";
+    }catch(err){
+      statusEl.textContent = "Errore durante la lettura: " + (err && err.message ? err.message : String(err));
+    }finally{
+      e.target.value = "";
+    }
+  });
+}
+
+function bindCadastralUnitEvents(){
+  var container = document.getElementById("cadastralUnitsContainer");
+  var addBtn = document.getElementById("addCadastralUnitBtn");
+  if(!container || !addBtn) return;
+
+  bindVisuraExtraction();
+
+  addBtn.addEventListener("click", function(){ addCadastralUnit(); });
+
+  container.addEventListener("click", function(e){
+    var removeBtn = e.target.closest(".remove-cadastral-unit-btn");
+    if(removeBtn){ removeCadastralUnit(removeBtn.dataset.unit); return; }
+  });
+
+  container.addEventListener("input", function(e){
+    var target = e.target;
+    var unitId = target.dataset.unit;
+    if(!unitId) return;
+    var u = findCadastralUnit(unitId);
+    if(!u) return;
+
+    if(target.classList.contains("cad-municipality")) u.municipality = target.value;
+    else if(target.classList.contains("cad-category")) u.category = target.value;
+    else if(target.classList.contains("cad-income")) u.income = target.value === "" ? "" : Number(target.value);
+    else if(target.classList.contains("cad-surface")) u.surface = target.value === "" ? "" : Number(target.value);
+    else if(target.classList.contains("cad-sheet")) u.sheet = target.value;
+    else if(target.classList.contains("cad-parcel")) u.parcel = target.value;
+    else if(target.classList.contains("cad-subalterno")) u.subalterno = target.value;
+  });
+}
+document.addEventListener("DOMContentLoaded", bindCadastralUnitEvents);
+
+function getCadastralUnitsPayload(){
+  return cadastralUnitsState
+    .map(function(u){
+      return {
+        municipality: (u.municipality || "").trim(),
+        category: (u.category || "").trim(),
+        income: (u.income === "" || u.income == null || isNaN(Number(u.income))) ? null : Number(u.income),
+        surface: (u.surface === "" || u.surface == null || isNaN(Number(u.surface))) ? null : Number(u.surface),
+        sheet: (u.sheet || "").trim(),
+        parcel: (u.parcel || "").trim(),
+        subalterno: (u.subalterno || "").trim()
+      };
+    })
+    .filter(function(u){ return u.municipality || u.category || u.income != null || u.surface != null || u.sheet || u.parcel || u.subalterno; });
 }
 
 function setDocumentsStatus(message, type){
@@ -4469,6 +4647,7 @@ form.addEventListener("submit", async function(e){
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
       room_inventory:getRoomInventoryPayload(),
+      cadastral_units:getCadastralUnitsPayload(),
       internal_size:numberOrNull("internal_size"),
       land_size:numberOrNull("land_size"),
       construction_year:numberOrNull("construction_year"),

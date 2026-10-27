@@ -1965,7 +1965,12 @@ button.danger{
         <label data-i18n="label_cadastral_units">Unità catastali (una per ogni particella/subalterno collegato all'immobile)</label>
         <div class="cadastral-units-note" data-i18n="note_cadastral_units">Aggiungi una sezione per ogni unità catastale distinta (es. abitazione principale, garage, cantina...): non c'è limite al numero.</div>
         <div id="cadastralUnitsContainer"></div>
-        <button type="button" class="soft" id="addCadastralUnitBtn" data-i18n="btn_add_cadastral_unit">+ Aggiungi unità catastale</button>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="soft" id="addCadastralUnitBtn" data-i18n="btn_add_cadastral_unit">+ Aggiungi unità catastale</button>
+          <button type="button" class="soft" id="extractVisuraBtn">📄 Carica visura catastale (estrazione automatica)</button>
+          <input type="file" id="visuraFileInput" accept="application/pdf,image/*" multiple style="display:none">
+          <span id="extractVisuraStatus" style="font-size:13px;color:#8a7458"></span>
+        </div>
       </div>
 
       <div class="field full">
@@ -4036,10 +4041,88 @@ function renderCadastralUnits(){
   }).join("") || '<div class="file-note">Nessuna unità catastale aggiunta.</div>';
 }
 
+/* ---- Estrazione automatica da scansione visura catastale (27/10/2026): stessa edge function
+   "immonova-cadastral-extract" usata in valuation-form.html -- legge uno o piu' file (PDF
+   multipagina o foto), mai valori inventati, e aggiunge una unita' catastale per ogni unita'
+   trovata nel documento (qui non c'e' distinzione sezione principale/aggiuntive: ogni unita'
+   trovata diventa semplicemente una nuova riga in elenco). ---- */
+function fileToBase64(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var result = String(reader.result || "");
+      var idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = function(){ reject(reader.error || new Error("Lettura file fallita")); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function bindVisuraExtraction(){
+  var btn = document.getElementById("extractVisuraBtn");
+  var input = document.getElementById("visuraFileInput");
+  if(!btn || !input) return;
+
+  btn.addEventListener("click", function(){ input.click(); });
+
+  input.addEventListener("change", async function(e){
+    var files = Array.from(e.target.files || []);
+    if(!files.length) return;
+    var statusEl = document.getElementById("extractVisuraStatus");
+    statusEl.textContent = "Lettura in corso (" + files.length + " file)...";
+
+    try{
+      var encoded = await Promise.all(files.map(async function(f){
+        return { base64: await fileToBase64(f), mime_type: f.type || "image/jpeg" };
+      }));
+
+      var result = await client.functions.invoke("immonova-cadastral-extract", { body: { files: encoded } });
+      if(result.error){
+        statusEl.textContent = "Errore: " + result.error.message;
+        return;
+      }
+      var data = result.data || {};
+      if(!data.ok){
+        statusEl.textContent = "Lettura non riuscita: " + (data.error || "errore sconosciuto");
+        return;
+      }
+      var units = Array.isArray(data.units) ? data.units : [];
+      if(!units.length){
+        statusEl.textContent = "Nessun dato catastale leggibile trovato nel documento caricato.";
+        return;
+      }
+
+      units.forEach(function(unit){
+        addCadastralUnit({
+          municipality: unit.municipality || "",
+          category: unit.category || "",
+          income: unit.income != null ? unit.income : "",
+          surface: unit.surface != null ? unit.surface : "",
+          sheet: unit.sheet || "",
+          parcel: unit.parcel || "",
+          subalterno: unit.subalterno || ""
+        });
+      });
+
+      var warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      statusEl.textContent = "Aggiunte " + units.length + " unità catastali (" + (data.pages_read || files.length) + " pagine lette)." +
+        (warnings.length ? " Attenzione: " + warnings.join("; ") : "") +
+        " Controlla i dati prima di salvare.";
+    }catch(err){
+      statusEl.textContent = "Errore durante la lettura: " + (err && err.message ? err.message : String(err));
+    }finally{
+      e.target.value = "";
+    }
+  });
+}
+
 function bindCadastralUnitEvents(){
   var container = document.getElementById("cadastralUnitsContainer");
   var addBtn = document.getElementById("addCadastralUnitBtn");
   if(!container || !addBtn) return;
+
+  bindVisuraExtraction();
 
   addBtn.addEventListener("click", function(){ addCadastralUnit(); });
 
