@@ -657,6 +657,8 @@ var UI_STRINGS = {
   msg_no_comparables:"Nessuna opportunità IMMONOVA comparabile trovata in questa zona/categoria.",
   msg_no_market_data:"Nessun dato di mercato pubblico disponibile per questa zona.",
   msg_no_data_at_all:"Impossibile calcolare una stima: né opportunità comparabili né dati di mercato pubblici disponibili per questa zona. Puoi comunque salvare la valutazione e completarla in seguito.",
+  msg_no_surface:"Sono stati trovati dati di prezzo/mq (comparabili o mercato), ma manca una superficie su cui applicarli: compila \"Superficie interna\" o i dati catastali (categoria + superficie) nella sezione Dati Catastali, poi ricalcola.",
+  msg_all_prices_outliers:"Sono stati trovati dei prezzi/mq, ma sono stati tutti scartati perché troppo fuori scala rispetto al range inserito (prezzo/mq atteso min-max) o tra loro: controlla quel range o i dati catastali/superficie, poi ricalcola.",
   msg_saving:"Salvataggio valutazione...",
   msg_saved_success:"Valutazione salvata correttamente.",
   msg_save_error:"Errore durante il salvataggio: ",
@@ -1008,9 +1010,24 @@ async function findMarketPricePerSqm(municipality, province, region){
       return { value: Number.isFinite(value) && value > 0 ? value : null, geography_level: localMatch.geography_level, rejected_as_too_broad: false, no_sources_found: false };
     }
 
+    /* ---- Fix (27/10/2026, segnalato esplicitamente: "le superfici le hai calcolate tu, devi
+       usare quelle metrature!"): prima, quando non c'era un dato di mercato abbastanza locale,
+       veniva scartato del tutto (value:null) anche se esisteva un dato a livello piu' ampio
+       (regione/nazione) -- risultato: una superficie commerciale corretta e gia' calcolata
+       restava INUTILIZZATA solo perche' mancava un prezzo/mq iper-locale, facendo fallire
+       l'intera stima anche quando i dati per produrne comunque una (piu' approssimativa, ma
+       reale) c'erano. Ora il dato piu' ampio viene usato come fallback, sempre segnalato come
+       tale (rejected_as_too_broad resta true) cosi' il report mostra chiaramente che e' un
+       prezzo/mq non iper-locale e non induce falsa precisione. ---- */
     var broadMatch = candidates[0];
     var noSourcesFound = !data?.sources_found;
-    return { value: null, geography_level: broadMatch ? broadMatch.geography_level : null, rejected_as_too_broad: !!broadMatch, no_sources_found: noSourcesFound };
+    var broadValue = broadMatch ? Number(broadMatch.value) : null;
+    return {
+      value: (broadMatch && Number.isFinite(broadValue) && broadValue > 0) ? broadValue : null,
+      geography_level: broadMatch ? broadMatch.geography_level : null,
+      rejected_as_too_broad: !!broadMatch,
+      no_sources_found: noSourcesFound
+    };
   }catch(e){
     console.warn("Dato di mercato pubblico non disponibile (non bloccante):", e);
     return { value: null, geography_level: null, rejected_as_too_broad: false, no_sources_found: false };
@@ -2087,7 +2104,21 @@ calculateBtn.addEventListener("click", async function(){
 
     if(!hasComparativo && !hasReddituale){
       resultBox.classList.remove("visible");
-      setProgress(T.msg_no_data_at_all, 100, "error");
+      /* ---- Bug segnalato (27/10/2026, "che non è vero"): il messaggio diceva sempre "nessun
+         comparabile né dato di mercato", ma in realtà quei dati potevano benissimo esserci --
+         il vero motivo per cui comparativoMin restava null era spesso la mancanza di una
+         superficie (equivSurface a 0) su cui moltiplicare i prezzi/mq trovati, o il filtro
+         anti-anomalie che scartava tutti i prezzi. Messaggio ora distingue il caso reale
+         invece di affermare "nessun dato" quando il dato c'era. ---- */
+      var noDataMsg;
+      if(pricesPerSqm.length && !equivSurface){
+        noDataMsg = T.msg_no_surface;
+      }else if(pricesPerSqm.length && !trimmedPricesPerSqm.length){
+        noDataMsg = T.msg_all_prices_outliers;
+      }else{
+        noDataMsg = T.msg_no_data_at_all;
+      }
+      setProgress(noDataMsg, 100, "error");
       lastCalculation = {
         comparables_snapshot: { internal: dropPriceOutliers(internalResult.comparables), internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, internal_geo_radius_km: internalResult.geo_radius_km, geocoded_lat: geocodeResult.lat, geocoded_lng: geocodeResult.lng, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
         ai_comparables: dropPriceOutliers(aiResult.comparables), ai_narrative: aiResult,
@@ -2191,6 +2222,7 @@ calculateBtn.addEventListener("click", async function(){
     if(internalResult.geography_level === "geo_radius") detailParts.push("<em>Comparabili IMMONOVA: cercati per distanza reale dall'indirizzo geolocalizzato, sempre nello stesso comune (raggio " + internalResult.geo_radius_km + " km).</em>");
     else if(internalResult.geography_level === "municipality_zone" || internalResult.geography_level === "municipality") detailParts.push("<em>Comparabili IMMONOVA: " + (geocodeResult.lat == null ? "indirizzo non geolocalizzabile, " : "nessun risultato nel raggio di " + GEO_RADIUS_KM + " km, ") + "criterio basato su comune" + (internalResult.geography_level === "municipality_zone" ? "/zona" : "") + " (fallback).</em>");
     else detailParts.push("<em>Comparabili IMMONOVA: nessun comparabile interno trovato nello stesso comune (non si allarga mai ad altri comuni).</em>");
+    if(marketResult.value && marketResult.rejected_as_too_broad) detailParts.push("<em>Dato di mercato pubblico: nessun dato abbastanza locale trovato, usato come fallback un dato a livello più ampio (" + (marketResult.geography_level || "area più estesa") + ") — meno preciso di un dato comunale, pesa comunque nella media del comparativo.</em>");
     detailParts.push("<strong>Metodo reddituale:</strong> " + (hasReddituale ? formatEuro(reddituraleMin) + " – " + formatEuro(reddituraleMax) : (isRented ? "canone non inserito" : "immobile non locato")));
     detailParts.push("<strong>Prezzo di immissione consigliato:</strong> " + formatEuro(suggestedListingPrice));
     if(pricePerSqmManual) detailParts.push("<em>Metodo comparativo calcolato sul prezzo/mq di riferimento inserito manualmente (" + formatEuro(pricePerSqmManual) + "/mq), non sui comparabili automatici.</em>");
