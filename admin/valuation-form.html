@@ -518,6 +518,8 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
         <div class="cadastral-value-amount" id="commercialSurfaceAmount">—</div>
         <div class="cadastral-value-detail" id="commercialSurfaceDetail"></div>
       </div>
+
+      <div id="fNotEvaluableBox" style="display:none;margin-top:14px;padding:14px 16px;border:1px solid #c98b3a;background:rgba(201,139,58,.08);border-radius:4px;font-size:12px;color:#5b471f"></div>
     </div>
 
     <div class="section">
@@ -1497,6 +1499,8 @@ function collectAdditionalCadastralSections(){
    tutte le sezioni aggiuntive valide (categoria riconosciuta + rendita presente). Una sezione
    senza categoria/rendita valide viene semplicemente esclusa dal totale, non blocca le altre. ---- */
 function computeAndRenderCadastralValue(){
+  if(typeof renderFNotEvaluableBox === "function") renderFNotEvaluableBox();
+
   var box = document.getElementById("cadastralValueBox");
   var breakdown = [];
   var total = 0;
@@ -1747,6 +1751,50 @@ function renderCommercialSurfaceBox(){
 ["internalSize","accessorySize","garageSqm","gardenSqm","cadastralSurface","cadastralCategory"].forEach(function(id){
   var el = document.getElementById(id);
   if(el) el.addEventListener("input", renderCommercialSurfaceBox);
+});
+
+/* ---- Disclaimer unità F2/F3 (27/10/2026, richiesta esplicita: "non inventiamo niente,
+   scriviamo una nota chiara che dice che non sono valutabili in quanto non abbiamo parametri
+   per valutarli, il proprietario dovrà fornirci dati ufficiali"). Nessun costo di
+   trasformazione/completamento stimato: le unità F2 (collabente) e F3 (in corso di
+   costruzione) restano già escluse dalla superficie commerciale (peso 0%, vedi
+   cadastralSurfaceWeight), ma ora lo si dichiara anche in modo esplicito e leggibile
+   all'agente, elencando quali unità sono coinvolte, invece di lasciarlo capire solo dal
+   totale che non cambia. ---- */
+function detectFNotEvaluableUnits(){
+  var units = [];
+  var primaryCategory = (document.getElementById("cadastralCategory") || {}).value || "";
+  var primaryLabel = (document.getElementById("cadastralSectionLabel") || {}).value || "Sezione principale";
+  if(/^F\s*\/?\s*[23]\b/i.test(primaryCategory.trim())){
+    units.push({ label: "Sezione principale", category: primaryCategory.trim() });
+  }
+  document.querySelectorAll("#additionalCadastralSections .cadastral-section-extra").forEach(function(block, i){
+    var idx = block.getAttribute("data-section-idx");
+    var categoryEl = document.getElementById("cadastralExtraCategory_" + idx);
+    var labelEl = document.getElementById("cadastralExtraLabel_" + idx);
+    var category = categoryEl ? categoryEl.value.trim() : "";
+    if(/^F\s*\/?\s*[23]\b/i.test(category)){
+      units.push({ label: (labelEl && labelEl.value.trim()) || ("Sezione " + (i + 2)), category: category });
+    }
+  });
+  return units;
+}
+
+function renderFNotEvaluableBox(){
+  var box = document.getElementById("fNotEvaluableBox");
+  if(!box) return;
+  var units = detectFNotEvaluableUnits();
+  if(!units.length){ box.style.display = "none"; box.innerHTML = ""; return; }
+  box.style.display = "block";
+  box.innerHTML = "<strong>⚠ Unità non valutabili:</strong><br>" +
+    units.map(function(u){ return escapeHTML(u.label) + " (categoria " + escapeHTML(u.category) + ")"; }).join("<br>") +
+    "<br><br>Per le categorie catastali F/2 (unità collabente) e F/3 (unità in corso di costruzione) non esistono parametri di mercato verificabili per stimarne un valore: non vengono incluse nel calcolo né viene applicata alcuna stima del costo di trasformazione o completamento. " +
+    "Per poterle considerare in valutazione il proprietario dovrà fornire dati ufficiali (computo metrico, capitolato lavori, stato di avanzamento lavori certificato, permesso di costruire/CILA/SCIA). Questo avviso compare anche nella relazione stampata.";
+}
+
+["cadastralCategory"].forEach(function(id){
+  var el = document.getElementById(id);
+  if(el) el.addEventListener("input", renderFNotEvaluableBox);
 });
 
 /* ---- Caratteristiche distintive / Bonus-Malus (27/10/2026) ----

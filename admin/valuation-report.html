@@ -176,7 +176,8 @@ body::after{
 .visura-attachment-page{page-break-after:always;margin-top:16px}
 .visura-attachment-page:last-child{page-break-after:auto}
 .visura-embed-img{max-width:100%;display:block;margin-top:10px;border:1px solid rgba(166,127,52,.28)}
-.visura-pdf-canvas{max-width:100%;height:auto;display:block;margin-top:10px;border:1px solid rgba(166,127,52,.28);page-break-inside:avoid}
+.visura-pdf-canvas{max-width:100%;height:auto;display:block;margin-top:10px;border:1px solid rgba(166,127,52,.28);page-break-inside:avoid;page-break-after:always}
+.visura-pdf-canvas:last-child{page-break-after:auto}
 .visura-pdf-loading{font-size:12px;color:#8a7458;margin-top:10px}
 
 @media print{
@@ -494,6 +495,27 @@ async function loadAndRender(){
           : "")
       + '<p class="method-text" style="margin-top:14px"><strong>Superficie commerciale equivalente: ' + equivSurface.toFixed(2) + ' mq</strong></p>'
       + '</div>';
+
+    /* ---- Disclaimer unità F2/F3 (27/10/2026, richiesta esplicita dell'utente, da mostrare
+       anche nel documento stampato per il proprietario/cliente, non solo nel form interno):
+       nessuna stima del costo di trasformazione/completamento -- per queste categorie non ci
+       sono parametri di mercato verificabili, va dichiarato apertamente invece di inventare un
+       numero. ---- */
+    var fNotEvaluable = [];
+    if(/^F\s*\/?\s*[23]\b/i.test(String(v.cadastral_category || "").trim())){
+      fNotEvaluable.push({ label: "Sezione principale", category: v.cadastral_category });
+    }
+    extraSections.forEach(function(e){
+      if(/^F\s*\/?\s*[23]\b/i.test(String(e.category || "").trim())){
+        fNotEvaluable.push({ label: e.label, category: e.category });
+      }
+    });
+    if(fNotEvaluable.length){
+      html += '<div class="section">'
+        + '<div class="disclaimer-box"><strong>⚠ Unità non valutabili: ' + fNotEvaluable.map(function(u){ return escapeHTML(u.label) + ' (cat. ' + escapeHTML(u.category) + ')'; }).join(", ") + '.</strong><br>'
+        + 'Per le categorie catastali F/2 (unità collabente) e F/3 (unità in corso di costruzione) non esistono parametri di mercato verificabili per stimarne un valore: non sono state incluse nella superficie commerciale né nel calcolo, e non è stata applicata alcuna stima del costo di trasformazione o completamento. Per poterle considerare in valutazione sarà necessario che la proprietà fornisca dati ufficiali (computo metrico, capitolato lavori, stato di avanzamento lavori certificato, permesso di costruire/CILA/SCIA).</div>'
+        + '</div>';
+    }
   }
 
   // 5. Metodo comparativo
