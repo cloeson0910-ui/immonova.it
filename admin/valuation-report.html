@@ -193,7 +193,17 @@ body::after{
   body{background:#f4ecdf}
   .section{margin-top:14mm;page-break-inside:avoid}
   .cover{padding:20mm 0 14mm}
-  .visura-attachments-section{page-break-inside:auto}
+  .visura-attachments-section{page-break-inside:auto;margin-top:0}
+  /* ---- Fix (27/10/2026, segnalato: "i pdf sono già in formato A4, non vedo perché li metti in
+     una pagina" -- le scansioni erano rimpicciolite e incorniciate dentro il padding/i bordi
+     del layout del report invece di occupare la pagina per intero, come un documento A4 già
+     pronto che viene stampato così com'è. In stampa: si annulla il padding laterale di 20mm
+     solo per queste pagine (margine negativo), si tolgono bordi/intestazione/link (inutili su
+     un documento che si presenta già da solo), e la scansione riempie tutta la larghezza
+     stampabile. ---- */
+  .visura-attachment-page{margin:0;padding:0;margin-left:-20mm;margin-right:-20mm;width:calc(100% + 40mm)}
+  .visura-attachment-heading,.visura-attachment-link{display:none}
+  .visura-embed-img,.visura-pdf-canvas{border:none;width:100%;max-width:none;margin:0}
 }
 
 @media(max-width:700px){
@@ -469,6 +479,7 @@ async function loadAndRender(){
      tramite quel campo). Ora replica la stessa identica priorità, e aggiunge anche il
      dettaglio di ogni sezione catastale aggiuntiva (prima assente qui, già mostrato nel form). ---- */
   var equivSurface = snap.equivalent_surface;
+  var extraSectionsForDisclaimer = Array.isArray(snap.additional_cadastral_sections_surface) ? snap.additional_cadastral_sections_surface : [];
   if(equivSurface){
     var primaryRows;
     if(v.cadastral_surface){
@@ -495,27 +506,33 @@ async function loadAndRender(){
           : "")
       + '<p class="method-text" style="margin-top:14px"><strong>Superficie commerciale equivalente: ' + equivSurface.toFixed(2) + ' mq</strong></p>'
       + '</div>';
+  }
 
-    /* ---- Disclaimer unità F2/F3 (27/10/2026, richiesta esplicita dell'utente, da mostrare
-       anche nel documento stampato per il proprietario/cliente, non solo nel form interno):
-       nessuna stima del costo di trasformazione/completamento -- per queste categorie non ci
-       sono parametri di mercato verificabili, va dichiarato apertamente invece di inventare un
-       numero. ---- */
-    var fNotEvaluable = [];
-    if(/^F\s*\/?\s*[23]\b/i.test(String(v.cadastral_category || "").trim())){
-      fNotEvaluable.push({ label: "Sezione principale", category: v.cadastral_category });
+  /* ---- Disclaimer unità F2/F3 (27/10/2026, richiesta esplicita dell'utente, da mostrare
+     anche nel documento stampato per il proprietario/cliente, non solo nel form interno):
+     nessuna stima del costo di trasformazione/completamento -- per queste categorie non ci
+     sono parametri di mercato verificabili, va dichiarato apertamente invece di inventare un
+     numero.
+     FIX (27/10/2026, segnalato: "questo deve uscire anche nel formato che verrà stampato" --
+     prima questo blocco stava DENTRO "if(equivSurface)": se una proprietà era interamente/solo
+     F2 o F3 (superficie commerciale risultante 0, perché il peso di queste categorie è 0%),
+     equivSurface era falsy, tutta la sezione 4 non veniva stampata e il disclaimer spariva con
+     essa -- proprio nel caso in cui serve di più. Spostato fuori: ora compare sempre che ci sia
+     un'unità F2/F3, indipendentemente da quanta altra superficie valutabile esiste. ---- */
+  var fNotEvaluable = [];
+  if(/^F\s*\/?\s*[23]\b/i.test(String(v.cadastral_category || "").trim())){
+    fNotEvaluable.push({ label: "Sezione principale", category: v.cadastral_category });
+  }
+  extraSectionsForDisclaimer.forEach(function(e){
+    if(/^F\s*\/?\s*[23]\b/i.test(String(e.category || "").trim())){
+      fNotEvaluable.push({ label: e.label, category: e.category });
     }
-    extraSections.forEach(function(e){
-      if(/^F\s*\/?\s*[23]\b/i.test(String(e.category || "").trim())){
-        fNotEvaluable.push({ label: e.label, category: e.category });
-      }
-    });
-    if(fNotEvaluable.length){
-      html += '<div class="section">'
-        + '<div class="disclaimer-box"><strong>⚠ Unità non valutabili: ' + fNotEvaluable.map(function(u){ return escapeHTML(u.label) + ' (cat. ' + escapeHTML(u.category) + ')'; }).join(", ") + '.</strong><br>'
-        + 'Per le categorie catastali F/2 (unità collabente) e F/3 (unità in corso di costruzione) non esistono parametri di mercato verificabili per stimarne un valore: non sono state incluse nella superficie commerciale né nel calcolo, e non è stata applicata alcuna stima del costo di trasformazione o completamento. Per poterle considerare in valutazione sarà necessario che la proprietà fornisca dati ufficiali (computo metrico, capitolato lavori, stato di avanzamento lavori certificato, permesso di costruire/CILA/SCIA).</div>'
-        + '</div>';
-    }
+  });
+  if(fNotEvaluable.length){
+    html += '<div class="section">'
+      + '<div class="disclaimer-box"><strong>⚠ Unità non valutabili: ' + fNotEvaluable.map(function(u){ return escapeHTML(u.label) + ' (cat. ' + escapeHTML(u.category) + ')'; }).join(", ") + '.</strong><br>'
+      + 'Per le categorie catastali F/2 (unità collabente) e F/3 (unità in corso di costruzione) non esistono parametri di mercato verificabili per stimarne un valore: non sono state incluse nella superficie commerciale né nel calcolo, e non è stata applicata alcuna stima del costo di trasformazione o completamento. Per poterle considerare in valutazione sarà necessario che la proprietà fornisca dati ufficiali (computo metrico, capitolato lavori, stato di avanzamento lavori certificato, permesso di costruire/CILA/SCIA).</div>'
+      + '</div>';
   }
 
   // 5. Metodo comparativo
@@ -818,9 +835,9 @@ async function loadAndRender(){
             ? '<div class="visura-pdf-pages" id="visuraPdfPages_' + i + '" data-pdf-url="' + escapeHTML(url) + '"><div class="visura-pdf-loading">Caricamento scansione…</div></div>'
             : '<img src="' + escapeHTML(url) + '" class="visura-embed-img" alt="' + escapeHTML(name) + '">';
           return '<div class="visura-attachment-page">'
-            + '<div class="cadastral-unit-heading">' + escapeHTML(name) + '</div>'
+            + '<div class="cadastral-unit-heading visura-attachment-heading">' + escapeHTML(name) + '</div>'
             + body
-            + '<div style="font-size:10px;margin-top:6px"><a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">Apri scansione originale</a></div>'
+            + '<div class="visura-attachment-link" style="font-size:10px;margin-top:6px"><a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">Apri scansione originale</a></div>'
             + '</div>';
         }).join("")
       + '</div>';
