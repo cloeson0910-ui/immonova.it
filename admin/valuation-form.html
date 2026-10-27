@@ -2103,7 +2103,6 @@ calculateBtn.addEventListener("click", async function(){
     var hasReddituale = reddituraleMin != null;
 
     if(!hasComparativo && !hasReddituale){
-      resultBox.classList.remove("visible");
       /* ---- Bug segnalato (27/10/2026, "che non è vero"): il messaggio diceva sempre "nessun
          comparabile né dato di mercato", ma in realtà quei dati potevano benissimo esserci --
          il vero motivo per cui comparativoMin restava null era spesso la mancanza di una
@@ -2119,6 +2118,30 @@ calculateBtn.addEventListener("click", async function(){
         noDataMsg = T.msg_no_data_at_all;
       }
       setProgress(noDataMsg, 100, "error");
+
+      /* ---- Fix (27/10/2026, segnalato: "la tua ricerca AI non ha trovato un cazzo di niente
+         nei comparabili"): prima, in questo stesso caso, il box risultato veniva nascosto del
+         tutto (resultBox.classList.remove("visible")) PRIMA che il motivo dettagliato della
+         ricerca AI (ai_disclaimer, search_coverage_note -- il motore li genera apposta: quanti
+         annunci ha visto, quali portali ha interrogato, se ha scartato risultati perché fuori
+         dal comune richiesto) venisse mai scritto in resultDetail. L'agente restava quindi con
+         un generico "nessun dato" senza MAI vedere la spiegazione che il motore aveva gia'
+         preparato -- il motore stesso dichiara sempre perche' non ha trovato nulla (comune
+         troppo piccolo? risultati scartati perche' in un comune diverso? portali bloccati?),
+         ma quell'informazione veniva buttata via invece di essere mostrata. Ora il box resta
+         visibile anche quando il calcolo fallisce, con la diagnosi completa al posto del
+         risultato numerico. ---- */
+      resultBox.classList.add("visible");
+      resultRange.textContent = "Nessuna stima calcolabile";
+      var noDataDetailParts = [];
+      noDataDetailParts.push("<strong>Motivo:</strong> " + noDataMsg);
+      noDataDetailParts.push("<strong>Ricerca AI comparabili:</strong> " + (aiResult.ai_disclaimer ? escapeHTML(aiResult.ai_disclaimer) : "nessuna informazione restituita dal motore."));
+      if(aiResult.search_coverage_note) noDataDetailParts.push("<em>" + escapeHTML(aiResult.search_coverage_note) + "</em>");
+      noDataDetailParts.push("<strong>Comparabili IMMONOVA interni:</strong> " + (internalResult.pricePerSqm ? formatEuro(internalResult.pricePerSqm) + "/mq (" + (internalResult.geography_level || "n/d") + ")" : "nessuno trovato nello stesso comune."));
+      noDataDetailParts.push("<strong>Dato di mercato pubblico:</strong> " + (marketResult.value ? formatEuro(marketResult.value) + "/mq (" + (marketResult.geography_level || "livello non specificato") + (marketResult.rejected_as_too_broad ? ", non iper-locale" : "") + ")" : "nessuna fonte disponibile per questa zona/paese (vedi nota più sotto se l'elenco fonti non copre l'Italia)."));
+      if(pricesPerSqm.length && !equivSurface) noDataDetailParts.push("<em>Prezzi/mq trovati ma non utilizzabili: manca la superficie (compila \"Superficie interna\" o i dati catastali).</em>");
+      resultDetail.innerHTML = noDataDetailParts.join("<br>");
+
       lastCalculation = {
         comparables_snapshot: { internal: dropPriceOutliers(internalResult.comparables), internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, internal_geo_radius_km: internalResult.geo_radius_km, geocoded_lat: geocodeResult.lat, geocoded_lng: geocodeResult.lng, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition },
         ai_comparables: dropPriceOutliers(aiResult.comparables), ai_narrative: aiResult,
