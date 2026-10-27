@@ -146,6 +146,9 @@ body::after{
   color:var(--c-5a4a2a);
   line-height:1.7;
 }
+.cadastral-unit-block{margin-top:22px}
+.cadastral-unit-block:first-child{margin-top:0}
+.cadastral-unit-heading{font-size:13px;font-weight:600;color:var(--c-5b461d);margin-bottom:10px}
 .cadastral-value-box{
   margin-top:16px;
   padding:24px;
@@ -155,6 +158,8 @@ body::after{
 .cadastral-value-label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--c-4f4125);margin-bottom:8px}
 .cadastral-value-amount{font-size:24px;color:var(--c-5b461d);font-weight:300;margin-bottom:8px}
 .cadastral-value-detail{font-size:12px;color:var(--c-4f4125);line-height:1.7}
+.cadastral-value-breakdown{margin:0 0 10px;padding-left:18px}
+.cadastral-value-breakdown li{margin-bottom:4px}
 
 .empty-state{
   padding:30px;
@@ -235,6 +240,37 @@ function formatDate(v){
 function infoItem(label, value){
   if(value === null || value === undefined || value === "") return "";
   return '<div class="info-item"><div class="info-label">' + escapeHTML(label) + '</div><div class="info-value">' + escapeHTML(value) + '</div></div>';
+}
+
+/* ---- Moltiplicatori di rivalutazione per categoria catastale (D.P.R. 138/1998 + D.L.
+   262/2006 art. 2 c. 45): stessa funzione, verificata con ricerca, gia' in uso in
+   valuation-form.html -- portata qui identica perche' il database salva solo il VALORE
+   CATASTALE TOTALE gia' calcolato (somma di tutte le sezioni), non il dettaglio per sezione:
+   per mostrare "tutte le voci catastali" nel riepilogo (sezione principale + ogni sezione
+   aggiuntiva, ciascuna con il proprio valore), il dettaglio va ricalcolato qui dai dati grezzi
+   salvati (categoria/rendita di ciascuna sezione), non solo mostrato come un unico numero. ---- */
+function classifyCadastralCategory(rawCategory, isPrimaCasa){
+  var txt = String(rawCategory || "").trim().toUpperCase();
+  var m = txt.match(/^([A-E])\s*\/?\s*(\d+)?/);
+  if(!m) return null;
+  var letter = m[1], number = m[2] ? parseInt(m[2], 10) : null;
+
+  if(letter === "A"){
+    if(number === 10) return { group:"A/10", multiplier:60 };
+    return { group:"A (escluso A/10)", multiplier: isPrimaCasa ? 110 : 120 };
+  }
+  if(letter === "B") return { group:"B", multiplier:140 };
+  if(letter === "C"){
+    if(number === 1) return { group:"C/1", multiplier:40.8 };
+    var isPertinenzaPrimaCasa = isPrimaCasa && (number === 2 || number === 6 || number === 7);
+    return {
+      group: "C" + (number != null ? "/" + number : "") + (isPertinenzaPrimaCasa ? " (pertinenza prima casa)" : ""),
+      multiplier: isPertinenzaPrimaCasa ? 110 : 120
+    };
+  }
+  if(letter === "D") return { group:"D" + (number === 5 ? "/5" : ""), multiplier:60 };
+  if(letter === "E") return { group:"E", multiplier:40.8 };
+  return null;
 }
 
 async function checkAuth(){
@@ -511,31 +547,99 @@ async function loadAndRender(){
       + '</div>';
   }
 
-  var hasCadastral = v.cadastral_category || v.cadastral_income || v.cadastral_surface || v.cadastral_sheet;
+  // 11. Riferimento fiscale / Dati catastali -- CORRETTO (27/10/2026): prima mostrava SOLO la
+  // sezione principale, ignorando del tutto "cadastral_additional_sections" (dependance,
+  // garage, cantina, altre particelle...) anche quando presenti e salvate -- il riepilogo
+  // doveva riportare TUTTE le voci catastali, non solo la prima. Ora elenca ogni sezione (la
+  // principale + tutte le aggiuntive) con i propri dati, e ricalcola qui il dettaglio completo
+  // del valore catastale per ciascuna (il database salva solo il totale finale, non il
+  // dettaglio per sezione).
+  var additionalSections = Array.isArray(v.cadastral_additional_sections) ? v.cadastral_additional_sections : [];
+  var primaryHasData = v.cadastral_municipality || v.cadastral_category || v.cadastral_income || v.cadastral_surface || v.cadastral_sheet || v.cadastral_parcel || v.cadastral_subalterno;
+  var hasCadastral = primaryHasData || additionalSections.length > 0;
+
   if(hasCadastral){
     html += '<div class="section">'
       + '<div class="section-kicker">11. Riferimento Fiscale</div>'
       + '<div class="section-title">Dati Catastali</div>'
-      + '<div class="cadastral-note">Il valore catastale è un dato fiscale, utilizzato per il calcolo di imposte e tasse: è per natura distinto dal valore di mercato riportato sopra, e i due non vanno confusi tra loro.</div>'
-      + '<div class="info-grid">'
-      + infoItem("Comune catastale", v.cadastral_municipality)
-      + infoItem("Categoria catastale", v.cadastral_category)
-      + infoItem("Rendita catastale", v.cadastral_income ? formatEuro(v.cadastral_income) : "")
-      + infoItem("Superficie catastale", v.cadastral_surface ? v.cadastral_surface + " mq" : "")
-      + infoItem("Foglio", v.cadastral_sheet)
-      + infoItem("Particella", v.cadastral_parcel)
-      + infoItem("Subalterno", v.cadastral_subalterno)
-      + (v.cadastral_is_prima_casa ? infoItem("Agevolazione", "Prima casa") : "")
-      + '</div>';
-    if(v.cadastral_value){
-      html += '<div class="cadastral-value-box">'
-        + '<div class="cadastral-value-label">Valore catastale</div>'
-        + '<div class="cadastral-value-amount">' + formatEuro(v.cadastral_value) + '</div>'
-        + '<div class="cadastral-value-detail">Rendita catastale ' + formatEuro(v.cadastral_income) + ' × 1,05 (rivalutazione) × '
-        + escapeHTML(String(v.cadastral_multiplier)) + ' (moltiplicatore categoria ' + escapeHTML(v.cadastral_category||"-") + (v.cadastral_is_prima_casa ? ", prima casa" : "") + ').'
-        + '<br>Dato fiscale (D.L. 262/2006, art. 2 c. 45) usato per imposte e tasse: distinto dal valore di mercato riportato in apertura di documento.</div>'
+      + '<div class="cadastral-note">Il valore catastale è un dato fiscale, utilizzato per il calcolo di imposte e tasse: è per natura distinto dal valore di mercato riportato sopra, e i due non vanno confusi tra loro.</div>';
+
+    // Sezione principale
+    if(primaryHasData){
+      html += '<div class="cadastral-unit-block">'
+        + (additionalSections.length ? '<div class="cadastral-unit-heading">Sezione principale</div>' : '')
+        + '<div class="info-grid">'
+        + infoItem("Comune catastale", v.cadastral_municipality)
+        + infoItem("Categoria catastale", v.cadastral_category)
+        + infoItem("Rendita catastale", v.cadastral_income ? formatEuro(v.cadastral_income) : "")
+        + infoItem("Superficie catastale", v.cadastral_surface ? v.cadastral_surface + " mq" : "")
+        + infoItem("Foglio", v.cadastral_sheet)
+        + infoItem("Particella", v.cadastral_parcel)
+        + infoItem("Subalterno", v.cadastral_subalterno)
+        + (v.cadastral_is_prima_casa ? infoItem("Agevolazione", "Prima casa") : "")
+        + '</div>'
         + '</div>';
     }
+
+    // Tutte le sezioni catastali aggiuntive (dependance, garage, cantina, altre particelle...)
+    additionalSections.forEach(function(s, i){
+      html += '<div class="cadastral-unit-block">'
+        + '<div class="cadastral-unit-heading">' + escapeHTML(s.label || ("Sezione catastale " + (i + 2))) + '</div>'
+        + '<div class="info-grid">'
+        + infoItem("Comune catastale", s.municipality)
+        + infoItem("Categoria catastale", s.category)
+        + infoItem("Rendita catastale", s.income ? formatEuro(s.income) : "")
+        + infoItem("Superficie catastale", s.surface ? s.surface + " mq" : "")
+        + infoItem("Foglio", s.sheet)
+        + infoItem("Particella", s.parcel)
+        + infoItem("Subalterno", s.subalterno)
+        + (s.is_prima_casa ? infoItem("Agevolazione", "Prima casa (pertinenza)") : "")
+        + '</div>'
+        + '</div>';
+    });
+
+    // Valore catastale totale, ricalcolato qui sezione per sezione (il database salva solo il
+    // totale finale in v.cadastral_value: qui si ricostruisce il dettaglio completo).
+    var breakdown = [];
+    var total = 0;
+    if(v.cadastral_category && v.cadastral_income){
+      var primaryClass = classifyCadastralCategory(v.cadastral_category, !!v.cadastral_is_prima_casa);
+      if(primaryClass){
+        var primaryValue = v.cadastral_income * 1.05 * primaryClass.multiplier;
+        total += primaryValue;
+        breakdown.push({
+          label: additionalSections.length ? "Sezione principale" : "Immobile",
+          detail: "Rendita " + formatEuro(v.cadastral_income) + " × 1,05 × " + primaryClass.multiplier + " (cat. " + primaryClass.group + (v.cadastral_is_prima_casa ? ", prima casa" : "") + ") = " + formatEuro(primaryValue)
+        });
+      }
+    }
+    additionalSections.forEach(function(s, i){
+      if(s.category && s.income){
+        var cls = classifyCadastralCategory(s.category, !!s.is_prima_casa);
+        if(cls){
+          var val = s.income * 1.05 * cls.multiplier;
+          total += val;
+          breakdown.push({
+            label: s.label || ("Sezione catastale " + (i + 2)),
+            detail: "Rendita " + formatEuro(s.income) + " × 1,05 × " + cls.multiplier + " (cat. " + cls.group + (s.is_prima_casa ? ", prima casa" : "") + ") = " + formatEuro(val)
+          });
+        }
+      }
+    });
+
+    if(breakdown.length){
+      var roundedTotal = Math.round(total * 100) / 100;
+      html += '<div class="cadastral-value-box">'
+        + '<div class="cadastral-value-label">Valore catastale' + (breakdown.length > 1 ? ' totale (' + breakdown.length + ' sezioni)' : '') + '</div>'
+        + '<div class="cadastral-value-amount">' + formatEuro(roundedTotal) + '</div>'
+        + '<div class="cadastral-value-detail">'
+        + (breakdown.length > 1
+            ? '<ul class="cadastral-value-breakdown">' + breakdown.map(function(b){ return '<li>' + escapeHTML(b.label) + ': ' + b.detail + '</li>'; }).join("") + '</ul>'
+            : breakdown.map(function(b){ return b.detail; }).join(""))
+        + 'Dato fiscale (D.L. 262/2006, art. 2 c. 45) usato per imposte e tasse: distinto dal valore di mercato riportato in apertura di documento.</div>'
+        + '</div>';
+    }
+
     html += '</div>';
   }
 
