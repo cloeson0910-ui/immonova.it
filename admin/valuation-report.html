@@ -176,7 +176,8 @@ body::after{
 .visura-attachment-page{page-break-after:always;margin-top:16px}
 .visura-attachment-page:last-child{page-break-after:auto}
 .visura-embed-img{max-width:100%;display:block;margin-top:10px;border:1px solid rgba(166,127,52,.28)}
-.visura-embed-pdf{width:100%;height:900px;border:1px solid rgba(166,127,52,.28);margin-top:10px}
+.visura-pdf-canvas{max-width:100%;height:auto;display:block;margin-top:10px;border:1px solid rgba(166,127,52,.28);page-break-inside:avoid}
+.visura-pdf-loading{font-size:12px;color:#8a7458;margin-top:10px}
 
 @media print{
   .toolbar{display:none}
@@ -192,7 +193,6 @@ body::after{
   .section{margin-top:14mm;page-break-inside:avoid}
   .cover{padding:20mm 0 14mm}
   .visura-attachments-section{page-break-inside:auto}
-  .visura-embed-pdf{height:250mm}
 }
 
 @media(max-width:700px){
@@ -217,6 +217,7 @@ body::after{
   <div class="empty-state" style="margin-top:60px">Caricamento...</div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
@@ -311,6 +312,42 @@ function cadastralSurfaceWeight(rawCategory){
     return { weight:0, label:"F (categoria catastale fittizia) — 0%" };
   }
   return { weight:1, label: letter + (number != null ? "/" + number : "") + " — 100%" };
+}
+
+/* ---- Rendering PDF allegati via pdf.js (27/10/2026, fix urgente: vedi commento sopra nel
+   punto di chiamata). Niente plugin nativo del browser, nessun blocco della pagina: ogni
+   pagina del PDF diventa un semplice <canvas>, stampabile come qualsiasi immagine. Ogni file è
+   gestito in modo indipendente/non bloccante: se uno fallisce, gli altri e il resto della
+   pagina (tasto Stampa incluso) restano comunque utilizzabili. ---- */
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+async function renderVisuraPdfPages(){
+  var containers = document.querySelectorAll(".visura-pdf-pages");
+  containers.forEach(async function(el){
+    var url = el.getAttribute("data-pdf-url");
+    if(!url) return;
+    try{
+      if(!window.pdfjsLib) throw new Error("libreria di lettura PDF non disponibile");
+      var pdf = await pdfjsLib.getDocument(url).promise;
+      el.innerHTML = "";
+      for(var p = 1; p <= pdf.numPages; p++){
+        var page = await pdf.getPage(p);
+        var viewport = page.getViewport({ scale: 2 });
+        var canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.className = "visura-pdf-canvas";
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport }).promise;
+        el.appendChild(canvas);
+      }
+    }catch(err){
+      el.innerHTML = '<div style="font-size:11px;color:#a33">Anteprima non disponibile per questa scansione (' +
+        escapeHTML(err && err.message ? err.message : "errore sconosciuto") +
+        '). Il file resta comunque scaricabile dal link qui sotto.</div>';
+    }
+  });
 }
 
 async function checkAuth(){
@@ -738,10 +775,15 @@ async function loadAndRender(){
 
   // Allegato: scansioni visura catastale, stampate FISICAMENTE come pagine finali del
   // documento (27/10/2026, richiesta esplicita dell'utente: "mi serve che vengano stampate
-  // in automatico quando stampo la valutazione" -- i link da soli non bastano). Le immagini
-  // vengono incorporate come <img>, i PDF come <embed> (il visualizzatore nativo dei browser
-  // Chromium-based usati per "Stampa / Salva PDF" li rende e li stampa correttamente); resta
-  // comunque un link di apertura diretta come ripiego se l'anteprima non si carica.
+  // in automatico quando stampo la valutazione" -- i link da soli non bastano).
+  //
+  // FIX URGENTE (27/10/2026, stesso giorno): la prima versione usava <embed type="application/
+  // pdf"> per i PDF -- il visualizzatore PDF nativo del browser dentro un <embed> e' pesante,
+  // prende il focus e in pratica bloccava/rendeva inutilizzabile il resto della pagina (il
+  // tasto Stampa sembrava "disabilitato"). Sostituito con pdf.js: ogni pagina del PDF viene
+  // disegnata lato client su un <canvas> semplice (nessun plugin nativo, nessun overlay, nessun
+  // blocco) -- stampa in modo affidabile come qualsiasi altra immagine della pagina. Le
+  // immagini restano semplici <img>, mai state un problema.
   var allVisuraFiles = Array.isArray(v.cadastral_visura_files) ? v.cadastral_visura_files : [];
   if(allVisuraFiles.length){
     html += '<div class="section visura-attachments-section" style="page-break-before:always">'
@@ -751,7 +793,7 @@ async function loadAndRender(){
           var name = f.name || ("Scansione " + (i + 1));
           var isPdf = /\.pdf(\?|$)/i.test(url) || /pdf/i.test(name);
           var body = isPdf
-            ? '<embed src="' + escapeHTML(url) + '" type="application/pdf" class="visura-embed-pdf">'
+            ? '<div class="visura-pdf-pages" id="visuraPdfPages_' + i + '" data-pdf-url="' + escapeHTML(url) + '"><div class="visura-pdf-loading">Caricamento scansione…</div></div>'
             : '<img src="' + escapeHTML(url) + '" class="visura-embed-img" alt="' + escapeHTML(name) + '">';
           return '<div class="visura-attachment-page">'
             + '<div class="cadastral-unit-heading">' + escapeHTML(name) + '</div>'
@@ -765,6 +807,12 @@ async function loadAndRender(){
   html += '<div class="footer-note">IMMONOVA · Off Market Consulting</div>';
 
   pageContent.innerHTML = html;
+
+  /* ---- Rende i PDF allegati come immagini (canvas) via pdf.js, non bloccante: il tasto
+     Stampa resta sempre cliccabile mentre le scansioni caricano in background. Se una scansione
+     non si riesce a leggere (CORS, file corrotto, ecc.) resta comunque il link di apertura
+     diretta sotto, mai una pagina bianca senza spiegazione. ---- */
+  if(allVisuraFiles.length) renderVisuraPdfPages();
 }
 
 (async function init(){
