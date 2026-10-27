@@ -13,6 +13,15 @@
      label    -- etichetta italiana di default (fallback se la traduzione i18n non e' disponibile)
      i18nKey  -- chiave data-i18n gia' usata altrove per questa voce di menu, se esiste (per
                  riusare le traduzioni esistenti nel menu dinamico); null se non ne ha una propria
+
+   NOTA (27/10/2026) su "Log Accessi": la voce sotto compare nel menu Owner (quindi, nel
+   funzionamento normale di questo catalogo, per chi ha is_platform_owner=true o un grant
+   esplicito) -- ma access-logs.html fa ANCHE un controllo proprio, indipendente da questo menu,
+   che blocca chiunque non sia esattamente claudio.romano@bluewin.ch, anche se per errore
+   qualcuno venisse granted qui. Richiesta esplicita dell'utente: "solo per me non per tutti gli
+   admin" -- il catalogo da solo non basterebbe a garantirlo (un altro owner futuro o un grant
+   manuale lo vedrebbe comunque nel menu), quindi la vera barriera resta dentro la pagina stessa
+   (vedi ALLOWED_EMAIL in access-logs.html) + la RLS sul DB, non questa voce di menu.
    ============================================================================================ */
 var PAGE_CATALOG = [
   {section:"Attività", key:"calendar.html", label:"Calendario", i18nKey:"nav_calendar"},
@@ -52,5 +61,6 @@ var PAGE_CATALOG = [
   {section:"Owner", key:"statistics.html", label:"Statistiche", i18nKey:"nav_statistics"},
   {section:"Owner", key:"meta-ads-planner.html", label:"Test A/B Meta Ads", i18nKey:"nav_ads_ab"},
   {section:"Owner", key:"watermark-retroattivo.html", label:"Watermark Retroattivo", i18nKey:"nav_watermark_retro"},
-  {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk"}
+  {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk"},
+  {section:"Owner", key:"access-logs.html", label:"Log Accessi", i18nKey:null}
 ];
