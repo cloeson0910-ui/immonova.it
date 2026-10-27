@@ -481,12 +481,26 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
         <textarea id="notes" data-i18n-placeholder="ph_notes" placeholder="Dettagli emersi dal sopralluogo, richieste del venditore..."></textarea>
       </div>
 
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Caratteristiche Distintive (Bonus/Malus)</h2>
+      <p class="section-note">Le percentuali indicate accanto a ciascuna voce sono un riferimento tratto dalla prassi estimativa comune (range tipici, non una tabella fissa/ufficiale): servono solo da guida. Il valore che conta è quello che inserisci tu nel campo accanto — solo chi è sul posto può davvero giudicare se una caratteristica merita un apprezzamento o un deprezzamento, e di quanto. Lascia vuoto o a 0 ciò che non si applica.</p>
+      <div id="bonusMalusList"></div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="secondary-btn" id="addBonusMalusBtn">+ Aggiungi caratteristica</button>
+        <span id="bonusMalusTotal" style="font-size:14px;font-weight:600;color:#5b461d"></span>
+      </div>
+    </div>
+
+    <div class="section">
       <button type="button" class="secondary-btn" id="calculateBtn" data-i18n="btn_calculate">Calcola Valutazione</button>
 
       <div class="result-box" id="resultBox">
         <div class="result-title" data-i18n="result_title">Valore di mercato stimato</div>
         <div class="result-range" id="resultRange">—</div>
         <div class="result-detail" id="resultDetail"></div>
+        <div id="bonusMalusResultNote" style="margin-top:8px;font-size:12.5px;color:#5a4a2a"></div>
       </div>
     </div>
 
@@ -1501,6 +1515,218 @@ function renderCommercialSurfaceBox(){
   if(el) el.addEventListener("input", renderCommercialSurfaceBox);
 });
 
+/* ---- Caratteristiche distintive / Bonus-Malus (27/10/2026) ----
+   Checklist di aggiustamento percentuale del valore stimato, costruita sulle voci piu'
+   attestate nella prassi estimativa italiana (scheda di comparazione a punteggio /
+   coefficienti di merito), verificate con ricerca prima di scrivere qualsiasi percentuale --
+   vedi i range_hint sotto, tutti presentati come indicativi, MAI come tabella fissa/ufficiale
+   (nessuna fonte, nemmeno l'Agenzia delle Entrate, pubblica un tabellone unico: lo confermano
+   piu' fonti indipendenti). La "unicita'/pregio architettonico" richiesta esplicitamente e'
+   trattata come voce distinta, con range meno attestato (una sola fonte dettagliata trovata),
+   segnalato come tale nel suo hint.
+   SCELTA ESPLICITA DELL'UTENTE: le percentuali NON sono precompilate con un valore scelto da
+   noi -- restano vuote (0%) finche' l'agente, che e' fisicamente sul posto, non decide lui
+   stesso quanto merito o demerito attribuire a ciascuna voce in base a cio' che vede. Il
+   sistema suggerisce solo il RANGE tipico come testo di aiuto, mai un numero preselezionato.
+   Metodo di combinazione: somma algebrica semplice delle percentuali (piu' intuitivo e
+   trasparente per l'agente rispetto al prodotto di coefficienti usato in ambito accademico,
+   a scapito di un rigore matematico marginale per i range in gioco qui) applicata al valore
+   centrale e all'intervallo gia' calcolati dal metodo comparativo/reddituale -- non li
+   sostituisce, li corregge. ---- */
+var BONUS_MALUS_PRESETS = [
+  { key:"piano", label:"Piano (con/senza ascensore)",
+    range_hint:"indicativo: da circa −30% a +20% — vedi dettaglio per fascia",
+    reference:[
+      "Seminterrato: −25%",
+      "Piano terra/rialzato: −10% (−20% se senza giardino)",
+      "1° piano: −10%",
+      "2° piano: −3% (con ascensore) / −15% (senza)",
+      "3° piano: 0% (con ascensore) / −20% (senza)",
+      "Piani alti (oltre il 3°): +5% (con ascensore) / −30% (senza)",
+      "Ultimo piano: +10% (con ascensore) / −30% (senza)",
+      "Attico: +20% (con ascensore) / −20% a −25% (senza ascensore)"
+    ] },
+  { key:"esposizione", label:"Esposizione / luminosità",
+    range_hint:"indicativo: da circa −10% a +10% — vedi dettaglio",
+    reference:[
+      "Molto luminoso: +10%",
+      "Luminoso: +5%",
+      "Scarso/assente: −5% a −10%"
+    ] },
+  { key:"vista", label:"Vista / affaccio",
+    range_hint:"indicativo: da circa −10% a +10% — vedi dettaglio",
+    reference:[
+      "Esterna panoramica: +10%",
+      "Esterna: +5%",
+      "Mista: 0%",
+      "Interna: −5%",
+      "Completamente interna: −10%"
+    ] },
+  { key:"stato", label:"Stato di conservazione",
+    range_hint:"indicativo: da circa −10% a +10/15% — vedi dettaglio",
+    reference:[
+      "Da ristrutturare: −10%",
+      "Buono stato: 0%",
+      "Ristrutturato: +5%",
+      "Finemente ristrutturato / nuova costruzione: +10% (una fonte indica fino a +15%)"
+    ] },
+  { key:"eta", label:"Età dell'edificio × stato di conservazione (vetustà)",
+    range_hint:"indicativo: da circa −15% a +10% — vedi dettaglio incrociato per fascia di età e stato",
+    reference:[
+      "1–20 anni: ottimo 0% · normale 0% · scadente −5%",
+      "20–40 anni: ottimo +5% · normale 0% · scadente −10%",
+      "Oltre 40 anni: ottimo +10% · normale 0% · scadente −15%"
+    ] },
+  { key:"pregio", label:"Pregio architettonico / unicità",
+    range_hint:"indicativo, meno attestato in letteratura (una sola fonte dettagliata trovata) — vedi dettaglio",
+    reference:[
+      "Edificio di pregio, stato ottimo: +20%",
+      "Edificio di pregio, stato normale: +10%",
+      "Edificio di pregio, stato scadente: +5%",
+      "Attenzione: confidenza media — a differenza della tabella età×stato, qui il pregio resta un bonus anche con stato scadente; usalo solo se l'unicità è reale e riconoscibile, non per compensare un cattivo stato di conservazione già considerato sopra"
+    ] },
+  { key:"impianti", label:"Impianti / riscaldamento",
+    range_hint:"indicativo: da circa −5% a +5% — vedi dettaglio",
+    reference:[
+      "Autonomo: +5%",
+      "Centralizzato con contabilizzatore: +2%",
+      "Centralizzato (senza contabilizzatore): 0%",
+      "Assente: −5%"
+    ] },
+  { key:"pertinenze", label:"Pertinenze (box, giardino, cantina non già conteggiati altrove)",
+    range_hint:"indicativo: circa +5% a +10% per voce — vedi dettaglio",
+    reference:[
+      "Circa +5% a +10% per ciascuna pertinenza non già valorizzata a mq altrove nel form (il box auto è di norma valutato a parte, a mq, non con una %)",
+      "Range meno uniforme tra le fonti rispetto alle altre voci: usa il buon senso in base al mercato locale"
+    ] }
+];
+
+var bonusMalusState = [];
+
+function genBonusMalusId(){ return "bm_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8); }
+
+function initBonusMalusDefaults(){
+  bonusMalusState = BONUS_MALUS_PRESETS.map(function(p){
+    return { id: genBonusMalusId(), key:p.key, label:p.label, range_hint:p.range_hint, reference:p.reference||[], pct:"", custom:false };
+  });
+}
+
+function addBonusMalusCustom(initial){
+  bonusMalusState.push(Object.assign({
+    id: genBonusMalusId(), key:null, label:"", range_hint:"caratteristica specifica di questo immobile, non in elenco", pct:"", custom:true
+  }, initial || {}));
+  renderBonusMalusList();
+}
+
+function getBonusMalusTotalPct(){
+  return bonusMalusState.reduce(function(sum, item){
+    var n = Number(item.pct);
+    return sum + (item.pct !== "" && !isNaN(n) ? n : 0);
+  }, 0);
+}
+
+function renderBonusMalusList(){
+  var container = document.getElementById("bonusMalusList");
+  if(!container) return;
+  container.innerHTML = bonusMalusState.map(function(item){
+    var referenceHTML = (item.reference && item.reference.length)
+      ? '<ul class="bm-reference" style="margin:6px 0 0;padding-left:16px;font-size:11.5px;color:#8a7458;line-height:1.6">' +
+          item.reference.map(function(line){ return '<li>' + escapeHTML(line) + '</li>'; }).join("") +
+        '</ul>'
+      : (item.range_hint ? '<div style="font-size:11px;color:#8a7458;margin-top:4px">' + escapeHTML(item.range_hint) + '</div>' : '');
+    return '' +
+      '<div class="bonus-malus-row" data-bm-id="' + item.id + '" style="display:grid;grid-template-columns:1fr 110px' + (item.custom ? ' 32px' : '') + ';gap:10px;align-items:start;padding:12px 0;border-bottom:1px solid rgba(166,127,52,.15)">' +
+        (item.custom
+          ? '<input type="text" class="bm-label" data-bm="' + item.id + '" placeholder="Es. Angolo cottura di pregio, soffitti a volta..." value="' + escapeHTML(item.label || "") + '" style="padding:8px;border:1px solid rgba(166,127,52,.3);background:#fffaf0">'
+          : '<div><div style="font-size:13.5px;color:#4a3c1f;font-weight:600">' + escapeHTML(item.label) + '</div>' + referenceHTML + '</div>')
+        +
+        '<input type="number" class="bm-pct" data-bm="' + item.id + '" step="1" placeholder="0%" value="' + escapeHTML(item.pct === "" ? "" : String(item.pct)) + '" style="padding:8px;border:1px solid rgba(166,127,52,.3);background:#fffaf0;text-align:right;align-self:start">' +
+        (item.custom ? '<button type="button" class="remove-bonus-malus-btn" data-bm="' + item.id + '" title="Rimuovi" style="border:none;background:none;color:#a44;cursor:pointer;font-size:16px;align-self:start">×</button>' : '') +
+      '</div>';
+  }).join("");
+  renderBonusMalusTotal();
+}
+
+function renderBonusMalusTotal(){
+  var totalEl = document.getElementById("bonusMalusTotal");
+  if(!totalEl) return;
+  var total = getBonusMalusTotalPct();
+  totalEl.textContent = total !== 0 ? "Aggiustamento totale: " + (total > 0 ? "+" : "") + total.toFixed(1) + "%" : "";
+  applyBonusMalusToResult();
+}
+
+function collectBonusMalusPayload(){
+  return bonusMalusState
+    .map(function(item){ return { key:item.key, label:(item.label||"").trim(), pct: item.pct === "" ? null : Number(item.pct) }; })
+    .filter(function(item){ return item.pct != null && item.pct !== 0 && (item.key || item.label); });
+}
+
+function loadBonusMalusFromValuation(data){
+  var stored = Array.isArray(data && data.bonus_malus_items) ? data.bonus_malus_items : [];
+  initBonusMalusDefaults();
+  stored.forEach(function(s){
+    var preset = bonusMalusState.find(function(b){ return b.key && b.key === s.key; });
+    if(preset){
+      preset.pct = s.pct != null ? s.pct : "";
+    }else{
+      addBonusMalusCustom({ label: s.label || "", pct: s.pct != null ? s.pct : "" });
+    }
+  });
+  renderBonusMalusList();
+}
+
+document.getElementById("bonusMalusList").addEventListener("input", function(e){
+  var target = e.target;
+  var bmId = target.dataset.bm;
+  if(!bmId) return;
+  var item = bonusMalusState.find(function(b){ return b.id === bmId; });
+  if(!item) return;
+  if(target.classList.contains("bm-label")) item.label = target.value;
+  else if(target.classList.contains("bm-pct")) item.pct = target.value;
+  renderBonusMalusTotal();
+});
+
+document.getElementById("bonusMalusList").addEventListener("click", function(e){
+  var removeBtn = e.target.closest(".remove-bonus-malus-btn");
+  if(!removeBtn) return;
+  var bmId = removeBtn.dataset.bm;
+  bonusMalusState = bonusMalusState.filter(function(b){ return b.id !== bmId; });
+  renderBonusMalusList();
+});
+
+document.getElementById("addBonusMalusBtn").addEventListener("click", function(){
+  addBonusMalusCustom();
+});
+
+/* ---- Applica l'aggiustamento bonus/malus al risultato gia' calcolato (metodo comparativo +
+   reddituale), senza dover rilanciare la ricerca comparabili/AI: parte sempre dai valori GREZZI
+   (pre bonus/malus, salvati in lastCalculation.raw_*) cosi' cambiare una percentuale non
+   accumula aggiustamenti su aggiustamenti precedenti. Se l'agente non ha ancora premuto
+   "Calcola Valutazione" in questa sessione (lastCalculation vuoto), non fa nulla: si attiva
+   al primo calcolo e poi resta reattiva a ogni modifica della checklist. ---- */
+function applyBonusMalusToResult(){
+  if(!lastCalculation || lastCalculation.raw_estimated_value_min == null) return;
+  var totalPct = getBonusMalusTotalPct();
+  var factor = 1 + (totalPct / 100);
+
+  lastCalculation.estimated_value_min = lastCalculation.raw_estimated_value_min * factor;
+  lastCalculation.estimated_value_max = lastCalculation.raw_estimated_value_max * factor;
+  lastCalculation.estimated_value_per_sqm = lastCalculation.raw_estimated_value_per_sqm != null ? lastCalculation.raw_estimated_value_per_sqm * factor : null;
+  lastCalculation.suggested_listing_price = lastCalculation.raw_suggested_listing_price != null ? Math.round(lastCalculation.raw_suggested_listing_price * factor / 100) * 100 : null;
+  lastCalculation.bonus_malus_total_pct = totalPct;
+
+  resultRange.textContent = formatEuro(lastCalculation.estimated_value_min) + " – " + formatEuro(lastCalculation.estimated_value_max);
+  var noteEl = document.getElementById("bonusMalusResultNote");
+  if(noteEl){
+    noteEl.textContent = totalPct !== 0
+      ? "Valore base (prima dell'aggiustamento): " + formatEuro(lastCalculation.raw_estimated_value_min) + " – " + formatEuro(lastCalculation.raw_estimated_value_max) + ". Aggiustamento bonus/malus applicato: " + (totalPct > 0 ? "+" : "") + totalPct.toFixed(1) + "%."
+      : "";
+  }
+}
+
+initBonusMalusDefaults();
+renderBonusMalusList();
+
 calculateBtn.addEventListener("click", async function(){
   var category = val("category");
   var municipality = val("municipality");
@@ -1726,11 +1952,18 @@ calculateBtn.addEventListener("click", async function(){
       valuation_reddituale_min: reddituraleMin, valuation_reddituale_max: reddituraleMax,
       estimated_value_min: finalMin, estimated_value_max: finalMax,
       estimated_value_per_sqm: equivSurface ? centralValue/equivSurface : null,
-      suggested_listing_price: suggestedListingPrice
+      suggested_listing_price: suggestedListingPrice,
+      // ---- Valori GREZZI (prima di qualsiasi aggiustamento bonus/malus): base di partenza
+      // fissa su cui si applica sempre la percentuale della checklist, cosi' modificarla non
+      // accumula aggiustamenti su aggiustamenti precedenti. ----
+      raw_estimated_value_min: finalMin, raw_estimated_value_max: finalMax,
+      raw_estimated_value_per_sqm: equivSurface ? centralValue/equivSurface : null,
+      raw_suggested_listing_price: suggestedListingPrice
     };
 
     resultBox.classList.add("visible");
     resultRange.textContent = formatEuro(finalMin) + " – " + formatEuro(finalMax);
+    applyBonusMalusToResult();
 
     var detailParts = [];
     var discardedCount = pricesPerSqm.length - trimmedPricesPerSqm.length;
@@ -2058,9 +2291,17 @@ async function loadValuationForEdit(){
       valuation_comparativo_min: data.valuation_comparativo_min, valuation_comparativo_max: data.valuation_comparativo_max,
       valuation_reddituale_min: data.valuation_reddituale_min, valuation_reddituale_max: data.valuation_reddituale_max,
       suggested_listing_price: data.suggested_listing_price,
-      ai_narrative: data.ai_narrative, ai_comparables: data.ai_comparables
+      ai_narrative: data.ai_narrative, ai_comparables: data.ai_comparables,
+      // ---- record pre-esistenti senza raw_* (salvati prima di questa funzione): fallback sul
+      // valore gia' salvato come se fosse grezzo, cosi' la checklist bonus/malus parte comunque
+      // da una base valida invece di restare inattiva. ----
+      raw_estimated_value_min: data.raw_estimated_value_min != null ? data.raw_estimated_value_min : data.estimated_value_min,
+      raw_estimated_value_max: data.raw_estimated_value_max != null ? data.raw_estimated_value_max : data.estimated_value_max,
+      raw_estimated_value_per_sqm: data.raw_estimated_value_per_sqm != null ? data.raw_estimated_value_per_sqm : data.estimated_value_per_sqm,
+      raw_suggested_listing_price: data.raw_suggested_listing_price != null ? data.raw_suggested_listing_price : data.suggested_listing_price
     };
   }
+  loadBonusMalusFromValuation(data);
 
   fpLoadExisting(data.floorplan_image_url, data.floorplan_annotations);
 }
@@ -2278,7 +2519,13 @@ form.addEventListener("submit", async function(event){
     payload.ai_narrative = lastCalculation.ai_narrative;
     payload.ai_comparables = lastCalculation.ai_comparables;
     payload.valuation_generated_at = new Date().toISOString();
+    payload.raw_estimated_value_min = lastCalculation.raw_estimated_value_min;
+    payload.raw_estimated_value_max = lastCalculation.raw_estimated_value_max;
+    payload.raw_estimated_value_per_sqm = lastCalculation.raw_estimated_value_per_sqm;
+    payload.raw_suggested_listing_price = lastCalculation.raw_suggested_listing_price;
   }
+  payload.bonus_malus_items = collectBonusMalusPayload();
+  payload.bonus_malus_total_pct = getBonusMalusTotalPct();
 
   if(!valuationId){
     payload.created_by = currentUser.id;
