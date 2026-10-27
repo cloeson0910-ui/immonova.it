@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log Accessi — IMMONOVA</title>
+<!--
+  27/10/2026: pagina nuova, richiesta esplicita dell'utente ("una pagina che mi controlli
+  tutti i log dei miei utenti registrati per vedere ogni quanto tempo entrano in dash").
+  Scope confermato dall'utente: SOLO accessi/login e frequenza (non pagine/strumenti visitati,
+  quello eventualmente in un secondo momento). Visibile SOLO a claudio.romano@bluewin.ch, non a
+  tutti gli admin -- protezione DOPPIA: 1) RLS sul DB (vedi restrict_access_logs_to_claudio.sql,
+  l'utente deve eseguirlo lui stesso via SQL Editor perché il tool di migrazione automatica si è
+  bloccato in questa sessione), 2) gate client-side qui sotto (checkAccess()) che reindirizza
+  chiunque altro.
+
+  Fonte dati: tabella esistente immonova_access_logs (user_id, email, full_name, role, login_at,
+  user_agent) -- già popolata da un meccanismo di logging al login esistente nel sito, non è
+  stato necessario costruire nulla di nuovo lato tracciamento, solo questa pagina di lettura.
+-->
+<style>
+  :root{
+    --c-cream:#f4ecdf; --c-cream2:#f9f3e8; --c-ink:#3a2d05; --c-ink2:#5b471f;
+    --c-gold:#a67f34; --c-gold-dark:#8f6c2c; --c-border:rgba(166,127,52,.28);
+    --c-green:#4f7f45; --c-orange:#c97a2e; --c-white:#fffaf0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--c-cream);color:var(--c-ink);min-height:100vh}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;background:var(--c-cream2);border-bottom:1px solid var(--c-border);flex-wrap:wrap;gap:12px}
+  .topbar h1{font-size:19px;margin:0;letter-spacing:.02em}
+  .topbar a{color:var(--c-ink2);text-decoration:none;font-size:13px;border:1px solid var(--c-border);padding:8px 14px;border-radius:4px}
+  .topbar a:hover{background:var(--c-cream)}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .toolbar select,.toolbar input{padding:8px 10px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-white);font-size:13px;color:var(--c-ink)}
+  .toolbar .count{font-size:12px;color:var(--c-ink2);margin-left:auto}
+  table{width:100%;border-collapse:collapse;background:var(--c-white);border:1px solid var(--c-border);border-radius:6px;overflow:hidden;font-size:13px}
+  thead th{background:var(--c-gold);color:var(--c-white);text-align:left;padding:10px 12px;font-weight:600;cursor:pointer;user-select:none;white-space:nowrap}
+  thead th:hover{background:var(--c-gold-dark)}
+  thead th .arrow{opacity:.6;font-size:11px;margin-left:4px}
+  tbody td{padding:9px 12px;border-top:1px solid var(--c-border);vertical-align:top}
+  tbody tr:hover{background:rgba(166,127,52,.06)}
+  .role-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .role-admin{background:rgba(166,127,52,.18);color:var(--c-gold-dark)}
+  .role-user{background:rgba(90,90,90,.12);color:#555}
+  .recent{color:var(--c-green);font-weight:600}
+  .stale{color:var(--c-orange);font-weight:600}
+  .never{color:#a33}
+  .muted{color:#8a7458;font-size:12px}
+  .empty-state{text-align:center;padding:60px 20px;color:#8a7458}
+  .denied{max-width:480px;margin:80px auto;text-align:center;padding:30px;background:var(--c-white);border:1px solid var(--c-border);border-radius:6px}
+  .denied h2{margin-top:0}
+  .loading{text-align:center;padding:60px;color:#8a7458}
+  .detail-row td{background:var(--c-cream2);font-size:12px;color:var(--c-ink2)}
+  .detail-row ul{margin:4px 0;padding-left:18px}
+  .toggle-btn{background:none;border:none;color:var(--c-gold-dark);cursor:pointer;font-size:12px;text-decoration:underline;padding:0}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Log Accessi Utenti</h1>
+  <a href="dashboard.html">← Torna alla dashboard</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading" id="loadingState">Verifica accesso...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script>
+"use strict";
+
+/* Stesso pattern di inizializzazione client usato nelle altre pagine admin del sito
+   (SUPABASE_URL/SUPABASE_ANON_KEY attesi da js/config.js). */
+var client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+var ALLOWED_EMAIL = "claudio.romano@bluewin.ch";
+var currentUser = null;
+var allLogs = [];       // righe grezze da immonova_access_logs
+var userRows = [];      // aggregato per utente
+var sortKey = "last_login";
+var sortDir = "desc";
+var periodDays = 30;    // finestra per "accessi recenti" (selezionabile nella toolbar)
+var expandedUserId = null;
+
+function escapeHTML(v){ return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
+
+function formatDateTime(iso){
+  if(!iso) return "";
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  function pad(n){ return String(n).length<2 ? "0"+n : String(n); }
+  return pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+}
+
+function daysAgo(iso){
+  if(!iso) return Infinity;
+  var ms = Date.now() - new Date(iso).getTime();
+  return ms / (1000*60*60*24);
+}
+
+/* ---- Accesso: DOPPIA barriera, coerente con lo stesso pattern già usato in report-view.html
+   per l'override del mittente -- qui sul controllo dell'intera pagina, non solo di un campo.
+   1) RLS sul DB (vedi restrict_access_logs_to_claudio.sql): se l'utente non è Claudio, la
+      query sotto torna semplicemente zero righe, quindi anche bypassando questo controllo
+      client-side non si vedrebbe nulla di sensibile.
+   2) Questo controllo: mostra subito un messaggio chiaro invece di una pagina vuota
+      silenziosa, che sarebbe confusa da capire per chiunque altro ci arrivi per sbaglio. ---- */
+async function checkAccess(){
+  var sessionRes = await client.auth.getSession();
+  var session = sessionRes && sessionRes.data && sessionRes.data.session;
+  if(!session){ window.location.href = "login.html"; return false; }
+  currentUser = session.user;
+  var email = (currentUser.email || "").trim().toLowerCase();
+  if(email !== ALLOWED_EMAIL){
+    document.getElementById("wrap").innerHTML =
+      '<div class="denied"><h2>Accesso riservato</h2>'
+      + '<p>Questa pagina mostra dati sensibili sugli accessi degli utenti ed è visibile solo per un numero ristretto di account.</p>'
+      + '<p><a href="dashboard.html">← Torna alla dashboard</a></p></div>';
+    return false;
+  }
+  return true;
+}
+
+async function loadLogs(){
+  var res = await client.from("immonova_access_logs")
+    .select("user_id,email,full_name,role,login_at,user_agent")
+    .order("login_at", { ascending:false })
+    .limit(5000);
+  if(res.error){
+    document.getElementById("wrap").innerHTML =
+      '<div class="denied"><h2>Errore nel caricamento</h2><p>'+escapeHTML(res.error.message)+'</p>'
+      + '<p class="muted">Se l\'errore riguarda permessi/RLS, verifica di aver eseguito lo script restrict_access_logs_to_claudio.sql su Supabase.</p></div>';
+    return false;
+  }
+  allLogs = Array.isArray(res.data) ? res.data : [];
+  return true;
+}
+
+/* ---- Aggregazione per utente: ultimo accesso, conteggio totale, conteggio nella finestra
+   scelta (periodDays), media approssimativa di accessi/settimana calcolata sull'intero storico
+   disponibile per quell'utente (dal primo log trovato a oggi). ---- */
+function buildUserRows(){
+  var byUser = {};
+  allLogs.forEach(function(row){
+    var key = row.user_id || row.email;
+    if(!byUser[key]){
+      byUser[key] = {
+        user_id: row.user_id, email: row.email, full_name: row.full_name, role: row.role,
+        logins: []
+      };
+    }
+    byUser[key].logins.push(row.login_at);
+    // Il nome/ruolo più recente vince (può cambiare nel tempo, es. promozione a admin).
+    if(row.login_at >= (byUser[key].logins[0] || "")){
+      byUser[key].full_name = row.full_name || byUser[key].full_name;
+      byUser[key].role = row.role || byUser[key].role;
+    }
+  });
+
+  userRows = Object.keys(byUser).map(function(key){
+    var u = byUser[key];
+    var sorted = u.logins.slice().sort(); // asc
+    var lastLogin = sorted[sorted.length - 1];
+    var firstLogin = sorted[0];
+    var totalCount = sorted.length;
+    var recentCount = u.logins.filter(function(d){ return daysAgo(d) <= periodDays; }).length;
+    var spanDays = Math.max(1, daysAgo(firstLogin) - daysAgo(lastLogin)); // ampiezza storico in giorni
+    // Se c'è un solo accesso o lo storico è troppo corto, la media/settimana non è
+    // significativa: si mostra "—" invece di un numero fuorviante.
+    var weeklyAvg = (totalCount > 1 && spanDays >= 1) ? (totalCount / (spanDays / 7)) : null;
+    return {
+      user_id: u.user_id, email: u.email, full_name: u.full_name || "", role: u.role || "user",
+      last_login: lastLogin, first_login: firstLogin, total_count: totalCount,
+      recent_count: recentCount, weekly_avg: weeklyAvg, logins: sorted.slice().reverse()
+    };
+  });
+}
+
+function sortRows(){
+  userRows.sort(function(a,b){
+    var va = a[sortKey], vb = b[sortKey];
+    if(va == null) va = sortKey.indexOf("count")>=0 || sortKey==="weekly_avg" ? -Infinity : "";
+    if(vb == null) vb = sortKey.indexOf("count")>=0 || sortKey==="weekly_avg" ? -Infinity : "";
+    if(va < vb) return sortDir === "asc" ? -1 : 1;
+    if(va > vb) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+}
+
+function lastLoginClass(iso){
+  var d = daysAgo(iso);
+  if(d === Infinity) return "never";
+  if(d <= 7) return "recent";
+  if(d <= 30) return "";
+  return "stale";
+}
+
+function render(){
+  sortRows();
+  var html = '';
+  html += '<div class="toolbar">'
+    + '<label class="muted">Finestra "accessi recenti": </label>'
+    + '<select id="periodSelect">'
+    + [7,14,30,60,90].map(function(p){ return '<option value="'+p+'"'+(p===periodDays?" selected":"")+'>ultimi '+p+' giorni</option>'; }).join("")
+    + '</select>'
+    + '<span class="count">'+userRows.length+' utenti · '+allLogs.length+' accessi registrati in totale</span>'
+    + '</div>';
+
+  if(!userRows.length){
+    html += '<div class="empty-state">Nessun accesso registrato.</div>';
+    document.getElementById("wrap").innerHTML = html;
+    return;
+  }
+
+  function th(key, label){
+    var arrow = sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "";
+    return '<th data-sort="'+key+'">'+escapeHTML(label)+' <span class="arrow">'+arrow+'</span></th>';
+  }
+
+  html += '<table><thead><tr>'
+    + th("full_name", "Utente")
+    + th("role", "Ruolo")
+    + th("last_login", "Ultimo accesso")
+    + th("recent_count", "Accessi (periodo)")
+    + th("total_count", "Accessi (totale)")
+    + th("weekly_avg", "Media/settimana")
+    + '<th>Dettaglio</th>'
+    + '</tr></thead><tbody>';
+
+  userRows.forEach(function(u){
+    var isExpanded = expandedUserId === u.user_id;
+    html += '<tr>'
+      + '<td><strong>'+escapeHTML(u.full_name || "(nome non disponibile)")+'</strong><br><span class="muted">'+escapeHTML(u.email || "")+'</span></td>'
+      + '<td><span class="role-badge '+(u.role==="admin"?"role-admin":"role-user")+'">'+escapeHTML(u.role || "user")+'</span></td>'
+      + '<td class="'+lastLoginClass(u.last_login)+'">'+(u.last_login ? formatDateTime(u.last_login) : "mai registrato")+'</td>'
+      + '<td>'+u.recent_count+'</td>'
+      + '<td>'+u.total_count+'</td>'
+      + '<td>'+(u.weekly_avg != null ? u.weekly_avg.toFixed(1) : "—")+'</td>'
+      + '<td><button type="button" class="toggle-btn" data-toggle="'+escapeHTML(u.user_id || u.email)+'">'+(isExpanded?"Nascondi":"Vedi tutti")+'</button></td>'
+      + '</tr>';
+    if(isExpanded){
+      html += '<tr class="detail-row"><td colspan="7">'
+        + '<strong>Cronologia completa accessi (' + u.logins.length + '):</strong>'
+        + '<ul>' + u.logins.slice(0, 200).map(function(d){ return '<li>'+formatDateTime(d)+'</li>'; }).join("") + '</ul>'
+        + (u.logins.length > 200 ? '<span class="muted">(mostrati i 200 più recenti)</span>' : "")
+        + '</td></tr>';
+    }
+  });
+
+  html += '</tbody></table>';
+  document.getElementById("wrap").innerHTML = html;
+
+  document.getElementById("periodSelect").addEventListener("change", function(){
+    periodDays = Number(this.value) || 30;
+    buildUserRows();
+    render();
+  });
+  document.querySelectorAll("th[data-sort]").forEach(function(th){
+    th.addEventListener("click", function(){
+      var key = th.getAttribute("data-sort");
+      if(sortKey === key){ sortDir = sortDir === "asc" ? "desc" : "asc"; }
+      else { sortKey = key; sortDir = (key === "full_name" || key === "role") ? "asc" : "desc"; }
+      render();
+    });
+  });
+  document.querySelectorAll("[data-toggle]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var id = btn.getAttribute("data-toggle");
+      expandedUserId = (expandedUserId === id) ? null : id;
+      render();
+    });
+  });
+}
+
+(async function init(){
+  var ok = await checkAccess();
+  if(!ok) return;
+  var loaded = await loadLogs();
+  if(!loaded) return;
+  buildUserRows();
+  render();
+})();
+</script>
+</body>
+</html>
