@@ -511,6 +511,30 @@ async function loadAndRender(){
     html += '<p class="method-text">Immobile non locato (o canone non disponibile): il valore si basa interamente sul metodo comparativo.</p>';
   }
 
+  // Caratteristiche distintive (bonus/malus) -- CORRETTO (27/10/2026): nessun dato nascosto al
+  // cliente. Se l'agente ha attribuito un merito/demerito a una o più caratteristiche
+  // (valuation-form.html), il documento stampato deve riportare per intero quali voci sono
+  // state usate, con quale percentuale e sul valore base di quanto, esattamente come appare
+  // nel form -- mai solo il risultato finale senza il dettaglio di come ci si è arrivati.
+  var bonusMalusItems = Array.isArray(v.bonus_malus_items) ? v.bonus_malus_items.filter(function(it){ return it && it.pct; }) : [];
+  var bonusMalusTotalPct = v.bonus_malus_total_pct != null ? v.bonus_malus_total_pct : bonusMalusItems.reduce(function(s,it){ return s + (Number(it.pct)||0); }, 0);
+  if(bonusMalusItems.length && v.raw_estimated_value_min != null){
+    html += '<div class="section">'
+      + '<div class="section-kicker">8bis. Caratteristiche Distintive dell\'Immobile (Bonus/Malus)</div>'
+      + '<div class="section-title">Aggiustamento al Valore di Base</div>'
+      + '<p class="method-text">Il valore ottenuto dalla riconciliazione dei metodi estimativi (' + formatEuro(v.raw_estimated_value_min) + ' – ' + formatEuro(v.raw_estimated_value_max) + ') è stato ulteriormente corretto dall\'agente in base a caratteristiche specifiche rilevate direttamente sull\'immobile durante il sopralluogo, non desumibili dai soli dati comparativi di mercato. Di seguito il dettaglio completo di ogni voce considerata e della percentuale attribuita.</p>'
+      + '<table class="comp-table"><thead><tr><th>Caratteristica</th><th>Aggiustamento</th></tr></thead><tbody>'
+      + bonusMalusItems.map(function(it){
+          var pct = Number(it.pct) || 0;
+          return '<tr><td>' + escapeHTML(it.label || it.key || "—") + '</td><td>' + (pct > 0 ? "+" : "") + pct.toFixed(1) + '%</td></tr>';
+        }).join("")
+      + '</tbody></table>'
+      + '<p class="method-text" style="margin-top:14px"><strong>Aggiustamento totale: ' + (bonusMalusTotalPct > 0 ? "+" : "") + bonusMalusTotalPct.toFixed(1) + '%</strong><br>'
+      + formatEuro(v.raw_estimated_value_min) + ' – ' + formatEuro(v.raw_estimated_value_max) + ' × (1 ' + (bonusMalusTotalPct >= 0 ? '+' : '−') + ' ' + Math.abs(bonusMalusTotalPct).toFixed(1) + '%) = <strong>' + formatEuro(v.estimated_value_min) + ' – ' + formatEuro(v.estimated_value_max) + '</strong></p>'
+      + '<p class="method-text" style="font-size:11px;font-style:italic">Nota metodologica: le percentuali di riferimento per ciascuna voce sono indicative, tratte dalla prassi estimativa comune (non da una tabella fissa o ufficiale): il valore effettivamente applicato è una valutazione professionale dell\'agente, formulata sul posto.</p>'
+      + '</div>';
+  }
+
   html += '<div class="section-title" style="margin-top:24px">Valore di Mercato Stimato</div>';
   if(hasEstimate){
     html += '<div class="value-box">'
