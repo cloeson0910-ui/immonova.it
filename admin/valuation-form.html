@@ -503,7 +503,8 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
         <input type="file" id="visuraFileInput" accept="application/pdf,image/*" multiple style="display:none">
         <span id="extractVisuraStatus" style="font-size:13px;color:#8a7458"></span>
       </div>
-      <p class="section-note" style="margin-top:6px">Carica una o più pagine della visura catastale (PDF o foto): i dati vengono letti automaticamente e usati per riempire la sezione principale e, se la visura riporta più unità (es. abitazione + garage + cantina), per creare in automatico le sezioni catastali aggiuntive corrispondenti. Controlla sempre i dati estratti prima di salvare.</p>
+      <p class="section-note" style="margin-top:6px">Carica una o più pagine della visura catastale (PDF o foto): i dati vengono letti automaticamente e usati per riempire la sezione principale e, se la visura riporta più unità (es. abitazione + garage + cantina), per creare in automatico le sezioni catastali aggiuntive corrispondenti. Controlla sempre i dati estratti prima di salvare. Il file originale viene conservato e allegato al dossier di valutazione (lo ritrovi anche nel report stampabile).</p>
+      <p id="visuraFilesStatus" class="section-note" style="margin-top:4px;font-size:12px"></p>
       <p class="section-note" style="margin-top:8px" data-i18n="section_cadastral_multi_note">Usa questo pulsante se stai valutando un intero stabile/podere con più particelle o subalterni distinti (es. una villa + una dependance, o una palazzina con più Sub): ogni sezione aggiunta ha i propri dati catastali e il valore catastale totale qui sotto somma tutte le sezioni.</p>
 
       <div class="cadastral-value-box" id="cadastralValueBox" style="display:none">
@@ -1256,6 +1257,46 @@ function applyExtractedCadastralUnit(unit, targetIsPrimary){
   }
 }
 
+/* ---- Salvataggio automatico della scansione visura (27/10/2026): gli stessi file caricati per
+   l'estrazione dati vengono anche tenuti da parte e, al salvataggio della valutazione, caricati
+   su storage (stesso bucket/pattern della planimetria: solo un link in DB, niente blob pesanti)
+   cosi' restano sempre allegati al dossier -- "tutto completo e coerente", coerenza
+   documentale anche se l'estrazione automatica fallisce o legge dati parziali: il file
+   originale resta comunque consultabile/stampabile. pendingFiles si accumula su piu' caricamenti
+   nella stessa sessione (es. piu' pagine caricate separatamente); existingFiles arriva dal
+   caricamento di una valutazione gia' salvata (vedi loadValuationForEdit). ---- */
+var visuraState = { pendingFiles: [], existingFiles: [] };
+
+function visuraRenderStatus(){
+  var el = document.getElementById("visuraFilesStatus");
+  if(!el) return;
+  var attached = visuraState.existingFiles.length + visuraState.pendingFiles.length;
+  if(!attached){ el.innerHTML = ""; return; }
+  var parts = visuraState.existingFiles.map(function(f){
+    return '<a href="' + escapeHTML(f.url) + '" target="_blank" rel="noopener">' + escapeHTML(f.name || "visura") + '</a>';
+  });
+  if(visuraState.pendingFiles.length){
+    parts.push(visuraState.pendingFiles.length + " file da salvare (verranno allegati al salvataggio)");
+  }
+  el.innerHTML = "Visure allegate al dossier: " + parts.join(", ");
+}
+
+async function visuraUploadIfNeeded(id){
+  var uploaded = visuraState.existingFiles.slice();
+  for(var i = 0; i < visuraState.pendingFiles.length; i++){
+    var f = visuraState.pendingFiles[i];
+    var ext = (f.name && f.name.includes(".")) ? f.name.split(".").pop() : "pdf";
+    var path = "valuations/" + (id || "new-" + Date.now()) + "/visura-" + Date.now() + "-" + i + "." + ext;
+    var up = await client.storage.from("acquisition-photos").upload(path, f, { cacheControl:"3600", upsert:false });
+    if(up.error) throw up.error;
+    var pub = client.storage.from("acquisition-photos").getPublicUrl(path);
+    uploaded.push({ url: pub.data.publicUrl, name: f.name || "visura.pdf" });
+  }
+  visuraState.pendingFiles = [];
+  visuraState.existingFiles = uploaded;
+  return uploaded;
+}
+
 document.getElementById("extractVisuraBtn").addEventListener("click", function(){
   document.getElementById("visuraFileInput").click();
 });
@@ -1263,6 +1304,8 @@ document.getElementById("extractVisuraBtn").addEventListener("click", function()
 document.getElementById("visuraFileInput").addEventListener("change", async function(e){
   var files = Array.from(e.target.files || []);
   if(!files.length) return;
+  files.forEach(function(f){ visuraState.pendingFiles.push(f); });
+  visuraRenderStatus();
   var statusEl = document.getElementById("extractVisuraStatus");
   statusEl.textContent = "Lettura in corso (" + files.length + " file)...";
 
@@ -2484,6 +2527,8 @@ async function loadValuationForEdit(){
   loadBonusMalusFromValuation(data);
 
   fpLoadExisting(data.floorplan_image_url, data.floorplan_annotations);
+  visuraState.existingFiles = Array.isArray(data.cadastral_visura_files) ? data.cadastral_visura_files : [];
+  visuraRenderStatus();
 }
 
 /* ================================ Importa dati da un'acquisizione ================================
@@ -2634,6 +2679,14 @@ form.addEventListener("submit", async function(event){
     console.warn("Caricamento planimetria non riuscito (non bloccante):", fpErr);
   }
 
+  var visuraFiles = visuraState.existingFiles;
+  try{
+    visuraFiles = await visuraUploadIfNeeded(valuationId);
+    visuraRenderStatus();
+  }catch(visuraErr){
+    console.warn("Caricamento visura non riuscito (non bloccante, i dati già estratti restano salvati):", visuraErr);
+  }
+
   var payload = {
     seller_first_name: sellerFirstName,
     seller_last_name: sellerLastName,
@@ -2678,7 +2731,8 @@ form.addEventListener("submit", async function(event){
     latitude: lastGeocode && lastGeocode.lat != null ? lastGeocode.lat : null,
     longitude: lastGeocode && lastGeocode.lng != null ? lastGeocode.lng : null,
     floorplan_image_url: floorplanUrl,
-    floorplan_annotations: fpGetAnnotations()
+    floorplan_annotations: fpGetAnnotations(),
+    cadastral_visura_files: visuraFiles
   };
 
   PROPERTY_FEATURES.forEach(function(f){
