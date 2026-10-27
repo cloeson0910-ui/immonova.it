@@ -1251,6 +1251,54 @@ function fileToBase64(file){
   });
 }
 
+/* ---- Deduplica sezioni su ricaricamenti ripetuti (27/10/2026, segnalato: caricare la stessa
+   visura più volte creava sezioni aggiuntive duplicate invece di aggiornare quelle già
+   presenti). Le unità vengono identificate da foglio+particella+subalterno: se una sezione
+   aggiuntiva con la stessa combinazione esiste già, viene AGGIORNATA sul posto invece di
+   crearne una nuova; se la combinazione coincide con la sezione principale, l'unità viene
+   considerata già rappresentata lì e non duplicata come sezione extra. ---- */
+function cadastralUnitKey(sheet, parcel, subalterno){
+  var parts = [sheet, parcel, subalterno].map(function(s){ return String(s || "").trim().toLowerCase(); });
+  if(!parts[0] && !parts[1] && !parts[2]) return null; // niente di identificativo: mai considerato un match
+  return parts.join("|");
+}
+
+function primaryCadastralSectionKey(){
+  return cadastralUnitKey(
+    document.getElementById("cadastralSheet").value,
+    document.getElementById("cadastralParcel").value,
+    document.getElementById("cadastralSubalterno").value
+  );
+}
+
+function findExistingAdditionalCadastralSectionIdx(unit){
+  var key = cadastralUnitKey(unit.sheet, unit.parcel, unit.subalterno);
+  if(!key) return null;
+  var found = null;
+  document.querySelectorAll("#additionalCadastralSections .cadastral-section-extra").forEach(function(block){
+    if(found) return;
+    var idx = block.getAttribute("data-section-idx");
+    var blockKey = cadastralUnitKey(
+      document.getElementById("cadastralExtraSheet_" + idx).value,
+      document.getElementById("cadastralExtraParcel_" + idx).value,
+      document.getElementById("cadastralExtraSubalterno_" + idx).value
+    );
+    if(blockKey && blockKey === key) found = idx;
+  });
+  return found;
+}
+
+function fillExistingCadastralSection(idx, unit){
+  if(unit.label) document.getElementById("cadastralExtraLabel_" + idx).value = unit.label;
+  if(unit.municipality) document.getElementById("cadastralExtraMunicipality_" + idx).value = unit.municipality;
+  if(unit.category) document.getElementById("cadastralExtraCategory_" + idx).value = unit.category;
+  if(unit.income != null) document.getElementById("cadastralExtraIncome_" + idx).value = unit.income;
+  if(unit.surface != null) document.getElementById("cadastralExtraSurface_" + idx).value = unit.surface;
+  if(unit.sheet) document.getElementById("cadastralExtraSheet_" + idx).value = unit.sheet;
+  if(unit.parcel) document.getElementById("cadastralExtraParcel_" + idx).value = unit.parcel;
+  if(unit.subalterno) document.getElementById("cadastralExtraSubalterno_" + idx).value = unit.subalterno;
+}
+
 function applyExtractedCadastralUnit(unit, targetIsPrimary){
   if(targetIsPrimary){
     if(unit.municipality) document.getElementById("cadastralMunicipality").value = unit.municipality;
@@ -1354,18 +1402,44 @@ document.getElementById("visuraFileInput").addEventListener("change", async func
       overwritePrimary = confirm("La sezione principale ha già dei dati catastali compilati. Vuoi sovrascriverli con quelli letti dalla visura caricata (" + units[0].label + " o prima unità trovata)? Annulla per lasciare la sezione principale invariata e aggiungere comunque tutte le unità trovate come nuove sezioni.");
     }
 
+    var primaryKey = primaryCadastralSectionKey();
     units.forEach(function(unit, i){
       var isPrimary = (i === 0 && overwritePrimary);
-      applyExtractedCadastralUnit(unit, isPrimary);
+      if(isPrimary){
+        applyExtractedCadastralUnit(unit, true);
+        return;
+      }
+      var unitKeyStr = cadastralUnitKey(unit.sheet, unit.parcel, unit.subalterno);
+      if(unitKeyStr && primaryKey && unitKeyStr === primaryKey){
+        return; // stessa unità già rappresentata nella sezione principale, non duplicarla come sezione extra
+      }
+      var existingIdx = findExistingAdditionalCadastralSectionIdx(unit);
+      if(existingIdx){
+        fillExistingCadastralSection(existingIdx, unit); // ricaricamento della stessa visura: aggiorna sul posto
+      }else{
+        applyExtractedCadastralUnit(unit, false); // unità nuova, mai vista prima: crea la sezione
+      }
     });
 
     computeAndRenderCadastralValue();
     renderCommercialSurfaceBox();
 
+    /* ---- Diagnostica visibile (27/10/2026): mostra per ogni unità cosa ha letto davvero il
+       motore AI (superficie, vani, flag stima) così, se qualcosa continua a non quadrare, si
+       vede subito COSA è arrivato dal server invece di dover indovinare alla cieca. Anche in
+       console per debug più comodo. ---- */
+    console.log("[estrazione visura] risposta completa:", JSON.stringify(data, null, 2));
     var warnings = Array.isArray(data.warnings) ? data.warnings : [];
-    statusEl.textContent = "Trovate " + units.length + " unità catastali (" + (data.pages_read || files.length) + " pagine lette)." +
-      (warnings.length ? " Attenzione: " + warnings.join("; ") : "") +
-      " Controlla i dati prima di salvare.";
+    var debugLines = units.map(function(u, i){
+      return "#" + (i + 1) + " " + (u.label || u.category || "unità") + " (cat. " + (u.category || "?") + ", sub " + (u.subalterno || "?") +
+        "): superficie=" + (u.surface != null ? u.surface + " mq" : "null") +
+        (u.surface_is_estimated ? " [STIMATA]" : "") +
+        ", vani=" + (u.consistency_vani != null ? u.consistency_vani : "null");
+    });
+    statusEl.innerHTML = "Trovate " + units.length + " unità catastali (" + (data.pages_read || files.length) + " pagine lette)." +
+      (warnings.length ? "<br>⚠ " + warnings.map(escapeHTML).join("<br>⚠ ") : "") +
+      "<br><span style='opacity:.75'>" + debugLines.map(escapeHTML).join("<br>") + "</span>" +
+      "<br>Controlla i dati prima di salvare.";
   }catch(err){
     statusEl.textContent = "Errore durante la lettura: " + (err && err.message ? err.message : String(err));
   }finally{
