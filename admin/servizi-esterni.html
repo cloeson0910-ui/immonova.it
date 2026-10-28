@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Servizi Esterni — IMMONOVA</title>
+<!--
+  27/10/2026: pagina nuova, richiesta esplicita dell'utente per tenere traccia di tutti i
+  servizi esterni (pagamento/gratuiti) da cui dipende IMMONOVA. Stesso pattern di accesso di
+  access-logs.html: visibile solo a claudio.romano@bluewin.ch, perché contiene informazioni di
+  spesa/pagamenti. Nessun dato sensibile nel database qui (tabella statica scritta nel codice),
+  quindi basta il gate client-side, non serve RLS.
+-->
+<style>
+  :root{
+    --c-cream:#f4ecdf; --c-cream2:#f9f3e8; --c-ink:#3a2d05; --c-ink2:#5b471f;
+    --c-gold:#a67f34; --c-gold-dark:#8f6c2c; --c-border:rgba(166,127,52,.28);
+    --c-green:#4f7f45; --c-orange:#c97a2e; --c-white:#fffaf0;
+    --paid-bg:#fdecec; --paid-text:#b3261e; --free-bg:#eaf6ec; --free-text:#1e7a3a;
+    --unk-bg:#fdf3e3; --unk-text:#9a6a00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--c-cream);color:var(--c-ink);min-height:100vh}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;background:var(--c-cream2);border-bottom:1px solid var(--c-border);flex-wrap:wrap;gap:12px}
+  .topbar h1{font-size:19px;margin:0;letter-spacing:.02em}
+  .topbar a{color:var(--c-ink2);text-decoration:none;font-size:13px;border:1px solid var(--c-border);padding:8px 14px;border-radius:4px}
+  .topbar a:hover{background:var(--c-cream)}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+  .sub{color:var(--c-ink2);font-size:.92rem;margin:0 0 14px;max-width:820px;line-height:1.5}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+  .tag{font-size:.72rem;padding:3px 9px;border-radius:20px;font-weight:600;white-space:nowrap}
+  .tag.paid{background:var(--paid-bg);color:var(--paid-text)}
+  .tag.free{background:var(--free-bg);color:var(--free-text)}
+  .tag.unk{background:var(--unk-bg);color:var(--unk-text)}
+  .controls{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .controls input[type=text]{flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-white);color:var(--c-ink);font-size:.9rem}
+  .controls select{padding:9px 12px;border:1px solid var(--c-border);border-radius:4px;background:var(--c-white);color:var(--c-ink);font-size:.9rem}
+  .card{background:var(--c-white);border:1px solid var(--c-border);border-radius:6px;overflow:hidden;margin-bottom:22px}
+  .card h2{font-size:1rem;margin:0;padding:12px 16px;background:var(--c-cream2);border-bottom:1px solid var(--c-border)}
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  th{text-align:left;padding:9px 12px;background:var(--c-cream2);color:var(--c-ink2);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--c-border)}
+  td{padding:10px 12px;border-bottom:1px solid var(--c-border);vertical-align:top;line-height:1.4}
+  tr:last-child td{border-bottom:none}
+  tr.row:hover{background:var(--c-cream2)}
+  .servizio{font-weight:600}
+  .pages{color:var(--c-ink2);font-size:.82rem}
+  .note{font-size:.78rem;color:var(--c-ink2);margin-top:2px}
+  .hidden{display:none}
+  footer{color:var(--c-ink2);font-size:.78rem;margin-top:30px;line-height:1.6}
+  .denied{max-width:480px;margin:80px auto;text-align:center;padding:30px;background:var(--c-white);border:1px solid var(--c-border);border-radius:6px}
+  .denied h2{margin-top:0}
+  .loading{text-align:center;padding:60px;color:#8a7458}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Servizi Esterni</h1>
+  <a href="dashboard.html">← Torna alla dashboard</a>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="loading" id="loadingState">Verifica accesso...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+"use strict";
+
+var client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var ALLOWED_EMAIL = "claudio.romano@bluewin.ch";
+
+var DATA = {
+  infra: [
+    {s:"Supabase", c:"paid", d:"Database, autenticazione utenti, storage file (immagini/PDF/visure), tutte le ~70 edge function (backend), realtime. <b>Costo stimato: Pro $25/mese</b> (base, include 100.000 invocazioni edge function/mese, 8GB database, 100GB storage, 250GB banda — oltre si paga a consumo) oppure <b>Team $599/mese</b> se avete bisogno di SSO/supporto prioritario/più collaboratori. <span class='note'>Verifica tu quale dei due piani è attivo nella dashboard Supabase → Billing.</span>", p:"Tutto il sito — è la spina dorsale di IMMONOVA."},
+    {s:"GitHub Pages", c:"free", d:"Hosting statico del frontend (le pagine HTML/CSS/JS che vedi nel browser).", p:"Tutto il sito pubblico e l'area riservata — i file .html sono serviti da qui."},
+    {s:"Resend", c:"paid", d:"Invio email transazionali (notifiche, codici OTP, inviti, conferme, comunicazioni bulk). Mittente verificato: noreply@immonova-consulting.com. <b>Costo stimato: Free fino a 3.000 email/mese (max 100/giorno)</b>, oltre serve il piano <b>Pro: 20$/mese per 50.000 email</b> o <b>35$/mese per 100.000 email</b> (extra a 0,90$ ogni 1.000 se superate).", p:"otp-generate, send-dossier-email, dossier-request-email, opportunity-preview-email, notify-new-opportunity, notify-admins-new-submission, notify-new-investor, notify-deleted-investor, notify-new-search-mandate, notify-opportunity-status-change, send-bulk-communication, send-offer-to-seller, send-offer-to-buyer, send-visit-email, send-acquisition-summary-email, dossier-followup-reminders, offer-expiry-reminders, e altre funzioni di notifica."},
+    {s:"Dominio immonova-consulting.it / .com", c:"paid", d:"Registrazione annuale del/dei domini del sito. <span class='note'>Costo tipico: 10-25€/anno per dominio .it o .com presso un registrar italiano — verifica l'importo esatto sulla tua fattura di rinnovo.</span>", p:"Tutto il sito — rinnovo annuale presso il registrar (verifica tu quale: es. Aruba, Register.it, GoDaddy...)."}
+  ],
+  ai: [
+    {s:"OpenAI API (modelli linguaggio + web_search)", c:"paid", d:"Motore AI dietro quasi tutti gli 'engine' intelligenti del sito: classificazione, analisi di mercato, generazione testi, ricerche web in tempo reale, lettura/estrazione dati da visure catastali. <b>Nessun abbonamento fisso: si paga a consumo</b>, in base a quanto testo (token) viene letto/generato — <span class='note'>il prezzo esatto per milione di token dipende dal modello specifico configurato nel codice: controlla la spesa reale su platform.openai.com → Usage, è il dato più affidabile.</span>", p:"immonova-cadastral-extract (lettura visure), analyze-opportunity, generate-investment-report (v1/v2), generate-report-narrative, translate-investment-report, translate-visible-dossier-text, translate-public-content, immonova-location-profile, immonova-accessibility-engine, immonova-poi-engine, immonova-heritage-engine, immonova-destination-engine, immonova-coastal-engine, immonova-ai-classifier, immonova-context-validator, immonova-evidence-engine, immonova-publishing-engine, immonova-block-composer, immonova-investment-rating, immonova-tourism-intelligence, immonova-global-tourism-intelligence, immonova-global-data-provider, immonova-discovery-engine, immonova-demographics-engine, immonova-ai-valuation-engine, immonova-live-market-Intelligence."},
+    {s:"OpenAI gpt-image-1", c:"paid", d:"Generazione dei render fotorealistici 'post-ristrutturazione' a partire dalle foto reali caricate. Pagamento a consumo per immagine generata (circa pochi centesimi/decine di centesimi a immagine a seconda della qualità — verifica su platform.openai.com → Usage).", p:"generate-renovation-renders (bottone 'Genera render' nelle schede ristrutturazione)."}
+  ],
+  geo: [
+    {s:"Google Maps (Static Maps API + Geocoding API)", c:"paid", d:"Immagine mappa statica inserita nei dossier/PDF, e geocodifica indirizzo→coordinate (più affidabile di OpenStreetMap per vie di comuni piccoli). <b>Costo: 2$ ogni 1.000 richieste</b> per la mappa statica, <b>5$ ogni 1.000 richieste</b> per la geocodifica — <b>le prime 10.000 richieste al mese di ciascuna API sono gratuite</b>, quindi finché l'uso resta sotto quella soglia non si paga nulla.", p:"static-map-proxy (mappa nei dossier stampati), geocode-proxy (pulsante 'Geolocalizza' negli indirizzi). Stessa chiave Google per entrambe (GOOGLE_MAPS_STATIC_KEY)."},
+    {s:"GeoNames", c:"free", d:"Dati su popolazione, altitudine e informazioni geografiche dei comuni.", p:"Vari 'engine' di profilazione location (demographics, location-profile)."},
+    {s:"WAQI (World Air Quality Index)", c:"free", d:"Dati qualità dell'aria (piano gratuito).", p:"immonova-accessibility-engine / engine ambientali del dossier."},
+    {s:"EEA (European Environment Agency)", c:"free", d:"Dati ufficiali qualità delle acque di balneazione (solo Europa).", p:"immonova-coastal-engine."},
+    {s:"Cruscotto Italia / AgID", c:"free", d:"Dati demografici ufficiali governativi italiani.", p:"immonova-demographics-engine."},
+    {s:"Apple iCloud (CalDAV)", c:"free", d:"Sincronizzazione calendario con l'app Calendario di Apple — usa il tuo Apple ID personale, non un abbonamento separato pagato da IMMONOVA.", p:"icloud-calendar-sync, icloud-calendar-push, calendar.html."},
+    {s:"AeroDataBox (via RapidAPI)", c:"free", d:"Dati arrivi aeroportuali/jet privati per i dossier di investimento. Piano attivo nel codice: 'Basic' gratuito, 400 richieste/mese incluse. <span class='note'>Se un giorno servisse di più: i piani a pagamento RapidAPI per AeroDataBox partono generalmente da circa 10-25$/mese per qualche migliaio di richieste — controlla su rapidapi.com/aedbx-aedbx/api/aerodatabox prima di cambiare piano.</span>", p:"sync-aerodatabox-arrivals, discovery-air-traffic, ingest-air-traffic-snapshot. <span class='note'>Attenzione: se il traffico cresce, il piano gratuito potrebbe non bastare più — da monitorare.</span>"}
+  ],
+  social: [
+    {s:"Meta Business Manager / Marketing API (Facebook+Instagram)", c:"paid", d:"Pubblicazione automatica di annunci pubblicitari su Facebook/Instagram. <b>Nessun canone fisso per l'uso dell'API</b> — il costo è solo il budget pubblicitario che imposti tu di volta in volta su Meta Ads Manager.", p:"immonova-meta-ads-publish, ads-manager.html, meta-ads-planner.html."},
+    {s:"LinkedIn API", c:"free", d:"Pubblicazione automatica di post sulla pagina aziendale LinkedIn.", p:"immonova-social-publish, social-composer.html."}
+  ],
+  altri: [
+    {s:"LiveKit (server video self-hosted su meeting.immonova-consulting.it)", c:"unk", d:"Infrastruttura WebRTC per le videochiamate con clienti/investitori (stanze, token di accesso, registrazione/egress).", p:"immonova-video-call-room-token, -admin-token, -consent-get, -consent-submit, -end, -egress-webhook, video-calls.html. <span class='note'>Da verificare: è un server LiveKit gestito da voi (costo hosting del server) o un piano LiveKit Cloud a pagamento — il nome del dominio (meeting.immonova-consulting.it) suggerisce un server proprio, ma va controllato dove gira fisicamente e quanto costa.</span>"},
+    {s:"Invoicetronic", c:"paid", d:"Fatturazione elettronica italiana (invio a Sistema di Interscambio / SDI). <span class='note'>Non sono riuscito a trovare un listino prezzi pubblico affidabile per questo fornitore specifico — verifica l'importo sulla tua fattura/area clienti Invoicetronic.</span>", p:"invoicetronic-proxy, contabilita.html (fatture emesse/ricevute)."},
+    {s:"Stripe", c:"paid", d:"Gestione abbonamenti e pagamenti dei CLIENTI di Dominus Suite (non un costo fisso mensile, ma una commissione per transazione — tipicamente intorno a 1,5% + 0,25€ per pagamenti europei, da verificare sul tuo account Stripe perché varia per paese/metodo di pagamento).", p:"create-portal-session, license-verify (pannello centrale Dominus)."},
+    {s:"immobiliare.it / subito.it / idealista.it", c:"free", d:"Lettura diretta (scraping) di annunci pubblici per confronto prezzi — non sono API a pagamento, sono pagine lette direttamente.", p:"search-shortrent-comparables e strumenti di confronto mercato."},
+    {s:"Web Push / VAPID", c:"free", d:"Standard gratuito dei browser per le notifiche push (nessun servizio terzo a pagamento).", p:"immonova-send-push-notification, immonova-news-followup-push, immonova-calendar-notify, immonova-broadcast-notify."}
+  ]
+};
+
+function esc(s){ return String(s); }
+
+async function checkAccess(){
+  var sessionRes = await client.auth.getSession();
+  var session = sessionRes && sessionRes.data && sessionRes.data.session;
+  if(!session){ window.location.href = "login.html"; return false; }
+  var email = (session.user.email || "").trim().toLowerCase();
+  if(email !== ALLOWED_EMAIL){
+    document.getElementById("wrap").innerHTML =
+      '<div class="denied"><h2>Accesso riservato</h2>'
+      + '<p>Questa pagina mostra informazioni sui servizi a pagamento e i relativi costi, visibile solo per un numero ristretto di account.</p>'
+      + '<p><a href="dashboard.html">← Torna alla dashboard</a></p></div>';
+    return false;
+  }
+  return true;
+}
+
+function renderPage(){
+  var html = '';
+  html += '<p class="sub">Elenco di tutti i servizi esterni (a pagamento e gratuiti) da cui dipende il funzionamento del sito, con indicazione di quali pagine/funzioni li usano. Aggiorna questa tabella ogni volta che aggiungiamo un nuovo servizio.</p>';
+  html += '<p class="sub" style="color:var(--unk-text);font-weight:600">⚠ Lista non garantita al 100% completa: è basata sull\'ispezione del codice sorgente delle funzioni del backend Supabase il cui nome suggeriva un servizio esterno. Non esiste un modo per elencare automaticamente TUTTE le chiavi/credenziali configurate, perché sono salvate come "secret" delle Edge Function e non in una tabella leggibile via query — un servizio con un nome di funzione poco esplicito potrebbe essere sfuggito. L\'unica lista davvero definitiva è su Supabase → Project Settings → Edge Functions → Secrets.</p>';
+  html += '<p class="sub" style="color:var(--unk-text)">I prezzi sotto sono quelli pubblici attuali dei fornitori, non necessariamente quello che pagate voi — dipende dal piano/volume effettivo attivo: usali come riferimento e verificali con la fattura/dashboard reale.</p>';
+  html += '<div class="legend"><span class="tag paid">A PAGAMENTO</span><span class="tag free">GRATUITO</span><span class="tag unk">DA VERIFICARE</span></div>';
+  html += '<div class="controls"><input type="text" id="search" placeholder="Cerca servizio, pagina o funzione..."><select id="filterCost"><option value="">Tutti i costi</option><option value="paid">Solo a pagamento</option><option value="free">Solo gratuiti</option><option value="unk">Solo da verificare</option></select></div>';
+
+  var sections = [
+    {key:"infra", title:"Infrastruttura di base (hosting, database, email, backend)"},
+    {key:"ai", title:"Intelligenza artificiale"},
+    {key:"geo", title:"Mappe, geolocalizzazione e dati territoriali"},
+    {key:"social", title:"Comunicazione, social e pubblicità"},
+    {key:"altri", title:"Videochiamate, fatturazione, aviazione e altro"}
+  ];
+  sections.forEach(function(sec){
+    html += '<div class="card" id="card-'+sec.key+'"><h2>'+sec.title+'</h2><table><thead><tr><th style="width:16%">Servizio</th><th style="width:9%">Costo</th><th style="width:30%">A cosa serve</th><th>Dove/come viene usato</th></tr></thead><tbody id="tbl-'+sec.key+'"></tbody></table></div>';
+  });
+
+  html += '<footer><p><strong>Nota su Stripe:</strong> è usato dal "Pannello Centrale" di Dominus Suite per gestire gli abbonamenti dei CLIENTI che pagano per avere il proprio sito (fork di IMMONOVA) — non è un costo che paghi tu per far funzionare immonova-consulting.it/.com, ma lo includo perché fa parte dell\'ecosistema.</p><p>Lista generata il 27/10/2026.</p></footer>';
+
+  document.getElementById("wrap").innerHTML = html;
+
+  function renderTables(){
+    var q = document.getElementById("search").value.trim().toLowerCase();
+    var cost = document.getElementById("filterCost").value;
+    Object.keys(DATA).forEach(function(key){
+      var tbody = document.getElementById("tbl-" + key);
+      if(!tbody) return;
+      tbody.innerHTML = "";
+      DATA[key].forEach(function(row){
+        if(cost && row.c !== cost) return;
+        var hay = (row.s + " " + row.d + " " + row.p).toLowerCase();
+        if(q && hay.indexOf(q) === -1) return;
+        var tr = document.createElement("tr");
+        tr.className = "row";
+        var tagClass = row.c === "paid" ? "paid" : (row.c === "free" ? "free" : "unk");
+        var tagLabel = row.c === "paid" ? "A PAGAMENTO" : (row.c === "free" ? "GRATUITO" : "DA VERIFICARE");
+        tr.innerHTML =
+          '<td class="servizio">' + esc(row.s) + '</td>' +
+          '<td><span class="tag ' + tagClass + '">' + tagLabel + '</span></td>' +
+          '<td>' + row.d + '</td>' +
+          '<td class="pages">' + row.p + '</td>';
+        tbody.appendChild(tr);
+      });
+      document.getElementById("card-" + key).classList.toggle("hidden", tbody.children.length === 0);
+    });
+  }
+
+  document.getElementById("search").addEventListener("input", renderTables);
+  document.getElementById("filterCost").addEventListener("change", renderTables);
+  renderTables();
+}
+
+(async function init(){
+  var ok = await checkAccess();
+  if(!ok) return;
+  renderPage();
+})();
+</script>
+</body>
+</html>
