@@ -22,6 +22,12 @@
    admin" -- il catalogo da solo non basterebbe a garantirlo (un altro owner futuro o un grant
    manuale lo vedrebbe comunque nel menu), quindi la vera barriera resta dentro la pagina stessa
    (vedi ALLOWED_EMAIL in access-logs.html) + la RLS sul DB, non questa voce di menu.
+
+   NOTA (27/10/2026) su "Servizi Esterni": stesso discorso di "Log Accessi" -- la voce compare
+   nel menu Owner ma access-logs.html-style gate (ALLOWED_EMAIL = claudio.romano@bluewin.ch)
+   dentro servizi-esterni.html e' la vera barriera, visto che contiene informazioni di spesa/
+   pagamenti. Nessuna RLS necessaria qui: la tabella e' scritta staticamente nel codice della
+   pagina, non letta dal database.
    ============================================================================================ */
 var PAGE_CATALOG = [
   {section:"Attività", key:"calendar.html", label:"Calendario", i18nKey:"nav_calendar"},
@@ -62,5 +68,6 @@ var PAGE_CATALOG = [
   {section:"Owner", key:"meta-ads-planner.html", label:"Test A/B Meta Ads", i18nKey:"nav_ads_ab"},
   {section:"Owner", key:"watermark-retroattivo.html", label:"Watermark Retroattivo", i18nKey:"nav_watermark_retro"},
   {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk"},
-  {section:"Owner", key:"access-logs.html", label:"Log Accessi", i18nKey:null}
+  {section:"Owner", key:"access-logs.html", label:"Log Accessi", i18nKey:null},
+  {section:"Owner", key:"servizi-esterni.html", label:"Servizi Esterni", i18nKey:null}
 ];
