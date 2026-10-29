@@ -519,7 +519,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v5"; }
+function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v6"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -709,12 +709,21 @@ function sampleGridPointsInPolygon(points){
 
 /* ---- Una chiamata reverse-geocoding a geocode-proxy per un singolo punto. Non lancia mai:
    su errore/nessun risultato torna null, cosi' un punto campione andato storto non fa fallire
-   gli altri. ---- */
+   gli altri. Usiamo fetch diretta sull'URL della edge function (stesso schema gia' collaudato
+   in videocall-room.html) invece di client.functions.invoke: quest'ultima e' risultata
+   silenziosamente inaffidabile in alcuni browser/versioni della libreria supabase-js, facendo
+   fallire ogni campione senza nessun errore visibile e lasciando il campo "Zona / Aree di
+   interesse" vuoto anche con la zona disegnata correttamente. ---- */
 async function reverseGeocodePoint(lat, lng){
   try{
-    var result = await client.functions.invoke("geocode-proxy", { body:{ latlng: lat + "," + lng } });
-    if(result.error || !result.data || !result.data.ok) return null;
-    return result.data;
+    var res = await fetch(SUPABASE_URL + "/functions/v1/geocode-proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SUPABASE_ANON_KEY, "apikey": SUPABASE_ANON_KEY },
+      body: JSON.stringify({ latlng: lat + "," + lng })
+    });
+    var data = await res.json().catch(function(){ return null; });
+    if(!res.ok || !data || !data.ok) return null;
+    return data;
   }catch(e){
     console.warn("geocode-proxy non raggiungibile per il punto " + lat + "," + lng + " (non bloccante):", e);
     return null;
@@ -751,6 +760,14 @@ async function detectAreaNamesInPolygon(latlngPoints){
       }
     }
   });
+
+  // Se NESSUNO dei punti campione ha prodotto un risultato valido, non e' un esito normale
+  // (anche una zona piccolissima ne trova almeno uno dal centroide): trattalo come errore
+  // cosi' l'interfaccia mostra chiaramente il messaggio di fallimento invece di sembrare
+  // riuscita lasciando pero' il campo "Zona / Aree di interesse" vuoto.
+  if(!geocoded.length){
+    throw new Error("Nessun campione geocodificato con successo (" + samples.length + " punti tentati).");
+  }
 
   mergeIntoAllDetectedComuni(localities); // elenco completo per la ricerca annunci, mai troncato
 
