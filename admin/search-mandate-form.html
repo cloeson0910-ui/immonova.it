@@ -489,7 +489,7 @@ var UI_STRINGS = {
   listings_panel_fallback_hint:"Se il riquadro sopra resta vuoto, il portale sta bloccando la visualizzazione incorporata — usa \"Apri in nuova scheda\".",
   map_status_areas:"{n} zone disegnate",
   map_status_detecting:"Ricerca comuni nella zona in corso…",
-  map_status_detect_failed:"Zona salvata, ma non è stato possibile rilevare automaticamente comuni/provincia (servizio esterno non raggiungibile in questo momento) — aggiungili manualmente qui sopra se vuoi, oppure riprova più tardi.",
+  map_status_detect_failed:"Zona salvata, ma non è stato possibile rilevare automaticamente comuni/provincia in questo momento — aggiungili manualmente qui sopra se vuoi, oppure riprova più tardi.",
   map_status_drawn:"Zona salvata: verrà usata per il matching geografico.",
   map_status_drawing:"{n} punti aggiunti — continua a cliccare o premi \"Chiudi poligono\" (minimo 3 punti).",
   map_status_none:"Nessuna zona disegnata: clicca sulla mappa per iniziare (verrà usato solo il testo qui sopra finché non disegni nulla).",
@@ -518,7 +518,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v3"; }
+function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v4"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -582,10 +582,11 @@ async function loadUserLanguage(){
    immonova_search_mandates.interest_area_geojson. Si possono disegnare PIU' zone: "Chiudi
    poligono" completa quella corrente e ne apre subito una nuova (basta continuare a
    cliccare); "Elimina ultima zona" toglie solo l'ultimo poligono completato; "Cancella tutto"
-   azzera tutto. Alla chiusura di ogni poligono viene interrogata la Overpass API
-   (OpenStreetMap, pubblica, gratuita, nessuna chiave) per trovare i comuni/paesi che ricadono
-   dentro quel perimetro e il loro nome viene aggiunto automaticamente al campo testo "Zona /
-   Aree di interesse" qui sopra (senza duplicati, senza cancellare quello che c'era gia').
+   azzera tutto. Alla chiusura di ogni poligono viene interrogato Google Geocoding (via la
+   edge function geocode-proxy, stessa chiave gia' usata per le mappe statiche) per trovare
+   i comuni/provincia che ricadono dentro quel perimetro e il loro nome viene aggiunto
+   automaticamente al campo testo "Zona / Aree di interesse" qui sopra (senza duplicati,
+   senza cancellare quello che c'era gia').
    Solo Leaflet core per la mappa -- nessun plugin di disegno: il click-to-vertex e' gestito a
    mano qui sotto, cosi' il poligono puo' avere qualunque forma libera. ---- */
 var interestAreaMap = null;
@@ -650,189 +651,113 @@ function redrawAreaPreview(){
   }
 }
 
-/* ---- Overpass API: trova i nodi place=city/town/village/hamlet dentro il poligono appena
-   chiuso, e ne aggiunge il nome al campo "Zona / Aree di interesse" a testo libero. Best-effort:
-   se fallisce (rete, timeout, nessun risultato) non blocca nulla, resta solo il poligono salvato. ---- */
-async function detectPlacesInPolygon(latlngPoints){
-  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
-  var query = '[out:json][timeout:25];(node["place"~"^(city|town|village|hamlet)$"](poly:"'+polyStr+'"););out body;';
-  var json = await runOverpassQuery(query, 25000);
-  var names = (json.elements || [])
-    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
-    .filter(Boolean);
-  return Array.from(new Set(names));
-}
-
-/* ---- Se il poligono e' cosi' grande da coprire una BUONA PARTE del territorio di una o piu'
-   province, non ha senso elencare ogni singolo comune (lista infinita e illeggibile nel campo
-   testo): meglio scrivere direttamente "Provincia di X". Non basta controllare se il centro
-   (capoluogo) della provincia cade dentro il poligono -- un poligono puo' coprire quasi tutta
-   Brindisi e tagliare fuori solo il capoluogo stesso, e in quel caso Brindisi va comunque
-   riconosciuta. Si controlla invece quanti comuni della provincia ricadono nel poligono
-   rispetto al totale dei comuni della provincia (rapporto di copertura). ---- */
-/* ---- Ogni chiamata a Overpass e' incapsulata con un timeout lato browser (l'endpoint
-   pubblico a volte non risponde mai) e non fa mai fallire il resto: se una singola query va
-   storta, si degrada verso il comportamento piu' semplice (elenco comuni), MAI verso un campo
-   vuoto -- prima di questa versione un solo errore in una delle tante chiamate faceva saltare
-   tutto il resto senza aggiungere nulla. ---- */
-/* ---- L'istanza pubblica principale (overpass-api.de) puo' rispondere 429 (troppe richieste)
-   sotto carico: in quel caso la policy corretta e' aspettare un attimo e ritentare sullo STESSO
-   endpoint (non ha senso saltare altrove, il 429 e' un limite per IP), con backoff crescente.
-   Solo se anche i ritentativi fanno 429/errore, o l'errore non e' un 429 (rete, 5xx), si tenta
-   UNA volta un mirror pubblico alternativo con un timeout piu' corto, prima di arrendersi. ---- */
-var OVERPASS_PRIMARY = "https://overpass-api.de/api/interpreter";
-var OVERPASS_MIRROR = "https://overpass.kumi.systems/api/interpreter";
-var OVERPASS_429_RETRY_DELAYS_MS = [3000, 8000];
-
+/* ---- Rilevamento comuni/provincia via Google Geocoding (edge function "geocode-proxy", gia'
+   usata per le mappe statiche dei dossier) al posto di Overpass/OpenStreetMap: l'endpoint
+   pubblico Overpass si e' dimostrato troppo inaffidabile (rate-limit/irraggiungibile per piu'
+   giorni di fila) per una funzione in produzione. Google non enumera "tutti i nodi dentro un
+   poligono" come Overpass, quindi l'approccio e': si campionano alcuni punti dentro il
+   poligono (centroide + una griglia sul bounding box, scartando i punti fuori dal perimetro)
+   e per ciascuno si chiede a Google reverse-geocoding il comune/provincia di quel punto,
+   deduplicando i risultati. Meno esaustivo dell'enumerazione nodi di Overpass su poligoni
+   molto grandi e irregolari, ma enormemente piu' affidabile: stessa infrastruttura (Google
+   Maps) gia' in produzione e pagata per il resto del sito. ---- */
 function sleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
 
-async function runOverpassQueryOnce(endpoint, query, timeoutMs){
-  var controller = new AbortController();
-  var timer = setTimeout(function(){ controller.abort(); }, timeoutMs || 20000);
-  try{
-    var res = await fetch(endpoint, {
-      method:"POST",
-      headers:{ "Content-Type":"application/x-www-form-urlencoded" },
-      body:"data="+encodeURIComponent(query),
-      signal: controller.signal
-    });
-    if(!res.ok){
-      var err = new Error("HTTP "+res.status+" da "+endpoint);
-      err.httpStatus = res.status;
-      throw err;
-    }
-    return await res.json();
-  }finally{
-    clearTimeout(timer);
+/* ---- Ray casting standard: point=[lat,lng], polygon=[[lat,lng],...] ---- */
+function pointInPolygon(point, polygon){
+  var x = point[0], y = point[1];
+  var inside = false;
+  for(var i = 0, j = polygon.length - 1; i < polygon.length; j = i++){
+    var xi = polygon[i][0], yi = polygon[i][1];
+    var xj = polygon[j][0], yj = polygon[j][1];
+    var intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if(intersect) inside = !inside;
   }
+  return inside;
 }
 
-async function runOverpassQuery(query, timeoutMs){
-  var lastErr = null;
+function centroidOfPoints(points){
+  var lat = 0, lng = 0;
+  points.forEach(function(p){ lat += p[0]; lng += p[1]; });
+  return [lat / points.length, lng / points.length];
+}
 
-  // 1) endpoint principale, con ritentativi a distanza crescente se risponde 429
-  for(var attempt = 0; attempt <= OVERPASS_429_RETRY_DELAYS_MS.length; attempt++){
-    try{
-      return await runOverpassQueryOnce(OVERPASS_PRIMARY, query, timeoutMs);
-    }catch(e){
-      lastErr = e;
-      var is429 = e && e.httpStatus === 429;
-      console.warn("Overpass principale non raggiungibile (tentativo "+(attempt+1)+"/"+(OVERPASS_429_RETRY_DELAYS_MS.length+1)+"):", e);
-      if(!is429 || attempt >= OVERPASS_429_RETRY_DELAYS_MS.length) break;
-      await sleep(OVERPASS_429_RETRY_DELAYS_MS[attempt]);
+/* ---- Centroide + griglia 4x4 sul bounding box, tenendo solo i punti che cadono dentro il
+   poligono (il centroide stesso puo' cadere fuori su poligoni a "C" o molto concavi, quindi
+   non viene scartato anche se tecnicamente esterno: resta comunque un buon punto di partenza).
+   Tetto a 10 campioni per non moltiplicare troppo le chiamate a Google per poligono. ---- */
+function sampleGridPointsInPolygon(points){
+  var MAX_SAMPLES = 10;
+  var lats = points.map(function(p){ return p[0]; });
+  var lngs = points.map(function(p){ return p[1]; });
+  var minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
+  var minLng = Math.min.apply(null, lngs), maxLng = Math.max.apply(null, lngs);
+
+  var samples = [centroidOfPoints(points)];
+  var steps = 4;
+  for(var i = 1; i < steps; i++){
+    for(var j = 1; j < steps; j++){
+      var lat = minLat + (maxLat - minLat) * (i / steps);
+      var lng = minLng + (maxLng - minLng) * (j / steps);
+      if(pointInPolygon([lat, lng], points)) samples.push([lat, lng]);
+      if(samples.length >= MAX_SAMPLES) return samples;
     }
   }
+  return samples;
+}
 
-  // 2) mirror alternativo, un solo tentativo con timeout piu' corto (non deve bloccare a lungo)
+/* ---- Una chiamata reverse-geocoding a geocode-proxy per un singolo punto. Non lancia mai:
+   su errore/nessun risultato torna null, cosi' un punto campione andato storto non fa fallire
+   gli altri. ---- */
+async function reverseGeocodePoint(lat, lng){
   try{
-    return await runOverpassQueryOnce(OVERPASS_MIRROR, query, Math.min(timeoutMs || 20000, 10000));
+    var result = await client.functions.invoke("geocode-proxy", { body:{ latlng: lat + "," + lng } });
+    if(result.error || !result.data || !result.data.ok) return null;
+    return result.data;
   }catch(e){
-    lastErr = e;
-    console.warn("Overpass mirror non raggiungibile:", e);
+    console.warn("geocode-proxy non raggiungibile per il punto " + lat + "," + lng + " (non bloccante):", e);
+    return null;
   }
-  throw lastErr;
 }
 
-function overpassCountAt(json, index){
-  var el = (json.elements || [])[index];
-  return el && el.tags ? Number(el.tags.nodes || el.tags.total || 0) : 0;
-}
-
-async function findCandidateProvinces(polyStr){
-  var query = '[out:json][timeout:20];(relation["admin_level"="6"]["boundary"="administrative"](poly:"'+polyStr+'"););out ids tags;';
-  var json = await runOverpassQuery(query);
-  return (json.elements || [])
-    .map(function(el){ return { id: el.id, name: el.tags && (el.tags["name:it"] || el.tags.name) }; })
-    .filter(function(p){ return p.name; });
-}
-
-/* ---- Una SOLA richiesta a Overpass per TUTTE le province candidate insieme (conta comuni
-   totali e comuni dentro il poligono per ciascuna), invece di due richieste per provincia:
-   molto piu' veloce e molto meno soggetto ai limiti dell'endpoint pubblico. L'id di un'area
-   Overpass ricavata da una relation e' sempre 3600000000 + id relation. ---- */
-async function detectCoveredProvinces(candidates, polyStr){
-  if(!candidates.length) return [];
-
-  var stmts = "";
-  candidates.forEach(function(c, i){
-    var areaId = 3600000000 + c.id;
-    stmts += 'area(id:'+areaId+')->.a'+i+';';
-    stmts += 'node["place"~"^(city|town|village|hamlet)$"](area.a'+i+')->.all'+i+';';
-    stmts += 'node.all'+i+'(poly:"'+polyStr+'")->.matched'+i+';';
-  });
-  var outs = "";
-  candidates.forEach(function(c, i){
-    outs += '(.all'+i+';);out count;(.matched'+i+';);out count;';
-  });
-
-  var json = await runOverpassQuery('[out:json][timeout:20];' + stmts + outs, 25000);
-
-  var covered = [];
-  candidates.forEach(function(c, i){
-    var total = overpassCountAt(json, i*2);
-    var matched = overpassCountAt(json, i*2 + 1);
-    if(total > 0 && (matched >= 5 || (matched / total) >= 0.35)){
-      covered.push(c);
-    }
-  });
-  return covered;
-}
-
-/* ---- Una SOLA richiesta per i nomi di TUTTI i comuni delle province coperte insieme
-   (unione), da escludere dalla lista puntuale per non ripetere le stesse zone due volte. ---- */
-async function listPlaceNamesInProvinces(covered){
-  if(!covered.length) return [];
-
-  var stmts = "";
-  covered.forEach(function(c, i){
-    var areaId = 3600000000 + c.id;
-    stmts += 'area(id:'+areaId+')->.a'+i+';';
-    stmts += 'node["place"~"^(city|town|village|hamlet)$"](area.a'+i+')->.n'+i+';';
-  });
-  var union = covered.map(function(c, i){ return '.n'+i+';'; }).join("");
-
-  var json = await runOverpassQuery('[out:json][timeout:20];' + stmts + '(' + union + ');out body;', 25000);
-  return (json.elements || [])
-    .map(function(el){ return el.tags && (el.tags["name:it"] || el.tags.name); })
-    .filter(Boolean);
-}
-
-/* ---- Prova prima con le province (zona molto grande): per quelle abbastanza coperte usa
-   "Provincia di X" ed esclude i loro comuni dalla lista puntuale, per non ripetere le stesse
-   zone due volte. I comuni restanti (fuori da qualsiasi provincia coperta) vengono comunque
-   elencati uno per uno, con un tetto massimo per non riempire il campo all'infinito.
-   Ogni fase e' isolata: se il rilevamento province fallisce (rete lenta, endpoint pubblico
-   sovraccarico), si torna comunque al semplice elenco comuni invece di lasciare tutto vuoto. ---- */
+/* ---- Interroga Google per ogni punto campione del poligono e torna i nomi di comune da
+   aggiungere al campo testo. Se gran parte dei campioni ricade nella stessa provincia (zona
+   disegnata molto grande), riassume con "Provincia di X" invece di elencare ogni comune --
+   stessa logica/soglia di prima, solo ricavata dai campioni invece che dall'enumerazione
+   completa dei comuni della provincia. ---- */
 async function detectAreaNamesInPolygon(latlngPoints){
-  var MAX_TOWN_NAMES = 20;
-  var polyStr = latlngPoints.map(function(p){ return p[0]+" "+p[1]; }).join(" ");
+  var samples = sampleGridPointsInPolygon(latlngPoints);
+  var geocoded = await Promise.all(samples.map(function(pt){ return reverseGeocodePoint(pt[0], pt[1]); }));
+  geocoded = geocoded.filter(Boolean);
 
-  var covered = [];
-  try{
-    var candidates = await findCandidateProvinces(polyStr);
-    covered = await detectCoveredProvinces(candidates, polyStr);
-  }catch(e){
-    console.warn("Rilevamento province non riuscito, si prova comunque con i comuni (non bloccante):", e);
+  var localities = [];
+  var localitiesLower = [];
+  var provinceCounts = {};
+  geocoded.forEach(function(g){
+    if(g.locality && localitiesLower.indexOf(g.locality.toLowerCase()) === -1){
+      localities.push(g.locality);
+      localitiesLower.push(g.locality.toLowerCase());
+    }
+    if(g.province) provinceCounts[g.province] = (provinceCounts[g.province] || 0) + 1;
+  });
+
+  mergeIntoAllDetectedComuni(localities); // elenco completo per la ricerca annunci, mai troncato
+
+  // provincia "coperta" se compare in almeno 3 campioni distinti, o nella maggioranza di essi
+  var coveredProvinces = Object.keys(provinceCounts).filter(function(p){
+    return provinceCounts[p] >= 3 || provinceCounts[p] / geocoded.length >= 0.5;
+  });
+
+  if(!coveredProvinces.length){
+    return localities;
   }
 
-  var towns = await detectPlacesInPolygon(latlngPoints);
-  mergeIntoAllDetectedComuni(towns); // elenco completo per la ricerca annunci, mai troncato
-
-  if(!covered.length){
-    return towns.slice(0, MAX_TOWN_NAMES);
-  }
-
-  var excludeLower = new Set();
-  try{
-    var provinceTownNames = await listPlaceNamesInProvinces(covered);
-    provinceTownNames.forEach(function(n){ excludeLower.add(n.toLowerCase()); });
-  }catch(e){
-    console.warn("Lettura comuni delle province coperte non riuscita (non bloccante):", e);
-  }
-
-  var remainingTowns = towns.filter(function(t){ return !excludeLower.has(t.toLowerCase()); }).slice(0, MAX_TOWN_NAMES);
-  var provinceNames = covered.map(function(p){ return "Provincia di " + p.name; });
-  return provinceNames.concat(remainingTowns);
+  var provinceNames = coveredProvinces.map(function(p){ return "Provincia di " + p; });
+  var remainingLocalities = localities.filter(function(loc){
+    var g = geocoded.find(function(x){ return x.locality === loc; });
+    return !(g && g.province && coveredProvinces.indexOf(g.province) !== -1);
+  });
+  return provinceNames.concat(remainingLocalities);
 }
 
 function mergeNamesIntoAreasField(names){
