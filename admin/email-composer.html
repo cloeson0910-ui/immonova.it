@@ -68,6 +68,17 @@ body::after{
 .kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--c-554321);margin-bottom:12px}
 .title{font-size:42px;font-weight:200;letter-spacing:.05em;color:var(--c-5b461d);margin-bottom:18px}
 .subtitle{font-size:15px;line-height:1.8;color:var(--c-4f4125);max-width:860px;margin-bottom:28px}
+.window-notice{
+  max-width:860px;
+  margin:0 0 28px;
+  padding:14px 18px;
+  border:1px solid rgba(166,127,52,.28);
+  background:rgba(166,127,52,.08);
+  color:var(--c-4f4125);
+  font-size:12px;
+  letter-spacing:.04em;
+  line-height:1.6;
+}
 .form-wrapper{
   background:rgba(255,255,255,.20);
   backdrop-filter:blur(8px);
@@ -165,6 +176,7 @@ textarea{min-height:220px;resize:vertical;line-height:1.7}
 .save-panel{min-width:300px}
 .progress-text{min-height:18px;margin-bottom:10px;font-size:13px;color:var(--c-4f4125)}
 .progress-text.success{color:var(--c-2b4626)}
+.progress-text.scheduled{color:var(--c-5b461d);font-weight:600}
 .progress-text.error{color:var(--c-561a1a)}
 .progress-bar{width:100%;height:6px;border:1px solid rgba(166,127,52,.20);background:rgba(255,255,255,.28);overflow:hidden;margin-bottom:14px}
 .progress-fill{width:0%;height:100%;background:#a67f34;transition:width .35s ease}
@@ -201,6 +213,9 @@ textarea{min-height:220px;resize:vertical;line-height:1.7}
   <p class="subtitle" data-i18n="subtitle">
     Scrivi una comunicazione ufficiale IMMONOVA e mandala a tutta la rubrica scelta o solo alle persone che selezioni. La mail arriva già con la grafica del sito.
   </p>
+  <div class="window-notice" data-i18n="window_notice">
+    Le comunicazioni vengono inviate solo tra le 8:00 e le 21:00 (ora Italia). Se invii fuori da questa fascia oraria, il messaggio viene programmato automaticamente per le 8:00 del prossimo orario utile — non serve rifare nulla, parte da solo.
+  </div>
 
   <form id="composerForm" class="form-wrapper">
 
@@ -292,6 +307,7 @@ var UI_STRINGS = {
   nav_dashboard:"Dashboard", nav_investors:"Investitori", nav_users:"Utenti", logout:"Logout",
   kicker:"Comunicazione Ufficiale", title:"Nuova Comunicazione",
   subtitle:"Scrivi una comunicazione ufficiale IMMONOVA e mandala a tutta la rubrica scelta o solo alle persone che selezioni. La mail arriva già con la grafica del sito.",
+  window_notice:"Le comunicazioni vengono inviate solo tra le 8:00 e le 21:00 (ora Italia). Se invii fuori da questa fascia oraria, il messaggio viene programmato automaticamente per le 8:00 del prossimo orario utile — non serve rifare nulla, parte da solo.",
   section_book:"Rubrica",
   book_investors_title:"Investitori", book_investors_desc:"Clienti e acquirenti registrati",
   book_profiles_title:"Collaboratori", book_profiles_desc:"Utenti con accesso al pannello IMMONOVA",
@@ -311,13 +327,15 @@ var UI_STRINGS = {
   msg_sending:"Invio comunicazione in corso...",
   msg_sent_success:"Comunicazione inviata correttamente.",
   msg_sent_partial:"Comunicazione inviata con alcuni errori: ",
-  msg_send_error:"Errore durante l'invio: "
+  msg_send_error:"Errore durante l'invio: ",
+  msg_scheduled_today:"Fuori dalla fascia 8:00-21:00: la comunicazione partirà automaticamente alle 8:00 di oggi.",
+  msg_scheduled_tomorrow:"Fuori dalla fascia 8:00-21:00: la comunicazione partirà automaticamente alle 8:00 di domani."
 };
 
-var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Fran\u00e7ais", de:"Deutsch", es:"Espa\u00f1ol", ar:"\u0627\u0644\u0639\u0631\u0628\u064a\u0629" };
+var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_email_composer_" + lang + "_v2"; }
+function i18nCacheKey(lang){ return "immonova_i18n_email_composer_" + lang + "_v3"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -584,7 +602,11 @@ form.addEventListener("submit", async function(event){
 
     setProgress(T.msg_sending, 55, "");
 
-    var result = await client.functions.invoke("send-bulk-communication", {
+    /* queue-bulk-communication decide da sola se mandare subito (siamo dentro la
+       fascia 8:00-21:00 ora Italia) o accodare la comunicazione per le 8:00 del
+       prossimo orario utile (result.data.mode: "sent_now" oppure "scheduled") --
+       stesso payload di prima, cambia solo il nome della funzione chiamata. */
+    var result = await client.functions.invoke("queue-bulk-communication", {
       body: Object.assign({
         subject: subject,
         body_text: bodyText,
@@ -598,7 +620,15 @@ form.addEventListener("submit", async function(event){
     }
 
     var data = result.data || {};
-    if(data.failed > 0){
+
+    if(data.mode === "scheduled"){
+      var scheduledLocalHour = null;
+      try{
+        scheduledLocalHour = new Date(data.scheduled_send_at).toLocaleString("it-IT", { timeZone:"Europe/Rome", hour:"2-digit", minute:"2-digit", day:"2-digit", month:"2-digit" });
+      }catch(e){}
+      var scheduledMsg = data.message || T.msg_scheduled_tomorrow;
+      setProgress(scheduledMsg + (scheduledLocalHour ? " (" + scheduledLocalHour + ")" : ""), 100, "scheduled");
+    }else if(data.failed > 0){
       setProgress(T.msg_sent_partial + data.sent + "/" + (data.sent + data.failed), 100, "error");
     }else{
       setProgress(T.msg_sent_success + " (" + data.sent + ")", 100, "success");
