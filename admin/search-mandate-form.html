@@ -471,6 +471,7 @@ var UI_STRINGS = {
   btn_undo_last_area:"Elimina ultima zona",
   btn_retry_area_detect:"Rileva di nuovo comuni/provincia",
   map_status_detect_retry_none:"Nessuna zona disegnata: non c'è niente da rilevare di nuovo.",
+  map_status_detect_retry_success:"Rilevamento completato: comuni/provincia aggiornati nel campo qui sopra.",
   section_listings:"Immobili trovati",
   hint_listings:"Ricerca automatica su immobiliare.it, idealista.it, subito.it e casa.it in base a zona e budget del mandato, eseguita ad ogni salvataggio. I link “Ricerca su ...” aprono il portale già filtrato (sempre affidabili); gli eventuali annunci singoli sotto sono un tentativo automatico best-effort e possono mancare se il portale blocca le richieste automatiche.",
   btn_rerun_listings:"Cerca di nuovo ora",
@@ -518,7 +519,7 @@ var UI_STRINGS = {
 var LANGUAGE_LABELS = { it:"Italiano", en:"English", fr:"Français", de:"Deutsch", es:"Español", ar:"العربية" };
 var T = UI_STRINGS;
 
-function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v4"; }
+function i18nCacheKey(lang){ return "immonova_i18n_search_mandate_form_" + lang + "_v5"; }
 
 async function loadTranslatedStrings(lang){
   if(lang === "it") return UI_STRINGS;
@@ -743,21 +744,28 @@ async function detectAreaNamesInPolygon(latlngPoints){
 
   mergeIntoAllDetectedComuni(localities); // elenco completo per la ricerca annunci, mai troncato
 
-  // provincia "coperta" se compare in almeno 3 campioni distinti, o nella maggioranza di essi
-  var coveredProvinces = Object.keys(provinceCounts).filter(function(p){
-    return provinceCounts[p] >= 3 || provinceCounts[p] / geocoded.length >= 0.5;
-  });
+  // Google (long_name di administrative_area_level_2 in Italia) restituisce gia' il nome
+  // completo "Provincia di X", quindi va usato cosi' com'e' -- NON va aggiunto un secondo
+  // prefisso "Provincia di" sopra, altrimenti si ottiene "Provincia di Provincia di X".
+  // Il riassunto a livello di provincia scatta solo con un numero minimo di campioni
+  // (almeno 3): su una zona piccola (un quartiere, poche vie) spesso c'e' un solo campione
+  // dentro il poligono, e in quel caso va mostrato il comune puntuale, non la provincia.
+  var MIN_SAMPLES_FOR_PROVINCE_SUMMARY = 3;
+  var coveredProvinces = geocoded.length >= MIN_SAMPLES_FOR_PROVINCE_SUMMARY
+    ? Object.keys(provinceCounts).filter(function(p){
+        return provinceCounts[p] >= 3 || provinceCounts[p] / geocoded.length >= 0.6;
+      })
+    : [];
 
   if(!coveredProvinces.length){
     return localities;
   }
 
-  var provinceNames = coveredProvinces.map(function(p){ return "Provincia di " + p; });
   var remainingLocalities = localities.filter(function(loc){
     var g = geocoded.find(function(x){ return x.locality === loc; });
     return !(g && g.province && coveredProvinces.indexOf(g.province) !== -1);
   });
-  return provinceNames.concat(remainingLocalities);
+  return coveredProvinces.concat(remainingLocalities);
 }
 
 function mergeNamesIntoAreasField(names){
@@ -846,7 +854,12 @@ async function retryAreaDetection(){
   }
 
   if(btn) btn.disabled = false;
-  updateAreaMapStatus(anyFailed ? T.map_status_detect_failed : undefined);
+  if(anyFailed){
+    updateAreaMapStatus(T.map_status_detect_failed);
+  }else{
+    updateAreaMapStatus(T.map_status_detect_retry_success);
+    setTimeout(updateAreaMapStatus, 4000);
+  }
 }
 
 function undoLastAreaPolygon(){
