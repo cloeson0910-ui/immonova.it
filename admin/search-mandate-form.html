@@ -721,11 +721,14 @@ async function reverseGeocodePoint(lat, lng){
   }
 }
 
-/* ---- Interroga Google per ogni punto campione del poligono e torna i nomi di comune da
-   aggiungere al campo testo. Se gran parte dei campioni ricade nella stessa provincia (zona
-   disegnata molto grande), riassume con "Provincia di X" invece di elencare ogni comune --
-   stessa logica/soglia di prima, solo ricavata dai campioni invece che dall'enumerazione
-   completa dei comuni della provincia. ---- */
+/* ---- Interroga Google per ogni punto campione del poligono e torna i nomi dei singoli
+   comuni da aggiungere al campo testo -- SEMPRE il comune puntuale, mai un riassunto
+   "Provincia di X" al posto dell'elenco (comportamento di prima con Overpass, che elencava
+   ogni comune trovato nel poligono). TUTTE le province incontrate tra i campioni (non solo
+   la piu' frequente) vengono messe in automatico nel campo "Provincia" dedicato: una zona
+   costiera disegnata a mano spesso tocca piu' province bagnate dallo stesso mare (es. in
+   Puglia Brindisi/Lecce/Taranto), e omettere o scegliere una sola provincia farebbe perdere
+   annunci nella ricerca sui portali per le altre. ---- */
 async function detectAreaNamesInPolygon(latlngPoints){
   var samples = sampleGridPointsInPolygon(latlngPoints);
   var geocoded = await Promise.all(samples.map(function(pt){ return reverseGeocodePoint(pt[0], pt[1]); }));
@@ -733,39 +736,39 @@ async function detectAreaNamesInPolygon(latlngPoints){
 
   var localities = [];
   var localitiesLower = [];
-  var provinceCounts = {};
+  var provincesFound = [];
+  var provincesFoundLower = [];
   geocoded.forEach(function(g){
     if(g.locality && localitiesLower.indexOf(g.locality.toLowerCase()) === -1){
       localities.push(g.locality);
       localitiesLower.push(g.locality.toLowerCase());
     }
-    if(g.province) provinceCounts[g.province] = (provinceCounts[g.province] || 0) + 1;
+    if(g.province){
+      var p = g.province.replace(/^provincia di /i, "").trim();
+      if(provincesFoundLower.indexOf(p.toLowerCase()) === -1){
+        provincesFound.push(p);
+        provincesFoundLower.push(p.toLowerCase());
+      }
+    }
   });
 
   mergeIntoAllDetectedComuni(localities); // elenco completo per la ricerca annunci, mai troncato
 
-  // Google (long_name di administrative_area_level_2 in Italia) restituisce gia' il nome
-  // completo "Provincia di X", quindi va usato cosi' com'e' -- NON va aggiunto un secondo
-  // prefisso "Provincia di" sopra, altrimenti si ottiene "Provincia di Provincia di X".
-  // Il riassunto a livello di provincia scatta solo con un numero minimo di campioni
-  // (almeno 3): su una zona piccola (un quartiere, poche vie) spesso c'e' un solo campione
-  // dentro il poligono, e in quel caso va mostrato il comune puntuale, non la provincia.
-  var MIN_SAMPLES_FOR_PROVINCE_SUMMARY = 3;
-  var coveredProvinces = geocoded.length >= MIN_SAMPLES_FOR_PROVINCE_SUMMARY
-    ? Object.keys(provinceCounts).filter(function(p){
-        return provinceCounts[p] >= 3 || provinceCounts[p] / geocoded.length >= 0.6;
-      })
-    : [];
+  provincesFound.forEach(mergeSingleProvinceIntoField);
 
-  if(!coveredProvinces.length){
-    return localities;
+  return localities;
+}
+
+function mergeSingleProvinceIntoField(provinceName){
+  if(!provinceName) return;
+  var field = document.getElementById("province");
+  if(!field) return;
+  var existing = field.value.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+  var existingLower = existing.map(function(s){ return s.toLowerCase(); });
+  if(existingLower.indexOf(provinceName.toLowerCase()) === -1){
+    existing.push(provinceName);
+    field.value = existing.join(", ");
   }
-
-  var remainingLocalities = localities.filter(function(loc){
-    var g = geocoded.find(function(x){ return x.locality === loc; });
-    return !(g && g.province && coveredProvinces.indexOf(g.province) !== -1);
-  });
-  return coveredProvinces.concat(remainingLocalities);
 }
 
 function mergeNamesIntoAreasField(names){
