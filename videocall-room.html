@@ -357,12 +357,16 @@ function guestImageUrlForKind(kind){
 }
 
 function backgroundOptionsFor(organizer){
+  // La sfocatura funziona bene per chiunque (non dipende da un cutout netto della persona,
+  // quindi non ha i difetti di contorno delle immagini fisse): va offerta sia all'organizzatore
+  // che agli ospiti. Lo sfondo IMMONOVA resta un'opzione in piu' solo per l'organizzatore, ma
+  // non e' piu' l'unica alternativa alla camera reale.
   var opts = [ { kind:"none", label:"Videocamera reale" } ];
+  opts.push({ kind:"blur-light", label:"Sfocatura leggera" });
+  opts.push({ kind:"blur-strong", label:"Sfocatura forte" });
   if(organizer){
     opts.push({ kind:"immonova", label:"Sfondo IMMONOVA" });
   }else{
-    opts.push({ kind:"blur-light", label:"Sfocatura leggera" });
-    opts.push({ kind:"blur-strong", label:"Sfocatura forte" });
     GUEST_BACKGROUND_IMAGES.forEach(function(img){
       opts.push({ kind:img.kind, label:img.label, url:img.url });
     });
@@ -731,10 +735,27 @@ function stopCallTimer(){
   if(timerEl) timerEl.className = "call-timer";
 }
 
+/* ---- Avviso prima di ricaricare/chiudere la scheda durante una chiamata attiva: un reload
+   interrompe sempre la connessione video (vale per qualunque sistema di videochiamata via
+   browser, non e' qualcosa che si possa evitare), quindi lo scopo qui e' solo impedire che
+   succeda per sbaglio con un avviso nativo del browser prima che accada. ---- */
+function beforeUnloadHandler(e){
+  e.preventDefault();
+  e.returnValue = "";
+  return "";
+}
+function enableLeaveWarning(){
+  window.addEventListener("beforeunload", beforeUnloadHandler);
+}
+function disableLeaveWarning(){
+  window.removeEventListener("beforeunload", beforeUnloadHandler);
+}
+
 let hasLeft = false;
 async function leaveCall(){
   if(hasLeft) return;
   hasLeft = true;
+  disableLeaveWarning();
   stopCallTimer();
   stopWaitingRoomPolling();
   try{
@@ -844,6 +865,7 @@ async function connectToRoom(data){
   await room.connect(data.ws_url, data.token);
   hideDeviceBanner();
   startCallTimer();
+  enableLeaveWarning();
 
   try{
     await room.localParticipant.setMicrophoneEnabled(true);
