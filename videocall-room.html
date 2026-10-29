@@ -288,10 +288,26 @@ async function fetchAdminToken(){
   return res.json();
 }
 
+/* ---- Sfondi a scelta per gli INVITATI (mai per l'organizzatore): due per categoria,
+   immagini generate in stile coerente con la palette IMMONOVA (toni caldi/oro, sfumato).
+   Vanno caricate sul sito in questo percorso relativo, accanto a questa pagina. ---- */
+var GUEST_BACKGROUND_IMAGES = [
+  { kind:"img-stanza-1",    label:"Salotto",        url:"img/invitati/stanza-1.jpg" },
+  { kind:"img-stanza-2",    label:"Angolo lettura",  url:"img/invitati/stanza-2.jpg" },
+  { kind:"img-ufficio-1",   label:"Studio",          url:"img/invitati/ufficio-1.jpg" },
+  { kind:"img-ufficio-2",   label:"Ufficio",         url:"img/invitati/ufficio-2.jpg" },
+  { kind:"img-panorama-1",  label:"Skyline",         url:"img/invitati/panorama-1.jpg" },
+  { kind:"img-panorama-2",  label:"Collina",         url:"img/invitati/panorama-2.jpg" }
+];
+function guestImageUrlForKind(kind){
+  var found = GUEST_BACKGROUND_IMAGES.find(function(o){ return o.kind === kind; });
+  return found ? found.url : null;
+}
+
 /* ---- Opzioni di sfondo: l'organizzatore vede SOLO "Videocamera reale" e "Sfondo IMMONOVA"
    (parete nera con il logo, per uniformita' istituzionale). Gli invitati vedono anche le
-   sfocature (e in futuro altri sfondi), ma mai lo sfondo IMMONOVA, riservato a chi conduce
-   l'incontro. ---- */
+   sfocature e le immagini di ambiente qui sopra, ma mai lo sfondo IMMONOVA, riservato a chi
+   conduce l'incontro. ---- */
 function backgroundOptionsFor(organizer){
   var opts = [
     { kind:"none", label:"Videocamera reale" }
@@ -301,6 +317,9 @@ function backgroundOptionsFor(organizer){
   }else{
     opts.push({ kind:"blur-light", label:"Sfocatura leggera" });
     opts.push({ kind:"blur-strong", label:"Sfocatura forte" });
+    GUEST_BACKGROUND_IMAGES.forEach(function(img){
+      opts.push({ kind:img.kind, label:img.label, url:img.url });
+    });
   }
   return opts;
 }
@@ -324,6 +343,7 @@ function buildBackgroundPanel(controls){
     var swatch = document.createElement("span");
     swatch.className = "swatch";
     if(opt.kind === "immonova") swatch.style.backgroundImage = "url('" + IMMONOVA_BG_URL + "')";
+    else if(opt.url) swatch.style.backgroundImage = "url('" + opt.url + "')";
     else if(opt.kind === "none") swatch.style.background = "linear-gradient(135deg,#3a3a3a,#111)";
     else swatch.style.background = "linear-gradient(135deg,#55606a,#1c2126)";
     btn.appendChild(swatch);
@@ -380,9 +400,11 @@ async function applyBackground(kind){
 
   try{
     var processor = null;
+    var guestImageUrl = guestImageUrlForKind(kind);
     if(kind === "blur-light") processor = new TrackProcessors.BackgroundBlur(10);
     else if(kind === "blur-strong") processor = new TrackProcessors.BackgroundBlur(20);
     else if(kind === "immonova") processor = new TrackProcessors.VirtualBackground(IMMONOVA_BG_URL);
+    else if(guestImageUrl) processor = new TrackProcessors.VirtualBackground(guestImageUrl);
     if(processor){
       await pub.track.setProcessor(processor);
       currentProcessor = processor;
