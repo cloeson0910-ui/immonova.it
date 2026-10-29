@@ -60,6 +60,13 @@ cursor:pointer;
 background:none;
 }
 
+.waiting-spinner{
+width:34px;height:34px;margin:0 auto 18px;border-radius:50%;
+border:2px solid rgba(216,179,106,.25);border-top-color:#d8b36a;
+animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 .stage{
 flex:1;
 display:grid;
@@ -145,9 +152,9 @@ letter-spacing:.08em;
 text-transform:uppercase;
 }
 
-/* ---- Pannello scelta sfondo virtuale: si apre sopra la barra controlli, ancorato al
-   pulsante "bg". Opzioni diverse per organizzatore (solo videocamera reale / sfondo
-   IMMONOVA) e invitati (videocamera reale + sfocature, piu' eventuali sfondi futuri). ---- */
+/* ---- Pannello scelta sfondo virtuale, ancorato al pulsante "bg" della barra controlli.
+   Opzioni diverse per organizzatore (solo videocamera reale / sfondo IMMONOVA) e invitati
+   (videocamera reale + sfocature + alcuni sfondi d'ambiente). ---- */
 .bg-panel{
 position:absolute;
 bottom:78px;
@@ -161,6 +168,8 @@ display:none;
 flex-direction:column;
 gap:8px;
 min-width:240px;
+max-height:70vh;
+overflow-y:auto;
 box-shadow:0 12px 32px rgba(0,0,0,.5);
 }
 .bg-panel.show{display:flex}
@@ -197,6 +206,42 @@ color:var(--c-9a8f7a);
 line-height:1.5;
 margin-top:2px;
 }
+
+/* ---- Sala d'attesa (solo organizzatore): notifica quando un invitato ha firmato e vuole
+   entrare. Si impila in alto a destra, uno sopra l'altro se piu' persone sono in attesa. ---- */
+.waiting-room{
+position:fixed;
+top:76px;
+right:18px;
+z-index:50;
+display:flex;
+flex-direction:column;
+gap:10px;
+max-width:320px;
+}
+.waiting-card{
+background:#2a2217;
+border:1px solid rgba(216,179,106,.4);
+border-radius:10px;
+padding:14px 16px;
+box-shadow:0 14px 34px rgba(0,0,0,.5);
+animation:slidein .25s ease-out;
+}
+@keyframes slidein{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
+.waiting-card .wc-name{font-size:13.5px;color:var(--c-f4ecdf);margin-bottom:10px}
+.waiting-card .wc-actions{display:flex;gap:8px}
+.waiting-card button{
+flex:1;
+padding:8px 10px;
+border-radius:5px;
+border:none;
+font-size:11px;
+letter-spacing:.06em;
+text-transform:uppercase;
+cursor:pointer;
+}
+.waiting-card .admit-btn{background:#2f6b3a;color:#fffaf0}
+.waiting-card .dismiss-btn{background:rgba(255,255,255,.08);color:var(--c-cbb58a)}
 </style>
 </head>
 <body>
@@ -214,6 +259,7 @@ margin-top:2px;
 </div>
 
 <div id="deviceBanner" class="device-banner"></div>
+<div id="waitingRoom" class="waiting-room"></div>
 
 <div id="root" class="state-message">Caricamento...</div>
 
@@ -237,10 +283,14 @@ const isOrganizer = !!callId; // entra con token admin = organizzatore della chi
 let room = null;
 let micEnabled = true;
 let camEnabled = true;
+let adminAccessToken = null; // sessione Supabase dell'organizzatore, riusata per sala d'attesa
 
 // ---- Sfondo virtuale: caricamento best-effort di @livekit/track-processors. Se il CDN non
 // e' raggiungibile (rete, blocco), la funzione resta disponibile ma disattivata: il resto
-// della videochiamata deve continuare a funzionare normalmente in ogni caso. ----
+// della videochiamata deve continuare a funzionare normalmente in ogni caso. API reale della
+// libreria: un'unica factory BackgroundProcessor({mode, ...}), NON classi separate
+// BackgroundBlur/VirtualBackground -- usare quelle (come in una versione precedente di questo
+// file) fallisce silenziosamente e lo sfondo scelto non ha alcun effetto. ---- */
 let TrackProcessors = null;
 let currentBackgroundKind = "none";
 let currentProcessor = null;
@@ -280,6 +330,7 @@ async function fetchAdminToken(){
     window.location.href = "admin/login.html";
     return { success:false, message:"Sessione scaduta." };
   }
+  adminAccessToken = session.access_token;
   var res = await fetch(FUNCTIONS_BASE + "/immonova-video-call-admin-token", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + session.access_token, "apikey": ANON_KEY },
@@ -288,9 +339,10 @@ async function fetchAdminToken(){
   return res.json();
 }
 
-/* ---- Sfondi a scelta per gli INVITATI (mai per l'organizzatore): due per categoria,
-   immagini generate in stile coerente con la palette IMMONOVA (toni caldi/oro, sfumato).
-   Vanno caricate sul sito in questo percorso relativo, accanto a questa pagina. ---- */
+/* ---- Opzioni di sfondo: l'organizzatore vede SOLO "Videocamera reale" e "Sfondo IMMONOVA"
+   (parete nera con il logo, per uniformita' istituzionale). Gli invitati vedono anche le
+   sfocature e alcuni sfondi d'ambiente, ma mai lo sfondo IMMONOVA, riservato a chi conduce
+   l'incontro. ---- */
 var GUEST_BACKGROUND_IMAGES = [
   { kind:"img-stanza-1",    label:"Salotto",        url:"img/invitati/stanza-1.jpg" },
   { kind:"img-stanza-2",    label:"Angolo lettura",  url:"img/invitati/stanza-2.jpg" },
@@ -304,14 +356,8 @@ function guestImageUrlForKind(kind){
   return found ? found.url : null;
 }
 
-/* ---- Opzioni di sfondo: l'organizzatore vede SOLO "Videocamera reale" e "Sfondo IMMONOVA"
-   (parete nera con il logo, per uniformita' istituzionale). Gli invitati vedono anche le
-   sfocature e le immagini di ambiente qui sopra, ma mai lo sfondo IMMONOVA, riservato a chi
-   conduce l'incontro. ---- */
 function backgroundOptionsFor(organizer){
-  var opts = [
-    { kind:"none", label:"Videocamera reale" }
-  ];
+  var opts = [ { kind:"none", label:"Videocamera reale" } ];
   if(organizer){
     opts.push({ kind:"immonova", label:"Sfondo IMMONOVA" });
   }else{
@@ -359,7 +405,7 @@ function buildBackgroundPanel(controls){
   var note = document.createElement("div");
   note.className = "bg-panel-note";
   note.textContent = TrackProcessors
-    ? (isOrganizer ? "Visibile solo a te: l'immagine sostituisce lo sfondo reale alle tue spalle." : "La sfocatura nasconde ciò che hai alle spalle senza bisogno di uno sfondo fisso.")
+    ? (isOrganizer ? "Visibile solo a te: l'immagine sostituisce lo sfondo reale alle tue spalle." : "La sfocatura o l'immagine nascondono ciò che hai alle spalle.")
     : "Sfondo virtuale non disponibile al momento su questo dispositivo/rete.";
   panel.appendChild(note);
 
@@ -383,31 +429,31 @@ function findCameraPublication(){
   return pubs.find(function(p){ return p.source === LK.Track.Source.Camera; }) || null;
 }
 
-/* ---- Applica (o rimuove) il processor sulla traccia video locale della camera. Se la
-   libreria non e' disponibile, o la camera non e' ancora pubblicata, lo stato desiderato
-   resta comunque salvato in currentBackgroundKind e verra' applicato non appena possibile
-   (vedi LocalTrackPublished piu' sotto). ---- */
+function backgroundConfigFor(kind){
+  var guestImageUrl = guestImageUrlForKind(kind);
+  if(kind === "blur-light") return { mode:"background-blur", blurRadius:10 };
+  if(kind === "blur-strong") return { mode:"background-blur", blurRadius:20 };
+  if(kind === "immonova") return { mode:"virtual-background", imagePath:IMMONOVA_BG_URL };
+  if(guestImageUrl) return { mode:"virtual-background", imagePath:guestImageUrl };
+  return { mode:"disabled" };
+}
+
+/* ---- Applica il nuovo sfondo. Se esiste gia' un processor attivo lo si riconfigura con
+   switchTo() invece di crearne uno nuovo (la libreria lo consiglia esplicitamente per evitare
+   artefatti visivi nel passaggio da un effetto all'altro); solo la primissima attivazione crea
+   il processor e lo collega alla traccia video con setProcessor(). ---- */
 async function applyBackground(kind){
+  if(!TrackProcessors) return;
   var pub = findCameraPublication();
   if(!pub || !pub.track) return;
 
-  if(currentProcessor){
-    try{ await pub.track.stopProcessor(); }catch(e){ console.warn("Rimozione sfondo precedente non riuscita (non bloccante):", e); }
-    currentProcessor = null;
-  }
-
-  if(kind === "none" || !TrackProcessors) return;
-
+  var config = backgroundConfigFor(kind);
   try{
-    var processor = null;
-    var guestImageUrl = guestImageUrlForKind(kind);
-    if(kind === "blur-light") processor = new TrackProcessors.BackgroundBlur(10);
-    else if(kind === "blur-strong") processor = new TrackProcessors.BackgroundBlur(20);
-    else if(kind === "immonova") processor = new TrackProcessors.VirtualBackground(IMMONOVA_BG_URL);
-    else if(guestImageUrl) processor = new TrackProcessors.VirtualBackground(guestImageUrl);
-    if(processor){
-      await pub.track.setProcessor(processor);
-      currentProcessor = processor;
+    if(currentProcessor){
+      await currentProcessor.switchTo(config);
+    }else if(config.mode !== "disabled"){
+      currentProcessor = TrackProcessors.BackgroundProcessor(config);
+      await pub.track.setProcessor(currentProcessor);
     }
   }catch(e){
     console.warn("Applicazione sfondo virtuale non riuscita (non bloccante):", e);
@@ -464,6 +510,94 @@ function buildStage(){
     if(panel.contains(e.target) || e.target === bgBtn) return;
     closeBackgroundPanel();
   });
+
+  if(isOrganizer) startWaitingRoomPolling();
+}
+
+/* ---- Sala d'attesa (solo organizzatore): ogni pochi secondi chiede chi e' in attesa di
+   entrare (ha gia' firmato/superato l'OTP ma non ancora ammesso) e mostra una notifica con un
+   pulsante "Ammetti". Niente di bloccante: se la chiamata fallisce semplicemente non mostra
+   nulla e riprova al giro successivo. ---- */
+var waitingRoomInterval = null;
+var waitingRoomKnownIds = {};
+
+async function fetchPendingParticipants(){
+  if(!adminAccessToken) return [];
+  try{
+    var res = await fetch(FUNCTIONS_BASE + "/immonova-video-call-pending", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminAccessToken, "apikey": ANON_KEY },
+      body: JSON.stringify({ call_id: callId })
+    });
+    var data = await res.json().catch(function(){ return null; });
+    if(!data || !data.success) return [];
+    return data.pending || [];
+  }catch(e){
+    console.warn("Lettura sala d'attesa non riuscita (non bloccante):", e);
+    return [];
+  }
+}
+
+function renderWaitingCard(participant){
+  var container = document.getElementById("waitingRoom");
+  if(!container || document.getElementById("wc_" + participant.id)) return;
+
+  var card = document.createElement("div");
+  card.className = "waiting-card";
+  card.id = "wc_" + participant.id;
+
+  var name = document.createElement("div");
+  name.className = "wc-name";
+  name.innerHTML = "<strong>" + escapeHTML(participant.full_name || "Un invitato") + "</strong> è in attesa di entrare nella videochiamata.";
+  card.appendChild(name);
+
+  var actions = document.createElement("div");
+  actions.className = "wc-actions";
+
+  var admitBtn = document.createElement("button");
+  admitBtn.type = "button";
+  admitBtn.className = "admit-btn";
+  admitBtn.textContent = "Ammetti";
+  admitBtn.onclick = function(){ admitParticipant(participant.id); };
+
+  var dismissBtn = document.createElement("button");
+  dismissBtn.type = "button";
+  dismissBtn.className = "dismiss-btn";
+  dismissBtn.textContent = "Ignora";
+  dismissBtn.onclick = function(){ card.remove(); };
+
+  actions.appendChild(admitBtn);
+  actions.appendChild(dismissBtn);
+  card.appendChild(actions);
+  container.appendChild(card);
+}
+
+async function admitParticipant(participantId){
+  var card = document.getElementById("wc_" + participantId);
+  if(card) card.remove();
+  try{
+    await fetch(FUNCTIONS_BASE + "/immonova-video-call-admit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + adminAccessToken, "apikey": ANON_KEY },
+      body: JSON.stringify({ participant_id: participantId })
+    });
+  }catch(e){
+    console.warn("Ammissione partecipante non riuscita, riprova dalla notifica se ricompare:", e);
+  }
+}
+
+function startWaitingRoomPolling(){
+  if(waitingRoomInterval) return;
+  var poll = async function(){
+    var pending = await fetchPendingParticipants();
+    pending.forEach(renderWaitingCard);
+  };
+  poll();
+  waitingRoomInterval = setInterval(poll, 4000);
+}
+
+function stopWaitingRoomPolling(){
+  if(waitingRoomInterval){ clearInterval(waitingRoomInterval); waitingRoomInterval = null; }
 }
 
 function tileIdFor(participant){
@@ -602,6 +736,7 @@ async function leaveCall(){
   if(hasLeft) return;
   hasLeft = true;
   stopCallTimer();
+  stopWaitingRoomPolling();
   try{
     if(room){
       await room.localParticipant.setMicrophoneEnabled(false);
@@ -621,6 +756,8 @@ async function leaveCall(){
   if(stageEl) stageEl.remove();
   var controlsEl = document.querySelector(".controls");
   if(controlsEl) controlsEl.remove();
+  var waitingRoomEl = document.getElementById("waitingRoom");
+  if(waitingRoomEl) waitingRoomEl.innerHTML = "";
 }
 
 function hideDeviceBanner(){
@@ -721,6 +858,46 @@ async function connectToRoom(data){
   }
 }
 
+function showWaitingForAdmission(){
+  setRootMessage(
+    '<div class="waiting-spinner"></div>' +
+    '<p>Hai firmato correttamente. L\'organizzatore ha gi&agrave; la tua richiesta: resterai qui in attesa finch&eacute; non ti far&agrave; entrare nella videochiamata.</p>' +
+    '<p style="font-size:13px;color:var(--c-9a8f7a);margin-top:10px">Questa pagina si aggiorna da sola, non serve ricaricare.</p>'
+  );
+}
+
+/* ---- Il partecipante prova a entrare a intervalli regolari finche' non viene ammesso
+   dall'organizzatore (error "waiting_admission") o finche' non arriva un errore diverso
+   (link scaduto, OTP necessario, ecc.) che va mostrato subito senza continuare a riprovare. ---- */
+let participantPollInterval = null;
+async function pollParticipantEntry(){
+  var data = await fetchParticipantToken();
+
+  if(data && data.success){
+    if(participantPollInterval){ clearInterval(participantPollInterval); participantPollInterval = null; }
+    await connectToRoom(data);
+    return;
+  }
+
+  if(data && data.error === "otp_required" && data.otp_id){
+    if(participantPollInterval){ clearInterval(participantPollInterval); participantPollInterval = null; }
+    var redirectUrl = window.location.href;
+    window.location.href = "verifica-otp.html?otp_id=" + encodeURIComponent(data.otp_id) + "&redirect=" + encodeURIComponent(redirectUrl);
+    return;
+  }
+
+  if(data && data.error === "waiting_admission"){
+    showWaitingForAdmission();
+    if(!participantPollInterval){
+      participantPollInterval = setInterval(pollParticipantEntry, 4000);
+    }
+    return;
+  }
+
+  if(participantPollInterval){ clearInterval(participantPollInterval); participantPollInterval = null; }
+  setRootMessage(escapeHTML((data && data.message) || "Impossibile accedere alla videochiamata."));
+}
+
 (async function init(){
   if(!inviteToken && !callId){
     setRootMessage("Link non valido: manca il codice di accesso alla videochiamata.");
@@ -728,18 +905,16 @@ async function connectToRoom(data){
   }
 
   try{
-    var data = inviteToken ? await fetchParticipantToken() : await fetchAdminToken();
-
-    if(!data || !data.success){
-      if(data && data.error === "otp_required" && data.otp_id){
-        var redirectUrl = window.location.href;
-        window.location.href = "verifica-otp.html?otp_id=" + encodeURIComponent(data.otp_id) + "&redirect=" + encodeURIComponent(redirectUrl);
-        return;
-      }
-      setRootMessage(escapeHTML((data && data.message) || "Impossibile accedere alla videochiamata."));
+    if(inviteToken){
+      await pollParticipantEntry();
       return;
     }
 
+    var data = await fetchAdminToken();
+    if(!data || !data.success){
+      setRootMessage(escapeHTML((data && data.message) || "Impossibile accedere alla videochiamata."));
+      return;
+    }
     await connectToRoom(data);
   }catch(e){
     setRootMessage("Errore di connessione alla videochiamata. Riprova tra qualche istante.");
