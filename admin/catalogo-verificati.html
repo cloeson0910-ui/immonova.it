@@ -454,17 +454,20 @@ function buildStats(p){
   return parts.join("");
 }
 
-function buildCard(p, index){
+function buildCard(p){
   const coverInner = p.cover_image
     ? `<img class="cover" src="${escapeHTML(p.cover_image)}" alt="">`
     : `<div class="cover placeholder">${escapeHTML(T.no_image)}</div>`;
   // L'immagine è cliccabile e porta alla scheda dell'opportunità su opportunity-edit.html --
   // stesso link usato altrove (es. matching mandati/contatti) per aprire il dettaglio.
   const cover = `<a class="cover-link" href="opportunity-edit.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">${coverInner}</a>`;
+  // Il numero scheda mostrato DEVE corrispondere all'id reale dell'opportunità
+  // (non a un indice progressivo di posizione nel catalogo), cosi' il numero
+  // riportato qui e' lo stesso che si trova aprendo opportunity-edit.html?id=...
   return `
     <div class="card">
       <div class="num-row">
-        <span class="num">${String(index).padStart(2,"0")}</span>
+        <span class="num">#${escapeHTML(p.id)}</span>
         <span class="price">${formatPrice(p.price)}</span>
       </div>
       ${cover}
@@ -479,7 +482,7 @@ function buildCard(p, index){
 }
 
 function buildSheet(items, pageNum, totalPages){
-  const cards = items.map((p, i) => buildCard(p, (pageNum - 1) * PER_PAGE + i + 1)).join("");
+  const cards = items.map((p) => buildCard(p)).join("");
   const localeMap = { it:"it-IT", en:"en-GB", fr:"fr-FR", de:"de-DE", es:"es-ES", ar:"ar" };
   const today = new Date().toLocaleDateString(localeMap[CURRENT_LANG] || "it-IT", { year:"numeric", month:"long", day:"numeric" });
   return `
