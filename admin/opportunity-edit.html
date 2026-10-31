@@ -1622,6 +1622,36 @@ button.danger{
         </label>
       </div>
 
+      <div class="section-title" data-i18n="section_seller_agreement">Accordo con il venditore e regole di pubblicazione</div>
+
+      <div class="field">
+        <label for="agreement_type" data-i18n="label_agreement_type">Tipo di incarico</label>
+        <select id="agreement_type">
+          <option value="" data-i18n="opt_select">Seleziona</option>
+          <option value="Esclusiva" data-i18n="agreement_exclusive">Esclusiva</option>
+          <option value="Non esclusiva" data-i18n="agreement_non_exclusive">Non esclusiva</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="publication_rule" data-i18n="label_publication_rule">Regola di pubblicazione</label>
+        <select id="publication_rule">
+          <option value="" data-i18n="opt_select">Seleziona</option>
+          <option value="Pubblicazione libera" data-i18n="pub_rule_free">Pubblicazione libera</option>
+          <option value="Off market" data-i18n="pub_rule_off_market">Off market (nessuna pubblicazione)</option>
+          <option value="Off market Italia, pubblicabile estero" data-i18n="pub_rule_off_market_italy_only">Off market in Italia, pubblicabile solo su portali esteri</option>
+          <option value="Pubblicazione consentita su portali selezionati" data-i18n="pub_rule_selected_portals">Pubblicazione consentita solo sui portali selezionati sotto</option>
+        </select>
+      </div>
+
+      <div class="field full" id="publicationPortalsField">
+        <label data-i18n="label_publication_portals">Portali su cui è consentita la pubblicazione</label>
+        <div class="room-inventory-note" data-i18n="note_publication_portals">Da compilare se la regola sopra lo richiede (pubblicazione libera su tutti, oppure solo sui portali qui selezionati).</div>
+        <div class="checks" id="portalsNationalGroup" style="grid-column:1/-1;flex-wrap:wrap;gap:10px 20px;margin-top:8px"></div>
+        <div class="room-inventory-note" style="margin-top:12px" data-i18n="label_portals_international">Portali internazionali</div>
+        <div class="checks" id="portalsInternationalGroup" style="grid-column:1/-1;flex-wrap:wrap;gap:10px 20px;margin-top:8px"></div>
+      </div>
+
       </div>
       <div class="tab-panel" data-tab-panel="media">
       <div class="section-title" data-i18n="section_media">Media</div>
@@ -2041,6 +2071,31 @@ button.danger{
         </select>
       </div>
 
+      <div class="section-title" data-i18n="section_water_sewage">Approvvigionamento idrico e scarico acque nere</div>
+
+      <div class="field">
+        <label for="water_supply_type" data-i18n="label_water_supply_type">Approvvigionamento idrico</label>
+        <select id="water_supply_type">
+          <option value="" data-i18n="opt_select">Seleziona</option>
+          <option value="Acquedotto" data-i18n="water_supply_aqueduct">Acquedotto</option>
+          <option value="Pozzo artesiano" data-i18n="water_supply_artesian_well">Pozzo artesiano</option>
+          <option value="Acquedotto + pozzo artesiano" data-i18n="water_supply_both">Acquedotto + pozzo artesiano</option>
+          <option value="Cisterna" data-i18n="water_supply_cistern">Cisterna</option>
+          <option value="Altro" data-i18n="opt_other">Altro</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="wastewater_type" data-i18n="label_wastewater_type">Scarico acque nere</label>
+        <select id="wastewater_type">
+          <option value="" data-i18n="opt_select">Seleziona</option>
+          <option value="Fognatura comunale" data-i18n="wastewater_sewer">Fognatura comunale</option>
+          <option value="Fossa Imhoff" data-i18n="wastewater_imhoff">Fossa Imhoff</option>
+          <option value="Subirrigazione" data-i18n="wastewater_subirrigation">Subirrigazione</option>
+          <option value="Vasca a tenuta stagna" data-i18n="wastewater_sealed_tank">Vasca a tenuta stagna</option>
+          <option value="Altro" data-i18n="opt_other">Altro</option>
+        </select>
+      </div>
 
       <div id="renovationBox" class="renovation-box">
         <div class="ai-title" data-i18n="renovation_title">Ristrutturazione e Render IA</div>
@@ -2434,6 +2489,8 @@ button.danger{
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="qrcode.min.js"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
@@ -4615,82 +4672,176 @@ document.getElementById("downloadAllRendersBtn").addEventListener("click", downl
    cosi' come sono, senza bisogno di rimuovere nulla. ---- */
 function yesNo(value){ return value === true ? "Sì" : "No"; }
 
-function buildDataRoomTechnicalText(){
-  var lines = [];
-  var push = function(label, value){
-    if(value === null || value === undefined || value === "") return;
-    lines.push(label + ": " + value);
+function ddrVal(id){
+  var el = document.getElementById(id);
+  return el ? el.value : "";
+}
+
+function ddrWaitForImages(root, timeoutMs){
+  var imgs = Array.prototype.slice.call(root.querySelectorAll("img"));
+  var pending = imgs.filter(function(img){ return !img.complete; });
+  if(!pending.length) return Promise.resolve();
+  return Promise.race([
+    Promise.all(pending.map(function(img){
+      return new Promise(function(resolve){
+        img.addEventListener("load", resolve, {once:true});
+        img.addEventListener("error", resolve, {once:true});
+      });
+    })),
+    new Promise(function(resolve){ setTimeout(resolve, timeoutMs || 6000); })
+  ]);
+}
+
+/* Costruisce il markup HTML (nascosto) della scheda Data Room da renderizzare in PDF:
+   ubicazione, distanze, dati tecnici, approvvigionamento idrico/scarico, accordo con
+   il venditore e regole di pubblicazione (tipo incarico, regola, portali autorizzati),
+   pittogrammi delle caratteristiche flaggate (icona + etichetta), descrizione e
+   sintesi di zona/turismo/mercato. */
+function buildDataRoomPdfHTML(){
+  var esc = function(v){ return escapeHTML(String(v == null ? "" : v)); };
+  var row = function(label, value){
+    if(value === null || value === undefined || value === "") return "";
+    return '<div class="ddr-row"><span class="ddr-label">' + esc(label) + '</span><span class="ddr-value">' + esc(value) + '</span></div>';
+  };
+  var section = function(title, inner){
+    if(!inner) return "";
+    return '<div class="ddr-section"><div class="ddr-section-title">' + esc(title) + '</div>' + inner + '</div>';
   };
 
-  lines.push("DATA ROOM — " + (document.getElementById("title").value || "Opportunità"));
-  lines.push("Generato il " + new Date().toLocaleString("it-IT"));
-  lines.push("");
+  var locationRows =
+    row("Comune", ddrVal("municipality")) +
+    row("Indirizzo", ddrVal("address")) +
+    row("Località", ddrVal("locality")) +
+    row("Provincia", ddrVal("province")) +
+    row("Regione", ddrVal("region")) +
+    row("CAP", ddrVal("postal_code"));
 
-  lines.push("--- UBICAZIONE ---");
-  push("Comune", document.getElementById("municipality") && document.getElementById("municipality").value);
-  push("Indirizzo", document.getElementById("address") && document.getElementById("address").value);
-  push("Località", document.getElementById("locality") && document.getElementById("locality").value);
-  push("Provincia", document.getElementById("province") && document.getElementById("province").value);
-  push("Regione", document.getElementById("region") && document.getElementById("region").value);
-  push("CAP", document.getElementById("postal_code") && document.getElementById("postal_code").value);
-  lines.push("");
+  var distanceRows =
+    row("Distanza dal mare", ddrVal("distance_to_sea_km") ? (ddrVal("distance_to_sea_km") + " km") : "") +
+    row("Aeroporto più vicino", ddrVal("nearest_airport")) +
+    row("Distanza aeroporto", ddrVal("distance_to_airport_km") ? (ddrVal("distance_to_airport_km") + " km") : "");
 
-  lines.push("--- DATI TECNICI ---");
-  push("Prezzo", document.getElementById("price") && document.getElementById("price").value);
-  push("Camere da letto", document.getElementById("bedrooms") && document.getElementById("bedrooms").value);
-  push("Bagni", document.getElementById("bathrooms") && document.getElementById("bathrooms").value);
-  push("Mq interni", document.getElementById("internal_size") && document.getElementById("internal_size").value);
-  push("Mq terreno", document.getElementById("land_size") && document.getElementById("land_size").value);
-  push("Mq giardino", document.getElementById("garden_sqm") && document.getElementById("garden_sqm").value);
-  push("Mq box auto/garage", document.getElementById("garage_sqm") && document.getElementById("garage_sqm").value);
-  push("Mq altri accessori", document.getElementById("accessory_size") && document.getElementById("accessory_size").value);
-  push("Anno costruzione", document.getElementById("construction_year") && document.getElementById("construction_year").value);
-  push("Classe energetica", document.getElementById("energy_class") && document.getElementById("energy_class").value);
-  push("Stato immobile", document.getElementById("property_condition") && document.getElementById("property_condition").value);
-  lines.push("");
+  var technicalRows =
+    row("Prezzo", ddrVal("price")) +
+    row("Camere da letto", ddrVal("bedrooms")) +
+    row("Bagni", ddrVal("bathrooms")) +
+    row("Mq interni", ddrVal("internal_size")) +
+    row("Mq terreno", ddrVal("land_size")) +
+    row("Mq giardino", ddrVal("garden_sqm")) +
+    row("Mq box auto/garage", ddrVal("garage_sqm")) +
+    row("Mq altri accessori", ddrVal("accessory_size")) +
+    row("Anno costruzione", ddrVal("construction_year")) +
+    row("Classe energetica", ddrVal("energy_class")) +
+    row("Stato immobile", ddrVal("property_condition"));
 
-  lines.push("--- IMPIANTI E CARATTERISTICHE ---");
+  var waterRows =
+    row("Approvvigionamento idrico", ddrVal("water_supply_type")) +
+    row("Scarico acque nere", ddrVal("wastewater_type"));
+
+  var portalLabels = (typeof getSelectedPublicationPortalLabels === "function") ? getSelectedPublicationPortalLabels() : [];
+  var agreementRows =
+    row("Tipo di incarico", ddrVal("agreement_type")) +
+    row("Regola di pubblicazione", ddrVal("publication_rule")) +
+    row("Portali autorizzati", portalLabels.length ? portalLabels.join(", ") : "");
+
+  var pictoItems = [];
   PROPERTY_FEATURES.forEach(function(f){
-    var el = document.getElementById(f.column);
-    if(!el || !el.checked) return;
+    var checkbox = document.getElementById(f.column);
+    if(!checkbox || !checkbox.checked) return;
     var label = (T && T["feat_" + f.column.replace(/^has_/, "")]) || f.column;
-    lines.push("• " + label);
+    var iconWrap = checkbox.parentElement ? checkbox.parentElement.querySelector(".feat-icon svg") : null;
+    var svgMarkup = iconWrap ? iconWrap.outerHTML : "";
+    var extra = "";
+    if(f.column === "has_photovoltaic" && ddrVal("photovoltaic_kw")){
+      extra = ddrVal("photovoltaic_kw") + " kW";
+    }else if(f.column === "has_heating_system" && (ddrVal("heating_type") || ddrVal("heating_fuel"))){
+      extra = [ddrVal("heating_type"), ddrVal("heating_fuel")].filter(Boolean).join(" · ");
+    }else if(f.column === "has_air_conditioning" && ddrVal("ac_type")){
+      extra = ddrVal("ac_type");
+    }
+    pictoItems.push(
+      '<div class="ddr-picto">' +
+        '<div class="ddr-picto-icon">' + svgMarkup + '</div>' +
+        '<div class="ddr-picto-label">' + esc(label) + (extra ? '<div class="ddr-picto-extra">' + esc(extra) + '</div>' : '') + '</div>' +
+      '</div>'
+    );
   });
-  if(document.getElementById("has_photovoltaic") && document.getElementById("has_photovoltaic").checked){
-    push("  Potenza fotovoltaico (kW)", document.getElementById("photovoltaic_kw") && document.getElementById("photovoltaic_kw").value);
-  }
-  if(document.getElementById("has_heating_system") && document.getElementById("has_heating_system").checked){
-    push("  Tipo riscaldamento", document.getElementById("heating_type") && document.getElementById("heating_type").value);
-    push("  Alimentazione riscaldamento", document.getElementById("heating_fuel") && document.getElementById("heating_fuel").value);
-  }
-  if(document.getElementById("has_air_conditioning") && document.getElementById("has_air_conditioning").checked){
-    push("  Tipo climatizzazione", document.getElementById("ac_type") && document.getElementById("ac_type").value);
-  }
-  lines.push("");
+  var pictoGrid = pictoItems.length ? '<div class="ddr-picto-grid">' + pictoItems.join("") + '</div>' : "";
 
-  lines.push("--- DESCRIZIONE ---");
-  lines.push(document.getElementById("full_description") && document.getElementById("full_description").value || document.getElementById("short_description").value || "(nessuna descrizione)");
-  lines.push("");
+  var description = ddrVal("full_description") || ddrVal("short_description") || "";
+  var locationSummary = ddrVal("location_summary");
+  var tourismSummary = ddrVal("tourism_summary");
+  var marketSummary = ddrVal("market_summary");
 
-  var locationSummary = document.getElementById("location_summary") && document.getElementById("location_summary").value;
-  if(locationSummary){
-    lines.push("--- ZONA E DINTORNI ---");
-    lines.push(locationSummary);
-    lines.push("");
-  }
-  var tourismSummary = document.getElementById("tourism_summary") && document.getElementById("tourism_summary").value;
-  if(tourismSummary){
-    lines.push("--- POTENZIALE TURISTICO ---");
-    lines.push(tourismSummary);
-    lines.push("");
-  }
-  var marketSummary = document.getElementById("market_summary") && document.getElementById("market_summary").value;
-  if(marketSummary){
-    lines.push("--- ANALISI DI MERCATO ---");
-    lines.push(marketSummary);
-  }
+  var textBlock = function(text){
+    return '<div class="ddr-text">' + esc(text).replace(/\n/g, "<br>") + '</div>';
+  };
 
-  return lines.join("\n");
+  var html =
+    '<div id="dataRoomPrintable" style="position:fixed;left:-99999px;top:0;width:800px;background:#ffffff;font-family:Helvetica,Arial,sans-serif;color:#1f2430;padding:36px;">' +
+      '<div style="border-bottom:2px solid #1f2430;padding-bottom:14px;margin-bottom:20px;">' +
+        '<div style="font-size:22px;font-weight:700;">' + esc(ddrVal("title") || "Opportunità") + '</div>' +
+        '<div style="font-size:12px;color:#667;margin-top:4px;">Data Room — generato il ' + esc(new Date().toLocaleString("it-IT")) + '</div>' +
+      '</div>' +
+      section("Ubicazione", locationRows) +
+      section("Distanze", distanceRows) +
+      section("Dati tecnici", technicalRows) +
+      section("Approvvigionamento idrico e scarico acque nere", waterRows) +
+      section("Accordo con il venditore e regole di pubblicazione", agreementRows) +
+      section("Caratteristiche", pictoGrid) +
+      (description ? section("Descrizione", textBlock(description)) : "") +
+      (locationSummary ? section("Zona e dintorni", textBlock(locationSummary)) : "") +
+      (tourismSummary ? section("Potenziale turistico", textBlock(tourismSummary)) : "") +
+      (marketSummary ? section("Analisi di mercato", textBlock(marketSummary)) : "") +
+    '</div>' +
+    '<style>' +
+      '#dataRoomPrintable .ddr-section{margin-bottom:18px;}' +
+      '#dataRoomPrintable .ddr-section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#1f2430;border-bottom:1px solid #d7dbe3;padding-bottom:6px;margin-bottom:8px;}' +
+      '#dataRoomPrintable .ddr-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;}' +
+      '#dataRoomPrintable .ddr-label{color:#556;}' +
+      '#dataRoomPrintable .ddr-value{font-weight:600;text-align:right;}' +
+      '#dataRoomPrintable .ddr-text{font-size:13px;line-height:1.6;color:#333;white-space:normal;}' +
+      '#dataRoomPrintable .ddr-picto-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}' +
+      '#dataRoomPrintable .ddr-picto{display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px 4px;border:1px solid #e3e6ec;border-radius:8px;}' +
+      '#dataRoomPrintable .ddr-picto-icon{width:28px;height:28px;color:#1f2430;}' +
+      '#dataRoomPrintable .ddr-picto-icon svg{width:100%;height:100%;}' +
+      '#dataRoomPrintable .ddr-picto-label{font-size:11px;margin-top:6px;color:#333;line-height:1.3;}' +
+      '#dataRoomPrintable .ddr-picto-extra{font-size:10px;color:#778;margin-top:2px;}' +
+    '</style>';
+
+  return html;
+}
+
+async function buildDataRoomPdfBlob(){
+  var holder = document.createElement("div");
+  holder.innerHTML = buildDataRoomPdfHTML();
+  document.body.appendChild(holder);
+  var el = document.getElementById("dataRoomPrintable");
+  try{
+    await ddrWaitForImages(el, 6000);
+    var canvas = await html2canvas(el, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+    var imgData = canvas.toDataURL("image/jpeg", 0.94);
+    var pageWidthMM = 210;
+    var ratio = canvas.height / canvas.width;
+    var pageHeightMM = pageWidthMM * ratio;
+    var MAX_HEIGHT_MM = 420;
+    var pdf, w = pageWidthMM, h = pageHeightMM;
+    if(pageHeightMM <= MAX_HEIGHT_MM){
+      pdf = new window.jspdf.jsPDF({orientation:"portrait", unit:"mm", format:[pageWidthMM, pageHeightMM]});
+      pdf.addImage(imgData, "JPEG", 0, 0, w, h);
+    }else{
+      pdf = new window.jspdf.jsPDF({orientation:"portrait", unit:"mm", format:"a4"});
+      var pageH = 297;
+      var pages = Math.ceil(h / pageH);
+      for(var i = 0; i < pages; i++){
+        if(i > 0) pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, -(i * pageH), w, h);
+      }
+    }
+    return pdf.output("blob");
+  }finally{
+    document.body.removeChild(holder);
+  }
 }
 
 async function exportDataRoom(){
@@ -4707,7 +4858,9 @@ async function exportDataRoom(){
 
   try{
     var zip = new JSZip();
-    zip.file("scheda-tecnica.txt", buildDataRoomTechnicalText());
+    btn.textContent = "Creazione PDF...";
+    var pdfBlob = await buildDataRoomPdfBlob();
+    zip.file("scheda-tecnica.pdf", pdfBlob);
 
     var photosFolder = zip.folder("foto");
     var failed = [];
@@ -5739,6 +5892,22 @@ var UI_STRINGS = {
   heating_fuel_diesel:"Gasolio", heating_fuel_electric:"Elettrico", heating_fuel_pellet:"Pellet", heating_fuel_wood:"Legna",
   label_ac_type:"Tipo di climatizzazione", ac_type_fancoil:"Ventilconvettore", ac_type_hot_cold:"Caldo/Freddo", ac_type_cold_only:"Solo freddo",
   opt_other:"Altro",
+  section_water_sewage:"Approvvigionamento idrico e scarico acque nere",
+  label_water_supply_type:"Approvvigionamento idrico", water_supply_aqueduct:"Acquedotto",
+  water_supply_artesian_well:"Pozzo artesiano", water_supply_both:"Acquedotto + pozzo artesiano",
+  water_supply_cistern:"Cisterna",
+  label_wastewater_type:"Scarico acque nere", wastewater_sewer:"Fognatura comunale",
+  wastewater_imhoff:"Fossa Imhoff", wastewater_subirrigation:"Subirrigazione",
+  wastewater_sealed_tank:"Vasca a tenuta stagna",
+  section_seller_agreement:"Accordo con il venditore e regole di pubblicazione",
+  label_agreement_type:"Tipo di incarico", agreement_exclusive:"Esclusiva", agreement_non_exclusive:"Non esclusiva",
+  label_publication_rule:"Regola di pubblicazione", pub_rule_free:"Pubblicazione libera",
+  pub_rule_off_market:"Off market (nessuna pubblicazione)",
+  pub_rule_off_market_italy_only:"Off market in Italia, pubblicabile solo su portali esteri",
+  pub_rule_selected_portals:"Pubblicazione consentita solo sui portali selezionati sotto",
+  label_publication_portals:"Portali su cui è consentita la pubblicazione",
+  note_publication_portals:"Da compilare se la regola sopra lo richiede (pubblicazione libera su tutti, oppure solo sui portali qui selezionati).",
+  label_portals_international:"Portali internazionali",
   msg_admin_only_render:"Solo un admin può generare i render IA.",
   label_owner:"Attribuita a (ai fini provvigione)", owner_unassigned:"Non attribuita",
   btn_save:"Salva Modifiche", btn_cancel:"Annulla", btn_open_dossier:"Apri Dossier IA", btn_synthetic_dossier:"Dossier Sintetico", btn_delete:"Elimina",
@@ -5833,6 +6002,69 @@ function syncConditionalFeatureFields(){
   if(heatingCheckbox) heatingCheckbox.addEventListener("change", syncConditionalFeatureFields);
   if(acCheckbox) acCheckbox.addEventListener("change", syncConditionalFeatureFields);
 })();
+
+/* ---- Portali di pubblicazione: lista curata di portali immobiliari nazionali e internazionali,
+   flaggabili indipendentemente dalla regola di pubblicazione scelta sopra. Salvati come array di
+   id in opportunities.publication_portals (jsonb), non come colonne separate, per poter
+   aggiungere/togliere portali dalla lista in futuro senza nuove migrazioni. ---- */
+var PORTAL_LIST = [
+  { id:"immobiliare_it", label:"Immobiliare.it", group:"national" },
+  { id:"casa_it", label:"Casa.it", group:"national" },
+  { id:"idealista_it", label:"Idealista.it", group:"national" },
+  { id:"subito_it", label:"Subito.it", group:"national" },
+  { id:"wikicasa_it", label:"Wikicasa.it", group:"national" },
+  { id:"tecnocasa_it", label:"Tecnocasa.it", group:"national" },
+  { id:"bakeca_immobiliare_it", label:"BakecaImmobiliare.it", group:"national" },
+  { id:"gateaway_com", label:"Gate-away.com", group:"international" },
+  { id:"rightmove_co_uk", label:"Rightmove (UK)", group:"international" },
+  { id:"zoopla_co_uk", label:"Zoopla (UK)", group:"international" },
+  { id:"realtor_com", label:"Realtor.com (USA)", group:"international" },
+  { id:"zillow_com", label:"Zillow (USA)", group:"international" },
+  { id:"jamesedition_com", label:"James Edition", group:"international" },
+  { id:"engelvoelkers_com", label:"Engel & Völkers", group:"international" },
+  { id:"green_acres_com", label:"Green-Acres", group:"international" },
+  { id:"primelocation_com", label:"PrimeLocation (UK)", group:"international" },
+  { id:"lux_residence_com", label:"Lux-Residence", group:"international" },
+  { id:"properstar_com", label:"Properstar", group:"international" },
+  { id:"kyero_com", label:"Kyero.com", group:"international" }
+];
+
+function renderPublicationPortalsCheckboxes(){
+  var nationalGroup = document.getElementById("portalsNationalGroup");
+  var intlGroup = document.getElementById("portalsInternationalGroup");
+  if(!nationalGroup || !intlGroup) return;
+  nationalGroup.innerHTML = "";
+  intlGroup.innerHTML = "";
+  PORTAL_LIST.forEach(function(p){
+    var label = document.createElement("label");
+    label.className = "check";
+    label.innerHTML = '<input type="checkbox" id="portal_' + p.id + '" data-portal-id="' + p.id + '" data-portal-label="' + p.label + '"><span>' + p.label + '</span>';
+    (p.group === "international" ? intlGroup : nationalGroup).appendChild(label);
+  });
+}
+renderPublicationPortalsCheckboxes();
+
+function setSelectedPublicationPortals(selectedIds){
+  var ids = Array.isArray(selectedIds) ? selectedIds : [];
+  PORTAL_LIST.forEach(function(p){
+    var el = document.getElementById("portal_" + p.id);
+    if(el) el.checked = ids.indexOf(p.id) !== -1;
+  });
+}
+
+function getSelectedPublicationPortals(){
+  return PORTAL_LIST.filter(function(p){
+    var el = document.getElementById("portal_" + p.id);
+    return el && el.checked;
+  }).map(function(p){ return p.id; });
+}
+
+function getSelectedPublicationPortalLabels(){
+  return PORTAL_LIST.filter(function(p){
+    var el = document.getElementById("portal_" + p.id);
+    return el && el.checked;
+  }).map(function(p){ return p.label; });
+}
 
 var isAdmin = false;
 var loadedFeatured = false;
@@ -6042,6 +6274,11 @@ async function loadOpportunity(){
   setValue("heating_type", data.heating_type || "");
   setValue("heating_fuel", data.heating_fuel || "");
   setValue("ac_type", data.ac_type || "");
+  setValue("water_supply_type", data.water_supply_type || "");
+  setValue("wastewater_type", data.wastewater_type || "");
+  setValue("agreement_type", data.agreement_type || "");
+  setValue("publication_rule", data.publication_rule || "");
+  setSelectedPublicationPortals(data.publication_portals);
   syncConditionalFeatureFields();
   document.getElementById("published").checked = data.published === true;
   loadedFeatured = data.featured === true;
@@ -7085,6 +7322,11 @@ form.addEventListener("submit", async function(e){
     payload.heating_type = textOrNull("heating_type");
     payload.heating_fuel = textOrNull("heating_fuel");
     payload.ac_type = textOrNull("ac_type");
+    payload.water_supply_type = textOrNull("water_supply_type");
+    payload.wastewater_type = textOrNull("wastewater_type");
+    payload.agreement_type = textOrNull("agreement_type");
+    payload.publication_rule = textOrNull("publication_rule");
+    payload.publication_portals = getSelectedPublicationPortals();
 
     var result = await client
       .from("opportunities")
