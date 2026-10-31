@@ -1647,6 +1647,8 @@ button.danger{
       <div class="field full" id="publicationPortalsField">
         <label data-i18n="label_publication_portals">Portali su cui è consentita la pubblicazione</label>
         <div class="room-inventory-note" data-i18n="note_publication_portals">Da compilare se la regola sopra lo richiede (pubblicazione libera su tutti, oppure solo sui portali qui selezionati).</div>
+        <div class="checks" id="portalsOwnGroup" style="grid-column:1/-1;flex-wrap:wrap;gap:10px 20px;margin-top:8px"></div>
+        <div class="room-inventory-note" style="margin-top:12px" data-i18n="label_portals_national">Portali nazionali</div>
         <div class="checks" id="portalsNationalGroup" style="grid-column:1/-1;flex-wrap:wrap;gap:10px 20px;margin-top:8px"></div>
         <div class="room-inventory-note" style="margin-top:12px" data-i18n="label_portals_international">Portali internazionali</div>
         <div class="checks" id="portalsInternationalGroup" style="grid-column:1/-1;flex-wrap:wrap;gap:10px 20px;margin-top:8px"></div>
@@ -5907,6 +5909,7 @@ var UI_STRINGS = {
   pub_rule_selected_portals:"Pubblicazione consentita solo sui portali selezionati sotto",
   label_publication_portals:"Portali su cui è consentita la pubblicazione",
   note_publication_portals:"Da compilare se la regola sopra lo richiede (pubblicazione libera su tutti, oppure solo sui portali qui selezionati).",
+  label_portals_national:"Portali nazionali",
   label_portals_international:"Portali internazionali",
   msg_admin_only_render:"Solo un admin può generare i render IA.",
   label_owner:"Attribuita a (ai fini provvigione)", owner_unassigned:"Non attribuita",
@@ -6008,6 +6011,8 @@ function syncConditionalFeatureFields(){
    id in opportunities.publication_portals (jsonb), non come colonne separate, per poter
    aggiungere/togliere portali dalla lista in futuro senza nuove migrazioni. ---- */
 var PORTAL_LIST = [
+  { id:"sito_agenzia", label:"Sito dell'agenzia", group:"own" },
+  { id:"sito_immonova", label:"Sito IMMONOVA", group:"own" },
   { id:"immobiliare_it", label:"Immobiliare.it", group:"national" },
   { id:"casa_it", label:"Casa.it", group:"national" },
   { id:"idealista_it", label:"Idealista.it", group:"national" },
@@ -6030,16 +6035,19 @@ var PORTAL_LIST = [
 ];
 
 function renderPublicationPortalsCheckboxes(){
+  var ownGroup = document.getElementById("portalsOwnGroup");
   var nationalGroup = document.getElementById("portalsNationalGroup");
   var intlGroup = document.getElementById("portalsInternationalGroup");
-  if(!nationalGroup || !intlGroup) return;
+  if(!ownGroup || !nationalGroup || !intlGroup) return;
+  ownGroup.innerHTML = "";
   nationalGroup.innerHTML = "";
   intlGroup.innerHTML = "";
   PORTAL_LIST.forEach(function(p){
     var label = document.createElement("label");
     label.className = "check";
     label.innerHTML = '<input type="checkbox" id="portal_' + p.id + '" data-portal-id="' + p.id + '" data-portal-label="' + p.label + '"><span>' + p.label + '</span>';
-    (p.group === "international" ? intlGroup : nationalGroup).appendChild(label);
+    var target = p.group === "international" ? intlGroup : (p.group === "own" ? ownGroup : nationalGroup);
+    target.appendChild(label);
   });
 }
 renderPublicationPortalsCheckboxes();
