@@ -7517,6 +7517,19 @@ form.addEventListener("submit", async function(e){
       throw result.error;
     }
 
+    /* FIX: dopo un salvataggio riuscito gli input file e la selezione da import-cartella
+       NON venivano mai svuotati -- quindi ad ogni "Salva Modifiche" successivo le STESSE
+       foto scelte in precedenza venivano ricaricate di nuovo su Supabase (duplicandole in
+       galleria), anche se l'utente non aveva selezionato nulla di nuovo. Puliamo tutto qui. */
+    currentCoverUrl = finalCoverUrl;
+    currentCoverCleanUrl = finalCoverCleanUrl;
+    coverRemoved = false;
+    document.getElementById("coverFile").value = "";
+    document.getElementById("galleryFiles").value = "";
+    clearFolderImport();
+    renderCover();
+    renderGallery();
+
     updateWorkProgress("save", "Modifiche salvate correttamente.", 100);
     hideWorkProgress("save", 1000);
     setStatus("Modifiche salvate correttamente.", "success");
