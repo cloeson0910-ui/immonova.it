@@ -2572,7 +2572,9 @@ var saveBtn = document.getElementById("saveBtn");
 var aiBtn = document.getElementById("aiBtn");
 
 var currentCoverUrl = "";
+var currentCoverCleanUrl = ""; // copertina originale SENZA logo, solo per Data Room
 var galleryImages = [];
+var galleryImagesClean = []; // foto gallery originali SENZA logo, stesso ordine di galleryImages, solo per Data Room
 var renovationImages = [];
 var renderImages = [];
 var coverRemoved = false;
@@ -4371,6 +4373,7 @@ async function downloadImageFile(url, suggestedName){
 
 function removeGalleryImage(index){
   galleryImages.splice(index, 1);
+  if(galleryImagesClean && galleryImagesClean.length > index) galleryImagesClean.splice(index, 1);
   renderGallery();
 }
 
@@ -4382,6 +4385,10 @@ function moveGalleryImage(fromIndex, toIndex){
   if(toIndex < 0 || toIndex >= galleryImages.length || fromIndex === toIndex) return;
   var moved = galleryImages.splice(fromIndex, 1)[0];
   galleryImages.splice(toIndex, 0, moved);
+  if(galleryImagesClean && galleryImagesClean.length > fromIndex){
+    var movedClean = galleryImagesClean.splice(fromIndex, 1)[0];
+    galleryImagesClean.splice(toIndex, 0, movedClean);
+  }
   renderGallery();
 }
 
@@ -4875,12 +4882,17 @@ async function exportDataRoom(){
     var photosFolder = zip.folder("foto");
     var failed = [];
     var photoList = [];
+    /* Data Room = foto SENZA logo: usiamo sempre la copia pulita (cover_image_clean /
+       gallery_images_clean) quando esiste. Se manca (foto caricate prima che questo
+       sistema esistesse), ricadiamo sulla versione pubblica con logo bruciato, piuttosto
+       che far fallire l'export -- quelle vecchie foto vanno sistemate a parte. */
     if(typeof currentCoverUrl !== "undefined" && currentCoverUrl && !coverRemoved){
-      photoList.push({ url: currentCoverUrl, name: "00-copertina" });
+      photoList.push({ url: currentCoverCleanUrl || currentCoverUrl, name: "00-copertina" });
     }
     if(typeof galleryImages !== "undefined" && galleryImages.length){
       galleryImages.forEach(function(url, idx){
-        photoList.push({ url: url, name: "foto-" + String(idx + 1).padStart(2, "0") });
+        var cleanUrl = (galleryImagesClean && galleryImagesClean[idx]) || "";
+        photoList.push({ url: cleanUrl || url, name: "foto-" + String(idx + 1).padStart(2, "0") });
       });
     }
 
@@ -5002,12 +5014,12 @@ async function uploadAndInsertRenovationImages(folder){
     );
 
     var path = "renovation/" + folder + "/" + roomType + "/" + Date.now() + "-" + (i + 1) + "-" + cleanFileName(file.name);
-    var url = await uploadImage(file, path);
+    var uploadResult = await uploadImage(file, path);
 
     rows.push({
       opportunity_id:Number(id),
       room_type:roomType,
-      original_image:url
+      original_image:uploadResult.url
     });
   }
 
@@ -5188,13 +5200,19 @@ async function applyImmonovaWatermark(file, watermarkKey){
   return new File([blob], originalName, { type: mimeType });
 }
 
-/* Il watermark NON viene piu' "cotto" nei pixel in upload: viene sovrapposto live (overlay
-   CSS) a video/stampa nel dossier (dossier-send.html / report-view.html), in base al logo
-   partner/co-brand impostato su questa scheda in quel momento. Cosi' cambiare il logo partner
-   non richiede mai piu' di rielaborare le foto gia' salvate. Qui carichiamo quindi il file
-   originale, senza alterarlo. */
+/* Ogni foto viene salvata in DUE copie, caricate in parallelo:
+   1) la versione PUBBLICA con il watermark IMMONOVA (o del partner) bruciato nei
+      pixel -- questa e' quella mostrata sul sito e nel dossier, SEMPRE con logo,
+      nessuna eccezione (regola esplicita).
+   2) una versione PULITA, identica ma senza nessun logo bruciato, salvata sotto
+      "clean/" nello stesso bucket -- questa e' usata SOLO dall'esportazione
+      Data Room, cosi' chi scarica la data room riceve foto pulite anche se il
+      sito continua a mostrare sempre il logo.
+   uploadImage() ritorna un oggetto {url, cleanUrl} invece di una singola stringa:
+   ogni chiamante va aggiornato di conseguenza. */
 async function uploadImage(file, path, watermarkKey){
   var watermarkedFile = await applyImmonovaWatermark(file, watermarkKey);
+  var cleanPath = "clean/" + path;
 
   var result = await client
     .storage
@@ -5208,12 +5226,32 @@ async function uploadImage(file, path, watermarkKey){
     throw result.error;
   }
 
+  var cleanResult = await client
+    .storage
+    .from("opportunities")
+    .upload(cleanPath, file, {
+      cacheControl:"3600",
+      upsert:false
+    });
+
+  if(cleanResult.error){
+    // Non blocchiamo il salvataggio della foto pubblica per un problema sulla sola
+    // copia pulita: la scheda resta funzionante, ma segnaliamo l'errore in console
+    // cosi' che l'esportazione Data Room possa ricadere sull'originale con logo.
+    console.warn("Upload copia pulita (Data Room) non riuscito per " + path + ":", cleanResult.error);
+  }
+
   var publicUrl = client
     .storage
     .from("opportunities")
     .getPublicUrl(path);
 
-  return publicUrl.data.publicUrl;
+  var cleanUrl = "";
+  if(!cleanResult.error){
+    cleanUrl = client.storage.from("opportunities").getPublicUrl(cleanPath).data.publicUrl;
+  }
+
+  return { url: publicUrl.data.publicUrl, cleanUrl: cleanUrl };
 }
 
 /* Upload "grezzo" SENZA watermark IMMONOVA: usato per il logo del partner (dossier white-label
@@ -6311,7 +6349,9 @@ async function loadOpportunity(){
   aiGenerated = data.ai_generated_description === true;
 
   currentCoverUrl = data.cover_image || "";
+  currentCoverCleanUrl = data.cover_image_clean || "";
   galleryImages = normalizeGallery(data.gallery_images);
+  galleryImagesClean = normalizeGallery(data.gallery_images_clean);
   currentPartnerLogoUrl = data.dossier_partner_logo_url || "";
   setValue("partnerName", data.dossier_partner_name || "");
   document.getElementById("partnerCobrand").checked = data.dossier_cobrand === true;
@@ -7145,6 +7185,7 @@ document.addEventListener("DOMContentLoaded", bindCrmMatchTools);
 document.getElementById("removeCoverBtn").addEventListener("click", function(){
   coverRemoved = true;
   currentCoverUrl = "";
+  currentCoverCleanUrl = "";
   document.getElementById("coverFile").value = "";
   renderCover();
 });
@@ -7190,9 +7231,18 @@ document.getElementById("removeAllPhotosBtn").addEventListener("click", async fu
     if(hasCover){
       var coverPath = extractOpportunityStoragePath(currentCoverUrl);
       if(coverPath) paths.push(coverPath);
+      if(currentCoverCleanUrl){
+        var coverCleanPath = extractOpportunityStoragePath(currentCoverCleanUrl);
+        if(coverCleanPath) paths.push(coverCleanPath);
+      }
     }
     if(hasGallery){
       galleryImages.forEach(function(url){
+        var p = extractOpportunityStoragePath(url);
+        if(p) paths.push(p);
+      });
+      (galleryImagesClean || []).forEach(function(url){
+        if(!url) return;
         var p = extractOpportunityStoragePath(url);
         if(p) paths.push(p);
       });
@@ -7208,7 +7258,7 @@ document.getElementById("removeAllPhotosBtn").addEventListener("click", async fu
     if(id){
       var dbResult = await client
         .from("opportunities")
-        .update({ cover_image:null, gallery_images:[] })
+        .update({ cover_image:null, cover_image_clean:null, gallery_images:[], gallery_images_clean:[] })
         .eq("id", id);
       if(dbResult.error){
         throw dbResult.error;
@@ -7217,10 +7267,12 @@ document.getElementById("removeAllPhotosBtn").addEventListener("click", async fu
 
     coverRemoved = true;
     currentCoverUrl = "";
+    currentCoverCleanUrl = "";
     document.getElementById("coverFile").value = "";
     renderCover();
 
     galleryImages = [];
+    galleryImagesClean = [];
     document.getElementById("galleryFiles").value = "";
     renderGallery();
 
@@ -7313,13 +7365,16 @@ form.addEventListener("submit", async function(e){
     }
 
     var finalCoverUrl = currentCoverUrl;
+    var finalCoverCleanUrl = currentCoverCleanUrl;
     var coverFile = folderImportCoverOverrideBlob || document.getElementById("coverFile").files[0];
 
     if(coverFile){
       setStatus("Caricamento nuova copertina...", "");
       updateWorkProgress("save", "Caricamento nuova copertina...", 22);
       var coverPath = "cover/" + folder + "/" + cleanFileName(coverFile.name);
-      finalCoverUrl = await uploadImage(coverFile, coverPath, "cover");
+      var coverUploadResult = await uploadImage(coverFile, coverPath, "cover");
+      finalCoverUrl = coverUploadResult.url;
+      finalCoverCleanUrl = coverUploadResult.cleanUrl || "";
     }
 
     var galleryFiles = Array.prototype.slice.call(document.getElementById("galleryFiles").files).concat(folderImportGalleryOverrideBlobs);
@@ -7332,8 +7387,9 @@ form.addEventListener("submit", async function(e){
         updateWorkProgress("save", "Caricamento immagine gallery " + (i + 1) + " di " + galleryFiles.length + "...", 38 + Math.round(((i + 1) / galleryFiles.length) * 18));
         var file = galleryFiles[i];
         var galleryPath = "gallery/" + folder + "/" + (i + 1) + "-" + cleanFileName(file.name);
-        var url = await uploadImage(file, galleryPath, "gallery:" + i);
-        galleryImages.push(url);
+        var galleryUploadResult = await uploadImage(file, galleryPath, "gallery:" + i);
+        galleryImages.push(galleryUploadResult.url);
+        galleryImagesClean.push(galleryUploadResult.cleanUrl || "");
       }
     }
 
@@ -7361,7 +7417,9 @@ form.addEventListener("submit", async function(e){
       price:textOrNull("price"),
 
       cover_image:finalCoverUrl,
+      cover_image_clean:finalCoverCleanUrl || null,
       gallery_images:galleryImages,
+      gallery_images_clean:galleryImagesClean,
       dossier_partner_logo_url:finalPartnerLogoUrl || null,
       dossier_partner_name:textOrNull("partnerName"),
       dossier_cobrand:isCobrand,

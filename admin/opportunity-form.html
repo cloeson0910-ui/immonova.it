@@ -3115,12 +3115,12 @@ async function uploadAndInsertRenovationImages(folder){
     );
 
     var path = "renovation/" + folder + "/" + roomType + "/" + Date.now() + "-" + (i + 1) + "-" + cleanFileName(file.name);
-    var url = await uploadImage(file, path);
+    var uploadResult = await uploadImage(file, path);
 
     rows.push({
       opportunity_id:Number(id),
       room_type:roomType,
-      original_image:url
+      original_image:uploadResult.url
     });
   }
 
@@ -3324,12 +3324,18 @@ async function applyImmonovaWatermark(file, watermarkKey){
   return new File([blob], originalName, { type: mimeType });
 }
 
+/* Ogni foto viene salvata in DUE copie, caricate in parallelo:
+   1) la versione PUBBLICA con il watermark IMMONOVA (o del partner) bruciato nei
+      pixel -- questa e' quella mostrata sul sito e nel dossier, SEMPRE con logo,
+      nessuna eccezione (regola esplicita).
+   2) una versione PULITA, identica ma senza nessun logo bruciato, salvata sotto
+      "clean/" nello stesso bucket -- usata SOLO dall'esportazione Data Room in
+      opportunity-edit.html, cosi' chi scarica la data room riceve foto pulite
+      anche se il sito continua a mostrare sempre il logo.
+   uploadImage() ritorna {url, cleanUrl} invece di una singola stringa. */
 async function uploadImage(file, path, watermarkKey){
-  /* Watermark NON piu' cotto nei pixel qui: il logo e' ora un overlay CSS live
-     applicato nel dossier (report-view.html/dossier-send.html), configurabile
-     per posizione/dimensione/opacita'/colore da opportunity-edit.html dopo la
-     creazione della scheda. Caricamento "grezzo" della foto originale. */
-  var watermarkedFile = file;
+  var watermarkedFile = await applyImmonovaWatermark(file, watermarkKey);
+  var cleanPath = "clean/" + path;
 
   var result = await client
     .storage
@@ -3343,12 +3349,29 @@ async function uploadImage(file, path, watermarkKey){
     throw result.error;
   }
 
+  var cleanResult = await client
+    .storage
+    .from("opportunities")
+    .upload(cleanPath, file, {
+      cacheControl:"3600",
+      upsert:false
+    });
+
+  if(cleanResult.error){
+    console.warn("Upload copia pulita (Data Room) non riuscito per " + path + ":", cleanResult.error);
+  }
+
   var publicUrl = client
     .storage
     .from("opportunities")
     .getPublicUrl(path);
 
-  return publicUrl.data.publicUrl;
+  var cleanUrl = "";
+  if(!cleanResult.error){
+    cleanUrl = client.storage.from("opportunities").getPublicUrl(cleanPath).data.publicUrl;
+  }
+
+  return { url: publicUrl.data.publicUrl, cleanUrl: cleanUrl };
 }
 
 /* =========================================================================
@@ -4379,19 +4402,23 @@ form.addEventListener("submit", async function(e){
     await resolveFolderImportSelection();
 
     var finalCoverUrl = "";
+    var finalCoverCleanUrl = "";
     var coverFile = folderImportCoverOverrideBlob || document.getElementById("coverFile").files[0];
 
     if(coverFile){
       setStatus("Caricamento copertina...", "");
       updateWorkProgress("save", "Caricamento copertina...", 18);
       var coverPath = "cover/" + tempFolder + "/" + cleanFileName(coverFile.name);
-      finalCoverUrl = await uploadImage(coverFile, coverPath, "cover");
+      var coverUploadResult = await uploadImage(coverFile, coverPath, "cover");
+      finalCoverUrl = coverUploadResult.url;
+      finalCoverCleanUrl = coverUploadResult.cleanUrl || "";
     }
 
     var galleryFiles = folderImportGalleryOverrideBlobs.length
       ? folderImportGalleryOverrideBlobs
       : Array.prototype.slice.call(document.getElementById("galleryFiles").files || []);
     galleryImages = [];
+    var galleryImagesClean = [];
 
     if(galleryFiles.length > 0){
       setStatus("Caricamento immagini gallery...", "");
@@ -4401,8 +4428,9 @@ form.addEventListener("submit", async function(e){
         updateWorkProgress("save", "Caricamento immagine gallery " + (i + 1) + " di " + galleryFiles.length + "...", 30 + Math.round(((i + 1) / galleryFiles.length) * 20));
         var file = galleryFiles[i];
         var galleryPath = "gallery/" + tempFolder + "/" + (i + 1) + "-" + cleanFileName(file.name);
-        var url = await uploadImage(file, galleryPath, "gallery:" + i);
-        galleryImages.push(url);
+        var galleryUploadResult = await uploadImage(file, galleryPath, "gallery:" + i);
+        galleryImages.push(galleryUploadResult.url);
+        galleryImagesClean.push(galleryUploadResult.cleanUrl || "");
       }
     }
 
@@ -4427,7 +4455,9 @@ form.addEventListener("submit", async function(e){
       show_price_dossier:document.getElementById("show_price_dossier") ? document.getElementById("show_price_dossier").checked : true,
 
       cover_image:finalCoverUrl,
+      cover_image_clean:finalCoverCleanUrl || null,
       gallery_images:galleryImages,
+      gallery_images_clean:galleryImagesClean,
 
       bedrooms:numberOrNull("bedrooms"),
       bathrooms:numberOrNull("bathrooms"),
