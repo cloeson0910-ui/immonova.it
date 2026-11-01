@@ -1818,6 +1818,12 @@ button.danger{
         <button type="button" class="soft" id="removeCoverBtn" data-i18n="btn_remove_cover">Rimuovi Copertina</button>
       </div>
 
+      <div class="field full" style="border-top:1px solid #e5d9bf;padding-top:14px;margin-top:4px">
+        <button type="button" class="soft" id="removeAllPhotosBtn" data-i18n="btn_remove_all_photos" style="color:#a33;border-color:#c99">🗑️ Rimuovi tutte le foto (copertina + gallery)</button>
+        <div class="file-note" data-i18n="note_remove_all_photos" style="margin-top:6px">Cancella subito copertina e gallery sia da questa scheda sia dallo storage Supabase: azione irreversibile. Dopo puoi ricaricare foto nuove e pulite.</div>
+        <div id="removeAllPhotosStatus" style="font-size:11.5px;margin-top:4px"></div>
+      </div>
+
       <div class="field full">
         <label for="coverFile" data-i18n="label_replace_cover">Sostituisci / Aggiungi Copertina</label>
         <input type="file" id="coverFile" accept="image/*">
@@ -5797,6 +5803,7 @@ var UI_STRINGS = {
   label_price:"Prezzo / Valore investimento",
   section_media:"Media", label_current_cover:"Copertina attuale", no_cover_text:"Nessuna copertina caricata.",
   btn_remove_cover:"Rimuovi Copertina", label_replace_cover:"Sostituisci / Aggiungi Copertina",
+  btn_remove_all_photos:"🗑️ Rimuovi tutte le foto (copertina + gallery)", note_remove_all_photos:"Cancella subito copertina e gallery sia da questa scheda sia dallo storage Supabase: azione irreversibile. Dopo puoi ricaricare foto nuove e pulite.",
   label_current_gallery:"Gallery attuale", no_gallery_text:"Nessuna immagine gallery caricata.",
   label_add_gallery:"Aggiungi immagini alla gallery",
   section_documents:"Documentazione immobile", documents_title:"Due Diligence Documentale",
@@ -7140,6 +7147,93 @@ document.getElementById("removeCoverBtn").addEventListener("click", function(){
   currentCoverUrl = "";
   document.getElementById("coverFile").value = "";
   renderCover();
+});
+
+function extractOpportunityStoragePath(publicUrl){
+  var marker = "/storage/v1/object/public/opportunities/";
+  var idx = publicUrl.indexOf(marker);
+  if(idx === -1) return null;
+  return decodeURIComponent(publicUrl.substring(idx + marker.length).split("?")[0]);
+}
+
+/* Rimuove TUTTE le foto (copertina + gallery) sia dalla scheda sia dallo storage
+   Supabase, cosi' da permettere di ricaricare foto nuove e pulite senza lasciare
+   file vecchi orfani nel bucket. Azione distruttiva e immediata: non aspetta il
+   pulsante Salva, conferma prima con l'utente e cancella anche la riga DB subito,
+   per evitare che la scheda resti puntata a file che non esistono piu'. */
+document.getElementById("removeAllPhotosBtn").addEventListener("click", async function(){
+  var btn = this;
+  var statusEl = document.getElementById("removeAllPhotosStatus");
+
+  var hasCover = currentCoverUrl && !coverRemoved;
+  var hasGallery = typeof galleryImages !== "undefined" && galleryImages.length;
+  if(!hasCover && !hasGallery){
+    if(statusEl){ statusEl.textContent = "Non ci sono foto caricate da rimuovere."; statusEl.style.color = "#886"; }
+    return;
+  }
+
+  var totalCount = (hasCover ? 1 : 0) + (hasGallery ? galleryImages.length : 0);
+  var confirmed = window.confirm(
+    "Rimuovere TUTTE le " + totalCount + " foto (copertina + gallery) di questa scheda?\n\n" +
+    "Le foto verranno cancellate subito dallo storage Supabase: azione irreversibile. " +
+    "Dopo potrai ricaricare foto nuove e pulite."
+  );
+  if(!confirmed) return;
+
+  btn.disabled = true;
+  var originalText = btn.textContent;
+  btn.textContent = "Rimozione in corso...";
+  if(statusEl){ statusEl.textContent = ""; }
+
+  try{
+    var paths = [];
+    if(hasCover){
+      var coverPath = extractOpportunityStoragePath(currentCoverUrl);
+      if(coverPath) paths.push(coverPath);
+    }
+    if(hasGallery){
+      galleryImages.forEach(function(url){
+        var p = extractOpportunityStoragePath(url);
+        if(p) paths.push(p);
+      });
+    }
+
+    if(paths.length){
+      var removeResult = await client.storage.from("opportunities").remove(paths);
+      if(removeResult.error){
+        throw removeResult.error;
+      }
+    }
+
+    if(id){
+      var dbResult = await client
+        .from("opportunities")
+        .update({ cover_image:null, gallery_images:[] })
+        .eq("id", id);
+      if(dbResult.error){
+        throw dbResult.error;
+      }
+    }
+
+    coverRemoved = true;
+    currentCoverUrl = "";
+    document.getElementById("coverFile").value = "";
+    renderCover();
+
+    galleryImages = [];
+    document.getElementById("galleryFiles").value = "";
+    renderGallery();
+
+    if(statusEl){ statusEl.textContent = "✓ " + totalCount + " foto rimosse (scheda + storage Supabase). Ora puoi ricaricare foto nuove."; statusEl.style.color = "#2a7a2a"; }
+    setStatus("Tutte le foto sono state rimosse. Ricarica copertina e gallery quando vuoi.", "success");
+  }catch(removeError){
+    console.error(removeError);
+    if(statusEl){ statusEl.textContent = "Errore durante la rimozione: " + (removeError.message || removeError); statusEl.style.color = "#a33"; }
+    setStatus("Errore nella rimozione delle foto: " + (removeError.message || removeError), "error");
+  }
+
+  btn.disabled = false;
+  btn.textContent = originalText;
 });
 
 document.getElementById("removePartnerLogoBtn").addEventListener("click", function(){
