@@ -5140,43 +5140,46 @@ function computeWatermarkRect(canvasWidth, canvasHeight, logoAspectRatio, positi
   return { x:x, y:y, width:wmWidth, height:wmHeight };
 }
 
+/* Regola: se la scheda non ha un logo partner, le foto DEVONO sempre avere il
+   watermark IMMONOVA impresso al salvataggio -- nessuna eccezione silenziosa.
+   Se qualcosa va storto qui, l'errore propaga e blocca l'upload (invece di
+   caricare una foto "pulita" senza che nessuno se ne accorga). */
 async function applyImmonovaWatermark(file, watermarkKey){
   if(!file) return file;
-  try{
-    var variant = getWatermarkVariantForKey(watermarkKey);
-    var logo = await loadImmonovaWatermarkLogo(variant);
-    var sourceImg = await loadImageFromBlob(file);
+  var variant = getWatermarkVariantForKey(watermarkKey);
+  var logo = await loadImmonovaWatermarkLogo(variant);
+  var sourceImg = await loadImageFromBlob(file);
 
-    var canvas = document.createElement("canvas");
-    canvas.width = sourceImg.naturalWidth || sourceImg.width;
-    canvas.height = sourceImg.naturalHeight || sourceImg.height;
+  var canvas = document.createElement("canvas");
+  canvas.width = sourceImg.naturalWidth || sourceImg.width;
+  canvas.height = sourceImg.naturalHeight || sourceImg.height;
 
-    if(!canvas.width || !canvas.height) return file;
-
-    var ctx = canvas.getContext("2d");
-    ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
-
-    var position = getWatermarkPosition();
-    var rect = computeWatermarkRect(canvas.width, canvas.height, logo.height / logo.width, position);
-
-    ctx.save();
-    ctx.globalAlpha = getWatermarkOpacity();
-    ctx.drawImage(logo, rect.x, rect.y, rect.width, rect.height);
-    ctx.restore();
-
-    var mimeType = (file.type === "image/png") ? "image/png" : "image/jpeg";
-    var blob = await new Promise(function(resolve){
-      canvas.toBlob(function(b){ resolve(b); }, mimeType, 0.92);
-    });
-
-    if(!blob) return file;
-
-    var originalName = file.name || "image.jpg";
-    return new File([blob], originalName, { type: mimeType });
-  }catch(watermarkError){
-    console.warn("Watermark non applicato, carico la foto originale:", watermarkError);
-    return file;
+  if(!canvas.width || !canvas.height){
+    throw new Error("Impossibile applicare il watermark: dimensioni immagine non valide (" + (file.name || "foto") + ").");
   }
+
+  var ctx = canvas.getContext("2d");
+  ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
+
+  var position = getWatermarkPosition();
+  var rect = computeWatermarkRect(canvas.width, canvas.height, logo.height / logo.width, position);
+
+  ctx.save();
+  ctx.globalAlpha = getWatermarkOpacity();
+  ctx.drawImage(logo, rect.x, rect.y, rect.width, rect.height);
+  ctx.restore();
+
+  var mimeType = (file.type === "image/png") ? "image/png" : "image/jpeg";
+  var blob = await new Promise(function(resolve){
+    canvas.toBlob(function(b){ resolve(b); }, mimeType, 0.92);
+  });
+
+  if(!blob){
+    throw new Error("Impossibile applicare il watermark: generazione immagine fallita (" + (file.name || "foto") + ").");
+  }
+
+  var originalName = file.name || "image.jpg";
+  return new File([blob], originalName, { type: mimeType });
 }
 
 /* Il watermark NON viene piu' "cotto" nei pixel in upload: viene sovrapposto live (overlay
@@ -5185,7 +5188,7 @@ async function applyImmonovaWatermark(file, watermarkKey){
    non richiede mai piu' di rielaborare le foto gia' salvate. Qui carichiamo quindi il file
    originale, senza alterarlo. */
 async function uploadImage(file, path, watermarkKey){
-  var watermarkedFile = file;
+  var watermarkedFile = await applyImmonovaWatermark(file, watermarkKey);
 
   var result = await client
     .storage
