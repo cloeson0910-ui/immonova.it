@@ -149,10 +149,10 @@ h1{font-size:26px;font-weight:300;letter-spacing:.04em;color:var(--c-5c4a22);mar
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
+<script src="../js/owner-pages-guard.js"></script>
 <script>
 const client = window.supabaseClient;
 const TEMPLATE_KEY = "partnership-agreement";
-const OWNER_ONLY_EMAIL = "claudio.romano@bluewin.ch";
 let currentUser = null, currentProfile = null, isOwner = false;
 
 const pageStatus = document.getElementById("pageStatus");
@@ -260,18 +260,17 @@ async function checkAuth() {
 }
 
 async function loadProfile() {
+  // Barriera vera: owner-pages-guard.js (stessa lista condivisa usata da tutte le
+  // pagine owner-only e dal menu dinamico in dashboard.html). Se non sei il titolare
+  // questa chiamata reindirizza già a dashboard.html, quindi il resto della pagina
+  // non parte nemmeno per chi non dovrebbe vederla.
+  const allowed = await guardOwnerOnlyPage(client, currentUser.id);
+  if (!allowed) return;
+
   const { data, error } = await client.from("profiles").select("id,email,full_name,role").eq("id", currentUser.id).single();
   if (error) { console.error(error); return; }
   currentProfile = data;
-  const myEmail = String((currentProfile && currentProfile.email) || currentUser.email || "").trim().toLowerCase();
-  isOwner = myEmail === OWNER_ONLY_EMAIL;
-  if (!isOwner) {
-    setStatus("Sezione riservata al titolare: non hai i permessi per accedere a questa pagina.", "error");
-    document.querySelector(".toolbar").style.display = "none";
-    document.querySelector(".sheet-wrap").style.display = "none";
-    document.querySelector(".history").style.display = "none";
-    return;
-  }
+  isOwner = true;
   await loadTemplate();
   await loadHistory();
 }
