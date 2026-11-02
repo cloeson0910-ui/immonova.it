@@ -74,6 +74,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
 .pill.status-scheduled{background:rgba(166,127,34,.22); color:var(--c-4c3a11)}
 .pill.status-published{background:rgba(40,120,60,.18); color:var(--c-134323)}
 .pill.status-archived{background:rgba(150,150,150,.18); color:var(--c-414141)}
+.pill.status-rejected{background:rgba(179,69,47,.15); color:var(--c-62261a)}
 .card-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:auto}
 .card-actions button{flex:1; min-width:110px}
 .post-status-line{font-size:12px; color:var(--dark2); min-height:16px}
@@ -192,6 +193,7 @@ button:disabled{opacity:.45; cursor:not-allowed}
       <option value="approved">Approvato</option>
       <option value="scheduled">Programmato</option>
       <option value="published">Pubblicato</option>
+      <option value="rejected">Rifiutato</option>
       <option value="archived">Archiviato</option>
     </select>
   </div>
@@ -352,6 +354,14 @@ button:disabled{opacity:.45; cursor:not-allowed}
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let posts = [];
 let currentUser = null;
+let currentProfile = null;
+// Solo il titolare può approvare/programmare/pubblicare un post altrui — stesso
+// controllo (email del profilo) usato ovunque nel pannello. Qui serve solo per
+// adattare l'interfaccia (nascondere opzioni che tanto il database rifiuterebbe);
+// la vera barriera è il trigger immonova_guard_social_post_status_trigger sul DB
+// e il controllo server-side nell'edge function immonova-social-publish.
+const OWNER_EMAIL = "claudio.romano@bluewin.ch";
+let isOwner = false;
 
 async function checkAuth(){
   const {data:{session}, error} = await client.auth.getSession();
@@ -365,7 +375,7 @@ function escapeHTML(s){
 }
 
 function statusLabel(s){
-  return {draft:"Bozza", ready_to_review:"Da rivedere", approved:"Approvato", scheduled:"Programmato", published:"Pubblicato", archived:"Archiviato"}[s] || s;
+  return {draft:"Bozza", ready_to_review:"Da rivedere", approved:"Approvato", scheduled:"Programmato", published:"Pubblicato", archived:"Archiviato", rejected:"Rifiutato"}[s] || s;
 }
 
 // v1: converte un valore <input type="datetime-local"> (locale, senza fuso)
@@ -422,9 +432,15 @@ function renderCard(p){
   if(p.publish_to_instagram) destinations.push("Instagram");
   if(p.publish_to_linkedin) destinations.push("LinkedIn");
   const alreadyPublished = p.status === "published";
+  // Un post non approvato (o non programmato dal titolare) non può essere pubblicato —
+  // il pulsante resta disabilitato invece di far scoprire il blocco solo dopo il click
+  // (il server lo rifiuterebbe comunque: vera barriera = trigger DB + edge function).
+  const canPublish = p.status === "approved" || p.status === "scheduled";
   const errorLine = p.publish_error ? `<div class="post-status-line error">${escapeHTML(p.publish_error)}</div>` : "";
   const okLine = (!p.publish_error && alreadyPublished) ? `<div class="post-status-line ok">Pubblicato${p.published_at ? " · " + new Date(p.published_at).toLocaleString("it-IT") : ""}</div>` : "";
   const scheduledLine = (!alreadyPublished && p.status === "scheduled" && p.scheduled_publish_at) ? `<div class="post-status-line" style="color:var(--c-4c3a11)">Programmato per il ${new Date(p.scheduled_publish_at).toLocaleString("it-IT")}</div>` : "";
+  const pendingLine = (p.status === "ready_to_review") ? `<div class="post-status-line" style="color:var(--c-4c3a11)">In attesa di approvazione del titolare</div>` : "";
+  const rejectedLine = (p.status === "rejected") ? `<div class="post-status-line error">Rifiutato dal titolare</div>` : "";
 
   const mediaType = p.media_type || "image";
   const mediaLabel = mediaType === "video" ? "Video" : (mediaType === "carousel" ? `Carosello${Array.isArray(p.carousel_image_urls) ? " (" + p.carousel_image_urls.length + ")" : ""}` : "Immagine");
@@ -440,11 +456,11 @@ function renderCard(p){
       <span class="pill">${escapeHTML(destinations.join(" + ") || "Nessuna destinazione")}</span>
     </div>
     <div class="caption">${escapeHTML(p.caption || "(nessun testo)")}</div>
-    <div class="post-status-line" id="postStatusLine-${escapeHTML(p.id)}">${errorLine}${okLine}${scheduledLine}</div>
+    <div class="post-status-line" id="postStatusLine-${escapeHTML(p.id)}">${errorLine}${okLine}${scheduledLine}${pendingLine}${rejectedLine}</div>
     <div class="card-actions">
       <button class="btn-outline edit-btn" data-id="${escapeHTML(p.id)}">Modifica</button>
       <button class="btn-outline preview-btn" data-id="${escapeHTML(p.id)}">Anteprima</button>
-      <button class="btn-gold publish-btn" data-id="${escapeHTML(p.id)}" ${alreadyPublished ? "disabled" : ""}>${alreadyPublished ? "Già pubblicato" : "Pubblica ora"}</button>
+      <button class="btn-gold publish-btn" data-id="${escapeHTML(p.id)}" ${(alreadyPublished || !canPublish) ? "disabled" : ""}>${alreadyPublished ? "Già pubblicato" : (canPublish ? "Pubblica ora" : "In attesa di approvazione")}</button>
       <button class="btn-danger delete-btn" data-id="${escapeHTML(p.id)}">Elimina</button>
     </div>
   </div>`;
@@ -615,9 +631,19 @@ function openEditModal(id){
   // assegnare direttamente p.status lascerebbe il <select> senza nessuna
   // opzione corrispondente selezionata (valore vuoto), che poi il database
   // rifiuta al salvataggio. In quei casi ripieghiamo su "draft".
-  const EDITABLE_STATUSES = ["draft", "ready_to_review", "approved"];
+  // Solo il titolare può scegliere "Approvato" o programmare una pubblicazione —
+  // per chiunque altro il database (trigger immonova_guard_social_post_status_trigger)
+  // forzerebbe comunque il post a "Da rivedere", quindi nascondiamo qui quelle opzioni
+  // per non far credere a un collaboratore che la sua scelta avrà effetto.
+  const fStatusEl = document.getElementById("fStatus");
+  const approvedOption = fStatusEl.querySelector('option[value="approved"]');
+  if(approvedOption) approvedOption.style.display = isOwner ? "" : "none";
+  const scheduleField = document.getElementById("fScheduleEnabled").closest(".field");
+  if(scheduleField) scheduleField.style.display = isOwner ? "" : "none";
+
+  const EDITABLE_STATUSES = isOwner ? ["draft", "ready_to_review", "approved"] : ["draft", "ready_to_review"];
   document.getElementById("fStatus").value = (p && EDITABLE_STATUSES.includes(p.status)) ? p.status : "draft";
-  document.getElementById("fScheduleEnabled").checked = !!(p && p.scheduled_publish_at && p.status === "scheduled");
+  document.getElementById("fScheduleEnabled").checked = isOwner && !!(p && p.scheduled_publish_at && p.status === "scheduled");
   document.getElementById("fScheduledAt").value = p ? isoToLocalDatetime(p.scheduled_publish_at) : "";
   toggleScheduleBlock();
   toggleStoryStyleBlock();
@@ -964,14 +990,39 @@ async function savePost(){
     scheduled_publish_at: scheduledAtISO,
   };
 
+  let savedPost = null;
   if(id){
-    const {error} = await client.from("immonova_social_posts").update(payload).eq("id", id);
+    const {data, error} = await client.from("immonova_social_posts").update(payload).eq("id", id).select().maybeSingle();
     if(error){ alert("Errore salvataggio: " + error.message); return; }
+    savedPost = data;
   } else {
     payload.created_by = currentUser ? currentUser.id : null;
-    const {error} = await client.from("immonova_social_posts").insert(payload);
+    const {data, error} = await client.from("immonova_social_posts").insert(payload).select().maybeSingle();
     if(error){ alert("Errore creazione: " + error.message); return; }
+    savedPost = data;
   }
+
+  // Non-owner e il post è (ri)entrato in revisione: avvisa il titolare via email,
+  // con link diretti di approvazione/rifiuto. Il vero blocco alla pubblicazione
+  // resta comunque il trigger sul database, a prescindere dall'esito di questa
+  // chiamata (fire-and-forget, un suo eventuale fallimento non blocca il salvataggio).
+  if(!isOwner && savedPost && savedPost.status === "ready_to_review"){
+    try{
+      const {data:{session}} = await client.auth.getSession();
+      if(session){
+        await fetch(SUPABASE_URL + "/functions/v1/notify-social-post-pending", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + session.access_token,
+            "apikey": SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({post_id: savedPost.id}),
+        });
+      }
+    }catch(e){ console.warn("Notifica approvazione non inviata (non bloccante):", e); }
+  }
+
   closeEditModal();
   await loadPosts();
 }
@@ -1281,8 +1332,17 @@ document.getElementById("closePreviewBtn").addEventListener("click", () => docum
 document.getElementById("editModal").addEventListener("click", (e) => { if(e.target.id === "editModal") closeEditModal(); });
 document.getElementById("previewModal").addEventListener("click", (e) => { if(e.target.id === "previewModal") document.getElementById("previewModal").classList.remove("open"); });
 
+async function loadOwnerFlag(){
+  try{
+    const {data, error} = await client.from("profiles").select("email").eq("id", currentUser.id).maybeSingle();
+    if(error){ console.warn(error); isOwner = false; return; }
+    isOwner = String((data && data.email) || currentUser.email || "").trim().toLowerCase() === OWNER_EMAIL;
+  }catch(e){ console.warn(e); isOwner = false; }
+}
+
 (async function init(){
   if(!(await checkAuth())) return;
+  await loadOwnerFlag();
   await loadPosts();
 })();
 </script>
