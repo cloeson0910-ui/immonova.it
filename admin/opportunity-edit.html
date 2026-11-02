@@ -4935,6 +4935,15 @@ async function exportDataRoom(){
     document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(downloadUrl); }, 4000);
 
+    /* Regola esplicita del titolare: SOLO lui deve sapere chi scarica una Data Room,
+       quale e quando -- nessun collaboratore vede questa notifica. Non deve mai bloccare
+       il download gia' avvenuto: se la mail fallisce, logghiamo soltanto in console. */
+    client.functions.invoke("notify-dataroom-download", {
+      body: { opportunity_id: id, opportunity_title: textOrNull("title") || "" }
+    }).catch(function(notifyError){
+      console.warn("Notifica download Data Room non inviata:", notifyError);
+    });
+
     if(failed.length){
       setStatus("Data room scaricata, ma " + failed.length + " foto non sono state incluse (link non raggiungibile).", "error");
     }else{
