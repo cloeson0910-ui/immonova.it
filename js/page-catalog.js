@@ -28,6 +28,12 @@
    dentro servizi-esterni.html e' la vera barriera, visto che contiene informazioni di spesa/
    pagamenti. Nessuna RLS necessaria qui: la tabella e' scritta staticamente nel codice della
    pagina, non letta dal database.
+
+   NOTA (02/11/2026): su richiesta esplicita del titolare, "Impostazioni Sito" e "Notifiche
+   Broadcast" spostate da "Gestione" a "Owner" -- nel menu Gestione devono restare SOLO
+   Richieste, Post Social, Utenti, Anteprima Responsive. Aggiunta anche "Contratto Partner"
+   (pagina admin/contratto-partner.html, accordo di partnership editabile/stampabile/inviabile),
+   riservata al titolare come le altre voci Owner -- vedi owner-pages-guard.js.
    ============================================================================================ */
 var PAGE_CATALOG = [
   {section:"Attività", key:"calendar.html", label:"Calendario", i18nKey:"nav_calendar"},
@@ -55,9 +61,9 @@ var PAGE_CATALOG = [
   {section:"Gestione", key:"inquiries.html", label:"Richieste", i18nKey:"nav_requests"},
   {section:"Gestione", key:"users.html", label:"Utenti", i18nKey:"nav_users"},
   {section:"Gestione", key:"social-composer.html", label:"Post Social", i18nKey:"nav_social_composer"},
-  {section:"Gestione", key:"site-settings.html", label:"Impostazioni Sito", i18nKey:"nav_site_settings"},
-  {section:"Gestione", key:"broadcast-notifications.html", label:"Notifiche Broadcast", i18nKey:"nav_broadcast_notifications"},
   {section:"Gestione", key:"responsive-preview.html", label:"Anteprima Responsive", i18nKey:"nav_responsive_preview"},
+  {section:"Owner", key:"site-settings.html", label:"Impostazioni Sito", i18nKey:"nav_site_settings"},
+  {section:"Owner", key:"broadcast-notifications.html", label:"Notifiche Broadcast", i18nKey:"nav_broadcast_notifications"},
   {section:"Owner", key:"articoli.html", label:"Articoli / Blog Sito", i18nKey:"nav_blog_articles"},
   {section:"Owner", key:"team-admin.html", label:"Team", i18nKey:"nav_team"},
   {section:"Owner", key:"email-composer.html", label:"Comunicazioni", i18nKey:"nav_communications"},
@@ -69,5 +75,6 @@ var PAGE_CATALOG = [
   {section:"Owner", key:"watermark-retroattivo.html", label:"Watermark Retroattivo", i18nKey:"nav_watermark_retro"},
   {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk"},
   {section:"Owner", key:"access-logs.html", label:"Log Accessi", i18nKey:null},
-  {section:"Owner", key:"servizi-esterni.html", label:"Servizi Esterni", i18nKey:null}
+  {section:"Owner", key:"servizi-esterni.html", label:"Servizi Esterni", i18nKey:null},
+  {section:"Owner", key:"contratto-partner.html", label:"Contratto Partner", i18nKey:null}
 ];

@@ -5,6 +5,11 @@
    basta modificare questo file soltanto: dashboard.html lo usa per
    mostrare/nascondere la voce di menu, e ogni pagina owner-only lo usa
    per bloccare anche l'accesso diretto via URL (non solo il link).
+
+   AGGIORNATO 02/11/2026 su richiesta esplicita del titolare: "Impostazioni
+   Sito" e "Notifiche Broadcast" spostate da Gestione a Owner (vedi
+   page-catalog.js), quindi aggiunte qui. Aggiunta anche "contratto-partner.html"
+   (nuova pagina, accordo di partnership editabile/stampabile/inviabile).
    ========================================================================== */
 
 var OWNER_ONLY_EMAIL = "claudio.romano@bluewin.ch";
@@ -21,7 +26,10 @@ var OWNER_ONLY_PAGES = [
   "ads-manager.html",
   "settings.html",
   "statistics.html",
-  "meta-ads-planner.html"
+  "meta-ads-planner.html",
+  "site-settings.html",
+  "broadcast-notifications.html",
+  "contratto-partner.html"
 ];
 
 /* Da chiamare SUBITO DOPO aver verificato la sessione (checkAuth), su ogni
