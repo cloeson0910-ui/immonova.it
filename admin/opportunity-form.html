@@ -1261,6 +1261,14 @@ button.danger{
       <div class="tab-panel active" data-tab-panel="info">
       <div class="section-title" data-i18n="section_main_info">Informazioni principali</div>
 
+      <div class="field full" id="wordImportBox" style="border:1px dashed #c9a85a;background:#fbf6ea;border-radius:8px;padding:14px 16px;margin-bottom:6px">
+        <label for="wordImportFile" style="margin-top:0">📄 Importa da documento Word (.docx)</label>
+        <div class="file-note">Carica il Word della proprietà: vengono estratti foto, dati principali e descrizione per creare lo scheletro della scheda. Si compilano solo i campi ancora vuoti; il Word originale viene salvato nei documenti della scheda per poterlo riaprire e verificare.</div>
+        <input type="file" id="wordImportFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="margin-top:8px">
+        <div id="wordImportStatus" style="font-size:12px;margin-top:6px;line-height:1.5"></div>
+        <div id="wordImportSources"></div>
+      </div>
+
       <div class="field full">
         <label for="title" data-i18n="label_title">Titolo</label>
         <input type="text" id="title" required>
@@ -1354,7 +1362,7 @@ button.danger{
       </div>
 
       <div class="field full">
-        <div class="watermark-box">
+        <div class="watermark-box" style="display:none">
           <div class="watermark-title">Watermark logo Immonova</div>
           <div class="watermark-hint">
             Applicato automaticamente a copertina e gallery al salvataggio. L'opacità e la versione del logo ideali possono variare da foto a foto (es. foto scure/chiare) — regola le impostazioni globali qui, poi genera l'anteprima qui sotto per cambiare il logo foto per foto dove serve.
@@ -1800,6 +1808,7 @@ button.danger{
 
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
@@ -3324,23 +3333,17 @@ async function applyImmonovaWatermark(file, watermarkKey){
   return new File([blob], originalName, { type: mimeType });
 }
 
-/* Ogni foto viene salvata in DUE copie, caricate in parallelo:
-   1) la versione PUBBLICA con il watermark IMMONOVA (o del partner) bruciato nei
-      pixel -- questa e' quella mostrata sul sito e nel dossier, SEMPRE con logo,
-      nessuna eccezione (regola esplicita).
-   2) una versione PULITA, identica ma senza nessun logo bruciato, salvata sotto
-      "clean/" nello stesso bucket -- usata SOLO dall'esportazione Data Room in
-      opportunity-edit.html, cosi' chi scarica la data room riceve foto pulite
-      anche se il sito continua a mostrare sempre il logo.
-   uploadImage() ritorna {url, cleanUrl} invece di una singola stringa. */
+/* REGOLA (richiesta esplicita): NESSUN logo viene piu' "bruciato" nei pixel delle foto.
+   La foto viene salvata ORIGINALE, pulita. Il logo (IMMONOVA o partner) viene mostrato
+   SOLO come overlay live in visualizzazione (dossier/sito), con le impostazioni salvate
+   sulla scheda -- cosi' togliendo o cambiando il logo partner cambia automaticamente
+   su TUTTE le foto, senza ricaricarle.
+   uploadImage() ritorna sempre {url, cleanUrl}: ora sono lo stesso file pulito. */
 async function uploadImage(file, path, watermarkKey){
-  var watermarkedFile = await applyImmonovaWatermark(file, watermarkKey);
-  var cleanPath = "clean/" + path;
-
   var result = await client
     .storage
     .from("opportunities")
-    .upload(path, watermarkedFile, {
+    .upload(path, file, {
       cacheControl:"3600",
       upsert:false
     });
@@ -3349,29 +3352,12 @@ async function uploadImage(file, path, watermarkKey){
     throw result.error;
   }
 
-  var cleanResult = await client
-    .storage
-    .from("opportunities")
-    .upload(cleanPath, file, {
-      cacheControl:"3600",
-      upsert:false
-    });
-
-  if(cleanResult.error){
-    console.warn("Upload copia pulita (Data Room) non riuscito per " + path + ":", cleanResult.error);
-  }
-
   var publicUrl = client
     .storage
     .from("opportunities")
     .getPublicUrl(path);
 
-  var cleanUrl = "";
-  if(!cleanResult.error){
-    cleanUrl = client.storage.from("opportunities").getPublicUrl(cleanPath).data.publicUrl;
-  }
-
-  return { url: publicUrl.data.publicUrl, cleanUrl: cleanUrl };
+  return { url: publicUrl.data.publicUrl, cleanUrl: publicUrl.data.publicUrl };
 }
 
 /* =========================================================================
@@ -4523,6 +4509,7 @@ form.addEventListener("submit", async function(e){
     updateWorkProgress("save", "Opportunità creata. Caricamento documenti selezionati...", 78);
 
     await uploadSelectedDocumentsAfterCreate();
+    await wiUploadPendingSourceAfterCreate();
     await notifyAdminsNewSubmission(id, title);
 
     updateWorkProgress("save", "Proposta inviata correttamente.", 100);
@@ -4557,6 +4544,255 @@ document.getElementById("logoutBtn").addEventListener("click", async function(){
     await loadOpportunity();
   }
 })();
+
+/* =========================================================================
+   IMPORTAZIONE DA DOCUMENTO WORD (.docx)
+   Legge un .docx scelto dall'utente, estrae foto + testo e compila lo
+   scheletro della scheda. Regole:
+   - compila SOLO i campi ancora vuoti (non sovrascrive mai dati gia' inseriti);
+   - le foto estratte finiscono nei normali campi Copertina/Gallery, quindi
+     seguono lo stesso identico percorso di salvataggio delle foto caricate a mano;
+   - il .docx originale viene salvato tra i documenti della scheda (tipo
+     "word_source") per poterlo riaprire e verificare in qualsiasi momento.
+   ========================================================================= */
+var wordImportSourceFile = null;
+
+function wiSetStatus(msg, kind){
+  var el = document.getElementById("wordImportStatus");
+  if(!el) return;
+  el.textContent = msg || "";
+  el.style.color = kind === "error" ? "#a33" : (kind === "success" ? "#2a7a2a" : "#6b5a3a");
+}
+
+function wiNum(str){
+  if(str == null) return null;
+  var s = String(str).trim().replace(/\s/g, "");
+  if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
+  else if(/^\d+,\d+$/.test(s)) s = s.replace(",", ".");
+  else s = s.replace(/[.,](?=\d{3}\b)/g, "");
+  var n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function wiFirstMatch(text, regexes){
+  for(var i = 0; i < regexes.length; i++){
+    var m = text.match(regexes[i]);
+    if(m) return m;
+  }
+  return null;
+}
+
+function wiExtractFields(rawText){
+  var text = rawText.replace(/\r/g, "");
+  var lines = text.split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+  var flat = lines.join("\n");
+  var out = {};
+
+  var titleLine = lines.find(function(l){ return l.length >= 6 && l.length <= 140; });
+  if(titleLine) out.title = titleLine.replace(/[:\-–]+$/, "").trim();
+
+  var price = wiFirstMatch(flat, [
+    /(?:prezzo|richiesta|price|valore richiesto|asking)[^\d€\n]{0,25}€?\s*([\d][\d.,\s]{3,})/i,
+    /€\s*([\d]{1,3}(?:[.\s]\d{3})+(?:,\d+)?)/,
+    /([\d]{1,3}(?:[.\s]\d{3})+(?:,\d+)?)\s*(?:€|euro)/i
+  ]);
+  if(price){ var p = wiNum(price[1]); if(p && p >= 10000) out.price = "€ " + p.toLocaleString("it-IT"); }
+
+  var sqmRe = /([\d][\d.,]*)\s*(?:mq|m²|m2|metri\s+quadr[ia]ti?|sqm)\b/gi, m, internal = null, land = null, generic = null;
+  while((m = sqmRe.exec(flat))){
+    var ctx = flat.slice(Math.max(0, m.index - 60), m.index).toLowerCase();
+    var val = wiNum(m[1]);
+    if(!val) continue;
+    if(/terren|parco|uliveto|agrumeto|giardino|lotto|ettar|fondo/.test(ctx)){ if(land == null) land = val; }
+    else if(/interni|abitabil|superficie|commerciale|coperti|calpestabil|casa|villa|immobile/.test(ctx)){ if(internal == null) internal = val; }
+    else if(generic == null) generic = val;
+  }
+  if(internal == null && generic != null) internal = generic;
+  if(internal != null) out.internal_size = Math.round(internal);
+  if(land != null) out.land_size = Math.round(land);
+
+  var bed = wiFirstMatch(flat, [/(\d{1,2})\s*(?:camere(?:\s+da\s+letto)?|stanze\s+da\s+letto|bedrooms?)\b/i]);
+  if(bed) out.bedrooms = parseInt(bed[1], 10);
+  var bath = wiFirstMatch(flat, [/(\d{1,2})\s*(?:bagni|bagno|servizi\s+igienici|bathrooms?)\b/i]);
+  if(bath) out.bathrooms = parseInt(bath[1], 10);
+
+  var ape = wiFirstMatch(flat, [/classe\s+energetica\s*[:\-]?\s*(A4|A3|A2|A1|[A-G])\b/i, /\bAPE\s*[:\-]?\s*(A4|A3|A2|A1|[A-G])\b/i]);
+  if(ape) out.energy_class = ape[1].toUpperCase();
+
+  var year = wiFirstMatch(flat, [/(?:costruit[oa]|edificat[oa]|anno\s+(?:di\s+)?costruzione|realizzat[oa])\D{0,25}((?:1[5-9]|20)\d\d)\b/i]);
+  if(year) out.construction_year = parseInt(year[1], 10);
+
+  var sea = wiFirstMatch(flat, [/([\d][\d.,]*)\s*(km|chilometri|metri|m)\b[^\n]{0,25}\b(?:dal\s+)?mare\b/i]);
+  if(sea){ var d = wiNum(sea[1]); if(d != null){ if(/^m|metri/i.test(sea[2]) && !/^km/i.test(sea[2])) d = d / 1000; out.distance_to_sea_km = Math.round(d * 10) / 10; } }
+
+  var prov = flat.match(/\b([A-ZÀ-Ü][a-zà-ü'’]+(?:\s+(?:di|del|della|dei|de|d'|sul|sulla|in|al)?\s*[A-ZÀ-Ü][a-zà-ü'’]+){0,3})\s*\(([A-Z]{2})\)/);
+  if(prov){ out.municipality = prov[1].trim(); out.province = prov[2]; }
+  else{
+    var com = wiFirstMatch(flat, [/(?:comune\s+di|situat[ao]\s+(?:a|in)|si\s+trova\s+(?:a|in)|localit[aà])\s+([A-ZÀ-Ü][\wà-ü'’]+(?:\s+[A-ZÀ-Ü][\wà-ü'’]+){0,3})/]);
+    if(com) out.municipality = com[1].trim();
+  }
+  var addr = wiFirstMatch(flat, [/\b((?:via|viale|piazza|corso|contrada|c\.da|strada|largo|vicolo|lungomare)\s+[^\n,;]{3,60}(?:,?\s*n?\.?\s*\d+[a-z]?)?)/i]);
+  if(addr) out.address = addr[1].replace(/,?\s*\d{5}\b.*$/, "").trim();
+  var cap = flat.match(/\b(\d{5})\b(?=\s+[A-ZÀ-Ü])/);
+  if(cap) out.postal_code = cap[1];
+
+  var body = lines.slice(titleLine ? lines.indexOf(titleLine) + 1 : 0).join("\n\n").trim();
+  if(body){
+    out.full_description = body;
+    var firstPara = lines.slice(titleLine ? lines.indexOf(titleLine) + 1 : 0).find(function(l){ return l.length > 60; }) || body;
+    var sentences = firstPara.match(/[^.!?]+[.!?]+/g) || [firstPara];
+    var short = "";
+    for(var i = 0; i < sentences.length && (short + sentences[i]).length <= 320; i++) short += sentences[i];
+    out.short_description = (short || firstPara.slice(0, 300)).trim();
+  }
+  return out;
+}
+
+var WI_LABELS = {
+  title:"Titolo", price:"Prezzo", internal_size:"Mq interni", land_size:"Mq terreno", bedrooms:"Camere",
+  bathrooms:"Bagni", energy_class:"Classe energetica", construction_year:"Anno costruzione",
+  distance_to_sea_km:"Distanza dal mare (km)", municipality:"Comune", province:"Provincia",
+  address:"Indirizzo", postal_code:"CAP", short_description:"Descrizione breve", full_description:"Descrizione completa"
+};
+
+function wiApplyFields(fields){
+  var filled = [], skipped = [];
+  Object.keys(fields).forEach(function(key){
+    var el = document.getElementById(key);
+    var value = fields[key];
+    if(!el || value == null || value === "") return;
+    if(String(el.value || "").trim() !== ""){ skipped.push(WI_LABELS[key] || key); return; }
+    if(el.tagName === "SELECT"){
+      var opt = Array.prototype.find.call(el.options, function(o){ return o.value.toLowerCase() === String(value).toLowerCase(); });
+      if(!opt) return;
+      el.value = opt.value;
+    }else{
+      el.value = value;
+    }
+    el.dispatchEvent(new Event("input", { bubbles:true }));
+    el.dispatchEvent(new Event("change", { bubbles:true }));
+    el.style.outline = "2px solid #c99a2e";
+    el.style.outlineOffset = "1px";
+    filled.push(WI_LABELS[key] || key);
+  });
+  return { filled:filled, skipped:skipped };
+}
+
+function wiAppendFilesToInput(input, files){
+  if(!input || !files.length || typeof DataTransfer === "undefined") return false;
+  var dt = new DataTransfer();
+  if(input.multiple && input.files) Array.prototype.forEach.call(input.files, function(f){ dt.items.add(f); });
+  files.forEach(function(f){ dt.items.add(f); });
+  input.files = dt.files;
+  input.dispatchEvent(new Event("change", { bubbles:true }));
+  return true;
+}
+
+async function wiImportWord(file){
+  if(!file) return;
+  if(!/\.docx$/i.test(file.name)){
+    wiSetStatus("Serve un file Word .docx (i vecchi .doc vanno prima salvati come .docx da Word).", "error");
+    return;
+  }
+  if(typeof mammoth === "undefined"){
+    wiSetStatus("Libreria di lettura Word non caricata: ricarica la pagina e riprova.", "error");
+    return;
+  }
+  try{
+    wiSetStatus("Lettura del documento Word in corso...");
+    var buffer = await file.arrayBuffer();
+
+    var images = [];
+    await mammoth.convertToHtml({ arrayBuffer:buffer }, {
+      convertImage: mammoth.images.imgElement(function(image){
+        return image.read("base64").then(function(b64){
+          var type = image.contentType || "image/jpeg";
+          if(/^image\/(jpeg|jpg|png|webp)$/i.test(type)){
+            var bin = atob(b64), arr = new Uint8Array(bin.length);
+            for(var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            if(arr.length > 15000){ // scarta icone/loghi minuscoli
+              var ext = type.split("/")[1].replace("jpeg", "jpg");
+              images.push(new File([arr], "word-foto-" + String(images.length + 1).padStart(2, "0") + "." + ext, { type:type }));
+            }
+          }
+          return { src:"" };
+        });
+      })
+    });
+    var raw = await mammoth.extractRawText({ arrayBuffer:buffer });
+    var fields = wiExtractFields(raw.value || "");
+    var res = wiApplyFields(fields);
+
+    var coverInput = document.getElementById("coverFile");
+    var galleryInput = document.getElementById("galleryFiles");
+    var photoMsg = "";
+    if(images.length){
+      var remaining = images.slice();
+      var hasCover = coverInput && coverInput.files && coverInput.files.length;
+      var hasExistingCover = typeof currentCoverUrl !== "undefined" && currentCoverUrl;
+      if(coverInput && !hasCover && !hasExistingCover){
+        wiAppendFilesToInput(coverInput, [remaining.shift()]);
+        photoMsg = "copertina + ";
+      }
+      if(remaining.length) wiAppendFilesToInput(galleryInput, remaining);
+      photoMsg += remaining.length + " foto in gallery";
+    }
+
+    wordImportSourceFile = file;
+    if(typeof id !== "undefined" && id && typeof uploadOpportunityDocument === "function"){
+      wiSetStatus("Salvataggio del documento Word originale nella scheda...");
+      await uploadOpportunityDocument("word_source", file, false);
+      wordImportSourceFile = null;
+    }
+    wiRenderSourceLinks();
+
+    var msg = "Importazione completata. Compilati: " + (res.filled.length ? res.filled.join(", ") : "nessun campo") + ".";
+    if(images.length) msg += " Foto estratte: " + images.length + " (" + photoMsg + ").";
+    else msg += " Nessuna foto trovata nel documento.";
+    if(res.skipped.length) msg += " Lasciati invariati perché già compilati: " + res.skipped.join(", ") + ".";
+    msg += (typeof id !== "undefined" && id) ? " Il Word originale è salvato nei documenti della scheda." : " Il Word originale verrà salvato nei documenti al salvataggio della scheda.";
+    msg += " Controlla i campi evidenziati prima di salvare.";
+    wiSetStatus(msg, "success");
+  }catch(err){
+    console.error(err);
+    wiSetStatus("Errore nella lettura del Word: " + (err.message || err), "error");
+  }
+}
+
+function wiRenderSourceLinks(){
+  var box = document.getElementById("wordImportSources");
+  if(!box) return;
+  var docs = (typeof opportunityDocuments !== "undefined" && opportunityDocuments) ? opportunityDocuments.filter(function(d){ return d.document_type === "word_source"; }) : [];
+  var html = docs.map(function(d){
+    return '<div style="margin-top:4px">📄 <a href="' + d.file_url + '" target="_blank" rel="noopener">' + escapeHTML(d.file_name || "Documento Word") + '</a></div>';
+  }).join("");
+  if(wordImportSourceFile) html += '<div style="margin-top:4px">📄 ' + escapeHTML(wordImportSourceFile.name) + ' <em>(verrà salvato con la scheda)</em></div>';
+  box.innerHTML = html ? '<div class="file-note" style="margin-top:8px">Documento Word originale:</div>' + html : "";
+}
+
+async function wiUploadPendingSourceAfterCreate(){
+  if(!wordImportSourceFile || typeof id === "undefined" || !id) return;
+  try{
+    await uploadOpportunityDocument("word_source", wordImportSourceFile, true);
+    wordImportSourceFile = null;
+  }catch(e){ console.warn("Salvataggio Word originale non riuscito:", e); }
+}
+
+(function wireWordImport(){
+  var input = document.getElementById("wordImportFile");
+  if(input) input.addEventListener("change", function(){
+    if(input.files && input.files[0]) wiImportWord(input.files[0]);
+    input.value = "";
+  });
+})();
+
+/* aggiorna anche il link al Word originale ogni volta che la lista documenti viene ridisegnata */
+(function(){
+  if(typeof renderDocuments !== "function") return;
+  var _wiOrigRenderDocuments = renderDocuments;
+  renderDocuments = function(){ var r = _wiOrigRenderDocuments.apply(this, arguments); try{ wiRenderSourceLinks(); }catch(e){} return r; };
+})();
+
 </script>
 
 </body>
