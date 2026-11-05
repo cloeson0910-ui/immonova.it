@@ -4629,11 +4629,15 @@ async function init(){
        computeScore()/buildCashflowProjections() (usate dal rendering sotto) restituiscono i
        numeri dell'edge function se la chiamata e' andata a buon fine, altrimenti ricadono in
        automatico e silenziosamente sul calcolo locale di sempre. */
-    await fetchRemoteInvestmentMetrics();
+    /* PRIMA si applicano i "Dati Verificati" (ADR, prezzi al mq...) al dossier, POI si chiede
+       il calcolo economico al server: nell'ordine inverso il server calcolava ricavi, costi e
+       break-even SENZA i dati verificati e restituiva "Non disponibile" anche quando l'ADR
+       verificato del comune c'era. */
     var manualOverridesChanged=false;
     if(dossierData && !dossierData._no_territorial_data){
       manualOverridesChanged=await applyManualOverridesClient();
     }
+    await fetchRemoteInvestmentMetrics();
     await ensurePopulationComposition();
     setStatus("Preparazione documenti per la stampa (rasterizzazione PDF in corso se presenti)...","");
     preparedDocumentPages = await renderDocumentsPages();
