@@ -7614,77 +7614,178 @@ function wiFirstMatch(text, regexes){
   return null;
 }
 
-function wiExtractFields(rawText){
-  var text = rawText.replace(/\r/g, "");
-  var lines = text.split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
-  var flat = lines.join("\n");
-  var out = {};
+var WI_PROVINCE_BY_CODE = (function(){ var m = {}; "AG:Agrigento,AL:Alessandria,AN:Ancona,AO:Aosta,AR:Arezzo,AP:Ascoli Piceno,AT:Asti,AV:Avellino,BA:Bari,BT:Barletta-Andria-Trani,BL:Belluno,BN:Benevento,BG:Bergamo,BI:Biella,BO:Bologna,BZ:Bolzano,BS:Brescia,BR:Brindisi,CA:Cagliari,CL:Caltanissetta,CB:Campobasso,CE:Caserta,CT:Catania,CZ:Catanzaro,CH:Chieti,CO:Como,CS:Cosenza,CR:Cremona,KR:Crotone,CN:Cuneo,EN:Enna,FM:Fermo,FE:Ferrara,FI:Firenze,FG:Foggia,FC:Forlì-Cesena,FR:Frosinone,GE:Genova,GO:Gorizia,GR:Grosseto,IM:Imperia,IS:Isernia,AQ:L'Aquila,SP:La Spezia,LT:Latina,LE:Lecce,LC:Lecco,LI:Livorno,LO:Lodi,LU:Lucca,MC:Macerata,MN:Mantova,MS:Massa-Carrara,MT:Matera,ME:Messina,MI:Milano,MO:Modena,MB:Monza e Brianza,NA:Napoli,NO:Novara,NU:Nuoro,OR:Oristano,PD:Padova,PA:Palermo,PR:Parma,PV:Pavia,PG:Perugia,PU:Pesaro e Urbino,PE:Pescara,PC:Piacenza,PI:Pisa,PT:Pistoia,PN:Pordenone,PZ:Potenza,PO:Prato,RG:Ragusa,RA:Ravenna,RC:Reggio Calabria,RE:Reggio Emilia,RI:Rieti,RN:Rimini,RM:Roma,RO:Rovigo,SA:Salerno,SS:Sassari,SV:Savona,SI:Siena,SR:Siracusa,SO:Sondrio,SU:Sud Sardegna,TA:Taranto,TE:Teramo,TR:Terni,TO:Torino,TP:Trapani,TN:Trento,TV:Treviso,TS:Trieste,UD:Udine,VA:Varese,VE:Venezia,VB:Verbano-Cusio-Ossola,VC:Vercelli,VR:Verona,VV:Vibo Valentia,VI:Vicenza,VT:Viterbo".split(",").forEach(function(p){ var kv = p.split(":"); m[kv[0]] = kv[1]; }); return m; })();
+function wiProvinceName(v){ var t = String(v || "").trim(); return WI_PROVINCE_BY_CODE[t.toUpperCase()] || t; }
+var WI_NUM_WORDS = {uno:1,una:1,un:1,due:2,tre:3,quattro:4,cinque:5,sei:6,sette:7,otto:8,nove:9,dieci:10,undici:11,dodici:12,tredici:13,quattordici:14,quindici:15,sedici:16,diciassette:17,diciotto:18,diciannove:19,venti:20};
+var WI_NUM_RE = "(\\d+|uno|una|un|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici|tredici|quattordici|quindici|sedici|diciassette|diciotto|diciannove|venti)";
+function wiCount(s){ s = String(s || "").toLowerCase(); return WI_NUM_WORDS[s] != null ? WI_NUM_WORDS[s] : parseInt(s, 10); }
 
-  var titleLine = lines.find(function(l){ return l.length >= 6 && l.length <= 140; });
+/* Converte una superficie in mq: gestisce mq/m²/m2/metri quadri, ettari (ha) e are. */
+function wiArea(numStr, unitStr){
+  var n = wiNum(numStr);
+  if(n == null) return null;
+  var u = String(unitStr || "").toLowerCase();
+  if(/^(ha|ettar)/.test(u)) n = n * 10000;
+  else if(/^(are|ari)\b/.test(u)) n = n * 100;
+  return Math.round(n);
+}
+
+function wiExtractFields(rawText){
+  var text = rawText.replace(/\r/g, "").replace(/ /g, " ");
+  var rawLines = text.split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+  var LABEL_ONLY = /^(?:n\.?\s*|numero\s+)?(?:camere(?:\s+da\s+letto)?|stanze(?:\s+da\s+letto)?|vani\s+letto|suites?|bagni|servizi(?:\s+igienici)?|superficie(?:\s+\w+)?|mq(?:\s+\w+)?|metratura|terreno|parco|giardino|area\s+verde|localit[aà]|frazione|zona|contrada|comune|provincia|indirizzo|prezzo(?:\s+richiesto)?|classe\s+energetica|anno\s+(?:di\s+)?costruzione)\s*:?$/i;
+  var lines = [];
+  for(var li = 0; li < rawLines.length; li++){
+    if(LABEL_ONLY.test(rawLines[li]) && rawLines[li + 1] && rawLines[li + 1].length <= 60 && !LABEL_ONLY.test(rawLines[li + 1])){
+      lines.push(rawLines[li].replace(/:$/, "") + ": " + rawLines[li + 1]); li++;
+    }else lines.push(rawLines[li]);
+  }
+  var flat = lines.join("\n");
+  var low = flat.toLowerCase();
+  var out = {};
+  var AREA_UNIT = "(mq\\.?|m²|m2|mt\\.?\\s?q\\.?|metri\\s+quadr[ia]ti?|metri\\s+quadri|sqm|ettari|ettaro|ha\\b|are\\b)";
+  var NUM = "([\\d][\\d.,]*)";
+
+  /* ---- 1) righe "etichetta: valore" (schede tecniche, tabelle copiate da Word) ---- */
+  var labelMap = [
+    { field:"bedrooms", re:/^(?:n\.?\s*|numero\s+)?(?:camere(?:\s+da\s+letto)?|stanze(?:\s+da\s+letto)?|vani\s+letto|suites?|bedrooms?)\s*[:\-–=]\s*(.+)$/i, type:"count" },
+    { field:"bathrooms", re:/^(?:n\.?\s*|numero\s+)?(?:bagni|servizi(?:\s+igienici)?|bathrooms?)\s*[:\-–=]\s*(.+)$/i, type:"count" },
+    { field:"internal_size", re:/^(?:superficie(?:\s+(?:interna|abitabile|commerciale|coperta|lorda|calpestabile|utile))?|mq(?:\s+(?:interni|abitabili|commerciali|coperti))?|metratura|dimensione)\s*[:\-–=]\s*(.+)$/i, type:"area" },
+    { field:"land_size", re:/^(?:terreno|superficie\s+(?:del\s+)?terreno|parco|uliveto|lotto|fondo|estensione(?:\s+terreno)?)\s*[:\-–=]\s*(.+)$/i, type:"area" },
+    { field:"garden_sqm", re:/^(?:giardino|superficie\s+(?:del\s+)?giardino|area\s+verde)\s*[:\-–=]\s*(.+)$/i, type:"area" },
+    { field:"locality", re:/^(?:localit[aà]|loc\.|frazione|fraz\.|zona|contrada|c\.da)\s*[:\-–=]?\s*(.+)$/i, type:"text" },
+    { field:"municipality", re:/^(?:comune|citt[aà])\s*[:\-–=]\s*(.+)$/i, type:"text" },
+    { field:"province", re:/^provincia\s*[:\-–=]\s*(.+)$/i, type:"text" },
+    { field:"address", re:/^indirizzo\s*[:\-–=]\s*(.+)$/i, type:"text" },
+    { field:"price", re:/^(?:prezzo(?:\s+richiesto)?|richiesta|valore\s+richiesto|asking\s+price)\s*[:\-–=]\s*(.+)$/i, type:"price" }
+  ];
+  lines.forEach(function(l){
+    labelMap.forEach(function(m){
+      if(out[m.field] != null) return;
+      var mm = l.match(m.re);
+      if(!mm) return;
+      var v = mm[1].trim();
+      if(m.type === "count"){ var c = v.match(new RegExp("^" + WI_NUM_RE, "i")); if(c) out[m.field] = wiCount(c[1]); }
+      else if(m.type === "area"){ var a = v.match(new RegExp(NUM + "\\s*" + AREA_UNIT + "?", "i")); if(a){ var val = wiArea(a[1], a[2] || "mq"); if(val) out[m.field] = val; } }
+      else if(m.type === "price"){ var p = wiNum((v.match(/[\d][\d.,\s]*/) || [""])[0]); if(p && p >= 10000) out.price = "€ " + p.toLocaleString("it-IT"); }
+      else{ var sg = v.match(/\(([A-Z]{2})\)/); if(sg && out.province == null) out.province = sg[1]; v = v.split(/[,;(]|\.\s/)[0].replace(/[.;,]+$/, "").trim(); if(v && v.length <= 60) out[m.field] = v; }
+    });
+  });
+
+  /* ---- 2) titolo: prima riga breve che non e' una riga "etichetta: valore" ---- */
+  var titleLine = lines.find(function(l){ return l.length >= 6 && l.length <= 140 && !/^[^:]{2,30}:\s*\S/.test(l); });
   if(titleLine) out.title = titleLine.replace(/[:\-–]+$/, "").trim();
 
-  var price = wiFirstMatch(flat, [
-    /(?:prezzo|richiesta|price|valore richiesto|asking)[^\d€\n]{0,25}€?\s*([\d][\d.,\s]{3,})/i,
-    /€\s*([\d]{1,3}(?:[.\s]\d{3})+(?:,\d+)?)/,
-    /([\d]{1,3}(?:[.\s]\d{3})+(?:,\d+)?)\s*(?:€|euro)/i
-  ]);
-  if(price){ var p = wiNum(price[1]); if(p && p >= 10000) out.price = "€ " + p.toLocaleString("it-IT"); }
+  /* ---- 3) testo libero ---- */
+  if(out.price == null){
+    var price = wiFirstMatch(flat, [
+      /(?:prezzo|richiesta|price|valore richiesto|asking)[^\d€\n]{0,25}€?\s*([\d][\d.,\s]{3,})/i,
+      /€\s*([\d]{1,3}(?:[.\s]\d{3})+(?:,\d+)?)/,
+      /([\d]{1,3}(?:[.\s]\d{3})+(?:,\d+)?)\s*(?:€|euro)/i
+    ]);
+    if(price){ var pp = wiNum(price[1]); if(pp && pp >= 10000) out.price = "€ " + pp.toLocaleString("it-IT"); }
+  }
 
-  var sqmRe = /([\d][\d.,]*)\s*(?:mq|m²|m2|metri\s+quadr[ia]ti?|sqm)\b/gi, m, internal = null, land = null, generic = null;
-  while((m = sqmRe.exec(flat))){
-    var ctx = flat.slice(Math.max(0, m.index - 60), m.index).toLowerCase();
-    var val = wiNum(m[1]);
-    if(!val) continue;
-    if(/terren|parco|uliveto|agrumeto|giardino|lotto|ettar|fondo/.test(ctx)){ if(land == null) land = val; }
-    else if(/interni|abitabil|superficie|commerciale|coperti|calpestabil|casa|villa|immobile/.test(ctx)){ if(internal == null) internal = val; }
-    else if(generic == null) generic = val;
+  // superfici: guardo le parole PRIMA e DOPO il numero per capire se e' casa, terreno o giardino
+  // unita' PRIMA del numero solo per "mq 320" (mai "ha": in italiano "ha" e' anche il verbo avere)
+  var areaRe = new RegExp("(?:(mq\\.?|m²|mt\\.?\\s?q\\.?)\\s*" + NUM + ")|(?:" + NUM + "\\s*" + AREA_UNIT + ")", "gi"), m;
+  var internal = null, land = null, garden = null, generic = null;
+  while((m = areaRe.exec(flat))){
+    var numStr = m[2] || m[3], unit = m[1] || m[4];
+    var val2 = wiArea(numStr, unit);
+    if(!val2) continue;
+    var before = low.slice(Math.max(0, m.index - 60), m.index);
+    var near = before.slice(-35).split(/[.;\n]/).pop();             // parole subito prima, nella stessa frase
+    var endIdx = m.index + m[0].length - (/\.$/.test(m[0]) ? 1 : 0); // "mq." a fine frase: il punto resta alla frase
+    var after = low.slice(endIdx, endIdx + 18).split(/[.,;\n]/)[0]; // parole subito dopo, nella stessa frase
+    var isHa = /^(ha|ettar)/i.test(unit || "");
+    var RX_GARDEN = /giardin|area verde|prato/, RX_LAND = /terren|parco|uliveto|agrumeto|vigneto|lotto|fondo|campagn|tenuta|ettar/;
+    var RX_IN = /interni|abitabil|superficie|commerciale|coperti|calpestabil|casa|villa|immobile|struttura|edificio|piano|metratura|si sviluppa/;
+    var kind = null;
+    if(RX_GARDEN.test(after)) kind = "garden"; else if(RX_LAND.test(after)) kind = "land"; else if(RX_IN.test(after)) kind = "in";
+    else if(RX_GARDEN.test(near)) kind = "garden"; else if(isHa || RX_LAND.test(near)) kind = "land"; else if(RX_IN.test(near)) kind = "in";
+    else if(RX_GARDEN.test(before)) kind = "garden"; else if(RX_LAND.test(before)) kind = "land"; else if(RX_IN.test(before)) kind = "in";
+    if(kind === "garden"){ if(garden == null) garden = val2; }
+    else if(kind === "land"){ if(land == null) land = val2; }
+    else if(kind === "in"){ if(internal == null) internal = val2; }
+    else if(generic == null) generic = val2;
   }
   if(internal == null && generic != null) internal = generic;
-  if(internal != null) out.internal_size = Math.round(internal);
-  if(land != null) out.land_size = Math.round(land);
+  if(out.internal_size == null && internal != null) out.internal_size = internal;
+  if(out.land_size == null && land != null) out.land_size = land;
+  if(out.garden_sqm == null && garden != null) out.garden_sqm = garden;
 
-  var bed = wiFirstMatch(flat, [/(\d{1,2})\s*(?:camere(?:\s+da\s+letto)?|stanze\s+da\s+letto|bedrooms?)\b/i]);
-  if(bed) out.bedrooms = parseInt(bed[1], 10);
-  var bath = wiFirstMatch(flat, [/(\d{1,2})\s*(?:bagni|bagno|servizi\s+igienici|bathrooms?)\b/i]);
-  if(bath) out.bathrooms = parseInt(bath[1], 10);
+  // camere / stanze / camere da letto / suite: "5 camere", "camere da letto 5", "cinque stanze da letto"
+  if(out.bedrooms == null){
+    var bed = wiFirstMatch(low, [
+      new RegExp(WI_NUM_RE + "\\s+(?:ampie\\s+|grandi\\s+|spaziose\\s+|eleganti\\s+)?(?:camere(?:\\s+da\\s+letto)?|stanze\\s+da\\s+letto|stanze|suites?|suite|bedrooms?|vani\\s+letto)\\b", "i"),
+      /(?:camere(?:\s+da\s+letto)?|stanze(?:\s+da\s+letto)?|suites?|bedrooms?)\s*(?:n\.?\s*)?[:(]?\s*(\d+)/i
+    ]);
+    if(bed){ var bc = wiCount(bed[1]); if(bc > 0 && bc < 100) out.bedrooms = bc; }
+  }
+  if(out.bathrooms == null){
+    var bath = wiFirstMatch(low, [
+      new RegExp(WI_NUM_RE + "\\s+(?:bagni|bagno|servizi\\s+igienici|bathrooms?)\\b", "i"),
+      /(?:bagni|servizi\s+igienici|bathrooms?)\s*[:(]?\s*(\d+)/i
+    ]);
+    if(bath){ var bt = wiCount(bath[1]); if(bt > 0 && bt < 100) out.bathrooms = bt; }
+  }
 
   var ape = wiFirstMatch(flat, [/classe\s+energetica\s*[:\-]?\s*(A4|A3|A2|A1|[A-G])\b/i, /\bAPE\s*[:\-]?\s*(A4|A3|A2|A1|[A-G])\b/i]);
   if(ape) out.energy_class = ape[1].toUpperCase();
 
-  var year = wiFirstMatch(flat, [/(?:costruit[oa]|edificat[oa]|anno\s+(?:di\s+)?costruzione|realizzat[oa])\D{0,25}((?:1[5-9]|20)\d\d)\b/i]);
+  var year = wiFirstMatch(flat, [/(?:costruit[oa]|edificat[oa]|anno\s+(?:di\s+)?costruzione|realizzat[oa]|risalente\s+al)\D{0,25}((?:1[0-9]|20)\d\d)\b/i]);
   if(year) out.construction_year = parseInt(year[1], 10);
 
   var sea = wiFirstMatch(flat, [/([\d][\d.,]*)\s*(km|chilometri|metri|m)\b[^\n]{0,25}\b(?:dal\s+)?mare\b/i]);
-  if(sea){ var d = wiNum(sea[1]); if(d != null){ if(/^m|metri/i.test(sea[2]) && !/^km/i.test(sea[2])) d = d / 1000; out.distance_to_sea_km = Math.round(d * 10) / 10; } }
+  if(sea){ var dd = wiNum(sea[1]); if(dd != null){ if(/^m|metri/i.test(sea[2]) && !/^km/i.test(sea[2])) dd = dd / 1000; out.distance_to_sea_km = Math.round(dd * 10) / 10; } }
 
-  var prov = flat.match(/\b([A-ZÀ-Ü][a-zà-ü'’]+(?:\s+(?:di|del|della|dei|de|d'|sul|sulla|in|al)?\s*[A-ZÀ-Ü][a-zà-ü'’]+){0,3})\s*\(([A-Z]{2})\)/);
-  if(prov){ out.municipality = prov[1].trim(); out.province = prov[2]; }
-  else{
-    var com = wiFirstMatch(flat, [/(?:comune\s+di|situat[ao]\s+(?:a|in)|si\s+trova\s+(?:a|in)|localit[aà])\s+([A-ZÀ-Ü][\wà-ü'’]+(?:\s+[A-ZÀ-Ü][\wà-ü'’]+){0,3})/]);
-    if(com) out.municipality = com[1].trim();
+  // luogo: "Ugento (LE)", "comune di ...", "localita' ...", "frazione ...", "marina di ..."
+  if(out.municipality == null){
+    var prov = flat.match(/\b([A-ZÀ-Ü][a-zà-ü'’]+(?:\s+(?:di|del|della|dei|de|d'|sul|sulla|in|al)?\s*[A-ZÀ-Ü][a-zà-ü'’]+){0,3})\s*\(([A-Z]{2})\)/);
+    if(prov){ out.municipality = prov[1].trim(); if(out.province == null) out.province = prov[2]; }
+    else{
+      var com = wiFirstMatch(flat, [/(?:comune\s+di|situat[ao]\s+(?:a|in)|si\s+trova\s+(?:a|in)|nel\s+comune\s+di|nel\s+territorio\s+di)\s+([A-ZÀ-Ü][\wà-ü'’]+(?:\s+[A-ZÀ-Ü][\wà-ü'’]+){0,3})/]);
+      if(com) out.municipality = com[1].trim();
+    }
   }
-  var addr = wiFirstMatch(flat, [/\b((?:via|viale|piazza|corso|contrada|c\.da|strada|largo|vicolo|lungomare)\s+[^\n,;]{3,60}(?:,?\s*n?\.?\s*\d+[a-z]?)?)/i]);
-  if(addr) out.address = addr[1].replace(/,?\s*\d{5}\b.*$/, "").trim();
+  if(out.locality == null){
+    var loc = wiFirstMatch(flat, [/\b(?:localit[aà]|loc\.|frazione|fraz\.)\s+([A-ZÀ-Ü][\wà-ü'’]+(?:\s+[A-ZÀ-Ü][\wà-ü'’]+){0,3})/i, /\b((?:marina|lido|torre|porto)\s+(?:di\s+)?[A-ZÀ-Ü][\wà-ü'’]+(?:\s+[A-ZÀ-Ü][\wà-ü'’]+){0,2})/]);
+    if(loc) out.locality = loc[1].trim();
+  }
+  if(out.address == null){
+    var addr = wiFirstMatch(flat, [/\b((?:via|viale|piazza|corso|contrada|c\.da|strada|largo|vicolo|lungomare)\s+[^\n,;]{3,60}?(?:,?\s*n?\.?\s*\d+[a-z]?)?)(?=[.,;\n]|$)/i]);
+    if(addr) out.address = addr[1].replace(/,?\s*\d{5}\b.*$/, "").trim();
+  }
   var cap = flat.match(/\b(\d{5})\b(?=\s+[A-ZÀ-Ü])/);
   if(cap) out.postal_code = cap[1];
 
-  var body = lines.slice(titleLine ? lines.indexOf(titleLine) + 1 : 0).join("\n\n").trim();
+  /* ---- 4) descrizioni: le righe "etichetta: valore" non finiscono nella descrizione ---- */
+  var bodyLines = lines.slice(titleLine ? lines.indexOf(titleLine) + 1 : 0).filter(function(l){ return !/^[^:]{2,30}:\s*\S.{0,60}$/.test(l); });
+  var body = bodyLines.join("\n\n").trim();
   if(body){
     out.full_description = body;
-    var firstPara = lines.slice(titleLine ? lines.indexOf(titleLine) + 1 : 0).find(function(l){ return l.length > 60; }) || body;
+    var firstPara = bodyLines.find(function(l){ return l.length > 60; }) || body;
     var sentences = firstPara.match(/[^.!?]+[.!?]+/g) || [firstPara];
     var short = "";
     for(var i = 0; i < sentences.length && (short + sentences[i]).length <= 320; i++) short += sentences[i];
     out.short_description = (short || firstPara.slice(0, 300)).trim();
   }
-  return out;
+
+  if(out.province) out.province = wiProvinceName(out.province);
+
+  /* ordine fisso dei campi, cosi' il riepilogo segue sempre lo stesso ordine della scheda */
+  var ORDER = ["title","price","municipality","locality","province","address","postal_code","internal_size","land_size","garden_sqm","bedrooms","bathrooms","energy_class","construction_year","distance_to_sea_km","short_description","full_description"];
+  var ordered = {};
+  ORDER.forEach(function(k){ if(out[k] != null && out[k] !== "") ordered[k] = out[k]; });
+  return ordered;
 }
 
 var WI_LABELS = {
   title:"Titolo", price:"Prezzo", internal_size:"Mq interni", land_size:"Mq terreno", bedrooms:"Camere",
   bathrooms:"Bagni", energy_class:"Classe energetica", construction_year:"Anno costruzione",
   distance_to_sea_km:"Distanza dal mare (km)", municipality:"Comune", province:"Provincia",
-  address:"Indirizzo", postal_code:"CAP", short_description:"Descrizione breve", full_description:"Descrizione completa"
+  address:"Indirizzo", postal_code:"CAP", locality:"Località", garden_sqm:"Mq giardino", short_description:"Descrizione breve", full_description:"Descrizione completa"
 };
 
 function wiApplyFields(fields){
