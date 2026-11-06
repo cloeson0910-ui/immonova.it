@@ -229,7 +229,7 @@ async function loadList(){
       '<div class="msg-title">' + esc(x.title) + '</div><div class="msg-meta">' + meta + '</div>' +
       (x.note ? '<div class="msg-note">' + esc(x.note) + '</div>' : '') +
       (urlOf[x.audio_path] ? '<audio controls preload="none" src="' + esc(urlOf[x.audio_path]) + '"></audio>' + '<div class="msg-actions"><a class="link-btn" style="color:#5b461d;text-decoration:none" href="' + esc(urlOf[x.audio_path]) + '" download>Scarica audio</a>' : '<div class="msg-actions">') +
-      (isAdmin ? ' &nbsp; <button class="link-btn" data-del="' + esc(x.id) + '" data-path="' + esc(x.audio_path) + '">Elimina</button>' : '') + '</div>' +
+      ((isAdmin || x.created_by === currentUser.id) ? ' &nbsp; <button class="link-btn" data-del="' + esc(x.id) + '" data-path="' + esc(x.audio_path) + '">Elimina</button>' : '') + '</div>' +
       '</div>';
   }).join("");
   list.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => removeMsg(b.dataset.del, b.dataset.path)));
@@ -310,10 +310,10 @@ async function init(){
   const { data:{ session } } = await client.auth.getSession();
   if(!session){ location.href = "login.html"; return; }
   currentUser = session.user;
-  const p = await client.from("profiles").select("full_name,email,role").eq("id", currentUser.id).single();
-  currentProfile = p.data || null;
+  const p = await client.from("profiles").select("full_name,email,role,active").eq("id", currentUser.id).single();
+  currentProfile = (p.data && p.data.active !== false) ? p.data : null;
   isAdmin = !!(currentProfile && currentProfile.role === "admin");
-  if(isAdmin){
+  if(currentProfile){
     $("composeCard").classList.remove("hidden");
     $("subtitle").textContent = "Registra o carica un messaggio vocale di richiesta: arriva per email a tutti i collaboratori IMMONOVA, con l'audio in allegato, e resta ascoltabile qui.";
   }
