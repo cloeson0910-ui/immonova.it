@@ -252,6 +252,14 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
     <label for="ecoMaxM2">Valore massimo</label>
     <input type="number" id="ecoMaxM2" step="1">
 
+    <div style="margin-top:18px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--c-5b471f)">ADR affitto breve (€/notte per camera/unità)</div>
+    <label for="ecoAdrMin">ADR minimo</label>
+    <input type="number" id="ecoAdrMin" step="1">
+    <label for="ecoAdrMax">ADR massimo</label>
+    <input type="number" id="ecoAdrMax" step="1">
+    <label for="ecoOcc">Occupazione media annua (%)</label>
+    <input type="number" id="ecoOcc" step="1" min="1" max="100" placeholder="vuoto = 50% assunto">
+
     <div style="margin-top:18px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--c-5b471f)">Canone locazione commerciale (€/m²/mese)</div>
     <label for="ecoRentMinM2">Canone minimo</label>
     <input type="number" id="ecoRentMinM2" step="0.5">
@@ -1432,6 +1440,7 @@ async function applyManualOverridesClient(){
         quality:{confidence:.97,status:"verified_final",notes:row2.source_note||null}
       };
       var existing=dossierData[cat][row2.field_key];
+      if(existing && existing.source && existing.source.dossier_manual) continue; // valore inserito a mano in questa scheda: vince sugli override di zona
       var alreadyIdentical = existing && existing.value===metric.value && existing.source && existing.source.retrieved_at===metric.source.retrieved_at;
       if(!alreadyIdentical) changed=true;
       dossierData[cat][row2.field_key]=metric;
@@ -4713,13 +4722,19 @@ function openEconomicsPanel(){
   var maxMetric=metricFromDossier("real_estate_market","residential_sale_per_m2_max");
   var rentMinMetric=metricFromDossier("commercial_rent","monthly_rent_per_m2_min");
   var rentMaxMetric=metricFromDossier("commercial_rent","monthly_rent_per_m2_max");
-  var src=(minMetric||maxMetric||rentMinMetric||rentMaxMetric||{}).source||{};
+  var adrMinMetric=metricFromDossier("adr","average_daily_rate_min");
+  var adrMaxMetric=metricFromDossier("adr","average_daily_rate_max");
+  var occMetric=metricFromDossier("adr","occupancy");
+  var src=(minMetric||maxMetric||rentMinMetric||rentMaxMetric||adrMinMetric||adrMaxMetric||{}).source||{};
+  document.getElementById("ecoAdrMin").value = adrMinMetric ? adrMinMetric.value : "";
+  document.getElementById("ecoAdrMax").value = adrMaxMetric ? adrMaxMetric.value : "";
+  document.getElementById("ecoOcc").value = occMetric ? (occMetric.value>1?occMetric.value:Math.round(occMetric.value*100)) : "";
 
   document.getElementById("ecoMinM2").value = minMetric ? minMetric.value : "";
   document.getElementById("ecoMaxM2").value = maxMetric ? maxMetric.value : "";
   document.getElementById("ecoRentMinM2").value = rentMinMetric ? rentMinMetric.value : "";
   document.getElementById("ecoRentMaxM2").value = rentMaxMetric ? rentMaxMetric.value : "";
-  document.getElementById("ecoSourceName").value = src.provider_name || "";
+  document.getElementById("ecoSourceName").value = String(src.provider_name || "").replace(/\s*·?\s*IMMONOVA Analyst Verified$/,"");
   document.getElementById("ecoSourceUrl").value = src.source_url || "";
 
   setEconomicsStatus("","");
@@ -4752,6 +4767,20 @@ async function saveEconomicsPanel(){
     var sourceUrl=document.getElementById("ecoSourceUrl").value.trim();
 
     var source={provider_name:sourceName||"Inserito manualmente",source_url:sourceUrl||null,manual:true};
+    var adrMinRaw=document.getElementById("ecoAdrMin").value.trim();
+    var adrMaxRaw=document.getElementById("ecoAdrMax").value.trim();
+    var occRaw=document.getElementById("ecoOcc").value.trim();
+    /* ADR/occupazione inseriti a mano in questa scheda: "Analyst Verified" (cosi' i calcoli li
+       trattano come dato verificato) e dossier_manual=true (cosi' gli override per comune NON
+       li sovrascrivono al prossimo caricamento). */
+    var adrSource={provider_name:(sourceName?sourceName+" · ":"")+"IMMONOVA Analyst Verified",source_url:sourceUrl||null,manual:true,dossier_manual:true,verified:true};
+    if(!dossierData.adr)dossierData.adr={};
+    if(adrMinRaw===""){ delete dossierData.adr.average_daily_rate_min; }
+    else{ dossierData.adr.average_daily_rate_min={value:Number(adrMinRaw),unit:"eur_per_room_night",source:adrSource}; }
+    if(adrMaxRaw===""){ delete dossierData.adr.average_daily_rate_max; }
+    else{ dossierData.adr.average_daily_rate_max={value:Number(adrMaxRaw),unit:"eur_per_room_night",source:adrSource}; }
+    if(occRaw===""){ delete dossierData.adr.occupancy; }
+    else{ dossierData.adr.occupancy={value:Math.min(100,Math.max(1,Number(occRaw))),unit:"percent",source:adrSource}; }
 
     if(!dossierData)dossierData={};
     if(!dossierData.real_estate_market)dossierData.real_estate_market={};
@@ -4785,6 +4814,7 @@ async function saveEconomicsPanel(){
     if(lastPersistError)throw new Error(lastPersistError);
 
     setEconomicsStatus("Valori salvati. Aggiornamento anteprima dossier...","success");
+    if(typeof fetchRemoteInvestmentMetrics==="function") await fetchRemoteInvestmentMetrics();
     await renderBook();
     setTimeout(closeEconomicsPanel,900);
   }catch(e){
