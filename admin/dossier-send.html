@@ -2056,7 +2056,7 @@ function renderAssetCharacteristicsPage(){
 }
 function renderMarketAndADRPage(){
   var mkt=renderRealEstatePage();
-  var adr=renderPricingPage();
+  var adr=isResidentialVillaNoIncome()?"":renderPricingPage();
   if(!mkt&&!adr)return "";
   return '<article class="report-page"><div class="page-inner">'
     +(mkt?'<div class="merge-block">'+mkt+'</div>':'')
@@ -2236,6 +2236,7 @@ function computeScore(){
     {key:"access",label:T.comp_access,weight:SCORE_WEIGHTS.access,score:scoreAccessArea()},
     {key:"territory",label:T.comp_territory,weight:SCORE_WEIGHTS.territory,score:scoreTerritoryArea()}
   ];
+  if(isResidentialVillaNoIncome()) comps=comps.filter(function(c){ return c.key!=="financial" && c.key!=="hospitality"; });
   var available=comps.filter(function(c){return c.score!=null;});
   if(!available.length)return null;
   var totalWeight=available.reduce(function(a,c){return a+c.weight;},0);
@@ -2372,9 +2373,61 @@ function watermarkPositionStyle(){
 function photoWatermarkOverlayHTML(){
   var scale=getWatermarkScale();
   var opacity=getWatermarkOpacityValue();
-  var style="position:absolute;"+watermarkPositionStyle()+"width:"+(scale*100)+"%;max-width:"+(scale*100)+"%;height:auto;opacity:"+opacity+";pointer-events:none;z-index:1;"+watermarkColorFilterStyle();
-  return '<img class="photo-watermark-overlay" style="'+style+'" src="'+escapeHTML(getWatermarkLogoSrc())+'" alt="">';
+  var style="position:absolute;"+watermarkPositionStyle()+"width:"+(scale*100)+"%;max-width:"+(scale*100)+"%;height:auto;opacity:"+opacity+";pointer-events:none;z-index:1;"+(WM_BAKED_SRC?"":watermarkColorFilterStyle());
+  return '<img class="photo-watermark-overlay" crossorigin="anonymous" style="'+style+'" src="'+escapeHTML(WM_BAKED_SRC||getWatermarkLogoSrc())+'" alt="">';
 }
+
+/* ===== Foto pulite + logo sovrapposto (mai bruciato nei pixel) =====
+   1) Se una foto ha la sua copia pulita (cover_image_clean / gallery_images_clean) si usa
+      quella: le foto caricate in passato col logo stampato non mostrano due loghi.
+   2) Il logo sopra le foto e' un overlay: logo partner (se c'e' e non e' co-brand) altrimenti
+      IMMONOVA, con posizione/dimensione/opacita'/colore della scheda.
+   3) Il colore bianco/nero viene "cotto" in una copia del logo via canvas: html2canvas (che
+      genera il PDF) non applica i filtri CSS, quindi senza questo nel PDF uscirebbe sempre
+      il colore originale. */
+var WM_BAKED_SRC = null;
+function wmUseCleanPhotos(o){
+  if(!o) return;
+  var gal = normalizeGallery(o.gallery_images);
+  var cleanGal = normalizeGallery(o.gallery_images_clean);
+  if(cleanGal.length){ o.gallery_images = gal.map(function(u, i){ return cleanGal[i] || u; }); }
+  if(o.cover_image_clean){ o.cover_image = o.cover_image_clean; }
+}
+function wmRecolor(src, color){
+  return new Promise(function(resolve){
+    if(!src || (color !== "white" && color !== "black")) return resolve(src);
+    var img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = function(){
+      try{
+        var c = document.createElement("canvas");
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        var ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        var d = ctx.getImageData(0, 0, c.width, c.height), p = d.data, v = color === "white" ? 255 : 0;
+        for(var i = 0; i < p.length; i += 4){ p[i] = v; p[i+1] = v; p[i+2] = v; }
+        ctx.putImageData(d, 0, 0);
+        resolve(c.toDataURL("image/png"));
+      }catch(e){ resolve(src); }
+    };
+    img.onerror = function(){ resolve(src); };
+    img.src = src;
+  });
+}
+
+async function prepareDossierLogos(){
+  var color=getWatermarkColorValue();
+  WM_BAKED_SRC=(color==="white"||color==="black")?await wmRecolor(getWatermarkLogoSrc(),color):null;
+}
+(function(){
+  if(typeof loadOpportunity!=="function") return;
+  var _rvOrigLoadOpportunity=loadOpportunity;
+  loadOpportunity=async function(){
+    var r=await _rvOrigLoadOpportunity.apply(this,arguments);
+    try{ wmUseCleanPhotos(opportunity); await prepareDossierLogos(); }catch(e){ console.warn("Preparazione logo foto non riuscita:",e); }
+    return r;
+  };
+})();
 
 /* Il nome del partner/agenzia sotto il logo in copertina deve seguire lo stesso
    colore scelto per il logo (originale/bianco/nero) -- richiesta esplicita
@@ -3326,6 +3379,7 @@ function getRoomInventoryUnitsTotal(){
 }
 function getAssetUnits(){
   var o=opportunity||{};
+  if(isVillaShortRent()){ var su=Number(o.short_rent_units); if(Number.isFinite(su)&&su>0) return su; }
   var fromInventory=getRoomInventoryUnitsTotal();
   if(fromInventory>0) return fromInventory;
   var n=firstFiniteOpp(o.bedrooms);
@@ -3473,9 +3527,17 @@ var OPEX_COST_STRUCTURE = {
    (vedi isFiscalLuxuryOverride() sotto) -- le soglie dimensionali di isLuxuryProperty()
    (ADR/investimento/camere) NON lo attivano da sole: servono solo a scegliere il taglio
    "lusso" del piano dei costi (getOpexTierKey), non la natura fiscale dell'investimento. */
+// ===== Ville (06/11/2026): spunta "Messa a reddito come affitti brevi" in scheda =====
+// Con la spunta la villa e' trattata come hospitality (ricavo per unita'/suite, costi e
+// fiscalita' da struttura ricettiva). Senza spunta e' una villa residenziale: dossier
+// senza nessun calcolo economico. ALLINEATO a report-view.html / dossier-send.html e
+// all'edge function immonova-investment-metrics.
+function isVillaCategory(){ var c=String(getCategory()||"").toLowerCase().trim(); return c==="ville"||c==="villa"||c==="villas"; }
+function isVillaShortRent(){ return isVillaCategory() && !!(opportunity && opportunity.short_rent_income===true); }
+function isResidentialVillaNoIncome(){ return isVillaCategory() && !(opportunity && opportunity.short_rent_income===true); }
 function isHospitalityCategory(){
   var c=String(getCategory()||"").toLowerCase();
-  return c.indexOf("hotel")>=0 || c.indexOf("resort")>=0;
+  return c.indexOf("hotel")>=0 || c.indexOf("resort")>=0 || isVillaShortRent();
 }
 // Flag dedicato SOLO al calcolo del ricavo (ADR x unita'): di default il
 // ricavo viene sempre calcolato per unita', indipendentemente dalla
@@ -3484,6 +3546,7 @@ function isHospitalityCategory(){
 // fiscale/ZES, che resta legata a isHospitalityCategory().
 function isPerUnitRentalEnabled(){
   var o=opportunity||{};
+  if(isVillaShortRent()) return true;
   var mode=o.rental_mode;
   if(mode==="whole_property") return false;
   if(mode==="per_unit") return true;
@@ -3583,6 +3646,7 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
   return {rows:rows, revenueSource:revenueSource, adrVerified:adrVerified, total:total, breakEvenYear:be.year, breakEvenExtrapolated:be.extrapolated, opexRatio:ratio};
 }
 function buildCashflowProjections(){
+  if(isResidentialVillaNoIncome()) return null;
   var f=buildFinance();
 
   if(isCommercialCategory()){
@@ -3840,7 +3904,7 @@ function renderBook(){
   push(T.chapter_territory, renderEnvironmentPage());
   renderAdPagesForPosition("after_territory").forEach(function(p){ push(T.chapter_territory, p.html, p.divider); });
 
-  if(!isLandCategory()){
+  if(!isLandCategory() && !isResidentialVillaNoIncome()){
     push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
     push(T.chapter_financial, renderInternalFacts());
     renderInvestmentStructure().forEach(function(p){ push(T.chapter_financial, p); });

@@ -2145,7 +2145,7 @@ function renderAssetCharacteristicsPage(){
 }
 function renderMarketAndADRPage(){
   var mkt=renderRealEstatePage();
-  var adr=renderPricingPage();
+  var adr=isResidentialVillaNoIncome()?"":renderPricingPage();
   if(!mkt&&!adr)return "";
   return '<article class="report-page"><div class="page-inner">'
     +(mkt?'<div class="merge-block">'+mkt+'</div>':'')
@@ -2325,6 +2325,7 @@ function computeScoreLocal(){
     {key:"access",label:T.comp_access,weight:SCORE_WEIGHTS.access,score:scoreAccessArea()},
     {key:"territory",label:T.comp_territory,weight:SCORE_WEIGHTS.territory,score:scoreTerritoryArea()}
   ];
+  if(isResidentialVillaNoIncome()) comps=comps.filter(function(c){ return c.key!=="financial" && c.key!=="hospitality"; });
   var available=comps.filter(function(c){return c.score!=null;});
   if(!available.length)return null;
   var totalWeight=available.reduce(function(a,c){return a+c.weight;},0);
@@ -2348,8 +2349,9 @@ function renderScorePage(){
    alimenta esiste davvero (stesso principio "non si inventano scenari" usato altrove nel file):
    con pochi dati disponibili la pagina resta piu' corta, non riempita di "N/D". */
 function renderInvestmentThesisPage(){
+  if(isResidentialVillaNoIncome()) return "";
   var o=opportunity||{};
-  var rooms=Number(o.bedrooms);
+  var rooms=isVillaShortRent()?getAssetUnits():Number(o.bedrooms);
   var f=buildFinance();
   var projs=buildCashflowProjections();
   var isCommercial=isCommercialCategory();
@@ -2693,7 +2695,7 @@ function renderRoomKpiPage(){
      tolto del tutto per queste categorie, non solo rinominato. */
   if(!isHospitalityCategory()) return "";
   var o=opportunity||{};
-  var rooms=Number(o.bedrooms);
+  var rooms=isVillaShortRent()?getAssetUnits():Number(o.bedrooms);
   var f=buildFinance();
   if(!Number.isFinite(rooms) || rooms<=0) return "";
   var costPerKey = f.total>0 ? f.total/rooms : null;
@@ -3550,6 +3552,7 @@ function getRoomInventoryUnitsTotal(){
 }
 function getAssetUnits(){
   var o=opportunity||{};
+  if(isVillaShortRent()){ var su=Number(o.short_rent_units); if(Number.isFinite(su)&&su>0) return su; }
   var fromInventory=getRoomInventoryUnitsTotal();
   if(fromInventory>0) return fromInventory;
   var n=firstFiniteOpp(o.bedrooms);
@@ -3694,9 +3697,17 @@ var OPEX_COST_STRUCTURE = {
    (vedi isFiscalLuxuryOverride() sotto) -- le soglie dimensionali di isLuxuryProperty()
    (ADR/investimento/camere) NON lo attivano da sole: servono solo a scegliere il taglio
    "lusso" del piano dei costi (getOpexTierKey), non la natura fiscale dell'investimento. */
+// ===== Ville (06/11/2026): spunta "Messa a reddito come affitti brevi" in scheda =====
+// Con la spunta la villa e' trattata come hospitality (ricavo per unita'/suite, costi e
+// fiscalita' da struttura ricettiva). Senza spunta e' una villa residenziale: dossier
+// senza nessun calcolo economico. ALLINEATO a report-view.html / dossier-send.html e
+// all'edge function immonova-investment-metrics.
+function isVillaCategory(){ var c=String(getCategory()||"").toLowerCase().trim(); return c==="ville"||c==="villa"||c==="villas"; }
+function isVillaShortRent(){ return isVillaCategory() && !!(opportunity && opportunity.short_rent_income===true); }
+function isResidentialVillaNoIncome(){ return isVillaCategory() && !(opportunity && opportunity.short_rent_income===true); }
 function isHospitalityCategory(){
   var c=String(getCategory()||"").toLowerCase();
-  return c.indexOf("hotel")>=0 || c.indexOf("resort")>=0;
+  return c.indexOf("hotel")>=0 || c.indexOf("resort")>=0 || isVillaShortRent();
 }
 // Flag dedicato SOLO al calcolo del ricavo (ADR x unita'): di default il
 // ricavo viene sempre calcolato per unita', indipendentemente dalla
@@ -3706,6 +3717,7 @@ function isHospitalityCategory(){
 // ALLINEATO manualmente a dossier-send.html.
 function isPerUnitRentalEnabled(){
   var o=opportunity||{};
+  if(isVillaShortRent()) return true;
   var mode=o.rental_mode;
   if(mode==="whole_property") return false;
   if(mode==="per_unit") return true;
@@ -3805,6 +3817,7 @@ function buildOneCashflowProjection(baseRevenue, revenueSource, adrVerified, tot
   return {rows:rows, revenueSource:revenueSource, adrVerified:adrVerified, total:total, breakEvenYear:be.year, breakEvenExtrapolated:be.extrapolated, opexRatio:ratio};
 }
 function buildCashflowProjectionsLocal(){
+  if(isResidentialVillaNoIncome()) return null;
   var f=buildFinance();
 
   if(isCommercialCategory()){
@@ -4320,7 +4333,7 @@ function renderBook(){
   push(T.chapter_territory, renderAirTrafficPage());
   push(T.chapter_territory, renderEnvironmentPage());
 
-  if(!isLandCategory()){
+  if(!isLandCategory() && !isResidentialVillaNoIncome()){
     renderAdPagesForPosition("before_financial","after_financial").forEach(function(p){ push(T.chapter_financial, p.html, p.divider, true); });
     push(T.chapter_financial, dividerPageHTML(T.divider_financial_title,T.divider_financial_kicker), true);
     push(T.chapter_financial, renderInternalFacts());
@@ -4588,8 +4601,8 @@ async function fetchRemoteInvestmentMetrics(){
   }
 }
 function buildFinance(){ return (remoteMetrics && remoteMetrics.finance) ? remoteMetrics.finance : buildFinanceLocal(); }
-function computeScore(){ return (remoteMetrics && remoteMetrics.score) ? remoteMetrics.score : computeScoreLocal(); }
-function buildCashflowProjections(){ return (remoteMetrics && remoteMetrics.cashflow) ? remoteMetrics.cashflow : buildCashflowProjectionsLocal(); }
+function computeScore(){ if(isResidentialVillaNoIncome()) return computeScoreLocal(); return (remoteMetrics && remoteMetrics.score) ? remoteMetrics.score : computeScoreLocal(); }
+function buildCashflowProjections(){ if(isResidentialVillaNoIncome()) return null; return (remoteMetrics && remoteMetrics.cashflow) ? remoteMetrics.cashflow : buildCashflowProjectionsLocal(); }
 
 async function init(){
   try{
