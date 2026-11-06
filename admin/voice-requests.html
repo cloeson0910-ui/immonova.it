@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<link rel="stylesheet" href="../css/immonova-text-theme.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Messaggi vocali | IMMONOVA Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#46371a}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at center,rgba(255,255,255,.72) 0%,rgba(255,255,255,.34) 38%,rgba(244,236,223,.06) 72%),#f4ecdf}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.30}
+.header{padding:30px 40px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.12);background:rgba(244,236,223,.72);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10;gap:16px;flex-wrap:wrap}
+.logo{text-decoration:none;color:#5b461d}
+.logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}
+.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:#5b471f}
+.header-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.header-actions a,.logout{padding:10px 20px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.25);cursor:pointer;color:#5b461d;text-decoration:none;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-family:inherit}
+.header-actions a:hover,.logout:hover{background:#a67f34;color:#fff}
+.container{max-width:980px;margin:auto;padding:40px}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#554321;margin-bottom:12px}
+.title{font-size:40px;font-weight:200;letter-spacing:.05em;color:#5b461d;margin-bottom:14px}
+.subtitle{font-size:15px;line-height:1.8;color:#4f4125;margin-bottom:28px}
+.card{background:rgba(255,255,255,.55);border:1px solid rgba(166,127,52,.22);padding:28px;margin-bottom:28px}
+.section-title{font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:#a67f34;margin-bottom:18px;font-weight:600}
+label{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#5b471f;margin:16px 0 8px}
+input[type=text],textarea{width:100%;padding:13px 14px;border:1px solid rgba(166,127,52,.3);background:rgba(255,255,255,.8);font-family:inherit;font-size:15px;color:#2b2620}
+textarea{min-height:90px;resize:vertical}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:13px 22px;border:1px solid rgba(166,127,52,.45);background:#a67f34;color:#fffaf0;font-family:inherit;font-size:12px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+.btn.ghost{background:transparent;color:#5b461d}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.rec{background:#8d2f22;border-color:#8d2f22}
+.rec-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.timer{font-variant-numeric:tabular-nums;font-size:18px;color:#5b461d;min-width:60px}
+.dot{width:10px;height:10px;border-radius:50%;background:#c0392b;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+.or{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#8a7350;margin:16px 0 8px}
+audio{width:100%;margin-top:14px}
+.status{margin-top:16px;font-size:14px;line-height:1.6}
+.status.ok{color:#2e6b34}.status.err{color:#8d2f22}
+.msg{border-top:1px solid rgba(166,127,52,.2);padding:20px 0}
+.msg:first-child{border-top:none;padding-top:0}
+.msg.highlight{background:rgba(166,127,52,.08);padding:20px;border:1px solid rgba(166,127,52,.4)}
+.msg-title{font-size:18px;color:#2b2620}
+.msg-meta{font-size:12px;letter-spacing:.06em;color:#7d6640;margin-top:4px}
+.msg-note{font-size:14px;line-height:1.7;color:#4f4125;margin-top:10px;white-space:pre-line}
+.msg-actions{margin-top:10px}
+.link-btn{background:none;border:none;color:#8d2f22;font-family:inherit;font-size:12px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+.empty{font-size:14px;color:#7d6640}
+.hidden{display:none!important}
+@media(max-width:640px){.header{padding:20px}.container{padding:24px 16px}.title{font-size:30px}.card{padding:20px}}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a href="../index.html" class="logo">
+    <div class="logo-main">IMMONOVA</div>
+    <div class="logo-sub">OFF MARKET • CONSULTING</div>
+  </a>
+  <div class="header-actions">
+    <a href="dashboard.html">Dashboard</a>
+    <button class="logout" id="logoutBtn">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="kicker">Comunicazioni interne</div>
+  <h1 class="title">Messaggi vocali</h1>
+  <p class="subtitle" id="subtitle">Messaggi vocali di richiesta inviati a tutti i collaboratori IMMONOVA.</p>
+
+  <div class="card hidden" id="composeCard">
+    <div class="section-title">Nuovo messaggio a tutti i collaboratori</div>
+
+    <div class="rec-row">
+      <button class="btn rec" id="recBtn" type="button">● Registra</button>
+      <button class="btn ghost hidden" id="stopBtn" type="button">■ Stop</button>
+      <span class="dot hidden" id="recDot"></span>
+      <span class="timer" id="timer">0:00</span>
+    </div>
+    <div class="or">oppure carica un file audio</div>
+    <input type="file" id="fileInput" accept="audio/*,.m4a,.mp3,.wav,.ogg,.aac,.opus,.webm">
+    <audio id="preview" controls class="hidden"></audio>
+
+    <label for="vrTitle">Oggetto della richiesta *</label>
+    <input type="text" id="vrTitle" maxlength="140" placeholder="Es. Cerco villa con piscina in Salento per cliente">
+    <label for="vrNote">Nota scritta (facoltativa)</label>
+    <textarea id="vrNote" placeholder="Dettagli da leggere oltre all'audio: budget, zona, tempistiche…"></textarea>
+
+    <div style="margin-top:22px">
+      <button class="btn" id="sendBtn" type="button" disabled>Invia a tutti i collaboratori</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Messaggi inviati</div>
+    <div id="list"><div class="empty">Caricamento…</div></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const BUCKET = "voice-requests";
+let currentUser = null, currentProfile = null, isAdmin = false;
+let audioBlob = null, audioMime = "", audioExt = "", audioDuration = null;
+let mediaRecorder = null, chunks = [], recStart = 0, timerInt = null, stream = null;
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
+function setStatus(msg, kind){ const el = $("status"); el.textContent = msg || ""; el.className = "status" + (kind ? " " + kind : ""); }
+function fmtTime(s){ s = Math.max(0, Math.round(s)); return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }
+function extFromMime(m, name){
+  const fromName = (String(name||"").match(/\.([a-z0-9]+)$/i)||[])[1];
+  if(fromName) return fromName.toLowerCase();
+  if(/mp4|m4a|aac/.test(m)) return "m4a";
+  if(/mpeg|mp3/.test(m)) return "mp3";
+  if(/ogg/.test(m)) return "ogg";
+  if(/wav/.test(m)) return "wav";
+  return "webm";
+}
+async function edgeErrorMessage(result){
+  try{
+    if(result.error && result.error.context && typeof result.error.context.json === "function"){
+      const j = await result.error.context.json();
+      if(j && j.error) return j.error;
+    }
+  }catch(e){}
+  return (result.error && result.error.message) || "Errore sconosciuto";
+}
+function refreshSendState(){ $("sendBtn").disabled = !(audioBlob && $("vrTitle").value.trim()); }
+
+function setAudio(blob, mime, name){
+  audioBlob = blob; audioMime = mime || blob.type || "audio/webm"; audioExt = extFromMime(audioMime, name);
+  const p = $("preview"); p.src = URL.createObjectURL(blob); p.classList.remove("hidden");
+  p.onloadedmetadata = () => { if(isFinite(p.duration)) audioDuration = Math.round(p.duration); };
+  refreshSendState();
+}
+
+async function startRecording(){
+  setStatus("");
+  if(!navigator.mediaDevices || !window.MediaRecorder){ setStatus("Questo browser non permette di registrare: carica un file audio.", "err"); return; }
+  try{ stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+  catch(e){ setStatus("Microfono non disponibile o permesso negato.", "err"); return; }
+  // mp4/AAC quando possibile: si ascolta anche da iPhone; altrimenti webm/opus
+  const prefs = ["audio/mp4", "audio/mp4;codecs=mp4a.40.2", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+  const mime = prefs.find(m => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || "";
+  mediaRecorder = mime ? new MediaRecorder(stream, { mimeType:mime }) : new MediaRecorder(stream);
+  chunks = [];
+  mediaRecorder.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const type = (mediaRecorder.mimeType || mime || "audio/webm").split(";")[0];
+    audioDuration = Math.round((Date.now() - recStart) / 1000);
+    setAudio(new Blob(chunks, { type }), type, "");
+    stream.getTracks().forEach(t => t.stop());
+  };
+  mediaRecorder.start();
+  recStart = Date.now();
+  $("recBtn").classList.add("hidden"); $("stopBtn").classList.remove("hidden"); $("recDot").classList.remove("hidden");
+  timerInt = setInterval(() => { $("timer").textContent = fmtTime((Date.now() - recStart) / 1000); }, 250);
+}
+function stopRecording(){
+  if(mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+  clearInterval(timerInt);
+  $("recBtn").classList.remove("hidden"); $("recBtn").textContent = "● Registra di nuovo";
+  $("stopBtn").classList.add("hidden"); $("recDot").classList.add("hidden");
+  $("fileInput").value = "";
+}
+
+async function send(){
+  const title = $("vrTitle").value.trim();
+  if(!audioBlob || !title) return;
+  $("sendBtn").disabled = true;
+  try{
+    setStatus("Caricamento dell'audio…");
+    const path = currentUser.id + "/" + Date.now() + "." + audioExt;
+    const up = await client.storage.from(BUCKET).upload(path, audioBlob, { contentType: audioMime, upsert:false });
+    if(up.error) throw new Error("Caricamento audio non riuscito: " + up.error.message);
+
+    setStatus("Salvataggio del messaggio…");
+    const ins = await client.from("immonova_voice_requests").insert({
+      title, note: $("vrNote").value.trim() || null, audio_path: path, mime_type: audioMime,
+      duration_seconds: audioDuration, created_by: currentUser.id,
+      sender_name: (currentProfile && currentProfile.full_name) || currentUser.email
+    }).select("id").single();
+    if(ins.error) throw new Error("Salvataggio non riuscito: " + ins.error.message);
+
+    setStatus("Invio dell'email a tutti i collaboratori…");
+    const res = await client.functions.invoke("notify-voice-request", { body:{ voice_request_id: ins.data.id } });
+    if(res.error) throw new Error("Invio email non riuscito: " + await edgeErrorMessage(res));
+    const d = res.data || {};
+    if(!d.success) throw new Error(d.error || "Nessuna email inviata.");
+    setStatus("Inviato a " + d.sent + " collaboratori" + (d.failed ? " (" + d.failed + " non riusciti)" : "") + (d.attached ? ", con l'audio in allegato." : "."), "ok");
+    audioBlob = null; $("preview").classList.add("hidden"); $("vrTitle").value = ""; $("vrNote").value = ""; $("timer").textContent = "0:00"; $("recBtn").textContent = "● Registra";
+    loadList();
+  }catch(e){
+    setStatus(e.message || String(e), "err");
+  }finally{ refreshSendState(); }
+}
+
+async function loadList(){
+  const focusId = new URLSearchParams(location.search).get("id");
+  const r = await client.from("immonova_voice_requests").select("*").order("created_at", { ascending:false }).limit(100);
+  const list = $("list");
+  if(r.error){ list.innerHTML = '<div class="empty">Errore: ' + esc(r.error.message) + '</div>'; return; }
+  const rows = r.data || [];
+  if(!rows.length){ list.innerHTML = '<div class="empty">Nessun messaggio vocale ancora.</div>'; return; }
+  const paths = rows.map(x => x.audio_path);
+  const signed = await client.storage.from(BUCKET).createSignedUrls(paths, 60 * 60 * 6);
+  const urlOf = {}; (signed.data || []).forEach(s => { if(s && s.path) urlOf[s.path] = s.signedUrl; });
+  list.innerHTML = rows.map(x => {
+    const when = new Date(x.created_at).toLocaleString("it-IT", { dateStyle:"medium", timeStyle:"short" });
+    const meta = [esc(x.sender_name || ""), when, x.duration_seconds ? fmtTime(x.duration_seconds) : "", x.recipients_count != null ? "inviato a " + x.recipients_count : ""].filter(Boolean).join(" · ");
+    return '<div class="msg' + (x.id === focusId ? ' highlight' : '') + '" id="m-' + esc(x.id) + '">' +
+      '<div class="msg-title">' + esc(x.title) + '</div><div class="msg-meta">' + meta + '</div>' +
+      (x.note ? '<div class="msg-note">' + esc(x.note) + '</div>' : '') +
+      (urlOf[x.audio_path] ? '<audio controls preload="none" src="' + esc(urlOf[x.audio_path]) + '"></audio>' + '<div class="msg-actions"><a class="link-btn" style="color:#5b461d;text-decoration:none" href="' + esc(urlOf[x.audio_path]) + '" download>Scarica audio</a>' : '<div class="msg-actions">') +
+      (isAdmin ? ' &nbsp; <button class="link-btn" data-del="' + esc(x.id) + '" data-path="' + esc(x.audio_path) + '">Elimina</button>' : '') + '</div>' +
+      '</div>';
+  }).join("");
+  list.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => removeMsg(b.dataset.del, b.dataset.path)));
+  if(focusId){ const el = document.getElementById("m-" + focusId); if(el) el.scrollIntoView({ behavior:"smooth", block:"center" }); }
+}
+async function removeMsg(id, path){
+  if(!confirm("Eliminare questo messaggio vocale per tutti?")) return;
+  const d = await client.from("immonova_voice_requests").delete().eq("id", id);
+  if(d.error){ alert("Eliminazione non riuscita: " + d.error.message); return; }
+  await client.storage.from(BUCKET).remove([path]);
+  loadList();
+}
+
+async function init(){
+  const { data:{ session } } = await client.auth.getSession();
+  if(!session){ location.href = "login.html"; return; }
+  currentUser = session.user;
+  const p = await client.from("profiles").select("full_name,email,role").eq("id", currentUser.id).single();
+  currentProfile = p.data || null;
+  isAdmin = !!(currentProfile && currentProfile.role === "admin");
+  if(isAdmin){
+    $("composeCard").classList.remove("hidden");
+    $("subtitle").textContent = "Registra o carica un messaggio vocale di richiesta: arriva per email a tutti i collaboratori IMMONOVA, con l'audio in allegato, e resta ascoltabile qui.";
+  }
+  $("recBtn").addEventListener("click", startRecording);
+  $("stopBtn").addEventListener("click", stopRecording);
+  $("fileInput").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if(f){ audioDuration = null; setAudio(f, f.type, f.name); } });
+  $("vrTitle").addEventListener("input", refreshSendState);
+  $("sendBtn").addEventListener("click", send);
+  $("logoutBtn").addEventListener("click", async () => { await client.auth.signOut(); location.href = "../index.html"; });
+  loadList();
+}
+init();
+</script>
+</body>
+</html>
