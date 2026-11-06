@@ -70,6 +70,17 @@ audio{width:100%;margin-top:14px}
   <h1 class="title">Messaggi vocali</h1>
   <p class="subtitle" id="subtitle">Messaggi vocali di richiesta inviati a tutti i collaboratori IMMONOVA.</p>
 
+  <div class="card" id="pushCard">
+    <div class="section-title">Notifiche su questo dispositivo</div>
+    <p class="subtitle" style="margin-bottom:16px" id="pushInfo">Attiva le notifiche per ricevere subito sul telefono i nuovi messaggi vocali.</p>
+    <div class="rec-row">
+      <button class="btn" id="pushOnBtn" type="button">Attiva notifiche</button>
+      <button class="btn ghost hidden" id="pushTestBtn" type="button">Prova</button>
+      <button class="btn ghost hidden" id="pushOffBtn" type="button">Disattiva</button>
+    </div>
+    <div class="status" id="pushStatus"></div>
+  </div>
+
   <div class="card hidden" id="composeCard">
     <div class="section-title">Nuovo messaggio a tutti i collaboratori</div>
 
@@ -193,7 +204,7 @@ async function send(){
     if(res.error) throw new Error("Invio email non riuscito: " + await edgeErrorMessage(res));
     const d = res.data || {};
     if(!d.success) throw new Error(d.error || "Nessuna email inviata.");
-    setStatus("Inviato a " + d.sent + " collaboratori" + (d.failed ? " (" + d.failed + " non riusciti)" : "") + (d.attached ? ", con l'audio in allegato." : "."), "ok");
+    setStatus("Email inviata a " + d.sent + " collaboratori" + (d.failed ? " (" + d.failed + " non riuscite)" : "") + (d.attached ? ", con l'audio in allegato" : "") + "; notifiche push: " + (d.push_sent || 0) + " dispositivi.", "ok");
     audioBlob = null; $("preview").classList.add("hidden"); $("vrTitle").value = ""; $("vrNote").value = ""; $("timer").textContent = "0:00"; $("recBtn").textContent = "● Registra";
     loadList();
   }catch(e){
@@ -213,7 +224,7 @@ async function loadList(){
   const urlOf = {}; (signed.data || []).forEach(s => { if(s && s.path) urlOf[s.path] = s.signedUrl; });
   list.innerHTML = rows.map(x => {
     const when = new Date(x.created_at).toLocaleString("it-IT", { dateStyle:"medium", timeStyle:"short" });
-    const meta = [esc(x.sender_name || ""), when, x.duration_seconds ? fmtTime(x.duration_seconds) : "", x.recipients_count != null ? "inviato a " + x.recipients_count : ""].filter(Boolean).join(" · ");
+    const meta = [esc(x.sender_name || ""), when, x.duration_seconds ? fmtTime(x.duration_seconds) : "", x.recipients_count != null ? "email a " + x.recipients_count : ""].filter(Boolean).join(" · ");
     return '<div class="msg' + (x.id === focusId ? ' highlight' : '') + '" id="m-' + esc(x.id) + '">' +
       '<div class="msg-title">' + esc(x.title) + '</div><div class="msg-meta">' + meta + '</div>' +
       (x.note ? '<div class="msg-note">' + esc(x.note) + '</div>' : '') +
@@ -230,6 +241,69 @@ async function removeMsg(id, path){
   if(d.error){ alert("Eliminazione non riuscita: " + d.error.message); return; }
   await client.storage.from(BUCKET).remove([path]);
   loadList();
+}
+
+
+/* ===== Notifiche push ai collaboratori (app IMMONOVA installata) ===== */
+function pushStatus(msg, kind){ const el=$("pushStatus"); el.textContent=msg||""; el.className="status"+(kind?" "+kind:""); }
+function isStandalone(){ return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; }
+function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1); }
+function b64ToUint8(b64){ const pad="=".repeat((4-b64.length%4)%4); const raw=atob((b64+pad).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(raw, c=>c.charCodeAt(0)); }
+function withTimeout(p, ms, what){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error(what+": tempo scaduto, riprova.")), ms))]); }
+async function getReg(){
+  let reg = await navigator.serviceWorker.getRegistration("/");
+  if(!reg) reg = await navigator.serviceWorker.register("/service-worker.js", { scope:"/" });
+  return withTimeout(navigator.serviceWorker.ready, 15000, "Avvio app");
+}
+async function refreshPushUi(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    $("pushOnBtn").classList.add("hidden");
+    $("pushInfo").textContent = isIOS() && !isStandalone()
+      ? "Su iPhone le notifiche funzionano solo dall'app: in Safari tocca Condividi → Aggiungi alla schermata Home, apri IMMONOVA dall'icona, fai login e torna qui."
+      : "Questo browser non supporta le notifiche push.";
+    return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.getRegistration("/");
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    const on = !!sub && Notification.permission === "granted";
+    $("pushOnBtn").classList.toggle("hidden", on);
+    $("pushTestBtn").classList.toggle("hidden", !on);
+    $("pushOffBtn").classList.toggle("hidden", !on);
+    if(on) pushStatus("Notifiche attive su questo dispositivo.", "ok");
+  }catch(e){}
+}
+async function enablePush(){
+  pushStatus("Attivazione in corso…");
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm !== "granted") throw new Error("Permesso notifiche negato: abilitalo dalle impostazioni del telefono/browser.");
+    const k = await client.functions.invoke("register-collaborator-push", { body:{ action:"key" } });
+    if(k.error || !k.data || !k.data.publicKey) throw new Error("Chiave notifiche non disponibile: " + (k.error ? await edgeErrorMessage(k) : ""));
+    const reg = await getReg();
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await withTimeout(reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToUint8(k.data.publicKey) }), 15000, "Iscrizione");
+    const r = await client.functions.invoke("register-collaborator-push", { body:{ action:"subscribe", subscription: sub.toJSON(), user_agent: navigator.userAgent } });
+    if(r.error) throw new Error(await edgeErrorMessage(r));
+    if(!r.data || !r.data.ok) throw new Error((r.data && r.data.error) || "Iscrizione non salvata.");
+    pushStatus("Notifiche attive su questo dispositivo.", "ok");
+  }catch(e){ pushStatus(e.message || String(e), "err"); }
+  refreshPushUi();
+}
+async function disablePush(){
+  try{
+    const reg = await navigator.serviceWorker.getRegistration("/");
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if(sub){ await client.functions.invoke("register-collaborator-push", { body:{ action:"unsubscribe", endpoint: sub.endpoint } }); await sub.unsubscribe(); }
+    pushStatus("Notifiche disattivate su questo dispositivo.");
+  }catch(e){ pushStatus(e.message || String(e), "err"); }
+  refreshPushUi();
+}
+async function testPush(){
+  pushStatus("Invio notifica di prova…");
+  const r = await client.functions.invoke("register-collaborator-push", { body:{ action:"test" } });
+  if(r.error){ pushStatus(await edgeErrorMessage(r), "err"); return; }
+  pushStatus(r.data && r.data.sent ? "Notifica di prova inviata." : "Nessun dispositivo attivo trovato: riattiva le notifiche.", r.data && r.data.sent ? "ok" : "err");
 }
 
 async function init(){
@@ -249,6 +323,10 @@ async function init(){
   $("vrTitle").addEventListener("input", refreshSendState);
   $("sendBtn").addEventListener("click", send);
   $("logoutBtn").addEventListener("click", async () => { await client.auth.signOut(); location.href = "../index.html"; });
+  $("pushOnBtn").addEventListener("click", enablePush);
+  $("pushOffBtn").addEventListener("click", disablePush);
+  $("pushTestBtn").addEventListener("click", testPush);
+  refreshPushUi();
   loadList();
 }
 init();

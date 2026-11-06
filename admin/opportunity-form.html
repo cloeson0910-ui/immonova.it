@@ -1280,6 +1280,20 @@ button.danger{
           <option value="" data-i18n="opt_loading_categories">Caricamento categorie...</option>
         </select>
       </div>
+      <div class="field full" id="shortRentBox" style="display:none">
+        <div style="border:1px solid rgba(166,127,52,.45);border-radius:10px;padding:14px 16px;background:rgba(166,127,52,.06)">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0">
+            <input type="checkbox" id="short_rent_income" style="width:18px;height:18px;margin:0">
+            <span>Messa a reddito come affitti brevi</span>
+          </label>
+          <div style="font-size:12px;opacity:.75;margin-top:6px">Spunta se la villa è (o può essere) affittata in affitto breve. Resta compatibile con l'uso come residenza privata.</div>
+          <div id="shortRentUnitsWrap" style="display:none;margin-top:12px;max-width:260px">
+            <label for="short_rent_units">Unità / suite affittabili</label>
+            <input type="number" id="short_rent_units" min="1" step="1" placeholder="Es. 5">
+          </div>
+        </div>
+      </div>
+
 
       <div class="field">
         <label for="investment_type" data-i18n="label_investment_type">Tipo Investimento</label>
@@ -4493,6 +4507,7 @@ form.addEventListener("submit", async function(e){
       if(el) payload[f.column] = el.checked;
     });
     payload.photovoltaic_kw = numberOrNull("photovoltaic_kw");
+    Object.assign(payload, srPayload());
 
     var result = await client
       .from("opportunities")
@@ -4896,5 +4911,32 @@ async function wiUploadPendingSourceAfterCreate(){
 
 </script>
 
+
+<script>
+/* ===== Ville: messa a reddito come affitti brevi ===== */
+function srIsVilla(){ var c=document.getElementById("category"); return !!(c && /^vill(a|e|as)$/i.test((c.value||"").trim())); }
+function srRefresh(){
+  var box=document.getElementById("shortRentBox"), cb=document.getElementById("short_rent_income"), w=document.getElementById("shortRentUnitsWrap");
+  if(!box||!cb||!w) return;
+  box.style.display = srIsVilla() ? "" : "none";
+  w.style.display = (srIsVilla() && cb.checked) ? "" : "none";
+}
+function srPayload(){
+  var cb=document.getElementById("short_rent_income"), u=document.getElementById("short_rent_units");
+  var on = srIsVilla() && cb && cb.checked;
+  var n = on && u && u.value ? parseInt(u.value,10) : null;
+  return { short_rent_income: !!on, short_rent_units: (n && n>0) ? n : null };
+}
+function srLoad(d){
+  var cb=document.getElementById("short_rent_income"), u=document.getElementById("short_rent_units");
+  if(cb) cb.checked = !!(d && d.short_rent_income);
+  if(u) u.value = (d && d.short_rent_units) ? d.short_rent_units : "";
+  srRefresh();
+}
+document.addEventListener("change", function(e){ if(e.target && (e.target.id==="category"||e.target.id==="short_rent_income")) srRefresh(); });
+document.addEventListener("DOMContentLoaded", srRefresh);
+["change","input","click"].forEach(function(ev){ document.addEventListener(ev, function(e){ if(e.target && (e.target.id==="category"||e.target.id==="short_rent_income")) setTimeout(srRefresh,0); }, true); });
+setInterval(srRefresh, 600); /* anche quando la categoria viene impostata via codice (caricamento scheda, import Word) */
+</script>
 </body>
 </html>
