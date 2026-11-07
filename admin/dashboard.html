@@ -114,6 +114,17 @@ body::after{
 }
 .nav-dropdown-menu a:last-child{border-bottom:0}
 .nav-dropdown-menu a:hover{background:rgba(166,127,52,.14)}
+/* sottomenu per famiglia (07/11/2026) */
+.nav-sub{border-bottom:1px solid rgba(166,127,52,.12)}
+.nav-sub-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 18px;background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--c-5b461d);font-weight:600;white-space:nowrap}
+.nav-sub-btn:hover{background:rgba(166,127,52,.14)}
+.nav-dropdown.open .nav-sub-btn .nav-dropdown-caret{transform:rotate(-45deg);margin-top:0}
+.nav-sub.open .nav-sub-btn{background:rgba(166,127,52,.1)}
+.nav-dropdown.open .nav-sub.open .nav-sub-btn .nav-dropdown-caret{transform:rotate(45deg);margin-top:-3px}
+.nav-sub-items{display:none;flex-direction:column;background:rgba(255,255,255,.45)}
+.nav-sub.open .nav-sub-items{display:flex}
+.nav-sub-items a{padding-left:32px!important}
+.nav-sub-items a:last-child{border-bottom:0}
 .container{max-width:1480px;margin:0 auto;padding:46px 42px 80px}
 .hero{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:28px}
 .kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--c-554321);margin-bottom:12px}
@@ -607,7 +618,7 @@ body::after{
 <script src="../js/config.js"></script>
 <script src="../js/site-branding.js"></script>
 <script src="../js/owner-pages-guard.js"></script>
-<script src="../js/page-catalog.js"></script>
+<script src="../js/page-catalog.js?v=20261107"></script>
 <script>
 const client=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser=null,currentProfile=null,isAdmin=false;
@@ -736,7 +747,7 @@ function renderTranslatedStaticText(){
    di spostarla a mano al posto giusto: viene sempre rimessa in ordine da sola. ---- */
 function sortNavDropdownMenus(){
   document.querySelectorAll(".nav-dropdown-menu").forEach(function(menu){
-    var links = Array.from(menu.querySelectorAll("a"));
+    var links = Array.from(menu.querySelectorAll(":scope > a"));
     links.sort(function(a, b){
       return a.textContent.trim().localeCompare(b.textContent.trim(), currentUserLanguage || "it", { sensitivity:"base" });
     });
@@ -838,6 +849,17 @@ async function loadMyGrantedPageKeys(){
   return new Set((!result.error && result.data) ? result.data.map(function(r){ return r.page_key; }) : []);
 }
 
+/* Sottomenu: li decide js/page-catalog.js (campo "family"). Questa copia serve solo se il
+   browser o GitHub servono ancora un catalogo vecchio senza "family" o senza le pagine nuove. */
+var NAV_FAMILY_FALLBACK = {"calendar.html": "Comunicazioni team", "opportunities.html": "Immobili", "opportunity-form.html": "Immobili", "valuations.html": "Immobili", "video-calls.html": "Comunicazioni team", "voice-notes.html": "Comunicazioni team", "voice-requests.html": "Comunicazioni team", "short-rent.html": "Immobili", "search-mandates.html": "Mandati di ricerca", "search-mandate-form.html": "Mandati di ricerca", "property-acquisition-form.html": "Acquisizioni", "acquisizioni.html": "Acquisizioni", "documenti.html": "Contatti", "opportunities-pipeline.html": "Immobili", "investors.html": "Contatti", "investor-form.html": "Contatti", "events.html": "Eventi e contenuti", "event-form.html": "Eventi e contenuti", "success-stories.html": "Eventi e contenuti", "notizie.html": "Eventi e contenuti", "site-settings.html": "Sito", "broadcast-notifications.html": "Marketing", "articoli.html": "Sito", "team-admin.html": "Sito", "email-composer.html": "Marketing", "contabilita.html": "Amministrazione", "ads-manager.html": "Marketing", "settings.html": "Marketing", "statistics.html": "Amministrazione", "meta-ads-planner.html": "Marketing", "watermark-retroattivo.html": "Sito", "data-sources-bulk-import.html": "Amministrazione", "access-logs.html": "Amministrazione", "servizi-esterni.html": "Amministrazione", "contratto-partner.html": "Amministrazione"};
+(function(){
+  if(typeof PAGE_CATALOG === "undefined") return;
+  [{section:"Attività", key:"acquisizioni.html", label:"Tutte le acquisizioni", i18nKey:null, family:"Acquisizioni"},
+   {section:"Attività", key:"voice-requests.html", label:"Messaggi vocali", i18nKey:null, family:"Comunicazioni team"}].forEach(function(p){
+    if(!PAGE_CATALOG.some(function(x){ return x.key === p.key; })) PAGE_CATALOG.push(p);
+  });
+})();
+
 async function renderDynamicNavMenu(){
   var granted;
   try{
@@ -875,11 +897,35 @@ async function renderDynamicNavMenu(){
       return String(labelA).localeCompare(String(labelB), currentUserLanguage || "it", { sensitivity:"base" });
     });
 
-    menuEl.innerHTML = sortedItems.map(function(p){
+    /* Sottomenu per famiglia: le pagine dello stesso ambito (es. tutte quelle delle
+       acquisizioni) stanno sotto un'unica voce che si apre al click; le pagine senza famiglia
+       restano voci singole. Le famiglie con una sola pagina concessa diventano voce singola. */
+    var linkHtml = function(p){
       var label = (p.i18nKey && T[p.i18nKey]) ? T[p.i18nKey] : p.label;
       var i18nAttr = p.i18nKey ? ' data-i18n="' + p.i18nKey + '"' : "";
       return '<a href="' + p.key + '"' + i18nAttr + '>' + escapeHTML(label) + '</a>';
-    }).join("");
+    };
+    var groups = {}, singles = [];
+    sortedItems.forEach(function(p){
+      var fam = p.family || NAV_FAMILY_FALLBACK[p.key] || null; // sottomenu definito in js/page-catalog.js
+      if(fam){ (groups[fam] = groups[fam] || []).push(p); } else { singles.push(p); }
+    });
+    var entries = singles.map(function(p){ return { label:((p.i18nKey && T[p.i18nKey]) ? T[p.i18nKey] : p.label), html:linkHtml(p) }; });
+    Object.keys(groups).forEach(function(fam){
+      var list = groups[fam];
+      if(list.length === 1){ entries.push({ label:((list[0].i18nKey && T[list[0].i18nKey]) ? T[list[0].i18nKey] : list[0].label), html:linkHtml(list[0]) }); return; }
+      entries.push({ label:fam, html:'<div class="nav-sub"><button type="button" class="nav-sub-btn"><span>' + escapeHTML(fam) + '</span><span class="nav-dropdown-caret"></span></button><div class="nav-sub-items">' + list.map(linkHtml).join("") + '</div></div>' });
+    });
+    entries.sort(function(x, y){ return String(x.label).localeCompare(String(y.label), currentUserLanguage || "it", { sensitivity:"base" }); });
+    menuEl.innerHTML = entries.map(function(e){ return e.html; }).join("");
+    menuEl.querySelectorAll(".nav-sub-btn").forEach(function(btn){
+      btn.addEventListener("click", function(ev){
+        ev.stopPropagation();
+        var sub = btn.parentNode, was = sub.classList.contains("open");
+        menuEl.querySelectorAll(".nav-sub.open").forEach(function(x){ x.classList.remove("open"); });
+        if(!was) sub.classList.add("open");
+      });
+    });
   });
 }
 
