@@ -1043,7 +1043,24 @@ function renderTourismDemandPage(){
     var res=computeBreakEvenDemand(sc.adr, units, f.total, demandTotals);
     if(!res) return;
     var marketNote=demandTotals ? T.pie_market_share_note : T.tourism_demand_unavailable_note;
-    var pies=pieChartHTML(res.marketSharePct, T.pie_market_share_caption, marketNote)
+    /* Quota di mercato < 1%: una torta che mostra "0%" non e' credibile (sembra che non serva
+       nessun cliente). Si mostra invece il dato reale: notti da vendere all'anno sul totale dei
+       pernottamenti dell'area, con la percentuale a piu' decimali. */
+    var shareHtml;
+    if(demandTotals && res.marketSharePct!=null && res.marketSharePct<1){
+      var nights=Math.round(res.roomNightsRequired);
+      var pct=res.marketSharePct;
+      var pctLabel=pct<0.01?"meno dello 0,01%":(pct.toFixed(pct<0.1?3:2).replace(".",",")+"%");
+      shareHtml='<div class="pie-block"><div style="display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;width:48mm;min-height:48mm;margin:0 auto;border:1px solid rgba(166,127,52,.35);padding:3mm">'
+        +'<div class="pie-value" style="font-size:26px">'+escapeHTML(nights.toLocaleString("it-IT"))+'</div>'
+        +'<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-top:6px">notti/anno da vendere</div>'
+        +'<div style="font-size:12px;margin-top:8px">su '+escapeHTML(Math.round(demandTotals.pernottamenti).toLocaleString("it-IT"))+' pernottamenti dell\'area ('+escapeHTML(pctLabel)+')</div></div>'
+        +'<div class="pie-caption">'+escapeHTML(T.pie_market_share_caption)+'</div>'
+        +'<div class="pie-note">Domanda turistica dell\'area ampiamente sufficiente: lo scenario richiede una quota marginale dei pernottamenti esistenti.</div></div>';
+    }else{
+      shareHtml=pieChartHTML(res.marketSharePct, T.pie_market_share_caption, marketNote);
+    }
+    var pies=shareHtml
       + pieChartHTML(res.occupancyPct, T.pie_occupancy_caption, T.pie_occupancy_note);
     var exceedsNote = res.exceedsHorizon ? '<p class="info-text" style="font-style:italic">'+escapeHTML(fmt(T.tourism_demand_exceeds,{years:BREAK_EVEN_DEMAND_HORIZON_YEARS}))+'</p>' : '';
     var block='<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+exceedsNote+'</div>';
