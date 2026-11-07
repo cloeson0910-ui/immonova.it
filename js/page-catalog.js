@@ -13,6 +13,10 @@
      label    -- etichetta italiana di default (fallback se la traduzione i18n non e' disponibile)
      i18nKey  -- chiave data-i18n gia' usata altrove per questa voce di menu, se esiste (per
                  riusare le traduzioni esistenti nel menu dinamico); null se non ne ha una propria
+     family   -- (facoltativo) sottomenu dentro la sezione: le pagine con la stessa family
+                 compaiono raggruppate sotto un'unica voce apribile (es. "Acquisizioni").
+                 Senza family la pagina e' una voce singola. Se di una family e' concessa una
+                 sola pagina, compare come voce singola.
 
    NOTA (27/10/2026) su "Log Accessi": la voce sotto compare nel menu Owner (quindi, nel
    funzionamento normale di questo catalogo, per chi ha is_platform_owner=true o un grant
@@ -34,26 +38,33 @@
    Richieste, Post Social, Utenti, Anteprima Responsive. Aggiunta anche "Contratto Partner"
    (pagina admin/contratto-partner.html, accordo di partnership editabile/stampabile/inviabile),
    riservata al titolare come le altre voci Owner -- vedi owner-pages-guard.js.
+
+   NOTA (07/11/2026): aggiunto il campo "family" (sottomenu per famiglia nel menu della
+   dashboard) e le pagine "Tutte le acquisizioni" (acquisizioni.html) e "Messaggi vocali"
+   (voice-requests.html). Il mandato a vendere (mandato-vendita.html) NON e' nel menu: si apre
+   sempre da una specifica acquisizione.
    ============================================================================================ */
 var PAGE_CATALOG = [
-  {section:"Attività", key:"calendar.html", label:"Calendario", i18nKey:"nav_calendar"},
-  {section:"Attività", key:"opportunities.html", label:"Immobili", i18nKey:"nav_opportunities"},
-  {section:"Attività", key:"opportunity-form.html", label:"Nuova Opportunità", i18nKey:null},
-  {section:"Attività", key:"valuations.html", label:"Valutazioni Immobiliari", i18nKey:"nav_valuations"},
-  {section:"Attività", key:"video-calls.html", label:"Videochiamate", i18nKey:"nav_video_calls"},
-  {section:"Attività", key:"voice-notes.html", label:"Note Vocali Collaboratori", i18nKey:"nav_voice_notes"},
-  {section:"Attività", key:"short-rent.html", label:"Short Rent", i18nKey:"nav_short_rent"},
-  {section:"Attività", key:"search-mandates.html", label:"Mandati di Ricerca", i18nKey:"nav_search_mandates"},
-  {section:"Attività", key:"search-mandate-form.html", label:"Nuovo Mandato di Ricerca", i18nKey:"nav_search_mandate"},
-  {section:"Attività", key:"property-acquisition-form.html", label:"Acquisizione Immobile", i18nKey:"nav_property_acquisition"},
-  {section:"Attività", key:"documenti.html", label:"Documenti", i18nKey:"nav_documents"},
-  {section:"Attività", key:"opportunities-pipeline.html", label:"Proposte / Pipeline", i18nKey:"nav_offers"},
-  {section:"Attività", key:"investors.html", label:"Contatti / Investitori", i18nKey:"nav_investors"},
-  {section:"Attività", key:"investor-form.html", label:"Nuovo Investitore", i18nKey:null},
-  {section:"Attività", key:"events.html", label:"Eventi", i18nKey:"nav_events"},
-  {section:"Attività", key:"event-form.html", label:"Nuovo Evento", i18nKey:null},
-  {section:"Attività", key:"success-stories.html", label:"Success Stories", i18nKey:"nav_success_stories"},
-  {section:"Attività", key:"notizie.html", label:"Notizie", i18nKey:"nav_news"},
+  {section:"Attività", key:"calendar.html", label:"Calendario", i18nKey:"nav_calendar", family:"Comunicazioni team"},
+  {section:"Attività", key:"opportunities.html", label:"Immobili", i18nKey:"nav_opportunities", family:"Immobili"},
+  {section:"Attività", key:"opportunity-form.html", label:"Nuova Opportunità", i18nKey:null, family:"Immobili"},
+  {section:"Attività", key:"valuations.html", label:"Valutazioni Immobiliari", i18nKey:"nav_valuations", family:"Immobili"},
+  {section:"Attività", key:"video-calls.html", label:"Videochiamate", i18nKey:"nav_video_calls", family:"Comunicazioni team"},
+  {section:"Attività", key:"voice-notes.html", label:"Note Vocali Collaboratori", i18nKey:"nav_voice_notes", family:"Comunicazioni team"},
+  {section:"Attività", key:"voice-requests.html", label:"Messaggi vocali", i18nKey:null, family:"Comunicazioni team"},
+  {section:"Attività", key:"short-rent.html", label:"Short Rent", i18nKey:"nav_short_rent", family:"Immobili"},
+  {section:"Attività", key:"search-mandates.html", label:"Mandati di Ricerca", i18nKey:"nav_search_mandates", family:"Mandati di ricerca"},
+  {section:"Attività", key:"search-mandate-form.html", label:"Nuovo Mandato di Ricerca", i18nKey:"nav_search_mandate", family:"Mandati di ricerca"},
+  {section:"Attività", key:"property-acquisition-form.html", label:"Acquisizione Immobile", i18nKey:"nav_property_acquisition", family:"Acquisizioni"},
+  {section:"Attività", key:"acquisizioni.html", label:"Tutte le acquisizioni", i18nKey:null, family:"Acquisizioni"},
+  {section:"Attività", key:"documenti.html", label:"Documenti", i18nKey:"nav_documents", family:"Contatti"},
+  {section:"Attività", key:"opportunities-pipeline.html", label:"Proposte / Pipeline", i18nKey:"nav_offers", family:"Immobili"},
+  {section:"Attività", key:"investors.html", label:"Contatti / Investitori", i18nKey:"nav_investors", family:"Contatti"},
+  {section:"Attività", key:"investor-form.html", label:"Nuovo Investitore", i18nKey:null, family:"Contatti"},
+  {section:"Attività", key:"events.html", label:"Eventi", i18nKey:"nav_events", family:"Eventi e contenuti"},
+  {section:"Attività", key:"event-form.html", label:"Nuovo Evento", i18nKey:null, family:"Eventi e contenuti"},
+  {section:"Attività", key:"success-stories.html", label:"Success Stories", i18nKey:"nav_success_stories", family:"Eventi e contenuti"},
+  {section:"Attività", key:"notizie.html", label:"Notizie", i18nKey:"nav_news", family:"Eventi e contenuti"},
   {section:"Dati", key:"data-sources.html", label:"Fonti Dati", i18nKey:"nav_data_sources"},
   {section:"Dati", key:"manual-overrides.html", label:"Dati Verificati", i18nKey:"nav_manual_overrides"},
   {section:"Dati", key:"destination-photos.html", label:"Foto Destinazioni", i18nKey:"nav_destination_photos"},
@@ -62,19 +73,19 @@ var PAGE_CATALOG = [
   {section:"Gestione", key:"users.html", label:"Utenti", i18nKey:"nav_users"},
   {section:"Gestione", key:"social-composer.html", label:"Post Social", i18nKey:"nav_social_composer"},
   {section:"Gestione", key:"responsive-preview.html", label:"Anteprima Responsive", i18nKey:"nav_responsive_preview"},
-  {section:"Owner", key:"site-settings.html", label:"Impostazioni Sito", i18nKey:"nav_site_settings"},
-  {section:"Owner", key:"broadcast-notifications.html", label:"Notifiche Broadcast", i18nKey:"nav_broadcast_notifications"},
-  {section:"Owner", key:"articoli.html", label:"Articoli / Blog Sito", i18nKey:"nav_blog_articles"},
-  {section:"Owner", key:"team-admin.html", label:"Team", i18nKey:"nav_team"},
-  {section:"Owner", key:"email-composer.html", label:"Comunicazioni", i18nKey:"nav_communications"},
-  {section:"Owner", key:"contabilita.html", label:"Contabilità", i18nKey:"nav_contabilita"},
-  {section:"Owner", key:"ads-manager.html", label:"Pubblicità", i18nKey:"nav_ads"},
-  {section:"Owner", key:"settings.html", label:"Social", i18nKey:"nav_social"},
-  {section:"Owner", key:"statistics.html", label:"Statistiche", i18nKey:"nav_statistics"},
-  {section:"Owner", key:"meta-ads-planner.html", label:"Test A/B Meta Ads", i18nKey:"nav_ads_ab"},
-  {section:"Owner", key:"watermark-retroattivo.html", label:"Watermark Retroattivo", i18nKey:"nav_watermark_retro"},
-  {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk"},
-  {section:"Owner", key:"access-logs.html", label:"Log Accessi", i18nKey:null},
-  {section:"Owner", key:"servizi-esterni.html", label:"Servizi Esterni", i18nKey:null},
-  {section:"Owner", key:"contratto-partner.html", label:"Contratto Partner", i18nKey:null}
+  {section:"Owner", key:"site-settings.html", label:"Impostazioni Sito", i18nKey:"nav_site_settings", family:"Sito"},
+  {section:"Owner", key:"broadcast-notifications.html", label:"Notifiche Broadcast", i18nKey:"nav_broadcast_notifications", family:"Marketing"},
+  {section:"Owner", key:"articoli.html", label:"Articoli / Blog Sito", i18nKey:"nav_blog_articles", family:"Sito"},
+  {section:"Owner", key:"team-admin.html", label:"Team", i18nKey:"nav_team", family:"Sito"},
+  {section:"Owner", key:"email-composer.html", label:"Comunicazioni", i18nKey:"nav_communications", family:"Marketing"},
+  {section:"Owner", key:"contabilita.html", label:"Contabilità", i18nKey:"nav_contabilita", family:"Amministrazione"},
+  {section:"Owner", key:"ads-manager.html", label:"Pubblicità", i18nKey:"nav_ads", family:"Marketing"},
+  {section:"Owner", key:"settings.html", label:"Social", i18nKey:"nav_social", family:"Marketing"},
+  {section:"Owner", key:"statistics.html", label:"Statistiche", i18nKey:"nav_statistics", family:"Amministrazione"},
+  {section:"Owner", key:"meta-ads-planner.html", label:"Test A/B Meta Ads", i18nKey:"nav_ads_ab", family:"Marketing"},
+  {section:"Owner", key:"watermark-retroattivo.html", label:"Watermark Retroattivo", i18nKey:"nav_watermark_retro", family:"Sito"},
+  {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk", family:"Amministrazione"},
+  {section:"Owner", key:"access-logs.html", label:"Log Accessi", i18nKey:null, family:"Amministrazione"},
+  {section:"Owner", key:"servizi-esterni.html", label:"Servizi Esterni", i18nKey:null, family:"Amministrazione"},
+  {section:"Owner", key:"contratto-partner.html", label:"Contratto Partner", i18nKey:null, family:"Amministrazione"}
 ];
