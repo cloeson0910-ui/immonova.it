@@ -68,7 +68,7 @@ var PAGE_CATALOG = [
   {section:"Dati", key:"data-sources.html", label:"Fonti Dati", i18nKey:"nav_data_sources"},
   {section:"Dati", key:"manual-overrides.html", label:"Dati Verificati", i18nKey:"nav_manual_overrides"},
   {section:"Dati", key:"destination-photos.html", label:"Foto Destinazioni", i18nKey:"nav_destination_photos"},
-  {section:"Dati", key:"catalogo-verificati.html", label:"Catalogo Verificati", i18nKey:"nav_catalog_verified"},
+  {section:"Attività", key:"catalogo-verificati.html", label:"Catalogo Verificati", i18nKey:"nav_catalog_verified", family:"Immobili"},
   {section:"Gestione", key:"inquiries.html", label:"Richieste", i18nKey:"nav_requests"},
   {section:"Gestione", key:"users.html", label:"Utenti", i18nKey:"nav_users"},
   {section:"Gestione", key:"social-composer.html", label:"Post Social", i18nKey:"nav_social_composer"},
