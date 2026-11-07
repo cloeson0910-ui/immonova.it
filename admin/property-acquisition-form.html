@@ -79,6 +79,7 @@
 <header>
   <a href="dashboard.html" class="secondary" style="padding:9px 16px;font-size:13px">← Dashboard</a>
   <h1 style="margin:0;flex:1;text-align:center">📋 Acquisizione immobile</h1>
+  <a href="acquisizioni.html" class="secondary" style="padding:9px 16px;font-size:13px">Tutte le acquisizioni</a>
   <span class="status-pill" id="statusPill">Bozza</span>
 </header>
 
@@ -230,6 +231,7 @@
 <div class="savebar">
   <span class="msg" id="saveMsg"></span>
   <a href="dashboard.html" class="secondary" id="dashboardBtn" style="display:none">✓ Torna alla Dashboard</a>
+  <a href="#" class="secondary" id="mandateBtn" style="display:none">✍ Mandato a vendere</a>
   <button type="button" class="secondary" id="printBtn">Stampa / PDF</button>
   <button type="button" class="primary" id="saveBtn">Salva acquisizione</button>
 </div>
@@ -1046,6 +1048,7 @@ async function saveAcquisition(silent){
       document.getElementById("dashboardBtn").style.display = ""; // dopo un salvataggio esplicito, un tasto pronto per tornare alla dashboard
       setTimeout(function(){ msg.textContent = ""; }, 2500);
     }
+    updateMandateBtn();
     return currentId;
   }catch(err){
     console.warn("Salvataggio acquisizione non riuscito:", err);
@@ -1112,6 +1115,20 @@ async function loadAcquisition(id){
   url.searchParams.set("id", id);
   window.history.replaceState({}, "", url);
   msg.textContent = "";
+  updateMandateBtn();
+}
+
+/* ---- Pulsante "Mandato a vendere": compare appena l'acquisizione ha un id (cioe' e' stata
+   salvata almeno una volta) e apre mandato-vendita.html con i dati di questa acquisizione. ---- */
+function updateMandateBtn(){
+  var b = document.getElementById("mandateBtn");
+  if(!b) return;
+  if(currentId){
+    b.href = "mandato-vendita.html?acquisition_id=" + encodeURIComponent(currentId);
+    b.style.display = "";
+  }else{
+    b.style.display = "none";
+  }
 }
 
 /* ---- Import dati anagrafici dal cliente/investitore scelto (o creato al volo) nella pagina
