@@ -4754,7 +4754,7 @@ async function init(){
       currentDossierPdfUrl = opportunity.dossier_pdf_url;
       dossierLinkVerified = true;
       renderDossierLinkRow();
-    }else if(!AUTO_PDF_MODE){
+    }else{
       generateDossierLink();
     }
     renderDossierLangLinksBox();
@@ -5404,26 +5404,7 @@ async function generateDossierLink(){
 }
 if(generateDossierLinkBtn) generateDossierLinkBtn.addEventListener("click", generateDossierLink);
 
-/* Modalita' "autopdf" (usata da Esporta Data Room in opportunity-edit, dentro un iframe nascosto):
-   apre il dossier nella lingua richiesta (traduzione al volo), genera il PDF, lo salva in
-   dossier-pdfs come un normale dossier e comunica il percorso alla pagina che l'ha aperta. */
-var AUTO_PDF_MODE = params.get("autopdf") === "1";
-async function autoPdfIfRequested(){
-  if(!AUTO_PDF_MODE || !window.parent || window.parent === window) return;
-  var reply = function(msg){ msg.type = "immonova-dossier-autopdf"; msg.opportunityId = opportunityId; window.parent.postMessage(msg, location.origin); };
-  try{
-    if(!opportunity) throw new Error("opportunita' non caricata");
-    await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
-    var pdfBlob = await generateDossierPdfBlob();
-    var path = "opportunity-"+(opportunityId||"na")+"/"+Date.now()+"_"+buildDossierFilename();
-    var up = await client.storage.from("dossier-pdfs").upload(path, pdfBlob, {contentType:"application/pdf", upsert:true});
-    if(up.error) throw up.error;
-    reply({ ok:true, path:path, lang:CURRENT_LANG });
-  }catch(e){
-    reply({ ok:false, error:(e && e.message) || String(e) });
-  }
-}
-init().then(autoPdfIfRequested, function(e){ if(AUTO_PDF_MODE && window.parent !== window) window.parent.postMessage({ type:"immonova-dossier-autopdf", ok:false, error:String(e && e.message || e) }, location.origin); });
+init();
 </script>
 </body>
 </html>
