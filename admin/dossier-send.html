@@ -1591,9 +1591,25 @@ function rangeCardHTML(label,minMetric,maxMetric,unitFallback){
   else valueLine=(T.range_to||"fino a ")+formatMetricVal(maxMetric.value);
   return '<div class="metric-card"><div class="metric-label">'+escapeHTML(label)+'</div><div class="metric-value">'+escapeHTML(valueLine)+'</div><div class="metric-note">'+escapeHTML(unitLabel(unit))+'</div></div>';
 }
+function isItalianOpportunity(){
+  var o=(typeof opportunity!=="undefined"&&opportunity)||{};
+  var c=String(o.country||o.country_code||"").trim().toLowerCase();
+  return !c || c==="it" || c==="ita" || c==="italia" || c==="italy";
+}
+function isForeignTransportAddress(addr){
+  var a=String(addr||"").toLowerCase();
+  if(!a) return false;
+  return /(greece|grecia|ελλάδα|albania|shqip|montenegro|croatia|croazia|hrvatska|slovenia|malta|tunisia|france|francia|switzerland|svizzera|austria)\s*$/.test(a.replace(/[\s,.]+$/,""));
+}
 function sortedItems(section,limit){
   var d=dossierData||{};
   var items=(d[section]&&Array.isArray(d[section].items))?d[section].items.slice():[];
+  /* Trasporti (aeroporti, porti, stazioni): per un immobile in Italia si escludono quelli in un
+     altro paese (es. Corfu' dal Salento: vicino in linea d'aria ma raggiungibile solo in nave,
+     quindi "km e minuti in auto" sarebbero falsi). */
+  if(section==="transport" && isItalianOpportunity()){
+    items=items.filter(function(it){ return !isForeignTransportAddress(it&&it.address); });
+  }
   items.sort(function(a,b){
     var da=Number(a&&a.distance_km),db=Number(b&&b.distance_km);
     da=Number.isFinite(da)?da:999999;db=Number.isFinite(db)?db:999999;
