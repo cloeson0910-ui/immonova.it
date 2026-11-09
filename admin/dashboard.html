@@ -242,7 +242,7 @@ body::after{
 
 .value-command-grid{
   display:grid;
-  grid-template-columns:repeat(4,1fr);
+  grid-template-columns:repeat(5,1fr);
   gap:18px;
   margin-bottom:34px;
 }
@@ -427,6 +427,21 @@ body::after{
   color:var(--c-4f4125);
 }
 
+
+.split-box{background:rgba(255,255,255,.55);border:1px solid rgba(166,127,52,.25);padding:26px 30px;margin:0 0 36px}
+.split-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:16px}
+.split-kicker{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:#5b471f}
+.split-total{font-size:38px;font-weight:200;color:#2b2620;margin-top:6px}
+.split-sub{font-size:13px;color:#6b5c44}
+.split-check{font-size:12px;letter-spacing:.06em}
+.split-check.ok{color:#2e6b34}.split-check.err{color:#8d2f22}
+.split-bar{display:flex;height:16px;border:1px solid rgba(166,127,52,.25);margin-bottom:16px;overflow:hidden}
+.split-bar span{display:block;height:100%}
+.split-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px 26px}
+.split-row{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid rgba(166,127,52,.12)}
+.split-dot{width:12px;height:12px;display:inline-block}
+.split-name{font-size:14px;color:#2b2620}.split-count{font-size:11px;color:#7d6640}
+.split-val{font-size:15px;color:#2b2620;text-align:right;white-space:nowrap}.split-pct{display:block;font-size:11px;color:#7d6640}
 @media(max-width:1220px){.command-grid,.value-command-grid,.performance-grid{grid-template-columns:repeat(3,1fr)}.alerts-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.chart-grid{grid-template-columns:1fr}.mini-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.header{padding:24px 22px;flex-direction:column;gap:18px}.logo{align-items:center}.logo-svg{width:250px}.header-actions{justify-content:center}.container{padding:34px 22px 54px}.title{font-size:34px}.command-grid,.value-command-grid,.alerts-grid,.opportunity-grid,.mini-grid,.performance-grid{grid-template-columns:1fr}.quick-actions{justify-content:flex-start}.requests-row{grid-template-columns:1fr}.request-actions{justify-content:flex-start}.owner-filter select{min-width:100%;width:100%}.mobile-quick-back{display:inline-block!important}}
 
@@ -570,7 +585,9 @@ body::after{
     <div class="value-command-card"><div class="value-command-label" data-i18n="val_published">Valore Pubblicate</div><div class="value-command-value" id="portfolioPublishedValue">€ 0</div><div class="value-command-note" id="portfolioPublishedNote">0 opportunità</div></div>
     <div class="value-command-card"><div class="value-command-label" data-i18n="val_evaluation">Valore Da Valutare</div><div class="value-command-value" id="portfolioEvaluationValue">€ 0</div><div class="value-command-note" id="portfolioEvaluationNote">0 opportunità</div></div>
     <div class="value-command-card"><div class="value-command-label" data-i18n="val_rejected">Valore Rifiutate</div><div class="value-command-value" id="portfolioRejectedValue">€ 0</div><div class="value-command-note" id="portfolioRejectedNote">0 opportunità</div></div>
+    <div class="value-command-card"><div class="value-command-label" data-i18n="val_approved_hidden">Valore Approvate non pubblicate</div><div class="value-command-value" id="portfolioApprovedHiddenValue">€ 0</div><div class="value-command-note" id="portfolioApprovedHiddenNote">0 opportunità</div></div>
   </section>
+
 
   <section class="alerts-grid" id="alertsGrid"></section>
 
@@ -667,7 +684,7 @@ var UI_STRINGS = {
   cmd_sold:"Vendute / Success", cmd_sold_note:"Operazioni concluse", cmd_investors:"Investitori CRM",
   cmd_events:"Eventi", cmd_activity:"Attività CRM", cmd_activity_note:"Ultimi contatti",
   val_total:"Valore Portfolio", val_total_note:"Somma valori opportunità",
-  val_published:"Valore Pubblicate", val_evaluation:"Valore Da Valutare", val_rejected:"Valore Rifiutate",
+  val_published:"Valore Pubblicate", val_evaluation:"Valore Da Valutare", val_rejected:"Valore Rifiutate", val_approved_hidden:"Valore Approvate non pubblicate",
   val_post_renovation:"Valore Post-Ristr.", val_post_renovation_note:"Totale investimenti con lavori",
   section_operational_opportunities:"Opportunità operative", see_all:"Vedi tutte",
   loading_opportunities:"Caricamento opportunità...", section_portfolio_analysis:"Analisi Portfolio",
@@ -775,10 +792,51 @@ function opportunityValue(o){/* Valore = PREZZO RICHIESTO della scheda. Solo se 
 function sumBy(items,mapper){return items.reduce((sum,item)=>sum+(Number(mapper(item))||0),0)}
 
 function postRenovationOpportunityValue(o){const report=reportForOpportunity(o.id);if(report&&Number(report.projected_value_5y)>0)return Number(report.projected_value_5y);if(report?.report_json?.kpi&&Number(report.report_json.kpi.projected_value_5y)>0)return Number(report.report_json.kpi.projected_value_5y);return opportunityValue(o)}
-function groupValues(items){const published=items.filter(o=>o.published===true);const evaluation=items.filter(o=>["da_verificare","da_revisionare"].includes(o.review_status||"da_verificare"));const rejected=items.filter(o=>o.review_status==="rifiutato");return {total:sumBy(items,opportunityValue),published:sumBy(published,opportunityValue),evaluation:sumBy(evaluation,opportunityValue),rejected:sumBy(rejected,opportunityValue),postRenovation:sumBy(items,postRenovationOpportunityValue),publishedCount:published.length,evaluationCount:evaluation.length,rejectedCount:rejected.length}}
+function groupValues(items){/* Venduti e ritirati NON sono portafoglio attivo: esclusi da tutti i valori. */items=items.filter(o=>!["sold","withdrawn"].includes(o.commercial_status));const published=items.filter(o=>o.published===true);const evaluation=items.filter(o=>["da_verificare","da_revisionare"].includes(o.review_status||"da_verificare"));const rejected=items.filter(o=>o.review_status==="rifiutato");const approvedHidden=items.filter(o=>o.review_status==="approvato"&&o.published!==true);return {total:sumBy(items,opportunityValue),published:sumBy(published,opportunityValue),evaluation:sumBy(evaluation,opportunityValue),rejected:sumBy(rejected,opportunityValue),postRenovation:sumBy(items,postRenovationOpportunityValue),publishedCount:published.length,evaluationCount:evaluation.length,rejectedCount:rejected.length,approvedHidden:sumBy(approvedHidden,opportunityValue),approvedHiddenCount:approvedHidden.length}}
 function statusGroups(items){return [{key:"da_verificare",label:T.status_da_verificare,count:items.filter(o=>(o.review_status||"da_verificare")==="da_verificare").length,value:sumBy(items.filter(o=>(o.review_status||"da_verificare")==="da_verificare"),opportunityValue)},{key:"da_revisionare",label:T.status_da_revisionare,count:items.filter(o=>o.review_status==="da_revisionare").length,value:sumBy(items.filter(o=>o.review_status==="da_revisionare"),opportunityValue)},{key:"approvato",label:T.status_approvato,count:items.filter(o=>o.review_status==="approvato").length,value:sumBy(items.filter(o=>o.review_status==="approvato"),opportunityValue)},{key:"rifiutato",label:T.status_rifiutato,count:items.filter(o=>o.review_status==="rifiutato").length,value:sumBy(items.filter(o=>o.review_status==="rifiutato"),opportunityValue)}]}
 function renderBarChart(targetId,groups,valueKey,formatFn){const target=document.getElementById(targetId);if(!target)return;const width=560,height=260,padL=54,padR=24,padT=24,padB=54,chartW=width-padL-padR,chartH=height-padT-padB;const values=groups.map(g=>Number(g[valueKey])||0);const max=Math.max(...values,1);const barW=chartW/groups.length*.56,gap=chartW/groups.length;let grid="";for(let i=0;i<=4;i++){const y=padT+chartH-(chartH/4)*i;const val=max/4*i;grid+=`<line class="grid-line" x1="${padL}" y1="${y}" x2="${width-padR}" y2="${y}"></line><text class="chart-text" x="6" y="${y+4}">${escapeHTML(formatFn?formatFn(val):Math.round(val))}</text>`}const bars=groups.map((g,i)=>{const val=Number(g[valueKey])||0;const h=max>0?(val/max)*chartH:0;const x=padL+gap*i+(gap-barW)/2;const y=padT+chartH-h;return `<rect class="chart-bar" x="${x}" y="${y}" width="${barW}" height="${h}"></rect><text class="chart-text" x="${x+(barW/2)}" y="${height-28}" text-anchor="middle">${escapeHTML(g.label)}</text><text class="chart-text" x="${x+(barW/2)}" y="${Math.max(y-8,14)}" text-anchor="middle">${escapeHTML(formatFn?formatFn(val):val)}</text>`}).join("");target.innerHTML=`<svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${grid}<line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${height-padB}"></line><line class="axis" x1="${padL}" y1="${height-padB}" x2="${width-padR}" y2="${height-padB}"></line>${bars}</svg>`}
-function renderPortfolio(items){const values=groupValues(items||allOpportunities);const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val};set("portfolioTotalValue",compactEuro(values.total));set("portfolioPublishedValue",compactEuro(values.published));set("portfolioEvaluationValue",compactEuro(values.evaluation));set("portfolioRejectedValue",compactEuro(values.rejected));set("portfolioPostRenovationValue",compactEuro(values.postRenovation));set("portfolioPublishedNote",values.publishedCount+" "+T.opportunities_note);set("portfolioEvaluationNote",values.evaluationCount+" "+T.evaluation_note);set("portfolioRejectedNote",values.rejectedCount+" "+T.rejected_note);const groups=statusGroups(items||allOpportunities);renderBarChart("statusCountChart",groups,"count",v=>Math.round(v));renderBarChart("statusValueChart",groups,"value",compactEuro)}
+
+/* Ripartizione COMPLETA: ogni scheda finisce in UNA sola voce, quindi le voci sommate
+   fanno sempre il totale di tutte le schede (vendute e ritirate comprese). */
+function renderPortfolioSplit(items){
+  items = items || allOpportunities || [];
+  const groups = [
+    { key:"published", name:"Pubblicate (attive)", color:"#a67f34" },
+    { key:"approved", name:"Approvate non pubblicate", color:"#d2b06a" },
+    { key:"verify", name:"Da verificare", color:"#5f6f92" },
+    { key:"revise", name:"Da revisionare", color:"#8f9bb8" },
+    { key:"rejected", name:"Rifiutate", color:"#8d2f22" },
+    { key:"sold", name:"Vendute", color:"#2e6b34" },
+    { key:"withdrawn", name:"Ritirate", color:"#9a9184" }
+  ];
+  const by = {}; groups.forEach(g => by[g.key] = { count:0, value:0 });
+  const pick = o => {
+    if(o.commercial_status === "sold") return "sold";
+    if(o.commercial_status === "withdrawn") return "withdrawn";
+    const r = o.review_status || "da_verificare";
+    if(r === "rifiutato") return "rejected";
+    if(o.published === true) return "published";
+    if(r === "approvato") return "approved";
+    if(r === "da_revisionare") return "revise";
+    return "verify";
+  };
+  let total = 0;
+  items.forEach(o => { const k = pick(o), v = opportunityValue(o) || 0; by[k].count++; by[k].value += v; total += v; });
+  const sumParts = groups.reduce((a, g) => a + by[g.key].value, 0);
+  const el = id => document.getElementById(id);
+  if(!el("portfolioSplit")) return;
+  el("splitTotal").textContent = compactEuro(total);
+  el("splitSub").textContent = items.length + " schede in totale (vendute e ritirate comprese)";
+  const chk = el("splitCheck");
+  chk.className = "split-check " + (Math.round(sumParts) === Math.round(total) ? "ok" : "err");
+  chk.textContent = Math.round(sumParts) === Math.round(total) ? "✓ Le voci sommate fanno esattamente il totale" : "Attenzione: somma voci " + compactEuro(sumParts);
+  el("splitBar").innerHTML = groups.filter(g => by[g.key].value > 0).map(g => '<span title="' + g.name + '" style="width:' + (by[g.key].value / total * 100) + '%;background:' + g.color + '"></span>').join("");
+  el("splitRows").innerHTML = groups.map(g => {
+    const d = by[g.key], pct = total ? (d.value / total * 100) : 0;
+    return '<div class="split-row"><span class="split-dot" style="background:' + g.color + '"></span><div><div class="split-name">' + g.name + '</div><div class="split-count">' + d.count + (d.count === 1 ? " scheda" : " schede") + '</div></div><div class="split-val">' + compactEuro(d.value) + '<span class="split-pct">' + pct.toFixed(1).replace(".", ",") + '%</span></div></div>';
+  }).join("");
+}
+function renderPortfolio(items){const values=groupValues(items||allOpportunities);const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val};set("portfolioTotalValue",compactEuro(values.total));set("portfolioPublishedValue",compactEuro(values.published));set("portfolioEvaluationValue",compactEuro(values.evaluation));set("portfolioRejectedValue",compactEuro(values.rejected));set("portfolioApprovedHiddenValue",compactEuro(values.approvedHidden));set("portfolioApprovedHiddenNote",values.approvedHiddenCount+" approvate, non pubblicate");set("portfolioPostRenovationValue",compactEuro(values.postRenovation));set("portfolioPublishedNote",values.publishedCount+" "+T.opportunities_note);set("portfolioEvaluationNote",values.evaluationCount+" "+T.evaluation_note);set("portfolioRejectedNote",values.rejectedCount+" "+T.rejected_note);const groups=statusGroups(items||allOpportunities);renderBarChart("statusCountChart",groups,"count",v=>Math.round(v));renderBarChart("statusValueChart",groups,"value",compactEuro)}
 function normalize(v){return String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")}
 function formatDate(v){if(!v)return "-";try{return new Date(v).toLocaleDateString(currentUserLanguage==="it"?"it-IT":currentUserLanguage,{day:"2-digit",month:"short"})}catch(e){return "-"}}
 function formatTime(v){if(!v)return "-";try{return new Date(v).toLocaleString(currentUserLanguage==="it"?"it-IT":currentUserLanguage,{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}catch(e){return "-"}}
