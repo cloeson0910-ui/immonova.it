@@ -71,6 +71,7 @@ var PAGE_CATALOG = [
   {section:"Attività", key:"catalogo-verificati.html", label:"Catalogo Verificati", i18nKey:"nav_catalog_verified", family:"Immobili"},
   {section:"Gestione", key:"inquiries.html", label:"Richieste", i18nKey:"nav_requests"},
   {section:"Gestione", key:"users.html", label:"Utenti", i18nKey:"nav_users"},
+  {section:"Gestione", key:"agenzie-partner.html", label:"Loghi agenzie partner", i18nKey:null},
   {section:"Gestione", key:"social-composer.html", label:"Post Social", i18nKey:"nav_social_composer"},
   {section:"Gestione", key:"responsive-preview.html", label:"Anteprima Responsive", i18nKey:"nav_responsive_preview"},
   {section:"Owner", key:"site-settings.html", label:"Impostazioni Sito", i18nKey:"nav_site_settings", family:"Sito"},
