@@ -1761,6 +1761,9 @@ button.danger{
         <img id="partnerLogoPreview" class="preview-cover" alt="Logo partner attuale" style="display:none;max-height:80px;width:auto">
         <div id="noPartnerLogoText" class="file-note" data-i18n="no_partner_logo_text">Nessun logo partner caricato: il dossier userà il brand IMMONOVA.</div>
         <button type="button" class="soft" id="removePartnerLogoBtn" data-i18n="btn_remove_partner_logo">Rimuovi logo partner (torna a IMMONOVA)</button>
+        <label for="partnerAgencySelect" style="margin-top:10px">Agenzia partner salvata</label>
+        <select id="partnerAgencySelect"><option value="">— Scegli un'agenzia dall'elenco —</option></select>
+        <div class="room-inventory-note" style="margin-top:6px">Imposta logo e nome dell'agenzia in un clic. I loghi si aggiungono da <a href="agenzie-partner.html" target="_blank">Gestione → Loghi agenzie partner</a>.</div>
         <label for="partnerLogoFile" data-i18n="label_upload_partner_logo" style="margin-top:10px">Carica / sostituisci logo partner</label>
         <input type="file" id="partnerLogoFile" accept="image/*">
         <label for="partnerName" data-i18n="label_partner_name" style="margin-top:10px">Nome partner (facoltativo, sostituisce la scritta "IMMONOVA" nel footer)</label>
@@ -6373,6 +6376,7 @@ async function loadOpportunity(){
   galleryImages = normalizeGallery(data.gallery_images);
   galleryImagesClean = normalizeGallery(data.gallery_images_clean);
   currentPartnerLogoUrl = data.dossier_partner_logo_url || "";
+  if(typeof syncPartnerAgencySelect === "function") syncPartnerAgencySelect();
   setValue("partnerName", data.dossier_partner_name || "");
   document.getElementById("partnerCobrand").checked = data.dossier_cobrand === true;
 
@@ -7308,9 +7312,44 @@ document.getElementById("removeAllPhotosBtn").addEventListener("click", async fu
   btn.textContent = originalText;
 });
 
+/* ---- Elenco agenzie partner (immonova_partner_agencies): scegliendo un'agenzia si impostano
+   logo e nome partner senza ricaricare il file ogni volta. ---- */
+var partnerAgencies = [];
+async function loadPartnerAgencies(){
+  var sel = document.getElementById("partnerAgencySelect");
+  if(!sel) return;
+  try{
+    var r = await client.from("immonova_partner_agencies").select("id,name,logo_url").order("name", { ascending:true });
+    if(r.error){ console.warn("Agenzie partner non caricate (non bloccante):", r.error.message); return; }
+    partnerAgencies = r.data || [];
+    sel.innerHTML = '<option value="">— Scegli un\'agenzia dall\'elenco —</option>' + partnerAgencies.map(function(a){
+      return '<option value="' + a.id + '">' + escapeHTML(a.name) + '</option>';
+    }).join("");
+    syncPartnerAgencySelect();
+  }catch(e){ console.warn("Agenzie partner non caricate (non bloccante):", e); }
+}
+function syncPartnerAgencySelect(){
+  var sel = document.getElementById("partnerAgencySelect");
+  if(!sel) return;
+  var match = partnerAgencies.find(function(a){ return currentPartnerLogoUrl && a.logo_url === currentPartnerLogoUrl; });
+  sel.value = match ? match.id : "";
+}
+document.getElementById("partnerAgencySelect").addEventListener("change", function(){
+  var a = partnerAgencies.find(function(x){ return x.id === this.value; }, this);
+  if(!a) return;
+  currentPartnerLogoUrl = a.logo_url;
+  partnerLogoRemoved = false;
+  document.getElementById("partnerLogoFile").value = "";
+  document.getElementById("partnerName").value = a.name;
+  renderPartnerLogo();
+  if(typeof updateWatermarkOverlayPreview === "function") updateWatermarkOverlayPreview();
+});
+loadPartnerAgencies();
+
 document.getElementById("removePartnerLogoBtn").addEventListener("click", function(){
   partnerLogoRemoved = true;
   currentPartnerLogoUrl = "";
+  var pas = document.getElementById("partnerAgencySelect"); if(pas) pas.value = "";
   document.getElementById("partnerLogoFile").value = "";
   renderPartnerLogo();
 });
