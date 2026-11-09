@@ -168,9 +168,7 @@ box-shadow:0 24px 70px rgba(127,100,48,.07);
 
 table{
 width:100%;
-border-collapse:collapse;
-min-width:1180px;
-}
+border-collapse:collapse;table-layout:auto;}
 
 th{
 text-align:left;
@@ -179,7 +177,7 @@ font-size:11px;
 letter-spacing:.18em;
 text-transform:uppercase;
 border-bottom:1px solid rgba(166,127,52,.15);
-white-space:nowrap;
+
 }
 
 td{
@@ -399,6 +397,16 @@ font-size:13px;
 }
 
 
+
+.dossier-logo{display:inline-block;padding:7px 10px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;border:1px solid rgba(166,127,52,.35);background:rgba(166,127,52,.10);color:var(--c-5b461d)}
+.dossier-logo.cobrand{border-color:rgba(95,111,146,.40);background:rgba(95,111,146,.10);color:var(--c-343d50)}
+.dossier-logo.partner{border-color:rgba(143,91,40,.45);background:rgba(143,91,40,.12);color:var(--c-4f3216)}
+.dossier-logo.legacy{border-style:dashed}
+.dossier-logo.none{opacity:.55}
+.dossier-en{margin-top:6px;font-size:10px;letter-spacing:.08em}
+.dossier-en.ok{color:var(--c-2b4626)}
+.dossier-en.missing{color:var(--c-561a1a)}
+
 @media(max-width:900px){
 .header{
 flex-direction:column;
@@ -500,13 +508,14 @@ Caricamento area riservata...
 <th data-i18n="th_commercial">Commerciale</th>
 <th data-i18n="th_published">Pubblicata</th>
 <th data-i18n="th_documents">Documenti</th>
+<th data-i18n="th_dossier_logo">Dossier AI / Logo</th>
 <th data-i18n="th_actions">Azioni</th>
 </tr>
 </thead>
 
 <tbody id="opportunitiesTable">
 <tr>
-<td colspan="10" class="empty" data-i18n="loading">Caricamento...</td>
+<td colspan="11" class="empty" data-i18n="loading">Caricamento...</td>
 </tr>
 </tbody>
 </table>
@@ -566,7 +575,7 @@ var UI_STRINGS = {
   commercial_sold:"Venduta", commercial_withdrawn:"Ritirata",
   th_cover:"Copertina", th_title:"Titolo", th_category:"Categoria", th_location:"Location", th_price:"Prezzo",
   th_review_status:"Stato Revisione", th_commercial:"Commerciale", th_published:"Pubblicata",
-  th_documents:"Documenti", th_actions:"Azioni",
+  th_documents:"Documenti", th_dossier_logo:"Dossier AI / Logo", th_actions:"Azioni",
   loading:"Caricamento...", loading_error:"Errore nel caricamento.", empty_none:"Nessuna proposta presente.",
   price_reserved:"Valore riservato",
   docs_complete:"Documenti completi", docs_missing_prefix:"Mancano: ",
@@ -800,7 +809,7 @@ async function loadOpportunities(){
     console.error(error);
     table.innerHTML = `
       <tr>
-        <td colspan="10" class="empty">${escapeHTML(T.loading_error)}</td>
+        <td colspan="11" class="empty">${escapeHTML(T.loading_error)}</td>
       </tr>
     `;
     return;
@@ -809,6 +818,7 @@ async function loadOpportunities(){
   allOpportunities = data || [];
   await attachDocumentCounts();
   await attachLinkedEvents();
+  await attachSavedDossiers();
 
   applyFilters();
 }
@@ -897,6 +907,55 @@ async function attachLinkedEvents(){
   }));
 }
 
+
+/* ---- Dossier AI salvati (bucket dossier-pdfs, cartella opportunity-<id>/): legge dal nome
+   del file lingua e logo usato. Usato da Data Room (allegato EN) e tabella Proposte. ---- */
+function parseDossierFile(name){
+  var m = String(name||"").match(/_dossier_(IMMONOVA-only|COBRAND-IMMONOVA-[a-z0-9-]+|PARTNER-[a-z0-9-]+|IMMONOVA)_.*_([a-z]{2})\.pdf$/);
+  if(!m) return null;
+  var tag = m[1], kind, partner = "";
+  if(tag === "IMMONOVA-only") kind = "immonova";
+  else if(tag === "IMMONOVA") kind = "legacy";
+  else if(tag.indexOf("COBRAND-IMMONOVA-") === 0){ kind = "cobrand"; partner = tag.slice(17); }
+  else { kind = "partner"; partner = tag.slice(8); }
+  var ts = Number((String(name).match(/^(\d{10,})_/) || [])[1]) || 0;
+  return { name:name, kind:kind, partnerSlug:partner, lang:m[2], ts:ts };
+}
+async function listSavedDossiers(oppId){
+  var r = await client.storage.from("dossier-pdfs").list("opportunity-" + oppId, { limit:200, sortBy:{ column:"name", order:"desc" } });
+  if(r.error || !r.data) return [];
+  return r.data.map(function(o){ var p = parseDossierFile(o.name); if(p){ p.created_at = o.created_at; p.path = "opportunity-" + oppId + "/" + o.name; } return p; })
+    .filter(Boolean).sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+}
+
+function partnerLabelFromSlug(item, slug){
+  var n = String(item.dossier_partner_name || "");
+  var sl = n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+  if(n && sl === slug) return n;
+  return slug.split("-").map(function(w){ return w.charAt(0).toUpperCase() + w.slice(1); }).join(" ");
+}
+async function attachSavedDossiers(){
+  await Promise.all(allOpportunities.map(async function(item){
+    try{ item.saved_dossiers = await listSavedDossiers(item.id); }catch(e){ item.saved_dossiers = []; }
+  }));
+}
+function renderDossierLogo(item){
+  var list = item.saved_dossiers || [];
+  if(!list.length) return '<span class="dossier-logo none">Nessun dossier</span>';
+  var en = list.find(function(x){ return x.lang === "en"; });
+  var ref = en || list[0];
+  var label, cls = ref.kind;
+  if(ref.kind === "immonova") label = "IMMONOVA";
+  else if(ref.kind === "cobrand") label = "Co-brand IMMONOVA + " + partnerLabelFromSlug(item, ref.partnerSlug);
+  else if(ref.kind === "partner") label = "Partner: " + partnerLabelFromSlug(item, ref.partnerSlug);
+  else label = item.dossier_partner_logo_url ? "IMMONOVA? (da rigenerare)" : "IMMONOVA";
+  var title = ref.kind === "legacy" ? "PDF salvato prima del tracciamento del logo: rigeneralo per avere la conferma." : "";
+  var d = ref.created_at ? new Date(ref.created_at).toLocaleDateString("it-IT") : "";
+  var langs = Array.from(new Set(list.map(function(x){ return x.lang.toUpperCase(); }))).join(" · ");
+  return '<span class="dossier-logo ' + cls + '" title="' + escapeHTML(title) + '">' + escapeHTML(label) + '</span>' +
+    '<div class="dossier-en ' + (en ? "ok" : "missing") + '">' + (en ? "EN in data room ✓" : "EN mancante: non allegato") + '</div>' +
+    '<div class="docs-mini">' + escapeHTML((d ? d + " · " : "") + langs) + '</div>';
+}
 function renderDocumentSummary(item){
   const total = REQUIRED_DOCUMENT_TYPES.length;
   const loaded = item.documents_loaded_count || 0;
@@ -1003,7 +1062,7 @@ function renderTable(data){
   if(!data || data.length === 0){
     table.innerHTML = `
       <tr>
-        <td colspan="10" class="empty">${escapeHTML(T.empty_none)}</td>
+        <td colspan="11" class="empty">${escapeHTML(T.empty_none)}</td>
       </tr>
     `;
     return;
@@ -1038,6 +1097,10 @@ function renderTable(data){
 
         <td>
           ${renderDocumentSummary(item)}
+        </td>
+
+        <td>
+          ${renderDossierLogo(item)}
         </td>
 
         <td>

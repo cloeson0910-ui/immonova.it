@@ -4319,8 +4319,17 @@ async function extractEdgeFunctionErrorMessage(error){
 function slugify(value){
   return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"") || "opportunita";
 }
+/* Il nome del PDF salvato dichiara con quale logo e' stato generato, cosi' la tabella Proposte
+   e la Data Room sanno sempre se il dossier e' IMMONOVA, co-brand o white-label partner:
+   IMMONOVA-only | COBRAND-IMMONOVA-<partner> | PARTNER-<partner>. I file vecchi
+   ("dossier_IMMONOVA_...") restano leggibili come "salvati prima del tracciamento logo". */
+function dossierBrandTag(){
+  var slugP=function(v){return String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"partner";};
+  if(!getPartnerLogoUrl()) return "IMMONOVA-only";
+  return (isCobrandDossier()?"COBRAND-IMMONOVA-":"PARTNER-")+slugP(getPartnerName());
+}
 function buildDossierFilename(){
-  return "dossier_IMMONOVA_"+slugify(getTitle())+".pdf";
+  return "dossier_"+dossierBrandTag()+"_"+slugify(getTitle())+"_"+(CURRENT_LANG||"it")+".pdf";
 }
 /* ---- Genera il PDF "fotografando" ogni .report-page cosi' come e' gia' impaginata a schermo
    in modalita' stampa (classe .pdf-export-mode, stessa resa di @media print ma senza aprire

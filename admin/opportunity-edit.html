@@ -4901,6 +4901,45 @@ async function buildDataRoomPdfBlob(){
   }
 }
 
+
+/* ---- Dossier AI salvati (bucket dossier-pdfs, cartella opportunity-<id>/): legge dal nome
+   del file lingua e logo usato. Usato da Data Room (allegato EN) e tabella Proposte. ---- */
+function parseDossierFile(name){
+  var m = String(name||"").match(/_dossier_(IMMONOVA-only|COBRAND-IMMONOVA-[a-z0-9-]+|PARTNER-[a-z0-9-]+|IMMONOVA)_.*_([a-z]{2})\.pdf$/);
+  if(!m) return null;
+  var tag = m[1], kind, partner = "";
+  if(tag === "IMMONOVA-only") kind = "immonova";
+  else if(tag === "IMMONOVA") kind = "legacy";
+  else if(tag.indexOf("COBRAND-IMMONOVA-") === 0){ kind = "cobrand"; partner = tag.slice(17); }
+  else { kind = "partner"; partner = tag.slice(8); }
+  var ts = Number((String(name).match(/^(\d{10,})_/) || [])[1]) || 0;
+  return { name:name, kind:kind, partnerSlug:partner, lang:m[2], ts:ts };
+}
+async function listSavedDossiers(oppId){
+  var r = await client.storage.from("dossier-pdfs").list("opportunity-" + oppId, { limit:200, sortBy:{ column:"name", order:"desc" } });
+  if(r.error || !r.data) return [];
+  return r.data.map(function(o){ var p = parseDossierFile(o.name); if(p){ p.created_at = o.created_at; p.path = "opportunity-" + oppId + "/" + o.name; } return p; })
+    .filter(Boolean).sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+}
+
+function generateEnglishDossierPdf(oppId){
+  return new Promise(function(resolve, reject){
+    var frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;left:-20000px;top:0;width:1400px;height:1000px;border:0;opacity:0;pointer-events:none;";
+    var done = false;
+    var finish = function(fn, val){ if(done) return; done = true; window.removeEventListener("message", onMsg); clearTimeout(timer); setTimeout(function(){ frame.remove(); }, 500); fn(val); };
+    var onMsg = function(ev){
+      if(ev.origin !== location.origin || !ev.data || ev.data.type !== "immonova-dossier-autopdf") return;
+      if(ev.data.ok && ev.data.path) finish(resolve, ev.data.path);
+      else finish(reject, new Error("generazione dossier inglese non riuscita: " + (ev.data.error || "errore sconosciuto")));
+    };
+    var timer = setTimeout(function(){ finish(reject, new Error("generazione dossier inglese troppo lenta (oltre 8 minuti)")); }, 8 * 60 * 1000);
+    window.addEventListener("message", onMsg);
+    frame.src = "report-view.html?id=" + encodeURIComponent(oppId) + "&lang=en&autopdf=1";
+    document.body.appendChild(frame);
+  });
+}
 async function exportDataRoom(){
   var btn = document.getElementById("exportDataRoomBtn");
   if(!btn) return;
@@ -4918,6 +4957,31 @@ async function exportDataRoom(){
     btn.textContent = "Creazione PDF...";
     var pdfBlob = await buildDataRoomPdfBlob();
     zip.file("scheda-tecnica.pdf", pdfBlob);
+
+    /* Dossier AI: se esiste, va nella Data Room SOLO in inglese (ultimo PDF "_en" salvato).
+       Se c'e' un dossier ma solo in altre lingue NON alleghiamo nulla e lo segnaliamo. */
+    var dossierNote = "";
+    try{
+      btn.textContent = "Ricerca dossier AI...";
+      var savedDossiers = await listSavedDossiers(id);
+      var enDossier = savedDossiers.find(function(x){ return x.lang === "en"; });
+      if(enDossier){
+        var enUrl = client.storage.from("dossier-pdfs").getPublicUrl(enDossier.path).data.publicUrl;
+        zip.file("dossier-ai-EN.pdf", await urlToBlob(enUrl));
+        dossierNote = " Dossier AI in inglese incluso.";
+      }else if(savedDossiers.length){
+        /* Dossier esistente ma non in inglese: lo generiamo ORA in inglese (traduzione al volo
+           in report-view, iframe nascosto), lo salviamo come dossier EN e lo alleghiamo. */
+        btn.textContent = "Traduzione dossier in inglese...";
+        var genPath = await generateEnglishDossierPdf(id);
+        var genUrl = client.storage.from("dossier-pdfs").getPublicUrl(genPath).data.publicUrl;
+        zip.file("dossier-ai-EN.pdf", await urlToBlob(genUrl));
+        dossierNote = " Dossier AI tradotto in inglese al volo, salvato e incluso.";
+      }
+    }catch(dossierError){
+      console.warn("Dossier AI non allegato:", dossierError);
+      dossierNote = " ATTENZIONE: dossier AI inglese non scaricato (" + (dossierError.message || dossierError) + ").";
+    }
 
     var photosFolder = zip.folder("foto");
     var failed = [];
@@ -4971,9 +5035,9 @@ async function exportDataRoom(){
     });
 
     if(failed.length){
-      setStatus("Data room scaricata, ma " + failed.length + " foto non sono state incluse (link non raggiungibile).", "error");
+      setStatus("Data room scaricata, ma " + failed.length + " foto non sono state incluse (link non raggiungibile)." + dossierNote, "error");
     }else{
-      setStatus("Data room scaricata correttamente (" + photoList.length + " foto incluse, senza watermark).", "success");
+      setStatus("Data room scaricata correttamente (" + photoList.length + " foto incluse, senza watermark)." + dossierNote, /ATTENZIONE/.test(dossierNote) ? "error" : "success");
     }
   }catch(error){
     console.error(error);
