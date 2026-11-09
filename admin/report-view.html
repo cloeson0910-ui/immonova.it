@@ -1060,6 +1060,7 @@ function applySenderOverrideVisibility(){
     if(feedback){feedback.textContent="Ripristinato il mittente predefinito.";feedback.style.color="#5b471f";}
   });
 })();
+var canForceTerritorialRefresh=true; // titolare e admin possono sempre rilanciare il Discovery Engine
 async function loadSuperUserFlag(){
   if(!currentUser) return;
   applySenderOverrideVisibility();
@@ -1070,7 +1071,8 @@ async function loadSuperUserFlag(){
   /* Il pulsante "Aggiorna dati territoriali" (rilancio Discovery Engine con raggio in km) resta
      SEMPRE visibile a titolare e admin: prima veniva nascosto a ogni super user, quindi anche
      al titolare (che e' super user) -- sparito dalla barra senza motivo. */
-  if(isSuperUser&&!res.data.is_platform_owner&&res.data.role!=="admin"&&refreshDossierBtn){refreshDossierBtn.style.display="none";}
+  canForceTerritorialRefresh=!isSuperUser||!!res.data.is_platform_owner||res.data.role==="admin";
+  if(!canForceTerritorialRefresh&&refreshDossierBtn){refreshDossierBtn.style.display="none";}
   isLimitedProfessional=res.data.role!=="admin"&&LIMITED_PROFESSIONAL_ROLES.indexOf(res.data.professional_role)!==-1;
   applyLimitedProfessionalRestrictions();
 
@@ -1557,7 +1559,7 @@ async function refreshAirTraffic(){
   }
 }
 async function forceRefreshDossier(){
-  if(isSuperUser){setStatus("Non hai i permessi per aggiornare i dati territoriali (chiamata a pagamento).","error");return;}
+  if(!canForceTerritorialRefresh){setStatus("Non hai i permessi per aggiornare i dati territoriali (chiamata a pagamento).","error");return;}
   var confirmed=confirm("Questo richiama il Discovery Engine (Google Places e le altre fonti a pagamento) e sovrascrive i dati territoriali già salvati per questo dossier. Da fare solo se necessario (es. verifica di un fix). Procedere?");
   if(!confirmed) return;
   var options=await askDossierOptions();
