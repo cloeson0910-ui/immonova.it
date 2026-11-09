@@ -474,7 +474,7 @@ var UI_STRINGS = {
   kicker_tourism_demand:"Tourism demand vs break-even", title_tourism_demand:"Domanda Turistica vs Break-Even",
   pie_market_share_caption:"Quota di mercato turistico implicita", pie_occupancy_caption:"Percentuale di riempimento utilizzata",
   pie_market_share_note:"Pernottamenti annui, all'occupazione utilizzata nello scenario, sul totale dei pernottamenti turistici dell'area", pie_occupancy_note:"Occupazione utilizzata nello scenario (stessa ipotesi usata nell'analisi finanziaria) sul totale notti disponibili nell'anno",
-  tourism_demand_intro:"Quanta domanda turistica reale (arrivi e pernottamenti registrati nell'area) l'immobile intercetterebbe all'occupazione utilizzata nello scenario, e il break-even reale che ne risulta, ai diversi scenari ADR.",
+  tourism_demand_intro:"Occupazione e notti da vendere ogni anno per rientrare dell\u2019investimento in 15 anni, a ciascuno scenario ADR, confrontate con la domanda turistica reale dell\u2019area (pernottamenti registrati) e con l\u2019occupazione ipotizzata nell\u2019analisi finanziaria.",
   tourism_demand_exceeds:"A parità di ipotesi il break-even non risulta raggiunto nell'orizzonte di proiezione considerato.",
   tourism_demand_breakeven_line:"Break-even stimato: {breakEven} anni.",
   tourism_demand_source_prefix:"Flusso turistico di riferimento: ", tourism_demand_unavailable_note:"Dato non mostrato: mancano nel dossier arrivi/pernottamenti turistici verificati per quest'area.",
@@ -1067,7 +1067,10 @@ async function loadSuperUserFlag(){
   var res=await client.from("profiles").select("role,is_super_user,professional_role,is_platform_owner,managed_by,email").eq("id",currentUser.id).single();
   if(res.error||!res.data){console.warn("Profilo non caricato per il controllo super user:",res.error&&res.error.message);return;}
   isSuperUser=!!res.data.is_super_user;
-  if(isSuperUser&&refreshDossierBtn){refreshDossierBtn.style.display="none";}
+  /* Il pulsante "Aggiorna dati territoriali" (rilancio Discovery Engine con raggio in km) resta
+     SEMPRE visibile a titolare e admin: prima veniva nascosto a ogni super user, quindi anche
+     al titolare (che e' super user) -- sparito dalla barra senza motivo. */
+  if(isSuperUser&&!res.data.is_platform_owner&&res.data.role!=="admin"&&refreshDossierBtn){refreshDossierBtn.style.display="none";}
   isLimitedProfessional=res.data.role!=="admin"&&LIMITED_PROFESSIONAL_ROLES.indexOf(res.data.professional_role)!==-1;
   applyLimitedProfessionalRestrictions();
 
@@ -4080,6 +4083,8 @@ function pieChartHTML(pct, caption, note){
     +'</svg>';
   return '<div class="pie-block"><div class="pie-chart">'+svg+'<div class="pie-center"><div class="pie-value">'+escapeHTML(valueLabel)+'</div></div></div><div class="pie-caption">'+escapeHTML(caption)+'</div>'+(note?'<div class="pie-note">'+escapeHTML(note)+'</div>':'')+'</div>';
 }
+var BE15_YEARS = 15;
+function euroPlain(n){ return Number(n||0).toLocaleString("it-IT",{maximumFractionDigits:0}); }
 function renderTourismDemandPage(){
   /* FIX: ogni scenario ADR (minimo/medio/massimo) sta sulla propria pagina, mai piu' di uno
      scenario per pagina -- stesso bug e stessa soluzione di dossier-send.html (vedi commento
@@ -4121,32 +4126,52 @@ function renderTourismDemandPage(){
 
   var pages=[];
   scenarios.forEach(function(sc,idx){
-    var res=computeBreakEvenDemand(sc.adr, occ, units, f.total, demandTotals);
-    if(!res) return;
+    /* ===== Rientro fisso a BE15_YEARS anni (richiesta 07/11/2026) =====
+       La costante e' l'orizzonte di rientro (15 anni); le variabili sono l'occupazione e le
+       notti da vendere. Per ogni scenario ADR si calcola l'occupazione che serve per
+       recuperare l'investimento in 15 anni, con la stessa crescita annua, gli stessi costi di
+       gestione e la stessa tassazione dell'analisi finanziaria. Accanto: l'occupazione
+       ipotizzata nell'analisi finanziaria, in notti/anno, e in quanti anni rientra. */
+    var be15Units=units, be15Total=f.total;
+    var be15Opex=(typeof remoteMetrics!=="undefined" && remoteMetrics && remoteMetrics.opexBreakdown && remoteMetrics.opexBreakdown.totalRatio!=null) ? remoteMetrics.opexBreakdown.totalRatio : getOpexRatio(be15Units);
+    var be15Tax=(typeof isFiscalLuxuryOverride==="function" && isFiscalLuxuryOverride()) ? CORPORATE_TAX_RATE : 0;
+    var be15Sum=0;
+    for(var yy=1;yy<=BE15_YEARS;yy++) be15Sum+=Math.pow(1+CASHFLOW_ANNUAL_GROWTH,yy-1);
+    var be15NetPerFullYear=sc.adr.value*365*be15Units*(1-be15Opex)*(1-be15Tax);
+    if(!be15Total || !be15NetPerFullYear) return;
+    var be15OccRaw=be15Total/(be15NetPerFullYear*be15Sum);
+    var be15Occ=Math.min(1,be15OccRaw);
+    var be15Nights=be15Occ*365*be15Units;
+    var res={
+      occupancyPct:be15Occ*100,
+      roomNightsRequired:be15Nights,
+      marketSharePct: demandTotals ? Math.min(100,(be15Nights/demandTotals.pernottamenti)*100) : null
+    };
+    var occA=(typeof getOccupancyAssumption==="function") ? getOccupancyAssumption() : {value:0.5,verified:false};
+    var occANights=Math.round(occA.value*365*be15Units);
+    var projA=buildOneCashflowProjection(sc.adr.value*occA.value*365*be15Units,"",false,be15Total,be15Opex);
+    var nf=function(n){ return Math.round(n).toLocaleString("it-IT"); };
+    var pf=function(p){ return (Math.round(p*10)/10).toString().replace(".",","); };
     var marketNote=demandTotals ? T.pie_market_share_note : T.tourism_demand_unavailable_note;
-    /* Quota di mercato < 1%: una torta che mostra "0%" non e' credibile (sembra che non serva
-       nessun cliente). Si mostra invece il dato reale: notti da vendere all'anno sul totale dei
-       pernottamenti dell'area, con la percentuale a piu' decimali. */
     var shareHtml;
     if(demandTotals && res.marketSharePct!=null && res.marketSharePct<1){
-      var nights=Math.round(res.roomNightsRequired);
       var pct=res.marketSharePct;
       var pctLabel=pct<0.01?"meno dello 0,01%":(pct.toFixed(pct<0.1?3:2).replace(".",",")+"%");
       shareHtml='<div class="pie-block"><div style="display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;width:48mm;min-height:48mm;margin:0 auto;border:1px solid rgba(166,127,52,.35);padding:3mm">'
-        +'<div class="pie-value" style="font-size:26px">'+escapeHTML(nights.toLocaleString("it-IT"))+'</div>'
+        +'<div class="pie-value" style="font-size:26px">'+escapeHTML(nf(be15Nights))+'</div>'
         +'<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-top:6px">notti/anno da vendere</div>'
-        +'<div style="font-size:12px;margin-top:8px">su '+escapeHTML(Math.round(demandTotals.pernottamenti).toLocaleString("it-IT"))+' pernottamenti dell\'area ('+escapeHTML(pctLabel)+')</div></div>'
-        +'<div class="pie-caption">'+escapeHTML(T.pie_market_share_caption)+'</div>'
-        +'<div class="pie-note">Domanda turistica dell\'area ampiamente sufficiente: lo scenario richiede una quota marginale dei pernottamenti esistenti.</div></div>';
+        +'<div style="font-size:12px;margin-top:8px">su '+escapeHTML(nf(demandTotals.pernottamenti))+' pernottamenti dell\'area ('+escapeHTML(pctLabel)+')</div></div>'
+        +'<div class="pie-caption">Quota di domanda turistica necessaria</div>'
+        +'<div class="pie-note">Domanda dell\'area ampiamente sufficiente: per rientrare in '+BE15_YEARS+' anni basta una quota marginale dei pernottamenti esistenti.</div></div>';
     }else{
-      shareHtml=pieChartHTML(res.marketSharePct, T.pie_market_share_caption, marketNote);
+      shareHtml=pieChartHTML(res.marketSharePct, "Quota di domanda turistica necessaria", marketNote);
     }
-    var pies=shareHtml
-      + pieChartHTML(res.occupancyPct, T.pie_occupancy_caption, T.pie_occupancy_note);
-    var breakEvenNote = res.breakEvenYear!=null
-      ? '<p class="info-text">'+escapeHTML(fmt(T.tourism_demand_breakeven_line,{breakEven:String(Math.round(res.breakEvenYear*10)/10)}))+(res.breakEvenExtrapolated?escapeHTML(T.extrapolated_note2):'')+'</p>'
-      : '<p class="info-text" style="font-style:italic">'+escapeHTML(T.tourism_demand_exceeds)+'</p>';
-    var block='<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+'</div><div class="pie-row">'+pies+'</div>'+breakEvenNote+'</div>';
+    var pies=shareHtml+pieChartHTML(res.occupancyPct, "Occupazione necessaria per rientrare in "+BE15_YEARS+" anni", nf(be15Nights)+" notti vendute/anno su "+nf(365*be15Units)+" disponibili ("+be15Units+(be15Units>1?" unità":" unità")+" × 365)");
+    var breakEvenNote='<p class="info-text">Con ADR '+escapeHTML(euroPlain(sc.adr.value))+' €/notte, per rientrare dell\'investimento ('+escapeHTML(euroPlain(be15Total))+' €) in <b>'+BE15_YEARS+' anni</b> servono <b>'+nf(be15Nights)+' notti vendute all\'anno</b>, cioè un\'occupazione del <b>'+pf(be15OccRaw*100)+'%</b>.</p>'
+      +(be15OccRaw>1?'<p class="info-text" style="font-style:italic">Oltre il 100%: con questo ADR il rientro in '+BE15_YEARS+' anni non è raggiungibile nemmeno con la struttura sempre piena.</p>':'')
+      +'<p class="info-text">Occupazione ipotizzata nell\'analisi finanziaria: '+pf(occA.value*100)+'% '+(occA.verified?'(verificata)':'(assunta)')+' = '+nf(occANights)+' notti/anno'
+      +(projA && projA.breakEvenYear ? ', con rientro in circa '+String(Math.round(projA.breakEvenYear*10)/10)+' anni.' : ', con rientro oltre l\'orizzonte di calcolo.')+'</p>';
+    var block='<div class="merge-block"><div class="cost-title" style="margin-bottom:6px">'+escapeHTML(sc.label)+' — ADR '+escapeHTML(euroPlain(sc.adr.value))+' €</div><div class="pie-row">'+pies+'</div>'+breakEvenNote+'</div>';
     var isLast = idx===scenarios.length-1;
     pages.push('<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_tourism_demand)+'</div><h2 class="section-title">'+escapeHTML(T.title_tourism_demand)+(sc.label?' — '+escapeHTML(sc.label):'')+'</h2><div class="lux-rule"></div>'
       +'<p class="info-text">'+escapeHTML(T.tourism_demand_intro)+'</p>'
