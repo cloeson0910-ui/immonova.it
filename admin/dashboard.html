@@ -242,7 +242,7 @@ body::after{
 
 .value-command-grid{
   display:grid;
-  grid-template-columns:repeat(5,1fr);
+  grid-template-columns:repeat(4,1fr);
   gap:18px;
   margin-bottom:34px;
 }
@@ -570,7 +570,6 @@ body::after{
     <div class="value-command-card"><div class="value-command-label" data-i18n="val_published">Valore Pubblicate</div><div class="value-command-value" id="portfolioPublishedValue">€ 0</div><div class="value-command-note" id="portfolioPublishedNote">0 opportunità</div></div>
     <div class="value-command-card"><div class="value-command-label" data-i18n="val_evaluation">Valore Da Valutare</div><div class="value-command-value" id="portfolioEvaluationValue">€ 0</div><div class="value-command-note" id="portfolioEvaluationNote">0 opportunità</div></div>
     <div class="value-command-card"><div class="value-command-label" data-i18n="val_rejected">Valore Rifiutate</div><div class="value-command-value" id="portfolioRejectedValue">€ 0</div><div class="value-command-note" id="portfolioRejectedNote">0 opportunità</div></div>
-    <div class="value-command-card"><div class="value-command-label" data-i18n="val_post_renovation">Valore Post-Ristr.</div><div class="value-command-value" id="portfolioPostRenovationValue">€ 0</div><div class="value-command-note" data-i18n="val_post_renovation_note">Totale investimenti con lavori</div></div>
   </section>
 
   <section class="alerts-grid" id="alertsGrid"></section>
@@ -772,7 +771,7 @@ function euro(value){const n=Number(value);if(!Number.isFinite(n)||n<=0)return "
 function compactEuro(value){const n=Number(value);if(!Number.isFinite(n)||n<=0)return "€ 0";if(n>=1000000000)return "€ "+(n/1000000000).toFixed(2).replace(".",",")+" Mld";if(n>=1000000)return "€ "+(n/1000000).toFixed(2).replace(".",",")+" M";if(n>=1000)return "€ "+(n/1000).toFixed(0).replace(".",",")+" K";return euro(n)}
 function parsePrice(value){const raw=String(value||"").trim();if(!raw||raw.toLowerCase().includes("riservato")||raw.toLowerCase().includes("trattativa"))return 0;const cleaned=raw.replace(/[^\d,.-]/g,"").replace(/\./g,"").replace(",",".");const n=Number(cleaned);return Number.isFinite(n)&&n>0?n:0}
 function reportForOpportunity(opportunityId){return latestReports.filter(r=>Number(r.opportunity_id)===Number(opportunityId)).sort((a,b)=>new Date(b.generated_at||b.created_at||0)-new Date(a.generated_at||a.created_at||0))[0]||null}
-function opportunityValue(o){const report=reportForOpportunity(o.id);if(report&&Number(report.total_investment_avg)>0)return Number(report.total_investment_avg);if(report?.report_json?.asset&&Number(report.report_json.asset.total_investment_avg)>0)return Number(report.report_json.asset.total_investment_avg);if(report?.report_json?.asset&&Number(report.report_json.asset.price_estimate)>0)return Number(report.report_json.asset.price_estimate);return parsePrice(o.price)}
+function opportunityValue(o){/* Valore = PREZZO RICHIESTO della scheda. Solo se il prezzo manca/e' riservato si usa la stima di prezzo del report. Mai il totale investimento con lavori. */const p=parsePrice(o.price);if(p>0)return p;const report=reportForOpportunity(o.id);if(report?.report_json?.asset&&Number(report.report_json.asset.price_estimate)>0)return Number(report.report_json.asset.price_estimate);return 0}
 function sumBy(items,mapper){return items.reduce((sum,item)=>sum+(Number(mapper(item))||0),0)}
 
 function postRenovationOpportunityValue(o){const report=reportForOpportunity(o.id);if(report&&Number(report.projected_value_5y)>0)return Number(report.projected_value_5y);if(report?.report_json?.kpi&&Number(report.report_json.kpi.projected_value_5y)>0)return Number(report.report_json.kpi.projected_value_5y);return opportunityValue(o)}
