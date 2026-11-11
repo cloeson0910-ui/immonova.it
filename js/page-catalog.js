@@ -49,6 +49,7 @@ var PAGE_CATALOG = [
   {section:"Attività", key:"opportunities.html", label:"Immobili", i18nKey:"nav_opportunities", family:"Immobili"},
   {section:"Attività", key:"opportunity-form.html", label:"Nuova Opportunità", i18nKey:null, family:"Immobili"},
   {section:"Attività", key:"valuations.html", label:"Valutazioni Immobiliari", i18nKey:"nav_valuations", family:"Immobili"},
+  {section:"Attività", key:"perimetro-catastale.html", label:"Perimetro catastale", i18nKey:null, family:"Immobili"},
   {section:"Attività", key:"video-calls.html", label:"Videochiamate", i18nKey:"nav_video_calls", family:"Comunicazioni team"},
   {section:"Attività", key:"voice-notes.html", label:"Note Vocali Collaboratori", i18nKey:"nav_voice_notes", family:"Comunicazioni team"},
   {section:"Attività", key:"voice-requests.html", label:"Messaggi vocali", i18nKey:null, family:"Comunicazioni team"},
