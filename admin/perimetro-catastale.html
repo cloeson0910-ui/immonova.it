@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<link rel="stylesheet" href="../css/immonova-text-theme.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Perimetro catastale | IMMONOVA</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#46371a;min-height:100vh}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px),repeating-linear-gradient(0deg,transparent 0 148px,rgba(188,149,78,.13) 149px,transparent 152px);background-size:230px 199px;opacity:.30}
+.header{padding:26px 40px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.12);background:rgba(244,236,223,.85);backdrop-filter:blur(14px);position:sticky;top:0;z-index:1000;gap:16px;flex-wrap:wrap}
+.logo{text-decoration:none;color:#5b461d}.logo-main{font-size:24px;font-weight:600;letter-spacing:.35em}.logo-sub{margin-top:6px;font-size:9px;font-weight:700;letter-spacing:.18em;color:#5b471f}
+.header-actions{display:flex;gap:12px;flex-wrap:wrap}
+.header-actions a{padding:10px 20px;border:1px solid rgba(166,127,52,.25);background:rgba(255,255,255,.25);color:#5b461d;text-decoration:none;font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+.header-actions a:hover{background:#a67f34;color:#fff}
+.container{max-width:1500px;margin:auto;padding:32px 28px}
+.kicker{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:#554321;margin-bottom:10px}
+.title{font-size:38px;font-weight:200;letter-spacing:.05em;color:#5b461d;margin-bottom:10px}
+.subtitle{font-size:15px;line-height:1.7;color:#4f4125;margin-bottom:24px;max-width:980px}
+.layout{display:grid;grid-template-columns:380px 1fr;gap:22px;align-items:start}
+.card{background:rgba(255,255,255,.6);border:1px solid rgba(166,127,52,.22);padding:20px;margin-bottom:18px}
+.section-title{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#a67f34;margin-bottom:14px;font-weight:600}
+label{display:block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#5b471f;margin:10px 0 6px}
+input[type=text],input[type=number],textarea{width:100%;padding:10px 12px;border:1px solid rgba(166,127,52,.3);background:rgba(255,255,255,.9);font-family:inherit;font-size:14px;color:#2b2620}
+textarea{min-height:230px;font-family:Menlo,Consolas,monospace;font-size:13px;line-height:1.5}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hint{font-size:12px;color:#6b5c44;line-height:1.5;margin-top:6px}
+.btn{display:inline-block;padding:12px 18px;border:1px solid rgba(166,127,52,.45);background:#a67f34;color:#fffaf0;font-family:inherit;font-size:12px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;margin-top:14px;width:100%}
+.btn.secondary{background:rgba(255,255,255,.6);color:#5b461d;width:auto;margin:6px 6px 0 0}
+.btn:disabled{opacity:.45;cursor:default}
+.status{margin-top:12px;font-size:13px;line-height:1.5;white-space:pre-line}.status.ok{color:#2e6b34}.status.err{color:#8d2f22}
+.progress{height:6px;background:rgba(166,127,52,.15);margin-top:10px;display:none}.progress span{display:block;height:100%;width:0;background:#a67f34;transition:width .3s}
+#map{height:72vh;min-height:520px;border:1px solid rgba(166,127,52,.3);background:#d9d2c4}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.stat{background:rgba(255,255,255,.65);border:1px solid rgba(166,127,52,.22);padding:14px}
+.stat .l{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5b471f}
+.stat .v{font-size:24px;font-weight:300;color:#2b2620;margin-top:6px}
+.stat .n{font-size:11.5px;color:#6b5c44;margin-top:4px}
+.stat.warn .v{color:#8d2f22}.stat.good .v{color:#2e6b34}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 8px;border-bottom:1px solid rgba(166,127,52,.15);text-align:left}
+th{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#5b471f}
+td.r,th.r{text-align:right}
+.ok{color:#2e6b34}.ko{color:#8d2f22}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:10px 0 0}
+.legend i{display:inline-block;width:22px;height:10px;margin-right:6px;vertical-align:middle}
+.leaflet-tooltip.plabel{background:rgba(255,255,255,.85);border:0;box-shadow:none;font-size:10px;padding:1px 4px;color:#2b2620}
+.imp-drop{border:1.5px dashed rgba(166,127,52,.55);background:rgba(255,255,255,.55);padding:14px;text-align:center;cursor:pointer;margin-bottom:6px}
+.imp-drop b{display:block;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#a67f34;margin-bottom:6px}
+.imp-drop span{font-size:12px;color:#6b5c44;line-height:1.5}
+.imp-drop.over{background:rgba(166,127,52,.15)}
+.imp-filters{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.chip{border:1px solid rgba(166,127,52,.35);background:#fff;padding:6px 9px;font-size:11px;cursor:pointer;font-family:inherit;color:#5b461d}
+.chip.on{background:#a67f34;color:#fff}
+.chip i,.sw{display:inline-block;width:11px;height:11px;margin-right:5px;vertical-align:-1px;border:1px solid rgba(0,0,0,.15)}
+.imp-table-wrap{max-height:260px;overflow:auto;border:1px solid rgba(166,127,52,.2);background:#fff}
+.imp-table{font-size:12.5px}.imp-table th,.imp-table td{padding:4px 6px}
+.print-head{display:none}
+@media(max-width:1000px){.layout{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.container{padding:20px 14px}.header{padding:16px}}
+@media print{
+  @page{size:A4 landscape;margin:10mm}
+  body::after,.header,.no-print,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
+  body{background:#fff}
+  .container{padding:0;max-width:none}
+  .layout{display:block}
+  .print-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid #a67f34;padding-bottom:4mm;margin-bottom:4mm}
+  .print-head .wm{font-weight:200;letter-spacing:.42em;color:#a67f34;font-size:16pt}
+  #map{height:150mm;min-height:0;break-inside:avoid}
+  .stats{grid-template-columns:repeat(4,1fr)}
+  .card{break-inside:avoid;border-color:#ddd}
+}
+</style>
+</head>
+<body>
+<header class="header">
+  <a href="../index.html" class="logo"><div class="logo-main">IMMONOVA</div><div class="logo-sub">OFF MARKET • CONSULTING</div></a>
+  <div class="header-actions"><a href="dashboard.html">Dashboard</a><a href="opportunities.html">Proposte</a></div>
+</header>
+
+<div class="container">
+  <div class="print-head"><div><div class="wm">IMMONOVA</div><div style="font-size:8pt;letter-spacing:.2em;color:#7d6640">OFF MARKET · CONSULTING</div></div><div style="text-align:right;font-size:9pt" id="printTitle"></div></div>
+  <div class="no-print">
+    <div class="kicker">Strumenti · Immobili</div>
+    <h1 class="title">Perimetro catastale</h1>
+    <p class="subtitle">Inserisci comune, fogli e particelle: il sistema prende i contorni ufficiali dalla cartografia dell'Agenzia delle Entrate, unisce le particelle confinanti in un unico perimetro e lo evidenzia sul satellite. Puoi scaricarlo in PDF, KML (Google Earth) e GeoJSON (formaps, GIS).</p>
+  </div>
+
+  <div class="layout">
+    <div class="no-print">
+      <div class="card">
+        <div class="section-title">1 · Comune</div>
+        <div class="row2">
+          <div><label>Comune</label><input type="text" id="comune" placeholder="Es. Vernole"></div>
+          <div><label>Provincia</label><input type="text" id="provincia" placeholder="Es. Lecce"></div>
+        </div>
+        <label>Codice catastale comune (automatico)</label>
+        <input type="text" id="code" placeholder="Es. L776 — lo trovo io">
+        <div class="hint">Il codice viene riconosciuto in automatico. Correggilo solo se il comune è sbagliato.</div>
+      </div>
+      <div class="card">
+        <div class="section-title">2 · Fogli e particelle</div>
+        <div class="imp-drop" id="impDrop">
+          <b>Importa da file</b>
+          <span>Trascina qui o clicca: visura PDF (anche con righe evidenziate), Excel/CSV, testo, foto o scansione. Puoi anche incollare uno screenshot (Cmd+V).</span>
+        </div>
+        <input type="file" id="impFile" accept=".pdf,.xlsx,.xls,.ods,.csv,.txt,image/*" style="display:none">
+        <div class="status" id="impStatus"></div>
+        <div id="impPreview" style="display:none">
+          <div class="imp-filters" id="impFilters"></div>
+          <div class="imp-table-wrap"><table id="impTable" class="imp-table"></table></div>
+          <div class="hint" id="impTotals"></div>
+          <button class="btn" id="impUse" type="button">Usa queste particelle</button>
+          <button class="btn secondary" id="impAdd" type="button" style="width:100%;margin-top:6px">Aggiungi all'elenco esistente</button>
+        </div>
+        <label>Una particella per riga: foglio, particella, superficie (facoltativa)</label>
+        <textarea id="parcels" placeholder="27 32 1.61.19&#10;27 135 20.11.80&#10;40/74&#10;fg 41 part 2"></textarea>
+        <div class="hint">Accetta "27 32", "27/32", "fg 27 part 32" o righe copiate dalla tabella della visura. La superficie (ha.are.ca oppure m²) serve solo per il confronto.</div>
+        <label>Totale da visura (ha) — facoltativo</label>
+        <input type="text" id="visuraTotal" placeholder="Es. 170,5194">
+        <div class="row2" style="margin-top:4px">
+          <div><label>Nome terreno (per il PDF)</label><input type="text" id="landName" placeholder="Es. Terreno + Aeroporto"></div>
+          <div><label>Margine unione (m)</label><input type="number" id="gap" value="3" min="0" max="15" step="0.5"></div>
+        </div>
+        <div class="hint">Il margine chiude le micro-fessure del disegno catastale tra particelle confinanti (3 m va bene quasi sempre). Strade e canali larghi restano come separazione.</div>
+        <button class="btn" id="runBtn" type="button">Trova particelle e crea perimetro</button>
+        <div class="progress" id="progress"><span></span></div>
+        <div class="status" id="status"></div>
+      </div>
+      <div class="card" id="exportCard" style="display:none">
+        <div class="section-title">3 · Scarica</div>
+        <button class="btn secondary" id="pdfBtn" type="button">PDF / Stampa</button>
+        <button class="btn secondary" id="kmlBtn" type="button">KML (Google Earth)</button>
+        <button class="btn secondary" id="geojsonBtn" type="button">GeoJSON (formaps)</button>
+        <div class="hint">Nel PDF scegli "Salva come PDF", orizzontale.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="stats" id="stats" style="display:none"></div>
+      <div id="map"></div>
+      <div class="legend"><span><i style="background:#ffd23f;opacity:.45;border:1px solid #ffd23f"></i>Particelle</span><span><i style="border-top:3px solid #ff3b30"></i>Perimetro complessivo</span><span><i style="border-top:2px dashed #ffffff;background:#555"></i>Confini dei fogli</span></div>
+      <div class="card" id="tableCard" style="display:none;margin-top:16px">
+        <div class="section-title">Dettaglio particelle</div>
+        <div id="blocks" style="margin-bottom:14px"></div>
+        <table><thead><tr><th>Foglio</th><th>Particella</th><th class="r">Visura (ha)</th><th class="r">Da mappa (ha)</th><th class="r">Scarto</th><th>Esito</th></tr></thead><tbody id="tbody"></tbody></table>
+        <div class="hint" style="margin-top:10px">Fonte: cartografia catastale Agenzia delle Entrate (servizio WFS INSPIRE, licenza CC BY 4.0). La mappa catastale ha valore indicativo e non sostituisce un rilievo: la superficie disegnata può scostarsi da quella censita in visura.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+<script>
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+const fmtHa = v => (v == null || !isFinite(v)) ? "—" : v.toLocaleString("it-IT", { minimumFractionDigits:4, maximumFractionDigits:4 });
+const STORE_KEY = "immonova_perimetro_last_v1";
+
+/* ---------- mappa ---------- */
+const map = L.map("map", { preferCanvas:false }).setView([41.9, 12.5], 6);
+const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom:20, maxNativeZoom:19, attribution:"Esri World Imagery · Catasto © Agenzia delle Entrate CC BY 4.0", crossOrigin:true }).addTo(map);
+const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap · Catasto © Agenzia delle Entrate CC BY 4.0" });
+const fogliLayer = L.layerGroup().addTo(map), parcelLayer = L.layerGroup().addTo(map), perimLayer = L.layerGroup().addTo(map), labelLayer = L.layerGroup().addTo(map);
+L.control.layers({ "Satellite":sat, "Stradale":osm }, { "Confini fogli":fogliLayer, "Particelle":parcelLayer, "Etichette":labelLayer, "Perimetro":perimLayer }).addTo(map);
+
+let result = null; // { parcels:[], perimeter: Feature, blocks:[] }
+
+/* ---------- parsing input ---------- */
+function parseSurface(tok){
+  if(!tok) return null;
+  const t = String(tok).trim();
+  let m = t.match(/^(\d{1,4})[.,](\d{2})[.,](\d{2})$/); // ha.are.ca
+  if(m) return Number(m[1]) + Number(m[2]) / 100 + Number(m[3]) / 10000;
+  m = t.replace(/\./g, "").match(/^(\d+)(?:,(\d+))?$/); // m² oppure ha con virgola
+  if(m){
+    const n = Number(m[1] + (m[2] ? "." + m[2] : ""));
+    if(t.includes(",") && n < 10000) return n; // "1,6119" = ha
+    return n / 10000; // m²
+  }
+  return null;
+}
+function parseHaTotal(v){ // totale sempre in ettari: "170,5194", "170.5194" o "170.51.94"
+  const t = String(v || "").replace(/\s/g, "").replace(/ha$/i, "");
+  if(!t) return null;
+  const m = t.match(/^(\d+)[.,](\d{2})[.,](\d{2})$/);
+  if(m) return Number(m[1]) + Number(m[2]) / 100 + Number(m[3]) / 10000;
+  const n = Number(t.replace(",", "."));
+  return isFinite(n) && n > 0 ? n : null;
+}
+function parseList(text){
+  const rows = [], seen = new Set(), bad = [];
+  text.split(/\n/).forEach(line => {
+    const raw = line.trim(); if(!raw) return;
+    const l = raw.replace(/\t/g, " ").replace(/\b(fg|fgl|foglio|f\.)\s*/ig, "").replace(/\b(part|p\.lla|particella|mapp|mappale|p\.)\s*/ig, "");
+    const m = l.match(/^\D*?(\d{1,4})\s*[\/\-\s,;]\s*(\d{1,5}[A-Z]?)\b(.*)$/i);
+    if(!m){ bad.push(raw); return; }
+    const foglio = Number(m[1]), part = m[2].toUpperCase();
+    const key = foglio + "." + part;
+    if(seen.has(key)) return; seen.add(key);
+    let surf = null;
+    const toks = (m[3] || "").trim().split(/\s+/).filter(Boolean);
+    for(const tk of toks){ const v = parseSurface(tk); if(v != null && v > 0){ surf = v; break; } }
+    rows.push({ foglio, particella:part, key, visuraHa:surf });
+  });
+  return { rows, bad };
+}
+
+/* ---------- chiamate al server ---------- */
+async function call(body){
+  const r = await client.functions.invoke("cadastral-perimeter", { body });
+  if(r.error){
+    let msg = r.error.message;
+    try{ if(r.error.context && r.error.context.text){ const t = await r.error.context.text(); msg = (JSON.parse(t).error) || t; } }catch(e){}
+    throw new Error(msg);
+  }
+  return r.data;
+}
+function setStatus(m, k){ $("status").textContent = m || ""; $("status").className = "status" + (k ? " " + k : ""); }
+function setProgress(p){ $("progress").style.display = p == null ? "none" : "block"; $("progress").firstElementChild.style.width = Math.round((p || 0) * 100) + "%"; }
+
+function splitBbox(b){ // massimo ~25 tasselli da 0.01° per chiamata
+  const out = [], step = 0.05;
+  for(let x = b[0]; x < b[2]; x += step) for(let y = b[1]; y < b[3]; y += step) out.push([x, y, Math.min(x + step, b[2]), Math.min(y + step, b[3])]);
+  return out;
+}
+
+async function run(){
+  const comune = $("comune").value.trim(), provincia = $("provincia").value.trim();
+  const { rows, bad } = parseList($("parcels").value);
+  if(!comune){ setStatus("Scrivi il comune.", "err"); return; }
+  if(!rows.length){ setStatus("Inserisci almeno una particella (foglio e numero).", "err"); return; }
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify({ comune, provincia, code:$("code").value, parcels:$("parcels").value, total:$("visuraTotal").value, name:$("landName").value })); }catch(e){}
+  $("runBtn").disabled = true; setProgress(0.02);
+  fogliLayer.clearLayers(); parcelLayer.clearLayers(); perimLayer.clearLayers(); labelLayer.clearLayers();
+  try{
+    // 1. comune
+    setStatus("Cerco il comune di " + comune + "…");
+    const loc = await call({ action:"locate", comune, provincia });
+    let code = $("code").value.trim().toUpperCase();
+    if(!code){ code = loc.code; $("code").value = code; }
+    map.setView([loc.lat, loc.lon], 12);
+
+    // 2. fogli: anelli di tasselli attorno al centro finché li trovo tutti
+    const neededFogli = [...new Set(rows.map(r => r.foglio))];
+    const fogli = {};
+    for(let ring = 0; ring <= 5; ring++){
+      const missing = neededFogli.filter(f => !fogli[f]);
+      if(!missing.length) break;
+      setStatus("Cerco i fogli " + missing.join(", ") + " nella mappa catastale (giro " + (ring + 1) + ")…");
+      setProgress(0.05 + ring * 0.05);
+      const res = await call({ action:"fogli", code, lat:loc.lat, lon:loc.lon, ring });
+      (res.fogli || []).forEach(f => {
+        if(!neededFogli.includes(f.foglio)) return;
+        if(!fogli[f.foglio]) fogli[f.foglio] = { bbox:f.bbox.slice(), parts:[] };
+        const b = fogli[f.foglio].bbox;
+        b[0] = Math.min(b[0], f.bbox[0]); b[1] = Math.min(b[1], f.bbox[1]); b[2] = Math.max(b[2], f.bbox[2]); b[3] = Math.max(b[3], f.bbox[3]);
+        if(!fogli[f.foglio].parts.some(p => p.id === f.id)) fogli[f.foglio].parts.push(f);
+      });
+    }
+    Object.entries(fogli).forEach(([n, f]) => f.parts.forEach(p => p.polygons.forEach(poly => {
+      L.polygon(poly.map(r => r.map(([x, y]) => [y, x])), { color:"#ffffff", weight:1.5, dashArray:"6 5", fill:false, interactive:false }).addTo(fogliLayer);
+    })));
+    const fogliMancanti = neededFogli.filter(f => !fogli[f]);
+
+    // 3. particelle, foglio per foglio
+    const found = {};
+    const work = Object.entries(fogli);
+    let done = 0;
+    for(const [n, f] of work){
+      const wanted = rows.filter(r => r.foglio === Number(n)).map(r => r.key);
+      for(const sub of splitBbox(f.bbox)){
+        if(wanted.every(k => found[k])) break;
+        setStatus("Foglio " + n + ": cerco " + wanted.filter(k => !found[k]).length + " particelle…");
+        const res = await call({ action:"parcels", code, bbox:sub, wanted:wanted.filter(k => !found[k]) });
+        (res.parcels || []).forEach(p => { found[p.key] = p; });
+      }
+      done++; setProgress(0.35 + 0.55 * done / work.length);
+    }
+
+    // 4. geometria
+    setStatus("Unisco le particelle confinanti…");
+    const feats = [];
+    rows.forEach(r => {
+      const p = found[r.key];
+      r.found = !!p;
+      if(!p) return;
+      const geom = p.polygons.length === 1 ? { type:"Polygon", coordinates:p.polygons[0] } : { type:"MultiPolygon", coordinates:p.polygons };
+      const f = { type:"Feature", properties:{ foglio:r.foglio, particella:r.particella, ref:r.key }, geometry:geom };
+      r.mapHa = turf.area(f) / 10000;
+      feats.push(f);
+    });
+    if(!feats.length) throw new Error("Nessuna particella trovata. Controlla comune, codice e numeri.");
+    const gap = Math.max(0, Number($("gap").value) || 0);
+    let merged = null;
+    for(const f of feats){
+      const g = gap > 0 ? turf.buffer(f, gap / 2, { units:"meters" }) : f;
+      merged = merged ? turf.union(merged, g) : g;
+    }
+    if(gap > 0) merged = turf.buffer(merged, -gap / 2, { units:"meters" });
+    // rimuovo i "buchi" più piccoli di 200 m² (fessure tra particelle), tengo quelli veri
+    const polys = merged.geometry.type === "Polygon" ? [merged.geometry.coordinates] : merged.geometry.coordinates;
+    const cleaned = polys.map(p => [p[0]].concat(p.slice(1).filter(h => turf.area(turf.polygon([h])) > 200)));
+    const perimeter = { type:"Feature", properties:{ name:$("landName").value || ("Terreno " + comune) }, geometry: cleaned.length === 1 ? { type:"Polygon", coordinates:cleaned[0] } : { type:"MultiPolygon", coordinates:cleaned } };
+    const blocks = cleaned.map((p, i) => {
+      const poly = turf.polygon(p);
+      const members = feats.filter(f => turf.booleanIntersects(poly, turf.pointOnFeature(f))).map(f => f.properties.ref);
+      return { n:i + 1, ha:turf.area(poly) / 10000, perimeterM:turf.length(turf.polygonToLine(poly), { units:"meters" }), members, center:turf.centroid(poly).geometry.coordinates };
+    }).sort((a, b) => b.ha - a.ha).map((b, i) => ({ ...b, n:i + 1 }));
+    result = { comune, code, rows, feats, perimeter, blocks, fogliMancanti, bad };
+    render();
+    setProgress(null);
+    const miss = rows.filter(r => !r.found);
+    setStatus(
+      "Fatto: " + feats.length + " particelle su " + rows.length + ", " + blocks.length + (blocks.length === 1 ? " perimetro unico." : " blocchi separati.") +
+      (miss.length ? "\nNon trovate: " + miss.map(r => r.foglio + "/" + r.particella).join(", ") + " (soppresse/frazionate o numero errato)." : "") +
+      (bad.length ? "\nRighe non lette: " + bad.join(" | ") : ""), miss.length ? "err" : "ok");
+  }catch(e){
+    console.error(e); setProgress(null);
+    setStatus("Errore: " + (e.message || e), "err");
+  }
+  $("runBtn").disabled = false;
+}
+
+function render(){
+  const r = result;
+  parcelLayer.clearLayers(); perimLayer.clearLayers(); labelLayer.clearLayers();
+  r.feats.forEach(f => {
+    L.geoJSON(f, { style:{ color:"#ffd23f", weight:1, fillColor:"#ffd23f", fillOpacity:.28 } })
+      .bindPopup("Foglio " + f.properties.foglio + " · particella " + f.properties.particella + "<br>" + fmtHa(turf.area(f) / 10000) + " ha da mappa").addTo(parcelLayer);
+    const c = turf.pointOnFeature(f).geometry.coordinates;
+    L.tooltip({ permanent:true, direction:"center", className:"plabel" }).setLatLng([c[1], c[0]]).setContent(f.properties.foglio + "/" + f.properties.particella).addTo(labelLayer);
+  });
+  const pl = L.geoJSON(r.perimeter, { style:{ color:"#ff3b30", weight:3.5, fill:false } }).addTo(perimLayer);
+  if(r.blocks.length > 1) r.blocks.forEach(b => L.marker([b.center[1], b.center[0]], { icon:L.divIcon({ className:"", iconSize:[0,0], html:'<div style="transform:translate(-50%,-50%);display:inline-block;background:#ff3b30;color:#fff;font:600 12px Arial;padding:3px 8px;border-radius:12px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.4)">Blocco ' + b.n + '</div>' }) }).addTo(perimLayer));
+  map.fitBounds(pl.getBounds(), { padding:[30, 30] });
+
+  const totMap = r.blocks.reduce((a, b) => a + b.ha, 0);
+  const sumParcels = r.rows.reduce((a, x) => a + (x.mapHa || 0), 0);
+  const typedTotal = parseHaTotal($("visuraTotal").value);
+  const visuraHa = typedTotal || (r.rows.some(x => x.visuraHa) ? r.rows.reduce((a, x) => a + (x.visuraHa || 0), 0) : null);
+  const diff = visuraHa ? (sumParcels - visuraHa) / visuraHa * 100 : null;
+  const perimKm = r.blocks.reduce((a, b) => a + b.perimeterM, 0) / 1000;
+  const missing = r.rows.filter(x => !x.found).length;
+  $("stats").style.display = "grid";
+  $("stats").innerHTML =
+    '<div class="stat"><div class="l">Particelle trovate</div><div class="v">' + (r.rows.length - missing) + ' / ' + r.rows.length + '</div><div class="n">' + (missing ? missing + " non trovate" : "tutte trovate") + '</div></div>' +
+    '<div class="stat ' + (r.blocks.length === 1 ? "good" : "") + '"><div class="l">Perimetro</div><div class="v">' + (r.blocks.length === 1 ? "Unico" : r.blocks.length + " blocchi") + '</div><div class="n">' + perimKm.toLocaleString("it-IT", { maximumFractionDigits:2 }) + ' km di confine</div></div>' +
+    '<div class="stat"><div class="l">Superficie da mappa</div><div class="v">' + fmtHa(sumParcels) + ' ha</div><div class="n">somma delle particelle disegnate</div></div>' +
+    '<div class="stat ' + (diff != null && Math.abs(diff) > 5 ? "warn" : "good") + '"><div class="l">Superficie da visura</div><div class="v">' + (visuraHa ? fmtHa(visuraHa) + ' ha' : "—") + '</div><div class="n">' + (diff != null ? "scarto mappa/visura " + (diff > 0 ? "+" : "") + diff.toFixed(2).replace(".", ",") + "%" : "inserisci superfici o totale") + '</div></div>';
+
+  $("blocks").innerHTML = r.blocks.length > 1
+    ? '<div class="hint" style="margin-bottom:6px">Le particelle formano ' + r.blocks.length + ' blocchi non confinanti (separati da strade, canali o terreni di altri):</div>' + r.blocks.map(b => '<div style="font-size:13px;padding:3px 0"><b>Blocco ' + b.n + '</b> · ' + fmtHa(b.ha) + ' ha · ' + Math.round(b.perimeterM).toLocaleString("it-IT") + ' m · ' + b.members.map(m => m.replace(".", "/")).join(", ") + '</div>').join("")
+    : '<div style="font-size:13px">Tutte le particelle sono confinanti: <b>un unico perimetro</b> di ' + Math.round(r.blocks[0].perimeterM).toLocaleString("it-IT") + ' m.</div>';
+  $("tbody").innerHTML = r.rows.slice().sort((a, b) => a.foglio - b.foglio || String(a.particella).localeCompare(String(b.particella), "it", { numeric:true })).map(x => {
+    const d = x.visuraHa && x.mapHa ? (x.mapHa - x.visuraHa) / x.visuraHa * 100 : null;
+    return '<tr><td>' + x.foglio + '</td><td>' + esc(x.particella) + '</td><td class="r">' + fmtHa(x.visuraHa) + '</td><td class="r">' + fmtHa(x.mapHa) + '</td><td class="r ' + (d != null && Math.abs(d) > 10 ? "ko" : "") + '">' + (d == null ? "—" : (d > 0 ? "+" : "") + d.toFixed(1).replace(".", ",") + "%") + '</td><td class="' + (x.found ? "ok" : "ko") + '">' + (x.found ? "Trovata" : "Non trovata") + '</td></tr>';
+  }).join("");
+  $("tableCard").style.display = "block";
+  $("exportCard").style.display = "block";
+  $("printTitle").innerHTML = "<b>" + esc($("landName").value || "Perimetro catastale") + "</b><br>Comune di " + esc(r.comune) + " (" + esc(r.code) + ") · " + r.rows.length + " particelle · " + new Date().toLocaleDateString("it-IT");
+}
+
+/* ---------- export ---------- */
+function download(name, text, type){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+function slug(s){ return String(s || "perimetro").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+function ringsKml(poly){
+  const ring = r => r.map(([x, y]) => x.toFixed(8) + "," + y.toFixed(8) + ",0").join(" ");
+  return "<Polygon><outerBoundaryIs><LinearRing><coordinates>" + ring(poly[0]) + "</coordinates></LinearRing></outerBoundaryIs>" +
+    poly.slice(1).map(h => "<innerBoundaryIs><LinearRing><coordinates>" + ring(h) + "</coordinates></LinearRing></innerBoundaryIs>").join("") + "</Polygon>";
+}
+function geomKml(g){
+  const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  return polys.length === 1 ? ringsKml(polys[0]) : "<MultiGeometry>" + polys.map(ringsKml).join("") + "</MultiGeometry>";
+}
+$("kmlBtn").addEventListener("click", () => {
+  if(!result) return;
+  const name = $("landName").value || ("Terreno " + result.comune);
+  const kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>' + esc(name) + '</name>' +
+    '<Style id="perim"><LineStyle><color>ff303bff</color><width>4</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>' +
+    '<Style id="part"><LineStyle><color>ff3fd2ff</color><width>1</width></LineStyle><PolyStyle><color>553fd2ff</color></PolyStyle></Style>' +
+    '<Folder><name>Perimetro</name><Placemark><name>' + esc(name) + '</name><styleUrl>#perim</styleUrl>' + geomKml(result.perimeter.geometry) + '</Placemark></Folder>' +
+    '<Folder><name>Particelle</name>' + result.feats.map(f => '<Placemark><name>Fg ' + f.properties.foglio + ' part ' + esc(f.properties.particella) + '</name><styleUrl>#part</styleUrl>' + geomKml(f.geometry) + '</Placemark>').join("") + '</Folder>' +
+    '</Document></kml>';
+  download(slug(name) + ".kml", kml, "application/vnd.google-earth.kml+xml");
+});
+$("geojsonBtn").addEventListener("click", () => {
+  if(!result) return;
+  const name = $("landName").value || ("Terreno " + result.comune);
+  const fc = { type:"FeatureCollection", features:[{ ...result.perimeter, properties:{ tipo:"perimetro", nome:name, comune:result.comune, codice:result.code } }].concat(result.feats.map(f => ({ ...f, properties:{ tipo:"particella", ...f.properties } }))) };
+  download(slug(name) + ".geojson", JSON.stringify(fc), "application/geo+json");
+});
+$("pdfBtn").addEventListener("click", () => { if(result){ map.invalidateSize(); setTimeout(() => window.print(), 600); } });
+$("runBtn").addEventListener("click", run);
+
+/* ================== IMPORTA DA FILE ==================
+   Visura PDF (anche con righe evidenziate), Excel/CSV, testo, foto/scansioni (OCR).
+   Tutto avviene nel browser: il file non viene caricato da nessuna parte. */
+const IMP = { rows:[], colors:[], filter:"all" };
+const LIBS = {
+  pdf:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+  pdfWorker:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",
+  xlsx:"https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+  ocr:"https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"
+};
+function loadScript(src){
+  return new Promise((ok, ko) => {
+    if(document.querySelector('script[src="' + src + '"]')) return ok();
+    const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error("Libreria non caricata: " + src));
+    document.head.appendChild(s);
+  });
+}
+function impStatus(m, k){ $("impStatus").textContent = m || ""; $("impStatus").className = "status" + (k ? " " + k : ""); }
+const hex = c => "#" + [0,1,2].map(i => Math.round((c[i] > 1 ? c[i] / 255 : c[i]) * 255).toString(16).padStart(2, "0")).join("");
+function colorName(h){
+  const r = parseInt(h.slice(1,3),16), g = parseInt(h.slice(3,5),16), b = parseInt(h.slice(5,7),16);
+  if(r > 200 && g > 170 && b < 140) return "Gialle";
+  if(r > 200 && g < 170 && b > 120) return "Rosa/fucsia";
+  if(g > 170 && r < 170 && b < 170) return "Verdi";
+  if(b > 170 && r < 170) return "Azzurre/blu";
+  if(r > 200 && g > 100 && g < 190 && b < 100) return "Arancioni";
+  if(r > 180 && g < 100 && b < 100) return "Rosse";
+  return "Colore " + h;
+}
+function haFromParts(ha, are, ca){ return (Number(ha) || 0) + (Number(are) || 0) / 100 + (Number(ca) || 0) / 10000; }
+
+/* ---------- PDF ---------- */
+async function readPdf(buf){
+  await loadScript(LIBS.pdf);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = LIBS.pdfWorker;
+  const pdf = await pdfjsLib.getDocument({ data:buf }).promise;
+  const out = { rows:[], text:"", meta:{} };
+  let textChars = 0;
+  for(let n = 1; n <= pdf.numPages; n++){
+    impStatus("Leggo la pagina " + n + " di " + pdf.numPages + "…");
+    const page = await pdf.getPage(n);
+    const tc = await page.getTextContent();
+    const items = tc.items.filter(i => i.str && i.str.trim()).map(i => ({ s:i.str.trim(), x:i.transform[4], y:i.transform[5], w:i.width || 0 }));
+    textChars += items.reduce((a, i) => a + i.s.length, 0);
+    // righe di testo (per meta e parser generico)
+    const lines = groupLines(items);
+    out.text += lines.map(l => l.map(i => i.s).join(" ")).join("\n") + "\n";
+    const annots = (await page.getAnnotations()).filter(a => /highlight|square|ink|freetext/i.test(a.subtype || "") && a.color);
+    const hls = annots.map(a => ({ color:hex(a.color), quads:quadsOf(a) }));
+    out.rows.push(...parseVisuraPage(items, lines, hls, n));
+  }
+  const m = out.text.match(/Comune di\s+([A-ZÀ-Ü' ]+?)\s*\(\s*Codice\s+([A-Z]\d{3})\s*\)/i) || out.text.match(/comune di\s+([A-ZÀ-Ü' ]+?)\s*\(([A-Z]\d{3})\)/i);
+  if(m){ out.meta.comune = titleCase(m[1].trim()); out.meta.code = m[2].toUpperCase(); }
+  const pv = out.text.match(/provincia\s+([A-ZÀ-Ü' ]{3,})/i); if(pv) out.meta.provincia = titleCase(pv[1].trim().split(/\s{2,}|\n/)[0]);
+  if(!out.rows.length){
+    if(textChars < 40){ // scansione senza testo: OCR delle pagine
+      out.text = await ocrPdf(pdf);
+    }
+    out.rows = parseFreeText(out.text);
+  }
+  return out;
+}
+function titleCase(s){ return s.toLowerCase().replace(/(^|[\s'])([a-zà-ü])/g, (a, b, c) => b + c.toUpperCase()); }
+function quadsOf(a){
+  const q = a.quadPoints;
+  if(q && q.length){
+    if(Array.isArray(q[0])) return q.map(p => { const xs = p.map(v => v.x), ys = p.map(v => v.y); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; });
+    const r = []; for(let i = 0; i + 7 < q.length; i += 8){ const xs = [q[i],q[i+2],q[i+4],q[i+6]], ys = [q[i+1],q[i+3],q[i+5],q[i+7]]; r.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]); }
+    return r;
+  }
+  return [a.rect];
+}
+function groupLines(items){
+  const sorted = items.slice().sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines = [];
+  for(const it of sorted){
+    const l = lines.find(L => Math.abs(L.y - it.y) < 2.5);
+    if(l) l.push(it); else { const L = [it]; L.y = it.y; lines.push(L); }
+  }
+  lines.forEach(l => l.sort((a, b) => a.x - b.x));
+  return lines;
+}
+/* Visura Agenzia Entrate: colonne N. | Foglio | Particella | Sub | Porz | Qualità Classe | ha are ca …
+   Le porzioni (AA, AB…) stanno su righe sopra/sotto quella con foglio e particella: le loro
+   superfici vengono sommate alla particella più vicina. */
+function parseVisuraPage(items, lines, hls, pageNo){
+  const hF = items.find(i => /^foglio$/i.test(i.s)), hP = items.find(i => /^particella$/i.test(i.s));
+  if(!hF || !hP) return [];
+  const hHa = items.find(i => /^ha(\s+are\s+ca)?$/i.test(i.s)) || items.find(i => /ha\s+are\s+ca/i.test(i.s));
+  const hRed = items.find(i => /^(Deduz|Reddito)/i.test(i.s));
+  const hSup = items.find(i => /^superficie/i.test(i.s) && i.x > hP.x);
+  const surfMin = hSup ? hSup.x - 12 : hHa ? hHa.x - 30 : hP.x + 120, surfMax = hRed && hRed.x > surfMin ? hRed.x - 2 : (hHa ? hHa.x + 90 : surfMin + 120);
+  const isInt = s => /^\d{1,5}$/.test(s);
+  const rows = [];
+  for(const l of lines){
+    if(l.y >= hF.y) continue; // sopra l'intestazione
+    const closest = (arr, x) => arr.slice().sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
+    const ints = l.filter(i => isInt(i.s) && i.x < hP.x + 60);
+    const f = closest(ints.filter(i => Math.abs(i.x - hF.x) < 30), hF.x);
+    const p = f && closest(l.filter(i => i !== f && i.x > f.x + 4 && /^\d{1,5}[A-Z]?$/i.test(i.s) && Math.abs(i.x - hP.x) < 34), hP.x);
+    const num = f && l.find(i => isInt(i.s) && i.x < f.x - 6);
+    if(f && p && num) rows.push({ foglio:Number(f.s), particella:p.s.toUpperCase(), y:l.y, x:p.x, parts:[], page:pageNo });
+  }
+  if(!rows.length) return [];
+  // superfici: righe con 1-3 numeri nella colonna ha/are/ca
+  for(const l of lines){
+    if(l.y >= hF.y) continue;
+    const nums = l.filter(i => i.x >= surfMin && i.x <= surfMax && /^\d{1,4}$/.test(i.s));
+    if(!nums.length || nums.length > 3) continue;
+    const near = rows.slice().sort((a, b) => Math.abs(a.y - l.y) - Math.abs(b.y - l.y))[0];
+    if(Math.abs(near.y - l.y) > 30) continue;
+    let ha = 0, are = 0, ca = 0;
+    if(nums.length === 3){ ha = nums[0].s; are = nums[1].s; ca = nums[2].s; }
+    else if(nums.length === 2){ are = nums[0].s; ca = nums[1].s; }
+    else ca = nums[0].s;
+    near.parts.push(haFromParts(ha, are, ca));
+  }
+  return rows.map(r => {
+    let color = null;
+    for(const h of hls) for(const q of h.quads){
+      if(r.y + 3 >= q[1] && r.y - 1 <= q[3] && r.x + 4 >= q[0] - 2 && r.x <= q[2] + 2){ color = h.color; break; }
+    }
+    // evidenziazione che copre solo la riga (non la colonna particella): controllo su tutta la riga
+    if(!color) for(const h of hls) for(const q of h.quads){ if(r.y + 3 >= q[1] && r.y - 1 <= q[3]){ color = h.color; break; } }
+    return { foglio:r.foglio, particella:r.particella, ha:r.parts.length ? r.parts.reduce((a, b) => a + b, 0) : null, color, src:"visura p." + r.page };
+  });
+}
+
+/* ---------- testo libero / OCR ---------- */
+function parseFreeText(text){
+  const rows = [], seen = new Set();
+  const add = (f, p, ha) => { const k = Number(f) + "." + String(p).toUpperCase(); if(seen.has(k) || !Number(f)) return; seen.add(k); rows.push({ foglio:Number(f), particella:String(p).toUpperCase(), ha:ha == null ? null : ha, color:null, src:"testo" }); };
+  const lines = String(text || "").split(/\r?\n/);
+  let currentFoglio = null;
+  for(const raw of lines){
+    const line = raw.replace(/\s+/g, " ").trim(); if(!line) continue;
+    // 1) "foglio 27 particella 32" / "fg. 27 part. 32, 33 e 34" / "F.27 P.lla 32"
+    let hit = false;
+    const re = /\b(?:foglio|fgl?\.?|f\.)\s*(\d{1,4})\s*[,;:\-]?\s*(?:particell[ae]|part\.?|p\.?\s*lla|p\.?\s*lle|mappal[ei]|mapp\.?|map\.?|n\.?)\s*((?:\d{1,5}[A-Z]?)(?:\s*(?:,|;|e|-|\/)\s*\d{1,5}[A-Z]?)*)/gi;
+    let m;
+    while((m = re.exec(line))){ hit = true; m[2].split(/\s*(?:,|;|\be\b|-|\/)\s*/i).filter(Boolean).forEach(p => add(m[1], p)); }
+    if(hit) continue;
+    // 2) "Foglio 27" da solo: vale per le righe seguenti (elenchi raggruppati per foglio)
+    const fo = line.match(/^(?:foglio|fg\.?)\s*(\d{1,4})$/i); if(fo){ currentFoglio = fo[1]; continue; }
+    // 3) riga tipo visura: "1 27 32 - SEMINATIVO 04 1 61 19"
+    m = line.match(/^(\d{1,3})\s+(\d{1,4})\s+(\d{1,5}[A-Z]?)\s+(?:-|[A-Z]{2}\b|[A-Z]{3,})/);
+    if(m){ const s = line.match(/\b(\d{1,3})\s+(\d{2})\s+(\d{2})\b(?!.*\b\d{1,3}\s+\d{2}\s+\d{2}\b)/); add(m[2], m[3], s ? haFromParts(s[1], s[2], s[3]) : null); continue; }
+    // 4) "27/32", "27-32", "27 32 1.61.19"
+    m = line.match(/^(\d{1,4})\s*[\/\s]\s*(\d{1,5}[A-Z]?)(?:\s+(\d{1,4}[.,]\d{2}[.,]\d{2}|\d+(?:[.,]\d+)?))?\s*$/i);
+    if(m){ add(m[1], m[2], m[3] ? parseSurface(m[3]) : null); continue; }
+    // 5) sotto un "Foglio N": righe con soli numeri di particella
+    if(currentFoglio && /^\d{1,5}[A-Z]?(\s*[,;]\s*\d{1,5}[A-Z]?)*$/.test(line)) line.split(/\s*[,;]\s*/).forEach(p => add(currentFoglio, p));
+  }
+  return rows;
+}
+async function ocrImage(src, label){
+  await loadScript(LIBS.ocr);
+  impStatus("Leggo il testo " + (label || "dell'immagine") + " (OCR, qualche secondo)…");
+  const r = await Tesseract.recognize(src, "ita");
+  return r.data.text || "";
+}
+async function ocrPdf(pdf){
+  let text = "";
+  for(let n = 1; n <= pdf.numPages; n++){
+    const page = await pdf.getPage(n);
+    const vp = page.getViewport({ scale:2.2 });
+    const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+    await page.render({ canvasContext:c.getContext("2d"), viewport:vp }).promise;
+    text += await ocrImage(c, "della pagina " + n + " di " + pdf.numPages) + "\n";
+  }
+  return text;
+}
+
+/* ---------- Excel / CSV ---------- */
+async function readSheet(buf){
+  await loadScript(LIBS.xlsx);
+  const wb = XLSX.read(buf, { type:"array" });
+  const rows = [];
+  for(const name of wb.SheetNames){
+    const data = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, raw:false, defval:"" });
+    let hdr = -1, cF = -1, cP = -1, cS = -1, cHa = -1, cAre = -1, cCa = -1;
+    for(let i = 0; i < Math.min(data.length, 30) && hdr < 0; i++){
+      const r = data[i].map(v => String(v).toLowerCase().trim());
+      const f = r.findIndex(v => /^(fg\.?|fgl\.?|foglio)$/.test(v) || /foglio/.test(v));
+      const p = r.findIndex(v => /partic|mappal|^part\.?$|^p\.?lla$|^num/.test(v));
+      if(f >= 0 && p >= 0 && f !== p){
+        hdr = i; cF = f; cP = p;
+        cS = r.findIndex(v => /superf|^mq$|m2|m²|ettar|^ha$/.test(v) && !/are/.test(v));
+        cHa = r.findIndex(v => v === "ha"); cAre = r.findIndex(v => v === "are"); cCa = r.findIndex(v => v === "ca");
+      }
+    }
+    if(hdr < 0){ // nessuna intestazione: provo come testo
+      rows.push(...parseFreeText(data.map(r => r.join(" ")).join("\n")));
+      continue;
+    }
+    for(let i = hdr + 1; i < data.length; i++){
+      const r = data[i]; const f = String(r[cF] || "").trim(), p = String(r[cP] || "").trim();
+      if(!/^\d{1,4}$/.test(f) || !/^\d{1,5}[A-Z]?$/i.test(p)) continue;
+      let ha = null;
+      if(cHa >= 0 || cAre >= 0) ha = haFromParts(r[cHa], r[cAre], r[cCa]);
+      else if(cS >= 0 && String(r[cS]).trim()) ha = parseSurface(String(r[cS]).trim());
+      rows.push({ foglio:Number(f), particella:p.toUpperCase(), ha, color:null, src:"foglio " + name });
+    }
+  }
+  return { rows, meta:{} };
+}
+
+/* ---------- ingresso file ---------- */
+async function importFile(file){
+  impStatus("Apro " + file.name + "…");
+  $("impPreview").style.display = "none";
+  try{
+    const name = file.name.toLowerCase();
+    let res;
+    if(name.endsWith(".pdf")) res = await readPdf(await file.arrayBuffer());
+    else if(/\.(xlsx|xls|ods|csv)$/.test(name)) res = await readSheet(await file.arrayBuffer());
+    else if(/\.(png|jpe?g|webp|bmp|gif|heic)$/.test(name) || /^image\//.test(file.type)) res = { rows:parseFreeText(await ocrImage(file)), meta:{} };
+    else res = { rows:parseFreeText(await file.text()), meta:{} };
+    showPreview(res, file.name);
+  }catch(e){
+    console.error(e); impStatus("Non sono riuscito a leggere il file: " + (e.message || e), "err");
+  }
+}
+function showPreview(res, fname){
+  // unisco duplicati (stessa particella su più pagine): tengo la prima con superficie
+  const map = new Map();
+  res.rows.forEach(r => { const k = r.foglio + "." + r.particella; const p = map.get(k); if(!p) map.set(k, r); else { if(p.ha == null && r.ha != null) p.ha = r.ha; if(!p.color && r.color) p.color = r.color; } });
+  IMP.rows = [...map.values()].map(r => ({ ...r, on:true }));
+  IMP.colors = [...new Set(IMP.rows.map(r => r.color).filter(Boolean))];
+  IMP.meta = res.meta || {};
+  IMP.filter = "all";
+  if(!IMP.rows.length){ impStatus("Nel file non ho trovato fogli e particelle. Se è una foto, prova con un'immagine più nitida, oppure incolla il testo.", "err"); return; }
+  if(IMP.meta.comune && !$("comune").value){ $("comune").value = IMP.meta.comune; }
+  if(IMP.meta.code){ $("code").value = IMP.meta.code; }
+  if(IMP.meta.provincia && !$("provincia").value){ $("provincia").value = IMP.meta.provincia; }
+  const hasColors = IMP.colors.length > 0;
+  $("impFilters").innerHTML = '<button type="button" class="chip on" data-f="all">Tutte (' + IMP.rows.length + ')</button>' +
+    IMP.colors.map(c => '<button type="button" class="chip" data-f="' + c + '"><i style="background:' + c + '"></i>Solo ' + colorName(c).toLowerCase() + ' (' + IMP.rows.filter(r => r.color === c).length + ')</button>').join("") +
+    (hasColors ? '<button type="button" class="chip" data-f="none">Non evidenziate (' + IMP.rows.filter(r => !r.color).length + ')</button>' : "");
+  $("impFilters").querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
+    IMP.filter = b.dataset.f;
+    IMP.rows.forEach(r => { r.on = IMP.filter === "all" ? true : IMP.filter === "none" ? !r.color : r.color === IMP.filter; });
+    $("impFilters").querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b));
+    renderPreview();
+  }));
+  // se nella visura ci sono righe evidenziate in giallo, propongo subito quelle
+  const yellow = IMP.colors.find(c => colorName(c) === "Gialle");
+  if(yellow){ const b = $("impFilters").querySelector('[data-f="' + yellow + '"]'); if(b) b.click(); else renderPreview(); }
+  else renderPreview();
+  $("impPreview").style.display = "block";
+  impStatus("Da " + fname + ": " + IMP.rows.length + " particelle" + (IMP.meta.comune ? " · Comune di " + IMP.meta.comune + (IMP.meta.code ? " (" + IMP.meta.code + ")" : "") : "") + (hasColors ? " · trovate righe evidenziate" + (yellow ? ": ho selezionato le gialle" : "") : "") + ".", "ok");
+}
+function renderPreview(){
+  const sel = IMP.rows.filter(r => r.on);
+  const tot = sel.reduce((a, r) => a + (r.ha || 0), 0);
+  $("impTable").innerHTML = '<thead><tr><th></th><th>Fg</th><th>Part.</th><th class="r">ha</th><th></th></tr></thead><tbody>' +
+    IMP.rows.map((r, i) => '<tr><td><input type="checkbox" data-i="' + i + '"' + (r.on ? " checked" : "") + '></td><td>' + r.foglio + '</td><td>' + esc(r.particella) + '</td><td class="r">' + (r.ha == null ? "—" : fmtHa(r.ha)) + '</td><td>' + (r.color ? '<i class="sw" style="background:' + r.color + '" title="' + colorName(r.color) + '"></i>' : "") + '</td></tr>').join("") +
+    '</tbody>';
+  $("impTable").querySelectorAll("input[data-i]").forEach(c => c.addEventListener("change", () => { IMP.rows[Number(c.dataset.i)].on = c.checked; renderPreviewTotals(); }));
+  renderPreviewTotals();
+}
+function renderPreviewTotals(){
+  const sel = IMP.rows.filter(r => r.on);
+  const withHa = sel.filter(r => r.ha != null);
+  const tot = withHa.reduce((a, r) => a + r.ha, 0);
+  $("impTotals").textContent = sel.length + " selezionate" + (withHa.length ? " · " + fmtHa(tot) + " ha" + (withHa.length < sel.length ? " (superficie nota per " + withHa.length + ")" : "") : "");
+}
+function applyImport(mode){
+  const sel = IMP.rows.filter(r => r.on);
+  if(!sel.length){ impStatus("Nessuna particella selezionata.", "err"); return; }
+  const fmt = r => r.foglio + " " + r.particella + (r.ha != null ? " " + r.ha.toFixed(4).replace(".", ",") : "");
+  const lines = sel.map(fmt).join("\n");
+  $("parcels").value = mode === "add" && $("parcels").value.trim() ? $("parcels").value.trim() + "\n" + lines : lines;
+  const withHa = sel.filter(r => r.ha != null);
+  if(withHa.length === sel.length) $("visuraTotal").value = withHa.reduce((a, r) => a + r.ha, 0).toFixed(4).replace(".", ",");
+  else if(mode !== "add") $("visuraTotal").value = "";
+  $("impPreview").style.display = "none";
+  impStatus(sel.length + " particelle inserite nell'elenco. Ora premi \"Trova particelle e crea perimetro\".", "ok");
+  $("parcels").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+$("impFile").addEventListener("change", e => { const f = e.target.files[0]; if(f) importFile(f); e.target.value = ""; });
+$("impUse").addEventListener("click", () => applyImport("replace"));
+$("impAdd").addEventListener("click", () => applyImport("add"));
+const drop = $("impDrop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if(f) importFile(f); });
+drop.addEventListener("click", () => $("impFile").click());
+/* incolla direttamente un'immagine (screenshot) con Cmd+V */
+document.addEventListener("paste", e => {
+  const it = [...(e.clipboardData && e.clipboardData.items || [])].find(i => /^image\//.test(i.type));
+  if(it && document.activeElement !== $("parcels")){ e.preventDefault(); importFile(new File([it.getAsFile()], "immagine-incollata.png", { type:it.type })); }
+});
+
+/* ---------- avvio ---------- */
+(async function init(){
+  const { data:{ session } } = await client.auth.getSession();
+  if(!session){ location.href = "login.html"; return; }
+  try{
+    const s = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if(s){ $("comune").value = s.comune || ""; $("provincia").value = s.provincia || ""; $("code").value = s.code || ""; $("parcels").value = s.parcels || ""; $("visuraTotal").value = s.total || ""; $("landName").value = s.name || ""; }
+  }catch(e){}
+  $("comune").addEventListener("change", () => { $("code").value = ""; });
+})();
+</script>
+</body>
+</html>
