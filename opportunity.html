@@ -317,6 +317,7 @@ h1{
   50%{box-shadow:0 8px 32px rgba(217,122,46,.85)}
 }
 .hero-media{
+  position:relative;
   min-height:460px;
   border:1px solid rgba(166,127,52,.18);
   background:rgba(255,255,255,.18);
@@ -474,6 +475,7 @@ h1{
   gap:12px;
 }
 .gallery-item{
+  position:relative;
   min-height:150px;
   border:1px solid rgba(166,127,52,.14);
   overflow:hidden;
@@ -885,12 +887,14 @@ html[dir="rtl"] .data-grid{direction:rtl}
     <button type="button" class="lightbox-arrow lightbox-prev" id="lightboxPrev" aria-label="Precedente">&#8249;</button>
     <img id="lightboxImg" src="" alt="">
     <button type="button" class="lightbox-arrow lightbox-next" id="lightboxNext" aria-label="Successiva">&#8250;</button>
+    <div class="lightbox-disc" id="lightboxDisc" hidden></div>
     <div class="lightbox-counter" id="lightboxCounter"></div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
+<script src="js/photo-disclaimers.js"></script>
 
 <script>
 const client = window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
@@ -923,6 +927,9 @@ function showLightboxImage(idx){
   lightboxIndex = (idx + lightboxImages.length) % lightboxImages.length;
   lightboxImg.src = lightboxImages[lightboxIndex];
   lightboxCounter.textContent = (lightboxIndex + 1) + " / " + lightboxImages.length;
+  const discEl = document.getElementById("lightboxDisc");
+  const discTxt = (window.ImmonovaPhotoDisclaimers && discRenderData) ? window.ImmonovaPhotoDisclaimers.textFor(discRenderData, lightboxImages[lightboxIndex]) : "";
+  if(discEl){ discEl.textContent = discTxt; discEl.hidden = !discTxt; }
 }
 
 function openLightbox(idx){
@@ -1459,8 +1466,11 @@ function safeVirtualTour360(data){
   return allValid ? tour : null;
 }
 
+let discRenderData = null;
 async function renderOpportunity(data){
   data = await getRenderData(data);
+  discRenderData = data;
+  if(window.ImmonovaPhotoDisclaimers) await window.ImmonovaPhotoDisclaimers.prepare(data, currentLanguage, client);
   updatePageMeta(data);
 
   const category = data.category || "";
@@ -1492,7 +1502,7 @@ async function renderOpportunity(data){
       </div>
 
       <div class="hero-media">
-        ${mainImage ? `<img src="${escapeHTML(mainImage)}" alt="${escapeHTML(title)}">` : `<div class="media-placeholder">IMMONOVA<br>Opportunity</div>`}
+        ${mainImage ? `<img src="${escapeHTML(mainImage)}" alt="${escapeHTML(title)}">${window.ImmonovaPhotoDisclaimers ? window.ImmonovaPhotoDisclaimers.bandHTML(data, mainImage) : ""}` : `<div class="media-placeholder">IMMONOVA<br>Opportunity</div>`}
         <div class="lock-marker">
           <small>${escapeHTML(dict("reserved_dossier_small"))}</small>
           <strong>${escapeHTML(dict("full_details_by_request"))}</strong>
@@ -1528,7 +1538,7 @@ async function renderOpportunity(data){
           <div class="gallery">
             ${
               gallery.length
-              ? gallery.map((url, idx) => `<div class="gallery-item" data-lightbox-index="${idx}"><img src="${escapeHTML(url)}" alt="${escapeHTML(title)}"></div>`).join("")
+              ? gallery.map((url, idx) => `<div class="gallery-item" data-lightbox-index="${idx}"><img src="${escapeHTML(url)}" alt="${escapeHTML(title)}">${window.ImmonovaPhotoDisclaimers ? window.ImmonovaPhotoDisclaimers.bandHTML(data, url) : ""}</div>`).join("")
               : `<div class="gallery-item"><div class="gallery-locked">${escapeHTML(dict("gallery_preview_placeholder"))}</div></div>`
             }
             <div class="gallery-item"><div class="gallery-locked">${lockedCount > 0 ? "+" + lockedCount + " " : ""}${escapeHTML(dict("gallery_locked"))}</div></div>
