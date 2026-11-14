@@ -390,6 +390,7 @@ body.pdf-export-mode,body.pdf-export-mode{width:297mm;min-height:210mm;backgroun
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="../js/config.js"></script>
+<script src="../js/photo-disclaimers.js"></script>
 <script src="../js/site-branding.js"></script>
 <script>
 var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -885,6 +886,7 @@ async function applyLanguage(lang){
   buildRenovationStyleLabels();
   buildDocumentTypeLabels();
   await loadNarrativeTranslations();
+  if(window.ImmonovaPhotoDisclaimers && typeof opportunity !== "undefined" && opportunity) await window.ImmonovaPhotoDisclaimers.prepare(opportunity, CURRENT_LANG, client);
 }
 
 /* Sincronizzato da report-view.html: traduzione dei testi narrativi
@@ -3052,7 +3054,7 @@ function renderMediaGalleryPage(){
   for(var i=0;i<all.length;i+=PER_PAGE){
     var chunk=all.slice(i,i+PER_PAGE);
     var gridClass="gallery-photo-grid"+(chunk.length===1?" single":"");
-    var cells=chunk.map(function(u){return '<div class="gallery-photo-cell"><img src="'+escapeHTML(u)+'" alt="">'+photoWatermarkOverlayHTML()+'</div>';}).join("");
+    var cells=chunk.map(function(u){return '<div class="gallery-photo-cell"><img src="'+escapeHTML(u)+'" alt="">'+photoWatermarkOverlayHTML()+(window.ImmonovaPhotoDisclaimers?window.ImmonovaPhotoDisclaimers.bandHTML(opportunity,u):'')+'</div>';}).join("");
     pages.push('<article class="report-page"><div class="page-inner"><div class="section-kicker">'+escapeHTML(T.kicker_media_gallery)+'</div><h2 class="section-title">'+escapeHTML(T.title_media_gallery)+'</h2><div class="lux-rule"></div><div class="'+gridClass+'">'+cells+'</div></div></article>');
   }
 
@@ -4925,6 +4927,7 @@ async function init(){
     setStatus("Caricamento dati interni IMMONOVA...","");
     await checkAuth();
     await loadOpportunity();
+    if(window.ImmonovaPhotoDisclaimers) await window.ImmonovaPhotoDisclaimers.prepare(opportunity, CURRENT_LANG, client);
     await loadNarrativeTranslations();
     await Promise.all([loadLatestReport(),loadPropertyDocuments(),loadRenovationImagesData(),loadRenovationRendersData(),loadInvestorRequest(),loadDossierAds()]);
     renderSendBanner();

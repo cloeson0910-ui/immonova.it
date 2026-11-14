@@ -255,6 +255,18 @@ textarea{
   margin-top:10px;
 }
 
+.disc-select{position:absolute;top:12px;right:12px;z-index:3;background:rgba(255,255,255,.9);padding:3px 5px;line-height:0;cursor:pointer}
+.disc-select input{width:18px;height:18px;cursor:pointer}
+.disc-img-wrap{position:relative}
+.disc-band{position:absolute;left:0;right:0;bottom:0;background:rgba(20,16,10,.66);color:#fff;font-size:10px;line-height:1.3;padding:4px 6px}
+.disc-panel textarea{width:100%;min-height:60px!important;height:64px;margin-top:8px;padding:10px;font-family:inherit;font-size:14px;border:1px solid rgba(165,129,57,.35);background:rgba(255,255,255,.6)}
+.disc-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.disc-toolbar button,.disc-group-acts button{padding:9px 12px;border:1px solid rgba(165,129,57,.35);background:rgba(255,252,244,.4);color:var(--c-5b471f);text-transform:uppercase;font-size:10px;letter-spacing:.1em;cursor:pointer}
+.disc-toolbar button.disc-apply{background:#a58139;color:#fff}
+.disc-group{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border:1px solid rgba(165,129,57,.25);background:rgba(255,255,255,.35);padding:10px 12px;margin-top:8px;font-size:13px;line-height:1.5}
+.disc-group-acts{display:flex;gap:6px;flex-wrap:wrap}
+.disc-group-acts button.danger{color:var(--c-561a1a);border-color:rgba(156,47,47,.35)}
+
 .gallery-item{
   border:1px solid rgba(165,129,57,.20);
   background:rgba(255,255,255,.12);
@@ -1861,6 +1873,22 @@ button.danger{
         <div id="noGalleryText" class="file-note" data-i18n="no_gallery_text">Nessuna immagine gallery caricata.</div>
       </div>
 
+      <div class="field full disc-panel">
+        <label>Disclaimer sulle foto</label>
+        <div class="file-note">Spunta una o più foto (casella in alto a destra), scrivi il testo e premi "Applica". Puoi creare tutti i gruppi che vuoi, ognuno con il suo testo. Il disclaimer compare come fascia in basso sulla foto nel sito, nel dossier e nel PDF (la foto originale non viene modificata).</div>
+        <div class="disc-toolbar">
+          <span id="discSelCount" class="file-note">Nessuna foto selezionata</span>
+          <button type="button" onclick="selectAllGallery(true)">Seleziona tutte</button>
+          <button type="button" onclick="selectAllGallery(false)">Deseleziona</button>
+        </div>
+        <textarea id="discText" rows="2" placeholder="Es. Foto d'archivio: le condizioni ritratte risalgono a circa 4 anni fa."></textarea>
+        <div class="disc-toolbar">
+          <button type="button" class="disc-apply" onclick="applyDisclaimerToSelected()">Applica alle foto selezionate</button>
+          <button type="button" onclick="removeDisclaimerFromSelected()">Togli disclaimer dalle selezionate</button>
+        </div>
+        <div id="discGroups"></div>
+      </div>
+
       <div class="field full">
         <label for="galleryFiles" data-i18n="label_add_gallery">Aggiungi immagini alla gallery</label>
         <input type="file" id="galleryFiles" accept="image/*" multiple>
@@ -2601,6 +2629,9 @@ var currentCoverUrl = "";
 var currentCoverCleanUrl = ""; // copertina originale SENZA logo, solo per Data Room
 var galleryImages = [];
 var galleryImagesClean = []; // foto gallery originali SENZA logo, stesso ordine di galleryImages, solo per Data Room
+var galleryDisclaimers = []; // id del disclaimer per ogni foto (stesso ordine di galleryImages), null = nessuno
+var photoDisclaimers = [];    // [{id, text}] testi dei disclaimer
+var selectedGalleryIdx = new Set();
 var renovationImages = [];
 var renderImages = [];
 var coverRemoved = false;
@@ -4345,9 +4376,11 @@ function renderGallery(){
   var galleryPreview = document.getElementById("galleryPreview");
   var noGalleryText = document.getElementById("noGalleryText");
 
+  syncDisclaimerArray();
   if(!galleryImages || galleryImages.length === 0){
     galleryPreview.innerHTML = "";
     noGalleryText.style.display = "block";
+    renderDisclaimerPanel();
     return;
   }
 
@@ -4360,7 +4393,8 @@ function renderGallery(){
     html += `
       <div class="gallery-item" draggable="true" data-index="${i}">
         <span class="order-badge">${i + 1}</span>
-        <img src="${galleryImages[i]}" alt="Gallery image ${i + 1}">
+        <label class="disc-select" title="Seleziona per il disclaimer"><input type="checkbox" onchange="toggleGallerySelect(${i}, this.checked)" ${selectedGalleryIdx.has(i) ? "checked" : ""}></label>
+        <div class="disc-img-wrap"><img src="${galleryImages[i]}" alt="Gallery image ${i + 1}">${discBandFor(i)}</div>
         <div class="gallery-item-actions">
           <button type="button" title="Sposta indietro" onclick="moveGalleryImage(${i}, ${i - 1})" ${i === 0 ? "disabled" : ""}>◀</button>
           <button type="button" title="Sposta avanti" onclick="moveGalleryImage(${i}, ${i + 1})" ${i === last ? "disabled" : ""}>▶</button>
@@ -4373,6 +4407,7 @@ function renderGallery(){
 
   galleryPreview.innerHTML = html;
   bindGalleryDragEvents();
+  renderDisclaimerPanel();
 }
 
 /* Download "vero" (fetch + blob) invece di aprire solo una nuova scheda: il browser propone
@@ -4397,9 +4432,77 @@ async function downloadImageFile(url, suggestedName){
   }
 }
 
+
+/* ---- Disclaimer sulle foto: seleziona una o più foto, scrivi il testo, applica.
+   Si possono creare quanti gruppi si vuole (ogni gruppo = un testo). Il testo NON viene
+   bruciato nella foto: è salvato sulla scheda e mostrato come fascia sopra l'immagine
+   sul sito, nel dossier e nel PDF. Una foto può avere un solo disclaimer. ---- */
+function syncDisclaimerArray(){
+  if(!Array.isArray(galleryDisclaimers)) galleryDisclaimers = [];
+  while(galleryDisclaimers.length < galleryImages.length) galleryDisclaimers.push(null);
+  if(galleryDisclaimers.length > galleryImages.length) galleryDisclaimers.length = galleryImages.length;
+}
+function discEsc(t){ return String(t == null ? "" : t).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]; }); }
+function discTextById(id){ var d = photoDisclaimers.find(function(x){ return x.id === id; }); return d ? d.text : ""; }
+function discBandFor(i){ var t = discTextById(galleryDisclaimers[i]); return t ? '<div class="disc-band">' + discEsc(t) + '</div>' : ""; }
+function toggleGallerySelect(i, on){ if(on) selectedGalleryIdx.add(i); else selectedGalleryIdx.delete(i); renderDisclaimerPanel(); }
+function selectAllGallery(on){ selectedGalleryIdx.clear(); if(on) galleryImages.forEach(function(_, i){ selectedGalleryIdx.add(i); }); renderGallery(); }
+function applyDisclaimerToSelected(){
+  var txt = (document.getElementById("discText").value || "").trim();
+  if(!selectedGalleryIdx.size){ alert("Seleziona prima una o più foto (casella in alto a destra di ogni foto)."); return; }
+  if(!txt){ alert("Scrivi il testo del disclaimer."); return; }
+  syncDisclaimerArray();
+  var existing = photoDisclaimers.find(function(d){ return d.text.trim() === txt; });
+  var id = existing ? existing.id : ("d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+  if(!existing) photoDisclaimers.push({ id:id, text:txt });
+  selectedGalleryIdx.forEach(function(i){ galleryDisclaimers[i] = id; });
+  selectedGalleryIdx.clear();
+  document.getElementById("discText").value = "";
+  cleanupDisclaimers(); renderGallery();
+  setStatus("Disclaimer applicato. Ricordati di salvare la scheda.", "");
+}
+function removeDisclaimerFromSelected(){
+  if(!selectedGalleryIdx.size){ alert("Seleziona le foto da cui togliere il disclaimer."); return; }
+  selectedGalleryIdx.forEach(function(i){ galleryDisclaimers[i] = null; });
+  selectedGalleryIdx.clear(); cleanupDisclaimers(); renderGallery();
+}
+function selectDisclaimerGroup(id){
+  selectedGalleryIdx.clear();
+  galleryDisclaimers.forEach(function(d, i){ if(d === id) selectedGalleryIdx.add(i); });
+  renderGallery();
+}
+function editDisclaimerGroup(id){
+  var d = photoDisclaimers.find(function(x){ return x.id === id; }); if(!d) return;
+  var t = prompt("Testo del disclaimer:", d.text);
+  if(t == null) return; t = t.trim(); if(!t) return;
+  d.text = t; renderGallery();
+}
+function deleteDisclaimerGroup(id){
+  if(!confirm("Togliere questo disclaimer da tutte le sue foto?")) return;
+  galleryDisclaimers = galleryDisclaimers.map(function(d){ return d === id ? null : d; });
+  cleanupDisclaimers(); renderGallery();
+}
+function cleanupDisclaimers(){
+  photoDisclaimers = photoDisclaimers.filter(function(d){ return galleryDisclaimers.indexOf(d.id) >= 0; });
+}
+function renderDisclaimerPanel(){
+  var box = document.getElementById("discGroups"), cnt = document.getElementById("discSelCount");
+  if(cnt) cnt.textContent = selectedGalleryIdx.size ? selectedGalleryIdx.size + " foto selezionate" : "Nessuna foto selezionata";
+  if(!box) return;
+  syncDisclaimerArray();
+  if(!photoDisclaimers.length){ box.innerHTML = '<div class="file-note">Nessun disclaimer sulle foto.</div>'; return; }
+  box.innerHTML = photoDisclaimers.map(function(d, n){
+    var nums = []; galleryDisclaimers.forEach(function(x, i){ if(x === d.id) nums.push(i + 1); });
+    return '<div class="disc-group"><div class="disc-group-text"><b>Disclaimer ' + (n + 1) + '</b> · foto ' + nums.join(", ") + '<br>' + discEsc(d.text) + '</div>'
+      + '<div class="disc-group-acts"><button type="button" onclick="selectDisclaimerGroup(\'' + d.id + '\')">Seleziona foto</button><button type="button" onclick="editDisclaimerGroup(\'' + d.id + '\')">Modifica testo</button><button type="button" class="danger" onclick="deleteDisclaimerGroup(\'' + d.id + '\')">Elimina</button></div></div>';
+  }).join("");
+}
+
 function removeGalleryImage(index){
   galleryImages.splice(index, 1);
   if(galleryImagesClean && galleryImagesClean.length > index) galleryImagesClean.splice(index, 1);
+  if(galleryDisclaimers.length > index) galleryDisclaimers.splice(index, 1);
+  selectedGalleryIdx.clear();
   renderGallery();
 }
 
@@ -4415,6 +4518,10 @@ function moveGalleryImage(fromIndex, toIndex){
     var movedClean = galleryImagesClean.splice(fromIndex, 1)[0];
     galleryImagesClean.splice(toIndex, 0, movedClean);
   }
+  syncDisclaimerArray();
+  var movedDisc = galleryDisclaimers.splice(fromIndex, 1)[0];
+  galleryDisclaimers.splice(toIndex, 0, movedDisc == null ? null : movedDisc);
+  selectedGalleryIdx.clear();
   renderGallery();
 }
 
@@ -6376,6 +6483,9 @@ async function loadOpportunity(){
   currentCoverCleanUrl = data.cover_image_clean || "";
   galleryImages = normalizeGallery(data.gallery_images);
   galleryImagesClean = normalizeGallery(data.gallery_images_clean);
+  photoDisclaimers = Array.isArray(data.photo_disclaimers) ? data.photo_disclaimers.filter(function(d){ return d && d.id && d.text; }) : [];
+  galleryDisclaimers = Array.isArray(data.gallery_disclaimers) ? data.gallery_disclaimers.slice() : [];
+  selectedGalleryIdx.clear();
   currentPartnerLogoUrl = data.dossier_partner_logo_url || "";
   if(typeof syncPartnerAgencySelect === "function") syncPartnerAgencySelect();
   setValue("partnerName", data.dossier_partner_name || "");
@@ -7298,6 +7408,7 @@ document.getElementById("removeAllPhotosBtn").addEventListener("click", async fu
 
     galleryImages = [];
     galleryImagesClean = [];
+    galleryDisclaimers = []; photoDisclaimers = []; selectedGalleryIdx.clear();
     document.getElementById("galleryFiles").value = "";
     renderGallery();
 
@@ -7450,6 +7561,7 @@ form.addEventListener("submit", async function(e){
         var galleryUploadResult = await uploadImage(file, galleryPath, "gallery:" + i);
         galleryImages.push(galleryUploadResult.url);
         galleryImagesClean.push(galleryUploadResult.cleanUrl || "");
+        galleryDisclaimers.push(null);
       }
     }
 
@@ -7555,15 +7667,27 @@ form.addEventListener("submit", async function(e){
     payload.agreement_type = textOrNull("agreement_type");
     payload.publication_rule = textOrNull("publication_rule");
     payload.publication_portals = getSelectedPublicationPortals();
+    syncDisclaimerArray(); cleanupDisclaimers();
+    payload.photo_disclaimers = photoDisclaimers;
+    payload.gallery_disclaimers = galleryDisclaimers;
 
     var result = await client
       .from("opportunities")
       .update(payload)
       .eq("id", id);
 
+    /* Colonne dei disclaimer non ancora create (script disclaimer-foto.sql non eseguito):
+       salvo comunque tutto il resto e lo segnalo, invece di far fallire il salvataggio. */
+    var discColumnsMissing = false;
+    if(result.error && /photo_disclaimers|gallery_disclaimers/i.test(result.error.message || "")){
+      delete payload.photo_disclaimers; delete payload.gallery_disclaimers; discColumnsMissing = true;
+      result = await client.from("opportunities").update(payload).eq("id", id);
+    }
+
     if(result.error){
       throw result.error;
     }
+    if(discColumnsMissing) alert("Scheda salvata, ma i disclaimer sulle foto NON sono stati salvati: esegui prima lo script disclaimer-foto.sql su Supabase.");
 
     /* FIX: dopo un salvataggio riuscito gli input file e la selezione da import-cartella
        NON venivano mai svuotati -- quindi ad ogni "Salva Modifiche" successivo le STESSE
