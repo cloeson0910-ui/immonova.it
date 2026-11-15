@@ -502,6 +502,24 @@ async function fillInlineProposals(rows){
   });
 }
 
+
+/* Zona scritta a parole: ogni voce è un COMUNE (o una frazione/località), non una provincia.
+   "Lecce" = comune di Lecce, non provincia. Per tutta la provincia scrivere "provincia di Lecce"
+   (o "prov. Lecce"); i nomi delle regioni ("Puglia", "Toscana"...) valgono per la regione intera. */
+var REGIONI_IT = ["abruzzo","basilicata","calabria","campania","emilia romagna","friuli venezia giulia","lazio","liguria","lombardia","marche","molise","piemonte","puglia","sardegna","sicilia","toscana","trentino alto adige","umbria","valle d aosta","veneto"];
+function normPlace(v){ return String(v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim(); }
+function areaMatches(areasText, opp){
+  var areas = String(areasText || "").split(/[,;\n]| e | o /).map(normPlace).filter(Boolean);
+  if(!areas.length) return null;
+  var mun = normPlace(opp.municipality), loc = normPlace(opp.location), prov = normPlace(opp.province), reg = normPlace(opp.region);
+  if(!mun && !loc && !prov && !reg) return null;
+  return areas.some(function(a){
+    var pm = a.match(/^(?:provincia(?: di)?|prov) (.+)$/);
+    if(pm) return prov === pm[1];
+    if(REGIONI_IT.indexOf(a) >= 0) return reg === a;
+    return a === mun || a === loc;
+  });
+}
 var MIN_FIT_PCT = 75; // soglia minima di compatibilità per proporre un immobile
 function rankForMandate(mandate, opportunities){
   return opportunities
@@ -534,10 +552,9 @@ function computeFit(mandate, opp){
     var inZone = null;
     if(mandate.interest_area_geojson){
       if(opp.latitude != null && opp.longitude != null) inZone = pointInGeoJSON(Number(opp.longitude), Number(opp.latitude), mandate.interest_area_geojson);
+      else if(mandate.location_areas) inZone = areaMatches(mandate.location_areas, opp); // immobile senza coordinate: confronto per comune
     }else{
-      var areas = mandate.location_areas.split(",").map(function(a){ return a.trim().toLowerCase(); }).filter(Boolean);
-      var oppLoc = [opp.location, opp.municipality, opp.province, opp.region].filter(Boolean).join(" ").toLowerCase();
-      if(oppLoc) inZone = areas.some(function(a){ return oppLoc.indexOf(a) >= 0; });
+      inZone = areaMatches(mandate.location_areas, opp);
     }
     if(inZone === false) excluded = true;
     add(25, inZone == null ? 0.5 : inZone ? 1 : 0, inZone == null ? "zona da verificare" : inZone ? "zona ok" : "fuori zona");
@@ -698,11 +715,10 @@ function computeMatch(mandate, opp){
     }
   }else if(!excluded && mandate.location_areas){
     maxScore++;
-    var areas = mandate.location_areas.split(",").map(function(a){ return a.trim().toLowerCase(); }).filter(Boolean);
-    var oppLoc = [opp.location, opp.municipality, opp.province, opp.region].filter(Boolean).join(" ").toLowerCase();
-    if(!oppLoc){
+    var am = areaMatches(mandate.location_areas, opp);
+    if(am == null){
       unknowns.push(T.reason_location);
-    }else if(areas.some(function(a){ return oppLoc.indexOf(a) >= 0; })){
+    }else if(am){
       score++; reasons.push(T.reason_location);
     }else{
       excluded = true;
