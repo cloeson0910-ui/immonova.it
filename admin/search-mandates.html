@@ -465,7 +465,7 @@ function renderTable(data){
     return '<tr>'
       + '<td><strong>' + escapeHTML(displayName) + '</strong>' + (isOwnEntry && m.client_phone ? '<br>' + escapeHTML(m.client_phone) : '') + (isOwnEntry && m.client_email ? '<br>' + escapeHTML(m.client_email) : '') + '</td>'
       + '<td>' + (m.category ? '<span class="badge">' + escapeHTML(m.category) + '</span>' : '') + '</td>'
-      + '<td>' + escapeHTML(m.location_areas || "") + '</td>'
+      + '<td>' + escapeHTML(m.location_areas || "") + (m.interest_area_geojson ? '<div class="zone-auto" data-zone-id="' + m.id + '" style="margin-top:4px;font-size:12.5px;color:#5b461d">Zona sulla mappa: lettura in corso…</div>' : '') + '</td>'
       + '<td>' + escapeHTML(formatBudget(m)) + '</td>'
       + '<td>' + renderFeatures(m) + '</td>'
       + '<td class="fit-cell" id="fit-' + m.id + '"><span class="fit-loading">Calcolo…</span></td>'
@@ -478,6 +478,7 @@ function renderTable(data){
       + '</tr>';
   }).join("");
   fillInlineProposals(data);
+  fillZoneNames(data);
 }
 
 /* ---- Proposte dal portafoglio direttamente nella tabella: per ogni richiesta i migliori
@@ -521,6 +522,67 @@ function areaMatches(areasText, opp){
   });
 }
 var MIN_FIT_PCT = 75; // soglia minima di compatibilità per proporre un immobile
+
+/* ---- Zona disegnata sulla mappa -> nomi scritti (comuni, province o regioni), ricavati in
+   automatico dai punti dell'area con OpenStreetMap (Nominatim, gratuito). Risultato salvato nel
+   browser, così la lettura avviene una sola volta per ogni zona. ---- */
+var ZONE_CACHE_KEY = "immonova_zone_names_v1";
+function zoneCache(){ try{ return JSON.parse(localStorage.getItem(ZONE_CACHE_KEY) || "{}"); }catch(e){ return {}; } }
+function zoneCacheSet(k, v){ try{ var c = zoneCache(); c[k] = v; localStorage.setItem(ZONE_CACHE_KEY, JSON.stringify(c)); }catch(e){} }
+function geoPolys(g){ return !g ? [] : g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : []; }
+function zoneSamples(g){
+  var pts = [];
+  geoPolys(g).forEach(function(poly){
+    var ring = poly[0] || [], xs = ring.map(function(p){ return p[0]; }), ys = ring.map(function(p){ return p[1]; });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    var n = 4, got = [];
+    for(var i = 0; i < n; i++) for(var j = 0; j < n; j++){
+      var x = x0 + (x1 - x0) * (i + 0.5) / n, y = y0 + (y1 - y0) * (j + 0.5) / n;
+      if(pointInGeoJSON(x, y, { type:"Polygon", coordinates:poly })) got.push([x, y]);
+    }
+    if(!got.length) got.push([(x0 + x1) / 2, (y0 + y1) / 2]);
+    // al massimo 6 punti per area, distribuiti
+    var step = Math.max(1, Math.floor(got.length / 6));
+    for(var k = 0; k < got.length && pts.length < 12; k += step) pts.push(got[k]);
+    pts.diag = Math.max(pts.diag || 0, Math.hypot(x1 - x0, y1 - y0));
+  });
+  return pts;
+}
+var nominatimQueue = Promise.resolve();
+function reverseGeo(lat, lon, zoom){
+  var p = nominatimQueue.then(function(){
+    return fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=it&zoom=" + zoom + "&lat=" + lat + "&lon=" + lon)
+      .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+  });
+  nominatimQueue = p.then(function(){ return new Promise(function(r){ setTimeout(r, 1100); }); });
+  return p;
+}
+async function describeZone(g){
+  var key = JSON.stringify(g).length + ":" + JSON.stringify(g).slice(0, 120);
+  var c = zoneCache(); if(c[key]) return c[key];
+  var pts = zoneSamples(g), diag = pts.diag || 0;
+  var level = diag > 1.5 ? "regione" : diag > 0.35 ? "provincia" : "comune";
+  var zoom = level === "regione" ? 5 : level === "provincia" ? 8 : 10;
+  var names = [];
+  for(var i = 0; i < pts.length; i++){
+    var d = await reverseGeo(pts[i][1], pts[i][0], zoom);
+    var a = (d && d.address) || {};
+    var nm = level === "regione" ? a.state : level === "provincia" ? (a.county || a.province || a.state_district || a.state) : (a.city || a.town || a.village || a.municipality || a.county);
+    if(nm){ nm = String(nm).replace(/^Provincia (di |del |della |dell')?/i, "").replace(/^Città metropolitana di /i, ""); if(names.indexOf(nm) < 0) names.push(nm); }
+  }
+  var txt = names.length ? (level === "regione" ? "Regioni: " : level === "provincia" ? "Province: " : "Comuni: ") + names.join(", ") : "";
+  if(txt) zoneCacheSet(key, txt);
+  return txt;
+}
+async function fillZoneNames(rows){
+  for(var i = 0; i < rows.length; i++){
+    var m = rows[i]; if(!m.interest_area_geojson) continue;
+    var el = document.querySelector('[data-zone-id="' + m.id + '"]'); if(!el) continue;
+    try{ var t = await describeZone(m.interest_area_geojson); el.textContent = t ? t + " (zona disegnata)" : "Zona disegnata sulla mappa"; }
+    catch(e){ el.textContent = "Zona disegnata sulla mappa"; }
+  }
+}
+
 var MIN_FIT_PCT_NO_ZONE = 60; // senza zona: basta che le caratteristiche si avvicinino
 function hasZone(m){ return !!(m.interest_area_geojson || String(m.location_areas || "").trim()); }
 function rankForMandate(mandate, opportunities){
