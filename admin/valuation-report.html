@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<link rel="stylesheet" href="../css/immonova-text-theme.css">
+<link rel="stylesheet" href="css/immonova-text-theme.css">
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-MBN70QWN3X"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-MBN70QWN3X');
+</script>
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -146,20 +155,6 @@ body::after{
   color:var(--c-5a4a2a);
   line-height:1.7;
 }
-.cadastral-unit-block{margin-top:22px}
-.cadastral-unit-block:first-child{margin-top:0}
-.cadastral-unit-heading{font-size:13px;font-weight:600;color:var(--c-5b461d);margin-bottom:10px}
-.cadastral-value-box{
-  margin-top:16px;
-  padding:24px;
-  background:rgba(166,127,52,.10);
-  border:1px solid rgba(166,127,52,.25);
-}
-.cadastral-value-label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--c-4f4125);margin-bottom:8px}
-.cadastral-value-amount{font-size:24px;color:var(--c-5b461d);font-weight:300;margin-bottom:8px}
-.cadastral-value-detail{font-size:12px;color:var(--c-4f4125);line-height:1.7}
-.cadastral-value-breakdown{margin:0 0 10px;padding-left:18px}
-.cadastral-value-breakdown li{margin-bottom:4px}
 
 .empty-state{
   padding:30px;
@@ -171,39 +166,18 @@ body::after{
 
 .footer-note{margin-top:60px;text-align:center;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--c-5b471f)}
 
-/* ---- Allegato scansioni visura (27/10/2026): le scansioni devono comparire FISICAMENTE
-   nella stampa/PDF, non solo come link. Ogni scansione occupa la sua pagina. ---- */
-.visura-attachment-page{page-break-after:always;margin-top:16px}
-.visura-attachment-page:last-child{page-break-after:auto}
-.visura-embed-img{max-width:100%;display:block;margin-top:10px;border:1px solid rgba(166,127,52,.28)}
-.visura-pdf-canvas{max-width:100%;height:auto;display:block;margin-top:10px;border:1px solid rgba(166,127,52,.28);page-break-inside:avoid;page-break-after:always}
-.visura-pdf-canvas:last-child{page-break-after:auto}
-.visura-pdf-loading{font-size:12px;color:#8a7458;margin-top:10px}
-
 @media print{
   .toolbar{display:none}
-  /* ---- Tolto il layout fisso della filigrana in stampa: prima veniva forzata a
-     "position:absolute" e resa sempre visibile su ogni pagina del PDF (era la correzione di
-     un bug precedente, "filigrana mancante in stampa"). Ora, su richiesta esplicita, il
-     motivo a triangoli dorati viene semplicemente nascosto in stampa/PDF invece di essere
-     agganciato in modo rigido a ogni pagina: il documento stampato resta pulito, solo con lo
-     sfondo pieno. ---- */
-  body::before,body::after{display:none}
+  /* ---- BUG RISOLTO: la filigrana IMMONOVA (il motivo a triangoli dorati) veniva nascosta
+     proprio in stampa, l'unico momento in cui serve davvero -- probabilmente perche' con
+     "position:fixed" un browser in stampa la mostra una sola volta invece di ripeterla su
+     ogni pagina. Corretto passando a "position:absolute": cosi' fa parte del flusso normale
+     del documento e si ripete correttamente pagina per pagina nel PDF. ---- */
+  body::before,body::after{position:absolute;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
   .page{max-width:none;padding:0 20mm;position:relative;z-index:1}
   body{background:#f4ecdf}
   .section{margin-top:14mm;page-break-inside:avoid}
   .cover{padding:20mm 0 14mm}
-  .visura-attachments-section{page-break-inside:auto;margin-top:0}
-  /* ---- Fix (27/10/2026, segnalato: "i pdf sono già in formato A4, non vedo perché li metti in
-     una pagina" -- le scansioni erano rimpicciolite e incorniciate dentro il padding/i bordi
-     del layout del report invece di occupare la pagina per intero, come un documento A4 già
-     pronto che viene stampato così com'è. In stampa: si annulla il padding laterale di 20mm
-     solo per queste pagine (margine negativo), si tolgono bordi/intestazione/link (inutili su
-     un documento che si presenta già da solo), e la scansione riempie tutta la larghezza
-     stampabile. ---- */
-  .visura-attachment-page{margin:0;padding:0;margin-left:-20mm;margin-right:-20mm;width:calc(100% + 40mm)}
-  .visura-attachment-heading,.visura-attachment-link{display:none}
-  .visura-embed-img,.visura-pdf-canvas{border:none;width:100%;max-width:none;margin:0}
 }
 
 @media(max-width:700px){
@@ -228,10 +202,8 @@ body::after{
   <div class="empty-state" style="margin-top:60px">Caricamento...</div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
-<script src="../js/site-branding.js"></script>
 
 <script>
 const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -252,113 +224,9 @@ function formatDate(v){
   catch(e){ return v; }
 }
 
-/* ---- Grafico andamento prezzi (Eurostat) RIMOSSO su richiesta esplicita: l'indice e' solo
-   a livello nazionale, un aggregato troppo generico rispetto al singolo comune per essere
-   difendibile davanti a un cliente -- rischio di essere contestato come dato fuorviante.
-   Il campo price_index_trend puo' ancora essere salvato in comparables_snapshot ma qui
-   viene volutamente ignorato, non stampato in nessuna sezione della relazione. ---- */
-
 function infoItem(label, value){
   if(value === null || value === undefined || value === "") return "";
   return '<div class="info-item"><div class="info-label">' + escapeHTML(label) + '</div><div class="info-value">' + escapeHTML(value) + '</div></div>';
-}
-
-/* ---- Moltiplicatori di rivalutazione per categoria catastale (D.P.R. 138/1998 + D.L.
-   262/2006 art. 2 c. 45): stessa funzione, verificata con ricerca, gia' in uso in
-   valuation-form.html -- portata qui identica perche' il database salva solo il VALORE
-   CATASTALE TOTALE gia' calcolato (somma di tutte le sezioni), non il dettaglio per sezione:
-   per mostrare "tutte le voci catastali" nel riepilogo (sezione principale + ogni sezione
-   aggiuntiva, ciascuna con il proprio valore), il dettaglio va ricalcolato qui dai dati grezzi
-   salvati (categoria/rendita di ciascuna sezione), non solo mostrato come un unico numero. ---- */
-function classifyCadastralCategory(rawCategory, isPrimaCasa){
-  var txt = String(rawCategory || "").trim().toUpperCase();
-  var m = txt.match(/^([A-E])\s*\/?\s*(\d+)?/);
-  if(!m) return null;
-  var letter = m[1], number = m[2] ? parseInt(m[2], 10) : null;
-
-  if(letter === "A"){
-    if(number === 10) return { group:"A/10", multiplier:60 };
-    return { group:"A (escluso A/10)", multiplier: isPrimaCasa ? 110 : 120 };
-  }
-  if(letter === "B") return { group:"B", multiplier:140 };
-  if(letter === "C"){
-    if(number === 1) return { group:"C/1", multiplier:40.8 };
-    var isPertinenzaPrimaCasa = isPrimaCasa && (number === 2 || number === 6 || number === 7);
-    return {
-      group: "C" + (number != null ? "/" + number : "") + (isPertinenzaPrimaCasa ? " (pertinenza prima casa)" : ""),
-      multiplier: isPertinenzaPrimaCasa ? 110 : 120
-    };
-  }
-  if(letter === "D") return { group:"D" + (number === 5 ? "/5" : ""), multiplier:60 };
-  if(letter === "E") return { group:"E", multiplier:40.8 };
-  return null;
-}
-
-/* ---- Peso commerciale per categoria catastale (27/10/2026): stessa funzione, identica,
-   gia' in uso in valuation-form.html -- portata qui per lo stesso motivo di
-   classifyCadastralCategory sopra: il DB salva solo il totale finale della superficie
-   commerciale (equivalent_surface), non il dettaglio di come e' composto per ciascuna
-   sezione, quindi va ricalcolato qui dai dati grezzi per mostrare il dettaglio completo
-   invece di un "0 mq" fuorviante sulla sezione principale quando e' stata usata la
-   superficie catastale (pesata) al posto della superficie interna. ---- */
-function cadastralSurfaceWeight(rawCategory){
-  var txt = String(rawCategory || "").trim().toUpperCase();
-  var m = txt.match(/^([A-F])\s*\/?\s*(\d+)?/);
-  if(!m) return { weight:1, label:null };
-  var letter = m[1], number = m[2] ? parseInt(m[2], 10) : null;
-
-  if(letter === "C"){
-    if(number === 2) return { weight:0.35, label:"C/2, magazzino/cantina/soffitta — 35%" };
-    if(number === 6) return { weight:0.35, label:"C/6, autorimessa/garage — 35%" };
-    if(number === 7) return { weight:0.20, label:"C/7, tettoia/posto auto coperto — 20%" };
-  }
-  if(letter === "F"){
-    if(number === 5) return { weight:0.20, label:"F/5, lastrico solare — 20%" };
-    if(number === 1) return { weight:0, label:"F/1, area urbana — 0%" };
-    if(number === 2) return { weight:0, label:"F/2, unità collabente — 0%" };
-    if(number === 3) return { weight:0, label:"F/3, unità in corso di costruzione — 0%" };
-    if(number === 4) return { weight:0, label:"F/4, unità in corso di definizione — 0%" };
-    if(number === 6) return { weight:0, label:"F/6, fabbricato in attesa di dichiarazione — 0%" };
-    if(number === 7) return { weight:0, label:"F/7, infrastrutture di reti pubbliche — 0%" };
-    return { weight:0, label:"F (categoria catastale fittizia) — 0%" };
-  }
-  return { weight:1, label: letter + (number != null ? "/" + number : "") + " — 100%" };
-}
-
-/* ---- Rendering PDF allegati via pdf.js (27/10/2026, fix urgente: vedi commento sopra nel
-   punto di chiamata). Niente plugin nativo del browser, nessun blocco della pagina: ogni
-   pagina del PDF diventa un semplice <canvas>, stampabile come qualsiasi immagine. Ogni file è
-   gestito in modo indipendente/non bloccante: se uno fallisce, gli altri e il resto della
-   pagina (tasto Stampa incluso) restano comunque utilizzabili. ---- */
-if(window.pdfjsLib){
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-}
-
-async function renderVisuraPdfPages(){
-  var containers = document.querySelectorAll(".visura-pdf-pages");
-  containers.forEach(async function(el){
-    var url = el.getAttribute("data-pdf-url");
-    if(!url) return;
-    try{
-      if(!window.pdfjsLib) throw new Error("libreria di lettura PDF non disponibile");
-      var pdf = await pdfjsLib.getDocument(url).promise;
-      el.innerHTML = "";
-      for(var p = 1; p <= pdf.numPages; p++){
-        var page = await pdf.getPage(p);
-        var viewport = page.getViewport({ scale: 2 });
-        var canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        canvas.className = "visura-pdf-canvas";
-        await page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport }).promise;
-        el.appendChild(canvas);
-      }
-    }catch(err){
-      el.innerHTML = '<div style="font-size:11px;color:#a33">Anteprima non disponibile per questa scansione (' +
-        escapeHTML(err && err.message ? err.message : "errore sconosciuto") +
-        '). Il file resta comunque scaricabile dal link qui sotto.</div>';
-    }
-  });
 }
 
 async function checkAuth(){
@@ -430,36 +298,6 @@ async function loadAndRender(){
     + '</div>'
     + '</div>';
 
-  // Composizione popolazione (eta' + reddito) -- spostata subito dopo l'identificazione
-  // dell'immobile, non piu' in fondo al documento: e' un dato che aiuta fin da subito a
-  // inquadrare la zona, prima ancora di entrare nei metodi di calcolo.
-  var popComp = snap.population_composition;
-  if(popComp && (popComp.age_distribution || popComp.income_distribution)){
-    var ageBrackets = ["0-14","15-29","30-44","45-59","60-74","75+"];
-    var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€","oltre 120.000€"];
-
-    function bracketBars(distribution, brackets){
-      if(!distribution || !distribution.percentages) return "";
-      return brackets.map(function(b){
-        var pct = distribution.percentages[b];
-        if(pct === undefined || pct === null) return "";
-        return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(b)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
-      }).filter(Boolean).join("");
-    }
-
-    html += '<div class="section">'
-      + '<div class="section-kicker">Il Territorio</div>'
-      + '<div class="section-title">Composizione della Popolazione</div>'
-      + '<p class="method-text">Un elemento a favore nella trattativa: chi acquista o investe vuole capire chi vive nella zona. Dati ufficiali, non stime.</p>';
-    if(popComp.age_distribution){
-      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Composizione per età</h3>' + bracketBars(popComp.age_distribution, ageBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.age_distribution.provider_name || "ISTAT") + '</p></div>';
-    }
-    if(popComp.income_distribution){
-      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Distribuzione economica</h3>' + bracketBars(popComp.income_distribution, incomeBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.income_distribution.provider_name || "MEF - Dipartimento delle Finanze") + '</p></div>';
-    }
-    html += '</div>';
-  }
-
   // 3. Analisi della posizione (narrativa AI)
   if(narrative.position_analysis){
     html += '<div class="section">'
@@ -469,75 +307,18 @@ async function loadAndRender(){
   }
 
   // 4. Superficie commerciale equivalente
-  /* ---- Fix (27/10/2026, segnalato: la sezione mostrava sempre "Superficie principale (100%):
-     0 mq" quando la sezione principale usava la superficie CATASTALE (pesata per categoria)
-     invece della "Superficie interna" -- stessa priorità corretta in valuation-form.html il
-     26/10/2026 (cadastral_surface vince sempre quando presente, internal_size resta solo il
-     fallback per il caso semplice). Il report qui leggeva solo v.internal_size, ignorando del
-     tutto che la sezione principale potesse venire dalla superficie catastale: risultato, un
-     fuorviante "0 mq" anche quando la superficie principale era in realtà usata (solo non
-     tramite quel campo). Ora replica la stessa identica priorità, e aggiunge anche il
-     dettaglio di ogni sezione catastale aggiuntiva (prima assente qui, già mostrato nel form). ---- */
   var equivSurface = snap.equivalent_surface;
-  /* ---- FIX (27/10/2026, secondo bug sullo stesso disclaimer: "ancora non esce il disclaimer!"):
-     prima leggeva snap.additional_cadastral_sections_surface, che pero' viene popolato SOLO
-     per le sezioni con superficie > 0 (vedi additionalSectionsSurfaceBreakdown() nel form) --
-     esattamente il caso che manca per un'unita' F2/F3, che non ha nulla da misurare. Ora legge
-     v.cadastral_additional_sections (l'elenco grezzo e completo salvato dal form, mai filtrato
-     per superficie), cosi' la categoria viene vista anche senza alcun dato di superficie. ---- */
-  var extraSectionsForDisclaimer = Array.isArray(v.cadastral_additional_sections) ? v.cadastral_additional_sections : [];
   if(equivSurface){
-    var primaryRows;
-    if(v.cadastral_surface){
-      var primaryWeightInfo = cadastralSurfaceWeight(v.cadastral_category);
-      var primaryWeighted = Math.round(v.cadastral_surface * primaryWeightInfo.weight * 100) / 100;
-      primaryRows = infoItem("Superficie principale (da dato catastale)", v.cadastral_surface + " mq" + (primaryWeightInfo.label ? " — " + primaryWeightInfo.label : "") + " → " + primaryWeighted + " mq");
-    }else{
-      primaryRows = infoItem("Superficie principale (100%)", (v.internal_size||0) + " mq");
-    }
-    var extraSections = Array.isArray(snap.additional_cadastral_sections_surface) ? snap.additional_cadastral_sections_surface : [];
     html += '<div class="section">'
       + '<div class="section-kicker">4. Superficie Commerciale Equivalente</div>'
       + '<p class="method-text">Ai fini della valutazione parametrica, alle superfici accessorie (deposito, garage, giardino) non viene attribuito il medesimo valore unitario della superficie principale, ma coefficienti prudenziali.</p>'
       + '<div class="info-grid">'
-      + primaryRows
+      + infoItem("Superficie principale (100%)", (v.internal_size||0) + " mq")
       + (v.accessory_size ? infoItem("Superficie accessoria (35%)", v.accessory_size + " mq → " + (v.accessory_size*0.35).toFixed(2) + " mq") : "")
       + (v.garage_sqm ? infoItem("Garage (35%)", v.garage_sqm + " mq → " + (v.garage_sqm*0.35).toFixed(2) + " mq") : "")
       + (v.garden_sqm ? infoItem("Giardino (15%)", v.garden_sqm + " mq → " + (v.garden_sqm*0.15).toFixed(2) + " mq") : "")
       + '</div>'
-      + (extraSections.length
-          ? '<ul class="cadastral-value-breakdown" style="margin-top:12px">' + extraSections.map(function(e){
-              return '<li>' + escapeHTML(e.label) + ': ' + e.surface + ' mq' + (e.weight_label ? ' — ' + escapeHTML(e.weight_label) : '') + ' → ' + e.weighted_surface + ' mq</li>';
-            }).join("") + '</ul>'
-          : "")
       + '<p class="method-text" style="margin-top:14px"><strong>Superficie commerciale equivalente: ' + equivSurface.toFixed(2) + ' mq</strong></p>'
-      + '</div>';
-  }
-
-  /* ---- Disclaimer unità F2/F3 (27/10/2026, richiesta esplicita dell'utente, da mostrare
-     anche nel documento stampato per il proprietario/cliente, non solo nel form interno):
-     nessuna stima del costo di trasformazione/completamento -- per queste categorie non ci
-     sono parametri di mercato verificabili, va dichiarato apertamente invece di inventare un
-     numero.
-     FIX (27/10/2026, segnalato: "questo deve uscire anche nel formato che verrà stampato" --
-     prima questo blocco stava DENTRO "if(equivSurface)": se una proprietà era interamente/solo
-     F2 o F3 (superficie commerciale risultante 0, perché il peso di queste categorie è 0%),
-     equivSurface era falsy, tutta la sezione 4 non veniva stampata e il disclaimer spariva con
-     essa -- proprio nel caso in cui serve di più. Spostato fuori: ora compare sempre che ci sia
-     un'unità F2/F3, indipendentemente da quanta altra superficie valutabile esiste. ---- */
-  var fNotEvaluable = [];
-  if(/^F\s*\/?\s*[23]\b/i.test(String(v.cadastral_category || "").trim())){
-    fNotEvaluable.push({ label: "Sezione principale", category: v.cadastral_category });
-  }
-  extraSectionsForDisclaimer.forEach(function(e, i){
-    if(/^F\s*\/?\s*[23]\b/i.test(String(e.category || "").trim())){
-      fNotEvaluable.push({ label: e.label || ("Sezione catastale " + (i + 2)), category: e.category });
-    }
-  });
-  if(fNotEvaluable.length){
-    html += '<div class="section">'
-      + '<div class="disclaimer-box"><strong>⚠ Unità non valutabili: ' + fNotEvaluable.map(function(u){ return escapeHTML(u.label) + ' (cat. ' + escapeHTML(u.category) + ')'; }).join(", ") + '.</strong><br>'
-      + 'Per le categorie catastali F/2 (unità collabente) e F/3 (unità in corso di costruzione) non esistono parametri di mercato verificabili per stimarne un valore: non sono state incluse nella superficie commerciale né nel calcolo, e non è stata applicata alcuna stima del costo di trasformazione o completamento. Per poterle considerare in valutazione sarà necessario che la proprietà fornisca dati ufficiali (computo metrico, capitolato lavori, stato di avanzamento lavori certificato, permesso di costruire/CILA/SCIA).</div>'
       + '</div>';
   }
 
@@ -545,17 +326,40 @@ async function loadAndRender(){
   var hasComparativo = v.valuation_comparativo_min != null;
   html += '<div class="section">'
     + '<div class="section-kicker">5. Metodo Comparativo</div>'
-    + '<p class="method-text">Confronto con l\'offerta immobiliare rilevabile nella stessa zona: opportunità IMMONOVA pubblicate, dati di mercato pubblici e comparabili reali individuati tramite ricerca.</p>';
+    + '<p class="method-text">Confronto con il mercato della stessa zona: opportunità IMMONOVA pubblicate, dati di mercato pubblici, comparabili individuati tramite ricerca, annunci in vendita sui portali immobiliari e compravendite reali registrate.</p>';
+  var rmk = snap.real_market || null;
 
-  var allComps = internalComps.map(function(c){ return { location: c.title || "Opportunità IMMONOVA", size_sqm: c.size_sqm || null, price_per_sqm: c.pricePerSqm, source: "IMMONOVA" }; })
-    .concat(aiComps.map(function(c){ return { location: c.title || c.location, size_sqm: c.size_sqm || null, price_per_sqm: c.price_per_sqm, source: c.source || "Ricerca web" }; }));
+  var allComps = internalComps.map(function(c){ return { location: c.title || "Opportunità IMMONOVA", price_per_sqm: c.pricePerSqm, source: "IMMONOVA" }; })
+    .concat(aiComps.map(function(c){ return { location: c.location, price_per_sqm: c.price_per_sqm, source: c.source || "Ricerca web" }; }));
+  if(rmk && rmk.listings_median) allComps.push({ location: "Mediana annunci in vendita (" + rmk.listings_count + ")", price_per_sqm: rmk.listings_median, source: "Portali immobiliari" });
+  if(rmk && rmk.transactions_median) allComps.push({ location: "Mediana compravendite reali (" + rmk.transactions_count + ")", price_per_sqm: rmk.transactions_median, source: "Atti di compravendita" });
 
   if(allComps.length){
-    html += '<table class="comp-table"><thead><tr><th>Comparabile</th><th>Superficie</th><th>€/mq</th><th>Fonte</th></tr></thead><tbody>'
+    html += '<table class="comp-table"><thead><tr><th>Comparabile</th><th>€/mq</th><th>Fonte</th></tr></thead><tbody>'
       + allComps.map(function(c){
-          return '<tr><td>' + escapeHTML(c.location||"") + '</td><td>' + (c.size_sqm ? c.size_sqm + " mq" : "—") + '</td><td>' + formatEuro(c.price_per_sqm) + '</td><td>' + escapeHTML(c.source||"") + '</td></tr>';
+          return '<tr><td>' + escapeHTML(c.location||"") + '</td><td>' + formatEuro(c.price_per_sqm) + '</td><td>' + escapeHTML(c.source||"") + '</td></tr>';
         }).join("")
       + '</tbody></table>';
+  }
+  if(rmk && rmk.transactions && rmk.transactions.length){
+    html += '<div class="section-title" style="margin-top:22px;font-size:16px">Compravendite reali registrate' + (rmk.radius_tx_m ? ' (raggio ' + (rmk.radius_tx_m/1000).toLocaleString("it-IT") + ' km)' : '') + '</div>'
+      + '<table class="comp-table"><thead><tr><th>Data</th><th>Indirizzo / Tipologia</th><th>Mq</th><th>Prezzo</th><th>€/mq</th><th>Dist.</th></tr></thead><tbody>'
+      + rmk.transactions.map(function(c){
+          return '<tr><td>' + escapeHTML(c.date ? formatDate(c.date) : "") + '</td><td>' + escapeHTML([c.address, c.type, c.category_code].filter(Boolean).join(" · ")) + '</td><td>' + (c.sqm||"") + '</td><td>' + formatEuro(c.price) + '</td><td>' + formatEuro(c.price_per_sqm) + '</td><td>' + (c.distance_km!=null ? c.distance_km.toFixed(2) + ' km' : '') + '</td></tr>';
+        }).join("")
+      + '</tbody></table>';
+  }
+  if(rmk && rmk.listings && rmk.listings.length){
+    html += '<div class="section-title" style="margin-top:22px;font-size:16px">Annunci in vendita nella zona (prezzi richiesti)' + (rmk.radius_listings_m ? ' (raggio ' + (rmk.radius_listings_m/1000).toLocaleString("it-IT") + ' km)' : '') + '</div>'
+      + '<table class="comp-table"><thead><tr><th>Indirizzo</th><th>Tipologia</th><th>Mq</th><th>Prezzo richiesto</th><th>€/mq</th></tr></thead><tbody>'
+      + rmk.listings.map(function(c){
+          return '<tr><td>' + escapeHTML([c.address, c.municipality].filter(Boolean).join(", ")) + '</td><td>' + escapeHTML(c.type||"") + '</td><td>' + (c.sqm||"") + '</td><td>' + formatEuro(c.price) + '</td><td>' + formatEuro(c.price_per_sqm) + '</td></tr>';
+        }).join("")
+      + '</tbody></table>'
+      + '<p class="method-text" style="margin-top:8px;font-size:11px;font-style:italic">I prezzi degli annunci sono prezzi richiesti dai venditori e includono normalmente un margine di trattativa; le compravendite registrate riportano invece il prezzo effettivo dichiarato in atto.</p>';
+  }
+  if(rmk && rmk.sandbox){
+    html += '<p class="method-text" style="margin-top:8px;font-size:11px;color:#a33">Dati di mercato in modalità di prova: valori dimostrativi, non utilizzabili per una valutazione reale.</p>';
   }
   if(narrative.ai_disclaimer){
     html += '<p class="method-text" style="margin-top:10px;font-size:11px;font-style:italic">' + escapeHTML(narrative.ai_disclaimer) + '</p>';
@@ -656,30 +460,6 @@ async function loadAndRender(){
     html += '<p class="method-text">Immobile non locato (o canone non disponibile): il valore si basa interamente sul metodo comparativo.</p>';
   }
 
-  // Caratteristiche distintive (bonus/malus) -- CORRETTO (27/10/2026): nessun dato nascosto al
-  // cliente. Se l'agente ha attribuito un merito/demerito a una o più caratteristiche
-  // (valuation-form.html), il documento stampato deve riportare per intero quali voci sono
-  // state usate, con quale percentuale e sul valore base di quanto, esattamente come appare
-  // nel form -- mai solo il risultato finale senza il dettaglio di come ci si è arrivati.
-  var bonusMalusItems = Array.isArray(v.bonus_malus_items) ? v.bonus_malus_items.filter(function(it){ return it && it.pct; }) : [];
-  var bonusMalusTotalPct = v.bonus_malus_total_pct != null ? v.bonus_malus_total_pct : bonusMalusItems.reduce(function(s,it){ return s + (Number(it.pct)||0); }, 0);
-  if(bonusMalusItems.length && v.raw_estimated_value_min != null){
-    html += '<div class="section">'
-      + '<div class="section-kicker">8bis. Caratteristiche Distintive dell\'Immobile (Bonus/Malus)</div>'
-      + '<div class="section-title">Aggiustamento al Valore di Base</div>'
-      + '<p class="method-text">Il valore ottenuto dalla riconciliazione dei metodi estimativi (' + formatEuro(v.raw_estimated_value_min) + ' – ' + formatEuro(v.raw_estimated_value_max) + ') è stato ulteriormente corretto dall\'agente in base a caratteristiche specifiche rilevate direttamente sull\'immobile durante il sopralluogo, non desumibili dai soli dati comparativi di mercato. Di seguito il dettaglio completo di ogni voce considerata e della percentuale attribuita.</p>'
-      + '<table class="comp-table"><thead><tr><th>Caratteristica</th><th>Aggiustamento</th></tr></thead><tbody>'
-      + bonusMalusItems.map(function(it){
-          var pct = Number(it.pct) || 0;
-          return '<tr><td>' + escapeHTML(it.label || it.key || "—") + '</td><td>' + (pct > 0 ? "+" : "") + pct.toFixed(1) + '%</td></tr>';
-        }).join("")
-      + '</tbody></table>'
-      + '<p class="method-text" style="margin-top:14px"><strong>Aggiustamento totale: ' + (bonusMalusTotalPct > 0 ? "+" : "") + bonusMalusTotalPct.toFixed(1) + '%</strong><br>'
-      + formatEuro(v.raw_estimated_value_min) + ' – ' + formatEuro(v.raw_estimated_value_max) + ' × (1 ' + (bonusMalusTotalPct >= 0 ? '+' : '−') + ' ' + Math.abs(bonusMalusTotalPct).toFixed(1) + '%) = <strong>' + formatEuro(v.estimated_value_min) + ' – ' + formatEuro(v.estimated_value_max) + '</strong></p>'
-      + '<p class="method-text" style="font-size:11px;font-style:italic">Nota metodologica: le percentuali di riferimento per ciascuna voce sono indicative, tratte dalla prassi estimativa comune (non da una tabella fissa o ufficiale): il valore effettivamente applicato è una valutazione professionale dell\'agente, formulata sul posto.</p>'
-      + '</div>';
-  }
-
   html += '<div class="section-title" style="margin-top:24px">Valore di Mercato Stimato</div>';
   if(hasEstimate){
     html += '<div class="value-box">'
@@ -716,100 +496,51 @@ async function loadAndRender(){
       + '</div>';
   }
 
-  // 11. Riferimento fiscale / Dati catastali -- CORRETTO (27/10/2026): prima mostrava SOLO la
-  // sezione principale, ignorando del tutto "cadastral_additional_sections" (dependance,
-  // garage, cantina, altre particelle...) anche quando presenti e salvate -- il riepilogo
-  // doveva riportare TUTTE le voci catastali, non solo la prima. Ora elenca ogni sezione (la
-  // principale + tutte le aggiuntive) con i propri dati, e ricalcola qui il dettaglio completo
-  // del valore catastale per ciascuna (il database salva solo il totale finale, non il
-  // dettaglio per sezione).
-  var additionalSections = Array.isArray(v.cadastral_additional_sections) ? v.cadastral_additional_sections : [];
-  var primaryHasData = v.cadastral_municipality || v.cadastral_category || v.cadastral_income || v.cadastral_surface || v.cadastral_sheet || v.cadastral_parcel || v.cadastral_subalterno;
-  var hasCadastral = primaryHasData || additionalSections.length > 0;
+  // Dati catastali (separati)
+  // Composizione popolazione (eta' + reddito), se presente nello snapshot salvato
+  var popComp = snap.population_composition;
+  if(popComp && (popComp.age_distribution || popComp.income_distribution)){
+    var ageBrackets = ["0-14","15-29","30-44","45-59","60-74","75+"];
+    var incomeBrackets = ["0-10.000€","10.000-15.000€","15.000-26.000€","26.000-55.000€","55.000-75.000€","75.000-120.000€","oltre 120.000€"];
 
+    function bracketBars(distribution, brackets){
+      if(!distribution || !distribution.percentages) return "";
+      return brackets.map(function(b){
+        var pct = distribution.percentages[b];
+        if(pct === undefined || pct === null) return "";
+        return '<div class="pop-bar-row"><div class="pop-bar-label">'+escapeHTML(b)+'</div><div class="pop-bar-track"><div class="pop-bar-fill" style="width:'+Math.max(pct,2)+'%"></div></div><div class="pop-bar-value">'+escapeHTML(pct)+'%</div></div>';
+      }).filter(Boolean).join("");
+    }
+
+    html += '<div class="section">'
+      + '<div class="section-kicker">12. Il Territorio</div>'
+      + '<div class="section-title">Composizione della Popolazione</div>'
+      + '<p class="method-text">Un elemento a favore nella trattativa: chi acquista o investe vuole capire chi vive nella zona. Dati ufficiali, non stime.</p>';
+    if(popComp.age_distribution){
+      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Composizione per età</h3>' + bracketBars(popComp.age_distribution, ageBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.age_distribution.provider_name || "ISTAT") + '</p></div>';
+    }
+    if(popComp.income_distribution){
+      html += '<div class="pop-comp-block"><h3 class="pop-comp-title">Distribuzione economica</h3>' + bracketBars(popComp.income_distribution, incomeBrackets) + '<p class="method-text" style="margin-top:8px;font-size:11px">Fonte: ' + escapeHTML(popComp.income_distribution.provider_name || "MEF - Dipartimento delle Finanze") + '</p></div>';
+    }
+    html += '</div>';
+  }
+
+  var hasCadastral = v.cadastral_category || v.cadastral_income || v.cadastral_surface || v.cadastral_sheet;
   if(hasCadastral){
     html += '<div class="section">'
       + '<div class="section-kicker">11. Riferimento Fiscale</div>'
       + '<div class="section-title">Dati Catastali</div>'
-      + '<div class="cadastral-note">Il valore catastale è un dato fiscale, utilizzato per il calcolo di imposte e tasse: è per natura distinto dal valore di mercato riportato sopra, e i due non vanno confusi tra loro.</div>';
-
-    // Sezione principale
-    if(primaryHasData){
-      html += '<div class="cadastral-unit-block">'
-        + (additionalSections.length ? '<div class="cadastral-unit-heading">Sezione principale</div>' : '')
-        + '<div class="info-grid">'
-        + infoItem("Comune catastale", v.cadastral_municipality)
-        + infoItem("Categoria catastale", v.cadastral_category)
-        + infoItem("Rendita catastale", v.cadastral_income ? formatEuro(v.cadastral_income) : "")
-        + infoItem("Superficie catastale", v.cadastral_surface ? v.cadastral_surface + " mq" : "")
-        + infoItem("Foglio", v.cadastral_sheet)
-        + infoItem("Particella", v.cadastral_parcel)
-        + infoItem("Subalterno", v.cadastral_subalterno)
-        + (v.cadastral_is_prima_casa ? infoItem("Agevolazione", "Prima casa") : "")
-        + '</div>'
-        + '</div>';
-    }
-
-    // Tutte le sezioni catastali aggiuntive (dependance, garage, cantina, altre particelle...)
-    additionalSections.forEach(function(s, i){
-      html += '<div class="cadastral-unit-block">'
-        + '<div class="cadastral-unit-heading">' + escapeHTML(s.label || ("Sezione catastale " + (i + 2))) + '</div>'
-        + '<div class="info-grid">'
-        + infoItem("Comune catastale", s.municipality)
-        + infoItem("Categoria catastale", s.category)
-        + infoItem("Rendita catastale", s.income ? formatEuro(s.income) : "")
-        + infoItem("Superficie catastale", s.surface ? s.surface + " mq" : "")
-        + infoItem("Foglio", s.sheet)
-        + infoItem("Particella", s.parcel)
-        + infoItem("Subalterno", s.subalterno)
-        + (s.is_prima_casa ? infoItem("Agevolazione", "Prima casa (pertinenza)") : "")
-        + '</div>'
-        + '</div>';
-    });
-
-    // Valore catastale totale, ricalcolato qui sezione per sezione (il database salva solo il
-    // totale finale in v.cadastral_value: qui si ricostruisce il dettaglio completo).
-    var breakdown = [];
-    var total = 0;
-    if(v.cadastral_category && v.cadastral_income){
-      var primaryClass = classifyCadastralCategory(v.cadastral_category, !!v.cadastral_is_prima_casa);
-      if(primaryClass){
-        var primaryValue = v.cadastral_income * 1.05 * primaryClass.multiplier;
-        total += primaryValue;
-        breakdown.push({
-          label: additionalSections.length ? "Sezione principale" : "Immobile",
-          detail: "Rendita " + formatEuro(v.cadastral_income) + " × 1,05 × " + primaryClass.multiplier + " (cat. " + primaryClass.group + (v.cadastral_is_prima_casa ? ", prima casa" : "") + ") = " + formatEuro(primaryValue)
-        });
-      }
-    }
-    additionalSections.forEach(function(s, i){
-      if(s.category && s.income){
-        var cls = classifyCadastralCategory(s.category, !!s.is_prima_casa);
-        if(cls){
-          var val = s.income * 1.05 * cls.multiplier;
-          total += val;
-          breakdown.push({
-            label: s.label || ("Sezione catastale " + (i + 2)),
-            detail: "Rendita " + formatEuro(s.income) + " × 1,05 × " + cls.multiplier + " (cat. " + cls.group + (s.is_prima_casa ? ", prima casa" : "") + ") = " + formatEuro(val)
-          });
-        }
-      }
-    });
-
-    if(breakdown.length){
-      var roundedTotal = Math.round(total * 100) / 100;
-      html += '<div class="cadastral-value-box">'
-        + '<div class="cadastral-value-label">Valore catastale' + (breakdown.length > 1 ? ' totale (' + breakdown.length + ' sezioni)' : '') + '</div>'
-        + '<div class="cadastral-value-amount">' + formatEuro(roundedTotal) + '</div>'
-        + '<div class="cadastral-value-detail">'
-        + (breakdown.length > 1
-            ? '<ul class="cadastral-value-breakdown">' + breakdown.map(function(b){ return '<li>' + escapeHTML(b.label) + ': ' + b.detail + '</li>'; }).join("") + '</ul>'
-            : breakdown.map(function(b){ return b.detail; }).join(""))
-        + 'Dato fiscale (D.L. 262/2006, art. 2 c. 45) usato per imposte e tasse: distinto dal valore di mercato riportato in apertura di documento.</div>'
-        + '</div>';
-    }
-
-    html += '</div>';
+      + '<div class="cadastral-note">Il valore catastale è un dato fiscale, utilizzato per il calcolo di imposte e tasse: è per natura distinto dal valore di mercato riportato sopra, e i due non vanno confusi tra loro.</div>'
+      + '<div class="info-grid">'
+      + infoItem("Comune catastale", v.cadastral_municipality)
+      + infoItem("Categoria catastale", v.cadastral_category)
+      + infoItem("Rendita catastale", v.cadastral_income ? formatEuro(v.cadastral_income) : "")
+      + infoItem("Superficie catastale", v.cadastral_surface ? v.cadastral_surface + " mq" : "")
+      + infoItem("Foglio", v.cadastral_sheet)
+      + infoItem("Particella", v.cadastral_parcel)
+      + infoItem("Subalterno", v.cadastral_subalterno)
+      + '</div>'
+      + '</div>';
   }
 
   // Disclaimer
@@ -818,46 +549,9 @@ async function loadAndRender(){
     + '<div class="disclaimer-box">Questa relazione costituisce una stima commerciale basata sulle informazioni disponibili alla data dell\'analisi, comparabili individuati tramite ricerca automatizzata (da verificare nella loro effettiva disponibilità) e dati di mercato pubblici. Non costituisce una perizia tecnica formale né sostituisce la valutazione di un tecnico abilitato. Prima della definitiva immissione sul mercato si raccomanda la verifica di: conformità catastale e urbanistica, contratto di locazione registrato e sua effettiva scadenza, regolarità dei pagamenti, eventuali oneri o vincoli sulla proprietà. Il valore stimato può variare in base a fattori non rilevabili a distanza.</div>'
     + '</div>';
 
-  // Allegato: scansioni visura catastale, stampate FISICAMENTE come pagine finali del
-  // documento (27/10/2026, richiesta esplicita dell'utente: "mi serve che vengano stampate
-  // in automatico quando stampo la valutazione" -- i link da soli non bastano).
-  //
-  // FIX URGENTE (27/10/2026, stesso giorno): la prima versione usava <embed type="application/
-  // pdf"> per i PDF -- il visualizzatore PDF nativo del browser dentro un <embed> e' pesante,
-  // prende il focus e in pratica bloccava/rendeva inutilizzabile il resto della pagina (il
-  // tasto Stampa sembrava "disabilitato"). Sostituito con pdf.js: ogni pagina del PDF viene
-  // disegnata lato client su un <canvas> semplice (nessun plugin nativo, nessun overlay, nessun
-  // blocco) -- stampa in modo affidabile come qualsiasi altra immagine della pagina. Le
-  // immagini restano semplici <img>, mai state un problema.
-  var allVisuraFiles = Array.isArray(v.cadastral_visura_files) ? v.cadastral_visura_files : [];
-  if(allVisuraFiles.length){
-    html += '<div class="section visura-attachments-section" style="page-break-before:always">'
-      + '<div class="section-kicker">Allegato: Scansioni Visura Catastale (' + allVisuraFiles.length + ')</div>'
-      + allVisuraFiles.map(function(f, i){
-          var url = f.url || "";
-          var name = f.name || ("Scansione " + (i + 1));
-          var isPdf = /\.pdf(\?|$)/i.test(url) || /pdf/i.test(name);
-          var body = isPdf
-            ? '<div class="visura-pdf-pages" id="visuraPdfPages_' + i + '" data-pdf-url="' + escapeHTML(url) + '"><div class="visura-pdf-loading">Caricamento scansione…</div></div>'
-            : '<img src="' + escapeHTML(url) + '" class="visura-embed-img" alt="' + escapeHTML(name) + '">';
-          return '<div class="visura-attachment-page">'
-            + '<div class="cadastral-unit-heading visura-attachment-heading">' + escapeHTML(name) + '</div>'
-            + body
-            + '<div class="visura-attachment-link" style="font-size:10px;margin-top:6px"><a href="' + escapeHTML(url) + '" target="_blank" rel="noopener">Apri scansione originale</a></div>'
-            + '</div>';
-        }).join("")
-      + '</div>';
-  }
-
   html += '<div class="footer-note">IMMONOVA · Off Market Consulting</div>';
 
   pageContent.innerHTML = html;
-
-  /* ---- Rende i PDF allegati come immagini (canvas) via pdf.js, non bloccante: il tasto
-     Stampa resta sempre cliccabile mentre le scansioni caricano in background. Se una scansione
-     non si riesce a leggere (CORS, file corrotto, ecc.) resta comunque il link di apertura
-     diretta sotto, mai una pagina bianca senza spiegazione. ---- */
-  if(allVisuraFiles.length) renderVisuraPdfPages();
 }
 
 (async function init(){
