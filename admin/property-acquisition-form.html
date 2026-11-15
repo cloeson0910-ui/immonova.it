@@ -191,7 +191,7 @@
   <div class="section">
     <h2 class="section-title">Planimetria</h2>
     <p class="section-hint">Carica la planimetria catastale e cerchia direttamente sopra le differenze rispetto allo stato dei luoghi, aggiungendo una nota numerata per ognuna.</p>
-    <input type="file" id="floorplanInput" accept="image/*" style="display:none">
+    <input type="file" id="floorplanInput" accept="image/*,application/pdf,.pdf" style="display:none">
     <button type="button" class="secondary" id="floorplanUploadBtn">📐 Carica planimetria</button>
     <div id="floorplanToolbar" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
       <button type="button" class="secondary" id="floorplanToolCircle">◯ Cerchia</button>
@@ -551,11 +551,57 @@ function fpSetTool(tool){
 function fpOnFileChange(e){
   var file = e.target.files[0];
   if(!file) return;
-  fpState.pendingFile = file;
   fpState.existingUrl = null;
+  var isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
+  if(isPdf){
+    fpPdfToImage(file).then(function(res){
+      fpState.pendingFile = res.file;
+      fpState.actions = []; fpLoadImage(res.dataUrl); fpRenderNotesList();
+    }).catch(function(err){
+      console.error(err);
+      alert("Impossibile leggere il PDF della planimetria: " + (err && err.message ? err.message : err));
+    });
+    e.target.value = "";
+    return;
+  }
+  fpState.pendingFile = file;
   var reader = new FileReader();
   reader.onload = function(ev){ fpState.actions = []; fpLoadImage(ev.target.result); fpRenderNotesList(); };
   reader.readAsDataURL(file);
+  e.target.value = "";
+}
+
+/* PDF planimetria (es. planimetria catastale scaricata dal portale AdE): si converte la prima
+   pagina in immagine ad alta risoluzione nel browser (pdf.js), poi si usa esattamente come
+   una foto: annotazioni, salvataggio, ecc. */
+var FP_PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+var FP_PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+function fpLoadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise(function(resolve, reject){
+    var s = document.createElement("script");
+    s.src = FP_PDFJS_URL;
+    s.onload = function(){ window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP_PDFJS_WORKER; resolve(window.pdfjsLib); };
+    s.onerror = function(){ reject(new Error("libreria PDF non caricata")); };
+    document.head.appendChild(s);
+  });
+}
+async function fpPdfToImage(file){
+  var lib = await fpLoadPdfJs();
+  var buf = await file.arrayBuffer();
+  var pdf = await lib.getDocument({ data: buf }).promise;
+  var page = await pdf.getPage(1);
+  var base = page.getViewport({ scale: 1 });
+  var scale = Math.min(6, Math.max(2, 3000 / Math.max(base.width, base.height)));
+  var vp = page.getViewport({ scale: scale });
+  var c = document.createElement("canvas");
+  c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  var ctx = c.getContext("2d");
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  var blob = await new Promise(function(r){ c.toBlob(r, "image/png"); });
+  var name = (file.name || "planimetria").replace(/\.pdf$/i, "") + ".png";
+  return { file: new File([blob], name, { type: "image/png" }), dataUrl: c.toDataURL("image/png") };
 }
 
 function fpLoadImage(src){
