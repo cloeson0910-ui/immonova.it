@@ -45,6 +45,29 @@ td.k{width:30%;color:#5b471f;background:#fbf8f2}
 .company-head h3{font-size:22px;font-weight:300;color:#2b2620}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .hist td{font-size:12px}
+.crumbs{font-size:12px;color:#7d6640;margin-bottom:10px}.crumbs a{color:#a67f34;cursor:pointer;text-decoration:underline}
+.subj{background:#fff;border:1px solid rgba(166,127,52,.25);padding:22px 24px;margin-top:16px}
+.subj-kind{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:#a67f34}
+.subj h2{font-size:28px;font-weight:300;color:#2b2620;margin:4px 0 2px}
+.subj-id{font-size:13px;color:#6b5c44}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0 4px;padding-top:14px;border-top:1px solid rgba(166,127,52,.15)}
+.tool{padding:8px 12px;border:1px solid rgba(166,127,52,.45);background:#fbf8f2;color:#5b461d;font-family:inherit;font-size:12.5px;cursor:pointer}
+.tool:hover{background:#a67f34;color:#fff}.tool .eur{font-size:10px;margin-left:5px;opacity:.7}
+.tool-sep{width:1px;height:26px;background:rgba(166,127,52,.25);margin:0 4px}
+.tools select{padding:8px;border:1px solid rgba(166,127,52,.35);font-family:inherit;font-size:12.5px;background:#fff}
+.sec{margin-top:18px}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(166,127,52,.2);padding-bottom:6px;margin-bottom:8px}
+.sec-h b{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#a67f34}.sec-h span{font-size:11px;color:#7d6640}
+.rowp{display:grid;grid-template-columns:1fr 160px 90px;gap:14px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(166,127,52,.1)}
+.rowp .who{font-size:15px;color:#2b2620}.rowp .meta{font-size:12px;color:#7d6640;margin-top:2px}
+.bar{height:8px;background:#efe6d4;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;background:#a67f34}
+.pct{font-size:13px;color:#2b2620;text-align:right;margin-top:3px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.tile{background:#fbf8f2;border:1px solid rgba(166,127,52,.15);padding:10px 12px}.tile .l{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7d6640}.tile .v{font-size:14px;color:#2b2620;margin-top:4px;word-break:break-word}
+details{margin-top:10px;font-size:13px}summary{cursor:pointer;color:#a67f34}
+.empty-sec{font-size:13px;color:#7d6640;padding:8px 0}
+.reslist .ri{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(166,127,52,.1);align-items:center}
+@media(max-width:700px){.rowp{grid-template-columns:1fr}}
 .note{font-size:12px;color:#6b5c44;line-height:1.6}
 @media(max-width:700px){input[type=text]{min-width:0;width:100%}.container{padding:20px 14px}}
 </style>
@@ -116,44 +139,114 @@ async function paidCall(body){
 }
 
 /* ---------- visualizzazione generica dei dati ---------- */
+const LBL = { companyName:"Ragione sociale", denominazione:"Ragione sociale", name:"Nome", surname:"Cognome", taxCode:"Codice fiscale", vatCode:"Partita IVA", percentShare:"Quota %", role:"Carica", roleDescription:"Carica", startDate:"Dal", endDate:"Al", birthDate:"Data di nascita", birthTown:"Luogo di nascita", town:"Comune", province:"Provincia", address:"Indirizzo", streetName:"Via", zipCode:"CAP", registrationDate:"Data iscrizione", activityStatus:"Stato attività", atecoCode:"Codice ATECO", legalForm:"Forma giuridica", shareCapital:"Capitale sociale", pec:"PEC", sdiCode:"Codice SDI", lastUpdateDate:"Ultimo aggiornamento", id:"ID", cf:"Codice fiscale" };
+const lbl = k => LBL[k] || k.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+const blank = v => v == null || v === "" || (Array.isArray(v) && !v.length);
 const CF_KEYS = /^(cf|codice_?fiscale|taxcode|tax_code|fiscalcode|cf_piva|vatcode|vat_code|partita_?iva)$/i;
 function cell(v, key){
   if(v == null || v === "") return "";
   if(typeof v === "object") return render(v, 1);
   const s = String(v);
-  if(key && CF_KEYS.test(key) && isId(s.trim())) return esc(s) + ' <button class="btn sec mini" type="button" data-look="' + esc(s.trim()) + '">Cerca</button>';
+  if(key && CF_KEYS.test(key) && isId(s.trim())) return esc(s) + ' <button class="btn sec mini" type="button" data-look="' + esc(s.trim()) + '">Apri</button>';
   return esc(s);
 }
 function render(v, depth){
   depth = depth || 0;
-  if(v == null) return '<span class="note">—</span>';
+  if(v == null || v === "") return '<span class="note">Nessun dato restituito dal Registro Imprese per questa voce.</span>';
   if(Array.isArray(v)){
     if(!v.length) return '<span class="note">Nessun dato</span>';
     if(v.every(x => x && typeof x === "object" && !Array.isArray(x))){
-      const cols = []; v.forEach(o => Object.keys(o).forEach(k => { if(!cols.includes(k)) cols.push(k); }));
-      return '<table><thead><tr>' + cols.map(c => '<th>' + esc(c.replace(/_/g, " ")) + '</th>').join("") + '</tr></thead><tbody>' +
+      const cols = []; v.forEach(o => Object.keys(o).forEach(k => { if(!cols.includes(k) && v.some(x => !blank(x[k]))) cols.push(k); }));
+      return '<table><thead><tr>' + cols.map(c => '<th>' + esc(lbl(c)) + '</th>').join("") + '</tr></thead><tbody>' +
         v.map(o => '<tr>' + cols.map(c => '<td>' + cell(o[c], c) + '</td>').join("") + '</tr>').join("") + '</tbody></table>';
     }
     return v.map(x => typeof x === "object" ? render(x, depth + 1) : esc(x)).join(", ");
   }
   if(typeof v === "object"){
-    const keys = Object.keys(v); if(!keys.length) return '<span class="note">—</span>';
-    return '<table>' + keys.map(k => '<tr><td class="k">' + esc(k.replace(/_/g, " ")) + '</td><td>' + cell(v[k], k) + '</td></tr>').join("") + '</table>';
+    const keys = Object.keys(v).filter(k => !blank(v[k])); if(!keys.length) return '<span class="note">Nessun dato</span>';
+    return '<table>' + keys.map(k => '<tr><td class="k">' + esc(lbl(k)) + '</td><td>' + cell(v[k], k) + '</td></tr>').join("") + '</table>';
   }
   return esc(v);
 }
 function unwrap(d){ let x = d && d.data; if(x && x.data !== undefined && (x.success !== undefined || x.message !== undefined)) x = x.data; return x; }
-function addBlock(title, html){
-  const div = document.createElement("div"); div.className = "res-block";
-  div.innerHTML = '<div class="res-title">' + esc(title) + '</div>' + html;
-  $("results").appendChild(div); bindLook(div); div.scrollIntoView({ behavior:"smooth", block:"start" });
-  return div;
+/* ---------- scheda soggetto (una alla volta, con percorso di navigazione) ---------- */
+let trail = [];   // [{id, name, kind}]
+const g = (o, ...ks) => { for(const k of ks){ const v = k.split(".").reduce((a, p) => a && a[p], o); if(!blank(v)) return v; } return ""; };
+const fullName = o => g(o, "companyName", "denominazione", "ragione_sociale") || [g(o, "name", "nome"), g(o, "surname", "cognome")].filter(Boolean).join(" ") || g(o, "taxCode", "cf");
+function addBlock(title, html){ // usato solo per elenchi di risultati
+  $("results").innerHTML = '<div class="subj"><div class="subj-kind">' + esc(title) + '</div>' + html + '</div>';
+  const d = $("results").firstElementChild; bindLook(d); return d;
 }
 function bindLook(root){
-  root.querySelectorAll("[data-look]").forEach(b => b.addEventListener("click", () => {
-    const v = b.dataset.look;
-    if(/^\d{11}$/.test(v)) openCompany(v, v); else { switchTab("per"); $("perQ").value = v; personProperties(v); }
+  root.querySelectorAll("[data-look]").forEach(b => b.addEventListener("click", () => openSubject(b.dataset.look, b.dataset.name || b.dataset.look, true)));
+}
+function openSubject(id, name, push){
+  id = String(id).trim().toUpperCase();
+  const kind = /^\d{11}$/.test(id) ? "societa" : "persona";
+  if(push){ const i = trail.findIndex(t => t.id === id); if(i >= 0) trail = trail.slice(0, i); trail.push({ id, name, kind }); }
+  else trail = [{ id, name, kind }];
+  const crumbs = trail.length > 1 ? '<div class="crumbs">' + trail.map((t, i) => i < trail.length - 1 ? '<a data-tr="' + i + '">' + esc(t.name) + '</a>' : '<b>' + esc(t.name) + '</b>').join(" › ") + '</div>' : "";
+  const soc = kind === "societa";
+  $("results").innerHTML = crumbs + '<div class="subj"><div class="subj-kind">' + (soc ? "Società" : "Persona") + '</div><h2>' + esc(name) + '</h2><div class="subj-id">' + (soc ? "P.IVA / C.F. " : "Codice fiscale ") + esc(id) + '</div>' +
+    '<div class="tools">' +
+    (soc ? '<button class="tool" data-a="company_start">Dati società<span class="eur">€</span></button><button class="tool" data-a="company_shareholders">Soci<span class="eur">€</span></button><button class="tool" data-a="company_stakeholders">Amministratori<span class="eur">€</span></button>' : '') +
+    '<button class="tool" data-a="catasto">Immobili intestati<span class="eur">€</span></button>' +
+    (soc ? '<span class="tool-sep"></span><select class="vc-tipo" title="Forma giuridica"><option value="ordinaria-societa-capitale">S.r.l. / S.p.A.</option><option value="ordinaria-societa-persone">S.n.c. / S.a.s.</option><option value="ordinaria-impresa-individuale">Impresa individuale</option><option value="storica-societa-capitale">Storica S.r.l./S.p.A.</option><option value="storica-societa-persone">Storica S.n.c./S.a.s.</option><option value="storica-impresa-individuale">Storica impr. individuale</option></select><button class="tool" data-a="visura_camerale">Visura camerale PDF<span class="eur">€</span></button>' : '') +
+    '</div><div class="secs"></div></div>';
+  $("results").querySelectorAll("[data-tr]").forEach(a => a.addEventListener("click", () => { const t = trail[Number(a.dataset.tr)]; trail = trail.slice(0, Number(a.dataset.tr)); openSubject(t.id, t.name, true); }));
+  const box = $("results").querySelector(".subj"), secs = box.querySelector(".secs");
+  box.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", async () => {
+    try{
+      if(b.dataset.a === "catasto"){ const sec = section(secs, "imm", "Immobili intestati"); await catastoFlow(id, sec); return; }
+      if(b.dataset.a === "visura_camerale"){ await visuraCamerale(id, box.querySelector(".vc-tipo").value, name); return; }
+      const d = await paidCall({ action:b.dataset.a, id }); if(!d) return;
+      const data = unwrap(d);
+      if(b.dataset.a === "company_shareholders") renderSoci(section(secs, "soci", "Soci", d), data);
+      else if(b.dataset.a === "company_stakeholders") renderAmm(section(secs, "amm", "Amministratori e soggetti collegati", d), data);
+      else { renderDati(section(secs, "dati", "Dati della società", d), data); const nm = fullName(Array.isArray(data) ? data[0] || {} : data || {}); if(nm && nm !== id){ trail[trail.length - 1].name = nm; box.querySelector("h2").textContent = nm; } }
+    }catch(e){ setStatus(e.message, "err"); }
   }));
+  $("results").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+function section(secs, key, title, d){
+  let el = secs.querySelector('[data-sec="' + key + '"]');
+  if(!el){ el = document.createElement("div"); el.className = "sec"; el.dataset.sec = key; secs.appendChild(el); }
+  el.innerHTML = '<div class="sec-h"><b>' + esc(title) + '</b><span>' + (d && d.cached ? "salvata il " + new Date(d.cached_at).toLocaleDateString("it-IT") + " · gratis" : "") + '</span></div><div class="sec-b"></div>';
+  return el.querySelector(".sec-b");
+}
+const asList = x => Array.isArray(x) ? x : (x && Array.isArray(x.data) ? x.data : (x && typeof x === "object" ? [x] : []));
+function renderSoci(el, data){
+  const list = asList(data).filter(o => o && typeof o === "object");
+  if(!list.length){ el.innerHTML = '<div class="empty-sec">Nessun socio restituito. Nota: qui compaiono solo i soci sopra il 10%; per l\'elenco completo usa la visura camerale.</div>'; return; }
+  el.innerHTML = list.map(o => {
+    const nm = fullName(o), cf = g(o, "taxCode", "cf", "vatCode"), pct = Number(g(o, "percentShare", "quota", "percentuale")) || 0, isSoc = !!g(o, "companyName", "denominazione");
+    return '<div class="rowp"><div><div class="who">' + esc(nm) + '</div><div class="meta">' + (isSoc ? "Società" : "Persona") + (cf ? " · " + esc(cf) : "") + '</div></div>' +
+      '<div><div class="bar"><i style="width:' + Math.min(100, pct) + '%"></i></div><div class="pct">' + (pct ? pct.toLocaleString("it-IT") + "%" : "—") + '</div></div>' +
+      '<div>' + (cf && isId(String(cf)) ? '<button class="tool" data-look="' + esc(cf) + '" data-name="' + esc(nm) + '">Apri ›</button>' : '') + '</div></div>';
+  }).join("");
+  bindLook(el);
+}
+function renderAmm(el, data){
+  const list = asList(data).filter(o => o && typeof o === "object");
+  if(!list.length){ el.innerHTML = '<div class="empty-sec">Nessun amministratore restituito dal Registro Imprese (in modalità di prova molti dati sono vuoti).</div>'; return; }
+  el.innerHTML = list.map(o => {
+    const nm = fullName(o), cf = g(o, "taxCode", "cf", "vatCode"), role = g(o, "roleDescription", "role", "carica", "position"), from = g(o, "startDate", "dal");
+    return '<div class="rowp"><div><div class="who">' + esc(nm) + '</div><div class="meta">' + esc([role, from ? "dal " + from : "", cf].filter(Boolean).join(" · ")) + '</div></div><div></div>' +
+      '<div>' + (cf && isId(String(cf)) ? '<button class="tool" data-look="' + esc(cf) + '" data-name="' + esc(nm) + '">Apri ›</button>' : '') + '</div></div>';
+  }).join("");
+  bindLook(el);
+}
+function flatten(o, pre, out){ out = out || {}; Object.keys(o || {}).forEach(k => { const v = o[k]; if(v && typeof v === "object" && !Array.isArray(v)) flatten(v, pre + k + ".", out); else if(!blank(v)) out[pre + k] = Array.isArray(v) ? v.map(x => typeof x === "object" ? fullName(x) || JSON.stringify(x) : x).join(", ") : v; }); return out; }
+function renderDati(el, data){
+  const o = Array.isArray(data) ? data[0] : (data && Array.isArray(data.data) ? data.data[0] : data);
+  if(!o || typeof o !== "object"){ el.innerHTML = '<div class="empty-sec">Nessun dato restituito.</div>'; return; }
+  const f = flatten(o, "");
+  const KEY = [["Ragione sociale",["companyName","denominazione"]],["Partita IVA",["vatCode"]],["Codice fiscale",["taxCode"]],["Stato",["activityStatus","companyStatus"]],["Forma giuridica",["detailedLegalForm.description","legalForm"]],["Sede",["address.registeredOffice.streetName","address.registeredOffice.town","address"]],["Comune",["address.registeredOffice.town","town"]],["Provincia",["address.registeredOffice.province","province"]],["Data iscrizione",["registrationDate"]],["ATECO",["atecoClassification.ateco.description","atecoCode"]],["PEC",["pec"]],["Capitale sociale",["shareCapital"]]];
+  const used = new Set();
+  const tiles = KEY.map(([l, ks]) => { const k = ks.find(k => !blank(f[k])); if(!k) return ""; used.add(k); return '<div class="tile"><div class="l">' + esc(l) + '</div><div class="v">' + esc(f[k]) + '</div></div>'; }).join("");
+  const rest = Object.keys(f).filter(k => !used.has(k) && !/^id$|\.id$/.test(k));
+  el.innerHTML = (tiles ? '<div class="tiles">' + tiles + '</div>' : '') +
+    (rest.length ? '<details><summary>Altri dati (' + rest.length + ')</summary><table>' + rest.map(k => '<tr><td class="k">' + esc(k.split(".").map(lbl).join(" › ")) + '</td><td>' + esc(f[k]) + '</td></tr>').join("") + '</table></details>' : '');
 }
 
 /* ---------- società ---------- */
@@ -162,43 +255,14 @@ async function companySearch(){
   if(!q){ setStatus("Scrivi un nome o una partita IVA.", "err"); return; }
   $("results").innerHTML = "";
   try{
-    if(isId(q.toUpperCase())){ openCompany(q.toUpperCase(), q.toUpperCase()); return; }
+    if(isId(q.toUpperCase())){ openSubject(q.toUpperCase(), q.toUpperCase(), false); return; }
     const d = await paidCall({ action:"company_search", name:q, province:$("socProv").value.trim() }); if(!d) return;
-    const list = unwrap(d);
-    const arr = Array.isArray(list) ? list : (list && Array.isArray(list.data) ? list.data : []);
-    if(!arr.length){ addBlock("Risultati per \"" + q + "\"", '<div class="note">Nessuna società trovata.</div>'); return; }
-    addBlock("Risultati per \"" + q + "\" (" + arr.length + ")", '<table><thead><tr><th>Denominazione</th><th>Comune</th><th>P.IVA / C.F.</th><th></th></tr></thead><tbody>' +
-      arr.map(c => { const id = c.vatCode || c.taxCode || c.partita_iva || c.codice_fiscale || c.id || ""; return '<tr><td>' + esc(c.companyName || c.denominazione || c.name || "") + '</td><td>' + esc(c.town || c.comune || (c.address && c.address.registeredOffice && c.address.registeredOffice.town) || "") + '</td><td>' + esc(c.vatCode || c.taxCode || c.partita_iva || "") + '</td><td><button class="btn sec mini" type="button" data-open="' + esc(id) + '" data-name="' + esc(c.companyName || c.denominazione || "") + '">Apri</button></td></tr>'; }).join("") + '</tbody></table>')
-      .querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => openCompany(b.dataset.open, b.dataset.name)));
+    const arr = asList(unwrap(d));
+    if(!arr.length){ addBlock("Risultati per \"" + q + "\"", '<div class="empty-sec">Nessuna società trovata.</div>'); return; }
+    addBlock(arr.length + " risultati per \"" + q + "\"", '<div class="reslist">' + arr.map(c => { const id = g(c, "vatCode", "taxCode", "partita_iva", "id"), nm = fullName(c); return '<div class="ri"><div><div class="who" style="font-size:15px">' + esc(nm) + '</div><div class="meta" style="font-size:12px;color:#7d6640">' + esc([g(c, "address.registeredOffice.town", "town", "comune"), id].filter(Boolean).join(" · ")) + '</div></div><button class="tool" data-look="' + esc(id) + '" data-name="' + esc(nm) + '">Apri ›</button></div>'; }).join("") + '</div>');
   }catch(e){ setStatus(e.message, "err"); }
 }
-function openCompany(id, name){
-  const div = addBlock("Società " + (name || id), '<div class="company-head"><h3>' + esc(name || id) + '</h3><span class="note">Identificativo: ' + esc(id) + '</span></div>' +
-    '<div class="actions">' +
-    '<button class="btn" data-a="company_start" type="button">Dati base <span class="paid">€</span></button>' +
-    '<button class="btn" data-a="company_shareholders" type="button">Soci <span class="paid">€</span></button>' +
-    '<button class="btn" data-a="company_stakeholders" type="button">Amministratori e soggetti <span class="paid">€</span></button>' +
-    '<button class="btn" data-a="catasto" type="button">Immobili intestati <span class="paid">€</span></button></div>' +
-    '<div class="actions"><select class="vc-tipo" style="padding:10px;border:1px solid rgba(166,127,52,.35);font-family:inherit">' +
-      '<option value="ordinaria-societa-capitale">Società di capitali (S.r.l., S.p.A.…)</option>' +
-      '<option value="ordinaria-societa-persone">Società di persone (S.n.c., S.a.s.…)</option>' +
-      '<option value="ordinaria-impresa-individuale">Impresa individuale</option>' +
-      '<option value="storica-societa-capitale">Storica – società di capitali</option>' +
-      '<option value="storica-societa-persone">Storica – società di persone</option>' +
-      '<option value="storica-impresa-individuale">Storica – impresa individuale</option></select>' +
-    '<button class="btn" data-a="visura_camerale" type="button">Visura camerale completa (PDF) <span class="paid">€</span></button></div>' +
-    '<div class="note">La visura camerale contiene tutti i soci con le quote, amministratori, sindaci, sedi e partecipazioni. Scegli la forma giuridica giusta: se non corrisponde, il Registro Imprese rifiuta la richiesta.</div><div class="cres"></div>');
-  div.querySelectorAll("[data-a]").forEach(b => b.addEventListener("click", async () => {
-    const out = div.querySelector(".cres");
-    try{
-      if(b.dataset.a === "catasto"){ await catastoFlow(id, out); return; }
-      if(b.dataset.a === "visura_camerale"){ await visuraCamerale(id, div.querySelector(".vc-tipo").value, name || id); return; }
-      const d = await paidCall({ action:b.dataset.a, id }); if(!d) return;
-      const sec = document.createElement("div"); sec.innerHTML = '<div class="res-title" style="margin-top:12px">' + esc(LABELS[b.dataset.a]) + '</div>' + render(unwrap(d));
-      out.appendChild(sec); bindLook(sec);
-    }catch(e){ setStatus(e.message, "err"); }
-  }));
-}
+function openCompany(id, name){ openSubject(id, name, false); }
 
 /* ---------- visura camerale ---------- */
 async function visuraCamerale(id, tipo, name){
@@ -233,8 +297,7 @@ function loadJsZip(){ return window.JSZip ? Promise.resolve() : new Promise((ok,
 async function personProperties(cf){
   cf = (cf || $("perQ").value).trim().toUpperCase();
   if(!isId(cf)){ setStatus("Codice fiscale o partita IVA non valido.", "err"); return; }
-  const div = addBlock("Immobili intestati a " + cf, '<div class="cres"></div>');
-  try{ await catastoFlow(cf, div.querySelector(".cres")); }catch(e){ setStatus(e.message, "err"); }
+  openSubject(cf, cf, false);
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function poll(action, id, done, extra){
@@ -255,12 +318,12 @@ async function catastoFlow(cf, out){
   setStatus("Ricerca catastale completata.", "ok");
   const sogg = (x.risultato && x.risultato.soggetti) || [];
   const sec = document.createElement("div");
-  if(!sogg.length){ sec.innerHTML = '<div class="note">Nessun immobile intestato trovato' + (x.esito && x.esito !== "OK" ? " (esito: " + esc(x.esito) + ")" : "") + '.</div>'; out.appendChild(sec); return; }
-  sec.innerHTML = sogg.map((s, n) => '<div style="margin-top:10px"><b>' + esc(s.denominazione || ((s.cognome || "") + " " + (s.nome || ""))) + '</b> ' + esc(s.sede || s.luogo_nascita || "") + ' · ' + esc(s.cf || cf) +
-    render((s.catasti || []).map(c => ({ comune:c.citta || c.comune, provincia:c.provincia, fabbricati:c.fabbricati, terreni:c.terreni }))) +
-    (s.id_soggetto ? '<button class="btn mini" type="button" data-vis="' + n + '">Visura per soggetto (PDF con l\'elenco degli immobili) <span class="paid">€</span></button>' : '') + '</div>').join("") +
+  if(!sogg.length){ out.innerHTML = ""; sec.innerHTML = '<div class="empty-sec">Nessun immobile intestato trovato' + (x.esito && x.esito !== "OK" ? " (esito: " + esc(x.esito) + ")" : "") + '.</div>'; out.appendChild(sec); return; }
+  sec.innerHTML = sogg.map((s, n) => '<div style="margin-top:10px"><div class="who" style="font-size:15px">' + esc(s.denominazione || ((s.cognome || "") + " " + (s.nome || ""))) + '</div><div class="meta" style="font-size:12px;color:#7d6640">' + esc([s.sede || s.luogo_nascita, s.cf || cf].filter(Boolean).join(" · ")) + '</div>' +
+    '<table style="margin-top:8px"><thead><tr><th>Comune</th><th style="text-align:right">Fabbricati</th><th style="text-align:right">Terreni</th></tr></thead><tbody>' + (s.catasti || []).map(c => '<tr><td>' + esc(c.citta || c.comune || "") + (c.provincia ? " (" + esc(c.provincia) + ")" : "") + '</td><td style="text-align:right">' + esc(c.fabbricati || 0) + '</td><td style="text-align:right">' + esc(c.terreni || 0) + '</td></tr>').join("") + '</tbody></table>' +
+    (s.id_soggetto ? '<button class="tool" type="button" data-vis="' + n + '" style="margin-top:8px">Visura per soggetto: elenco completo immobili (PDF)<span class="eur">€</span></button>' : '') + '</div>').join("") +
     '<div class="note" style="margin-top:8px">La ricerca nazionale indica in quali comuni il soggetto ha fabbricati o terreni. L\'elenco completo con foglio, particella e rendita è nella visura per soggetto.</div>';
-  out.appendChild(sec);
+  out.innerHTML = ""; out.appendChild(sec);
   sec.querySelectorAll("[data-vis]").forEach(b => b.addEventListener("click", async () => {
     try{
       const s = sogg[Number(b.dataset.vis)];
