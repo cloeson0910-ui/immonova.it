@@ -331,8 +331,6 @@ async function loadAndRender(){
 
   var allComps = internalComps.map(function(c){ return { location: c.title || "Opportunità IMMONOVA", price_per_sqm: c.pricePerSqm, source: "IMMONOVA" }; })
     .concat(aiComps.map(function(c){ return { location: c.location, price_per_sqm: c.price_per_sqm, source: c.source || "Ricerca web" }; }));
-  if(rmk && rmk.listings_median) allComps.push({ location: "Mediana annunci in vendita (" + rmk.listings_count + ")", price_per_sqm: rmk.listings_median, source: "Portali immobiliari" });
-  if(rmk && rmk.transactions_median) allComps.push({ location: "Mediana compravendite reali (" + rmk.transactions_count + ")", price_per_sqm: rmk.transactions_median, source: "Atti di compravendita" });
 
   if(allComps.length){
     html += '<table class="comp-table"><thead><tr><th>Comparabile</th><th>€/mq</th><th>Fonte</th></tr></thead><tbody>'
@@ -347,7 +345,8 @@ async function loadAndRender(){
       + rmk.transactions.map(function(c){
           return '<tr><td>' + escapeHTML(c.date ? formatDate(c.date) : "") + '</td><td>' + escapeHTML([c.address, c.type, c.category_code].filter(Boolean).join(" · ")) + '</td><td>' + (c.sqm||"") + '</td><td>' + formatEuro(c.price) + '</td><td>' + formatEuro(c.price_per_sqm) + '</td><td>' + (c.distance_km!=null ? c.distance_km.toFixed(2) + ' km' : '') + '</td></tr>';
         }).join("")
-      + '</tbody></table>';
+      + '</tbody></table>'
+      + (rmk.transactions_median ? '<p class="method-text" style="margin-top:8px"><strong>Valore mediano delle compravendite: ' + formatEuro(rmk.transactions_median) + '/mq</strong> (' + rmk.transactions_count + ' atti)</p>' : '');
   }
   if(rmk && rmk.listings && rmk.listings.length){
     html += '<div class="section-title" style="margin-top:22px;font-size:16px">Annunci in vendita nella zona (prezzi richiesti)' + (rmk.radius_listings_m ? ' (raggio ' + (rmk.radius_listings_m/1000).toLocaleString("it-IT") + ' km)' : '') + '</div>'
@@ -356,6 +355,7 @@ async function loadAndRender(){
           return '<tr><td>' + escapeHTML([c.address, c.municipality].filter(Boolean).join(", ")) + '</td><td>' + escapeHTML(c.type||"") + '</td><td>' + (c.sqm||"") + '</td><td>' + formatEuro(c.price) + '</td><td>' + formatEuro(c.price_per_sqm) + '</td></tr>';
         }).join("")
       + '</tbody></table>'
+      + (rmk.listings_median ? '<p class="method-text" style="margin-top:8px"><strong>Valore mediano degli annunci: ' + formatEuro(rmk.listings_median) + '/mq</strong> (' + rmk.listings_count + ' annunci)</p>' : '')
       + '<p class="method-text" style="margin-top:8px;font-size:11px;font-style:italic">I prezzi degli annunci sono prezzi richiesti dai venditori e includono normalmente un margine di trattativa; le compravendite registrate riportano invece il prezzo effettivo dichiarato in atto.</p>';
   }
   if(rmk && rmk.sandbox){
