@@ -664,27 +664,40 @@ function haversineDistanceKm(lat1, lng1, lat2, lng2){
   return R * c;
 }
 
-async function geocodeAddress(address, municipality, province, region){
-  var queryParts = [address, municipality, province, region, "Italia"].filter(Boolean);
-  if(!queryParts.length) return { lat:null, lng:null, precision:null };
-  var q = queryParts.join(", ");
+async function geocodeOnce(q){
   var controller = new AbortController();
   var timer = setTimeout(function(){ controller.abort(); }, GEOCODE_TIMEOUT_MS);
   try{
     var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q=" + encodeURIComponent(q);
     var res = await fetch(url, { signal: controller.signal, headers: { "Accept":"application/json" } });
-    if(!res.ok) return { lat:null, lng:null, precision:null };
+    if(!res.ok) return null;
     var data = await res.json();
-    if(!Array.isArray(data) || !data.length) return { lat:null, lng:null, precision:null };
+    if(!Array.isArray(data) || !data.length) return null;
     var lat = Number(data[0].lat), lng = Number(data[0].lon);
-    if(!Number.isFinite(lat) || !Number.isFinite(lng)) return { lat:null, lng:null, precision:null };
-    return { lat:lat, lng:lng, precision: address ? "address" : "municipality" };
-  }catch(e){
-    console.warn("Geocodifica non disponibile (non bloccante), si ripiega sul criterio comune/zona:", e);
-    return { lat:null, lng:null, precision:null };
-  }finally{
-    clearTimeout(timer);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat:lat, lng:lng } : null;
+  }catch(e){ return null; }
+  finally{ clearTimeout(timer); }
+}
+/* Tentativi in ordine: indirizzo completo -> indirizzo ripulito (prima via, senza "angolo",
+   "incrocio", "snc", civici tra parentesi) -> seconda via dell'incrocio -> solo comune.
+   Cosi' un indirizzo scritto "Via X angolo Via Y" non fa piu' saltare la geolocalizzazione. */
+async function geocodeAddress(address, municipality, province, region){
+  var tail = [municipality, province, region, "Italia"].filter(Boolean).join(", ");
+  var attempts = [];
+  if(address){
+    var a = String(address).trim();
+    attempts.push({ q: a + ", " + tail, precision:"address" });
+    var parts = a.split(/\s+(?:angolo|ang\.|incrocio|all'incrocio con|e)\s+|\s*[\/(]\s*/i).map(function(x){ return x.replace(/\b(snc|s\.n\.c\.)\b/ig,"").replace(/[),]+$/,"").trim(); }).filter(function(x){ return x.length > 3; });
+    parts.forEach(function(p){ if(p !== a) attempts.push({ q: p + ", " + tail, precision:"street" }); });
   }
+  if(municipality) attempts.push({ q: tail, precision:"municipality" });
+  for(var i=0;i<attempts.length;i++){
+    if(i > 0) await new Promise(function(r){ setTimeout(r, 1100); }); // limite Nominatim 1 richiesta/secondo
+    var hit = await geocodeOnce(attempts[i].q);
+    if(hit) return { lat:hit.lat, lng:hit.lng, precision:attempts[i].precision };
+  }
+  console.warn("Geocodifica non riuscita per tutti i tentativi:", attempts.map(function(x){ return x.q; }));
+  return { lat:null, lng:null, precision:null };
 }
 
 /* ---- Comparabili interni: altre opportunita' IMMONOVA gia' pubblicate, stessa categoria,
@@ -760,10 +773,10 @@ async function findInternalComparables(category, province, municipality, hasSeaV
     withPricePerSqm = sameMunicipalityAnyZone;
     geographyLevel = "municipality";
   }else{
-    withPricePerSqm = (province
-      ? result.data.filter(function(o){ return o.province && String(o.province).toLowerCase() === String(province).toLowerCase(); }).map(function(o){ return toComparable(o, null); }).filter(Boolean)
-      : []);
-    geographyLevel = "province";
+    // MAI allargare alla provincia: un immobile a 40 km (es. villa vista mare a Tricase per
+    // una villa nell'entroterra a Soleto) non e' un comparabile. Nessun comparabile interno.
+    withPricePerSqm = [];
+    geographyLevel = null;
   }
 
   if(!withPricePerSqm.length) return { comparables: [], pricePerSqm: null, geography_level: null, geo_radius_km: null };
@@ -1105,7 +1118,11 @@ calculateBtn.addEventListener("click", async function(){
 
     if(trimmedPricesPerSqm.length && equivSurface){
       var sorted = trimmedPricesPerSqm.slice().sort(function(a,b){return a-b;});
-      var lo = sorted[0], hi = sorted[sorted.length-1];
+      // Con 4+ fonti si usa l'intervallo interquartile (25°-75° percentile): gli estremi del
+      // pool non allargano piu' la forbice a valori inutilizzabili.
+      function pct(arr, q){ var pos = (arr.length-1)*q, b = Math.floor(pos), r = pos-b; return arr[b+1] !== undefined ? arr[b] + r*(arr[b+1]-arr[b]) : arr[b]; }
+      var lo = sorted.length >= 4 ? pct(sorted, 0.25) : sorted[0];
+      var hi = sorted.length >= 4 ? pct(sorted, 0.75) : sorted[sorted.length-1];
       // Se c'e' una sola fonte, allarga leggermente l'intervallo (+-10%) come margine di stima,
       // coerente con l'approccio della relazione di riferimento.
       if(sorted.length === 1){ lo = lo*0.9; hi = hi*1.1; }
@@ -1144,7 +1161,14 @@ calculateBtn.addEventListener("click", async function(){
 
     if(!hasComparativo && !hasReddituale){
       resultBox.classList.remove("visible");
-      setProgress(T.msg_no_data_at_all, 100, "error");
+      if(!equivSurface && trimmedPricesPerSqm.length){
+        var srcInfo = [];
+        if(realMarket.transactions_median) srcInfo.push("compravendite reali " + formatEuro(realMarket.transactions_median) + "/mq (" + realMarket.transactions.length + ")");
+        if(realMarket.listings_median) srcInfo.push("annunci " + formatEuro(realMarket.listings_median) + "/mq (" + realMarket.listings.length + ")");
+        setProgress("Manca la superficie interna (mq): senza metratura non si può calcolare il valore. Dati di mercato trovati: " + trimmedPricesPerSqm.length + " fonti" + (srcInfo.length ? " – " + srcInfo.join(", ") : "") + ". Inserisci i mq e ricalcola.", 100, "error");
+      }else{
+        setProgress(T.msg_no_data_at_all + (realMarket.notes.length ? " " + realMarket.notes.join(" ") : ""), 100, "error");
+      }
       lastCalculation = {
         comparables_snapshot: { internal: internalResult.comparables, internal_price_per_sqm: internalResult.pricePerSqm, internal_geography_level: internalResult.geography_level, internal_geo_radius_km: internalResult.geo_radius_km, geocoded_lat: geocodeResult.lat, geocoded_lng: geocodeResult.lng, market_price_per_sqm: marketResult.value, market_geography_level: marketResult.geography_level, population_composition: populationComposition, real_market: { listings: realMarket.listings.slice(0,30), listings_median: realMarket.listings_median, listings_count: realMarket.listings.length, radius_listings_m: realMarket.radius_listings_m, transactions: realMarket.transactions.slice(0,30), transactions_median: realMarket.transactions_median, transactions_count: realMarket.transactions.length, radius_tx_m: realMarket.radius_tx_m, notes: realMarket.notes, sandbox: realMarket.sandbox } },
         ai_comparables: aiResult.comparables || [], ai_narrative: aiResult,
@@ -1230,6 +1254,8 @@ calculateBtn.addEventListener("click", async function(){
     var detailParts = [];
     var discardedCount = pricesPerSqm.length - trimmedPricesPerSqm.length;
     detailParts.push("<strong>Metodo comparativo:</strong> " + (hasComparativo ? formatEuro(comparativoMin) + " – " + formatEuro(comparativoMax) + " (" + trimmedPricesPerSqm.length + " fonti" + (discardedCount>0 ? ", " + discardedCount + " scartate come anomale" : "") + ")" : "non calcolabile"));
+    if(geocodeResult.precision === "street") detailParts.push("<em>Posizione: indirizzo semplificato (prima via indicata) per la geolocalizzazione.</em>");
+    else if(geocodeResult.precision === "municipality") detailParts.push("<em>Posizione: indirizzo non trovato, usato il centro del comune (dati di mercato meno precisi).</em>");
     if(internalResult.geography_level === "geo_radius") detailParts.push("<em>Comparabili IMMONOVA: cercati per distanza reale dall'indirizzo geolocalizzato (raggio " + internalResult.geo_radius_km + " km).</em>");
     else if(geocodeResult.lat == null) detailParts.push("<em>Comparabili IMMONOVA: indirizzo non geolocalizzabile, criterio basato su comune/zona (fallback).</em>");
     else detailParts.push("<em>Comparabili IMMONOVA: nessun risultato nel raggio di " + GEO_RADIUS_KM + " km, allargato a comune/zona (fallback).</em>");
