@@ -213,7 +213,7 @@ Tutti i mandati di ricerca registrati: caratteristiche richieste dai clienti che
 <div class="modal-overlay" id="matchesOverlay">
 <div class="modal-box">
 <div class="modal-title" id="matchesTitle"></div>
-<div class="matches-disclaimer">Ordinati per compatibilità: budget 30%, zona 25%, metratura 15%, caratteristiche 15%, camere 10%, bagni 5%. Un immobile un po' sopra budget o un po' più piccolo resta proponibile con un punteggio più basso; sono esclusi categoria diversa, fuori zona, oltre il 30% sopra il budget, venduti e ritirati. Un dato mancante sull'immobile vale metà punteggio ("da verificare"). Vengono proposti solo gli immobili compatibili almeno al 75%.</div>
+<div class="matches-disclaimer">Ordinati per compatibilità: budget 30%, zona 25%, metratura 15%, caratteristiche 15%, camere 10%, bagni 5%. Un immobile un po' sopra budget o un po' più piccolo resta proponibile con un punteggio più basso; sono esclusi categoria diversa, fuori zona, oltre il 30% sopra il budget, venduti e ritirati. Un dato mancante sull'immobile vale metà punteggio ("da verificare"). Vengono proposti gli immobili compatibili almeno al 75%; se la richiesta non indica una zona, basta il 60% (tutti gli immobili con caratteristiche vicine, ovunque si trovino).</div>
 <div id="matchesList" class="matches-list"></div>
 <button type="button" class="secondary-link" id="closeMatchesBtn" data-i18n="btn_close" style="margin-top:18px">Chiudi</button>
 </div>
@@ -490,13 +490,13 @@ async function fillInlineProposals(rows){
     var cell = document.getElementById("fit-" + m.id);
     if(!cell) return;
     var best = rankForMandate(m, opportunities).slice(0, 3);
-    if(!best.length){ cell.innerHTML = '<span class="fit-none">Nessun immobile compatibile almeno al ' + MIN_FIT_PCT + '%</span>'; return; }
+    if(!best.length){ cell.innerHTML = '<span class="fit-none">Nessun immobile compatibile almeno al ' + (hasZone(m) ? MIN_FIT_PCT : MIN_FIT_PCT_NO_ZONE) + '%</span>'; return; }
     cell.innerHTML = best.map(function(s){
       var o = s.opp;
       return '<a class="fit-item" href="opportunity-edit.html?id=' + encodeURIComponent(o.id) + '" target="_blank" title="' + escapeHTML(s.fit.notes.join(" · ")) + '">'
         + (o.cover_image ? '<img src="' + escapeHTML(o.cover_image) + '" alt="">' : '<span class="fit-noimg"></span>')
         + '<span class="fit-txt"><span class="fit-title">' + escapeHTML(o.title || "") + '</span>'
-        + '<span class="fit-pct ' + (s.fit.pct >= 90 ? "hi" : "mid") + '">' + s.fit.pct + '% compatibile</span>'
+        + '<span class="fit-pct ' + (s.fit.pct >= 90 ? "hi" : s.fit.pct >= 75 ? "mid" : "lo") + '">' + s.fit.pct + '% compatibile</span>'
         + (o.price ? '<span class="fit-price">' + escapeHTML(String(o.price)) + '</span>' : '') + '</span></a>';
     }).join("") + '<button type="button" class="fit-all" onclick="showMatches(' + m.id + ')">Vedi tutte e i dettagli</button>';
   });
@@ -521,12 +521,14 @@ function areaMatches(areasText, opp){
   });
 }
 var MIN_FIT_PCT = 75; // soglia minima di compatibilità per proporre un immobile
+var MIN_FIT_PCT_NO_ZONE = 60; // senza zona: basta che le caratteristiche si avvicinino
+function hasZone(m){ return !!(m.interest_area_geojson || String(m.location_areas || "").trim()); }
 function rankForMandate(mandate, opportunities){
   return opportunities
     .filter(function(o){ return ["sold","withdrawn"].indexOf(o.commercial_status) < 0; })
     .filter(function(o){ return !mandate.category || String(o.category || "").toLowerCase() === String(mandate.category).toLowerCase(); })
     .map(function(o){ return { opp:o, fit:computeFit(mandate, o) }; })
-    .filter(function(s){ return !s.fit.excluded && s.fit.pct >= MIN_FIT_PCT; })
+    .filter(function(s){ return !s.fit.excluded && s.fit.pct >= (hasZone(mandate) ? MIN_FIT_PCT : MIN_FIT_PCT_NO_ZONE); })
     .sort(function(a, b){ return b.fit.pct - a.fit.pct; });
 }
 
@@ -568,7 +570,7 @@ function computeFit(mandate, opp){
     var have = wants.filter(function(k){ return opp[k.replace(/^wants_/, "has_")] === true; }).length;
     add(15, have / wants.length, have + "/" + wants.length + " caratteristiche richieste");
   }
-  var pct = tot ? Math.round(got / tot * 100) : 50;
+  var pct = tot ? Math.round(got / tot * 100) : 100; // nessun criterio oltre la categoria: tutti presentabili
   if(!tot) notes.push("richiesta senza criteri: solo categoria");
   return { pct:pct, notes:notes, excluded:excluded };
 }
