@@ -1649,6 +1649,7 @@ function reCategory(cat){
   if(/commerc|locale|hotel|albergh|struttur/.test(c)) return { listing:"Commerciale", tx:"immobili_non_residenziali" };
   return { listing:"Residenziale", tx:"immobili_residenziali" };
 }
+function reNorm(v){ return String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g," ").trim(); }
 function medianOf(arr){
   if(!arr.length) return null;
   var s = arr.slice().sort(function(a,b){return a-b;}), m = Math.floor(s.length/2);
@@ -1673,9 +1674,9 @@ async function findRealMarketData(category, internalSize, address, municipality,
   // 1) annunci sui portali
   tasks.push((async function(){
     try{
-      var radius = 2000;
+      var radius = 6000; // raggio ampio per includere le frazioni; poi si tengono solo gli annunci dello stesso comune
       var p = { action:"re_listings", latitude:lat, longitude:lng, search_radius:radius, limit:50, property_category:cat.listing };
-      if(internalSize){ p.min_sqm = internalSize*0.6; p.max_sqm = internalSize*1.6; }
+      if(internalSize){ p.min_sqm = internalSize*0.8; p.max_sqm = internalSize*1.2; }
       var d = await reCall(p);
       out.sandbox = out.sandbox || !!d.sandbox;
       var rows = (d.data && Array.isArray(d.data.data)) ? d.data.data : (Array.isArray(d.data) ? d.data : []);
@@ -1683,10 +1684,10 @@ async function findRealMarketData(category, internalSize, address, municipality,
         var sqm = Number(x.total_sqm) || null, price = Number(x.price) || null;
         var ppsqm = Number(x.price_per_sqm) || (price && sqm ? price/sqm : null);
         return { address:x.address||"", municipality:x.municipality||"", type:x.property_type||x.property_category||"", price:price, sqm:sqm, rooms:x.rooms||null, price_per_sqm: ppsqm ? Math.round(ppsqm) : null };
-      }).filter(function(x){ return x.price_per_sqm; });
+      }).filter(function(x){ return x.price_per_sqm && (!x.municipality || !municipality || reNorm(x.municipality) === reNorm(municipality)); });
       out.radius_listings_m = radius;
       out.listings_median = medianOf(out.listings.map(function(x){ return x.price_per_sqm; }));
-      if(!out.listings.length) out.notes.push("Nessun annuncio in vendita comparabile entro " + (radius/1000) + " km.");
+      if(!out.listings.length) out.notes.push("Nessun annuncio in vendita comparabile nel comune (frazioni comprese).");
     }catch(e){ out.notes.push("Annunci portali non disponibili: " + e.message); }
   })());
 
@@ -1694,7 +1695,7 @@ async function findRealMarketData(category, internalSize, address, municipality,
   if(cat.tx){
     tasks.push((async function(){
       try{
-        var radius = 1500;
+        var radius = 4000; // include le frazioni; poi si tengono solo gli atti dello stesso comune
         var d = await reCall({ action:"re_transactions", latitude:lat, longitude:lng, address:fullAddress, property_type:cat.tx, search_radius:radius });
         out.sandbox = out.sandbox || !!d.sandbox;
         var res = d.data && d.data.data ? d.data.data : null;
@@ -1709,15 +1710,16 @@ async function findRealMarketData(category, internalSize, address, municipality,
         out.transactions = sales.map(function(x){
           var sqm = Number(x.total_sqm) || null, price = Number(x.price) || null;
           var prop = (x.properties && x.properties[0]) || {};
+          if(prop.details && prop.details.city && municipality && reNorm(prop.details.city) !== reNorm(municipality)) return null;
           return { date:x.sale_date||"", type:x.property_type||"", address:prop.address||"", category_code:prop.category_code||"", price:price, sqm:sqm, distance_km: x.distance!=null ? Number(x.distance) : null, price_per_sqm: price && sqm ? Math.round(price/sqm) : null };
-        }).filter(function(x){ return x.price_per_sqm; });
+        }).filter(function(x){ return x && x.price_per_sqm; });
         if(internalSize){
-          var similar = out.transactions.filter(function(x){ return x.sqm >= internalSize*0.5 && x.sqm <= internalSize*2; });
-          if(similar.length >= 3) out.transactions = similar;
+          var similar = out.transactions.filter(function(x){ return x.sqm >= internalSize*0.8 && x.sqm <= internalSize*1.2; });
+          out.transactions = similar;
         }
         out.radius_tx_m = radius;
         out.transactions_median = medianOf(out.transactions.map(function(x){ return x.price_per_sqm; }));
-        if(!out.transactions.length) out.notes.push(res && res.id && !Array.isArray(res.sales) ? "Compravendite reali: risposta non ancora pronta, riprova il calcolo tra poco." : "Nessuna compravendita registrata entro " + (radius/1000) + " km dagli ultimi 3 anni.");
+        if(!out.transactions.length) out.notes.push(res && res.id && !Array.isArray(res.sales) ? "Compravendite reali: risposta non ancora pronta, riprova il calcolo tra poco." : "Nessuna compravendita comparabile registrata nel comune (frazioni comprese) negli ultimi 3 anni.");
       }catch(e){ out.notes.push("Compravendite reali non disponibili: " + e.message); }
     })());
   }
@@ -2247,6 +2249,26 @@ calculateBtn.addEventListener("click", async function(){
     var pricePerSqmRangeMin = numVal("pricePerSqmRangeMin");
     var pricePerSqmRangeMax = numVal("pricePerSqmRangeMax");
     var aiResult = await findAiComparablesAndNarrative(category, municipality, province, region, internalSize, address, propertyCondition, isRented, currentAnnualRent, hasSeaView, hasHistoricCenter, geocodeResult.lat, geocodeResult.lng, pricePerSqmManual || pricePerSqmRangeMin, pricePerSqmManual || pricePerSqmRangeMax);
+    /* ---- Filtro comparabili portali/AI: prima entravano TUTTI gli annunci trovati (fino a 40
+       per portale), anche di metratura lontanissima dall'immobile. Ora restano solo quelli con
+       superficie entro ±20% di quella dell'immobile (se nota) e al massimo 15, i piu'
+       vicini per metratura; gli annunci senza superficie vengono scartati. ---- */
+    (function(){
+      var all = Array.isArray(aiResult.comparables) ? aiResult.comparables : [];
+      var before = all.length, list = all;
+      if(internalSize){
+        list = all.filter(function(c){ var s = Number(c.size_sqm); return s && s >= internalSize*0.8 && s <= internalSize*1.2; });
+        list.sort(function(a,b){ return Math.abs(a.size_sqm-internalSize) - Math.abs(b.size_sqm-internalSize); });
+      }
+      var seenKey = {};
+      list = list.filter(function(c){ var k = Math.round(c.price||0) + "|" + Math.round(c.size_sqm||0); if(seenKey[k]) return false; seenKey[k] = 1; return true; }).slice(0, 15);
+      aiResult.comparables = list;
+      if(before > list.length){
+        var note = "Comparabili: " + before + " annunci trovati, " + list.length + " tenuti" + (internalSize ? " (metratura tra " + Math.round(internalSize*0.8) + " e " + Math.round(internalSize*1.2) + " mq, i più vicini, massimo 15, senza doppioni)" : " (massimo 15, senza doppioni)") + ".";
+        aiResult.search_coverage_note = (aiResult.search_coverage_note ? aiResult.search_coverage_note + " " : "") + note;
+        aiResult.ai_disclaimer = (aiResult.ai_disclaimer ? aiResult.ai_disclaimer + " " : "") + note;
+      }
+    })();
     setProgress((T.msg_calculating||"") + " (annunci e compravendite reali...)", 80, "");
     var realMarket = await findRealMarketData(category, internalSize, address, municipality, geocodeResult.lat, geocodeResult.lng);
 
