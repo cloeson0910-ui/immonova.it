@@ -533,6 +533,20 @@ textarea{min-height:100px;resize:vertical;line-height:1.6}
         <button type="button" class="secondary-btn" id="floorplanUndoBtn">↩ Annulla ultimo</button>
         <button type="button" class="secondary-btn" id="floorplanClearBtn">🗑 Cancella tutto</button>
       </div>
+      <div id="fmBox" style="display:none;margin-top:14px;padding:12px 14px;border:1px solid rgba(166,127,52,.35);background:rgba(166,127,52,.05)">
+        <div style="font-weight:600;margin-bottom:6px">📏 Misura superficie dalla planimetria</div>
+        <div style="font-size:12px;opacity:.8;margin-bottom:8px">Scegli il tipo e clicca dentro ogni vano: si colora fino ai muri e ne calcola i mq. La scala si legge da sola dalla griglia "10 metri" delle planimetrie catastali; se manca, usa "Imposta scala" su una misura nota. Se il colore esce da un ingresso o da una porta aperta, chiudila con una linea.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="fmRoomType"><option value="principale">Principale</option><option value="accessoria">Accessoria / deposito</option><option value="garage">Garage</option><option value="giardino">Giardino / esterno</option></select>
+          <button type="button" class="secondary-btn" id="fmRoomBtn">🖱 Aggiungi vano</button>
+          <button type="button" class="secondary-btn" id="fmLineBtn">✏️ Chiudi apertura</button>
+          <button type="button" class="secondary-btn" id="fmUndoLineBtn">↩ Togli ultima linea</button>
+          <button type="button" class="secondary-btn" id="fmScaleBtn">📐 Imposta scala</button>
+          <label style="font-size:13px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="fmGross" checked> Superficie lorda (con muri)</label>
+          <button type="button" class="secondary-btn" id="fmApplyBtn" style="font-weight:600">✔ Usa questi mq nella valutazione</button>
+        </div>
+        <div id="fmPanel"></div>
+      </div>
       <div id="floorplanCanvasWrap" style="display:none;margin-top:12px;max-width:100%;overflow:auto;border:1px solid rgba(166,127,52,.28)">
         <canvas id="floorplanCanvas" style="max-width:100%;display:block;touch-action:none;cursor:crosshair"></canvas>
       </div>
@@ -2547,12 +2561,14 @@ function fpSetTool(tool){
   fpState.tool = (fpState.tool === tool) ? null : tool;
   document.getElementById("floorplanToolCircle").style.outline = fpState.tool === "circle" ? "2px solid #a67f34" : "";
   document.getElementById("floorplanToolNote").style.outline = fpState.tool === "note" ? "2px solid #a67f34" : "";
+  [["fmRoomBtn","m_room"],["fmLineBtn","m_line"],["fmScaleBtn","m_scale"]].forEach(function(b){ var el = document.getElementById(b[0]); if(el) el.style.outline = fpState.tool === b[1] ? "2px solid #a67f34" : ""; });
 }
 
 function fpOnFileChange(e){
   var file = e.target.files[0];
   if(!file) return;
   fpState.existingUrl = null;
+  fmReset(false);
   var isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
   if(isPdf){
     fpPdfToImage(file).then(function(res){
@@ -2607,6 +2623,7 @@ async function fpPdfToImage(file){
 
 function fpLoadImage(src){
   fpImg = new Image();
+  if(!/^data:/.test(src)) fpImg.crossOrigin = "anonymous";
   fpImg.onload = function(){
     fpState.naturalW = fpImg.naturalWidth;
     fpState.naturalH = fpImg.naturalHeight;
@@ -2614,7 +2631,10 @@ function fpLoadImage(src){
     fpCanvas.height = fpState.naturalH;
     document.getElementById("floorplanToolbar").style.display = "flex";
     document.getElementById("floorplanCanvasWrap").style.display = "block";
-    fpRedraw();
+    document.getElementById("fmBox").style.display = "block";
+    fmState.walls = null; fmState.rooms.forEach(function(r){ r.idx = null; });
+    try{ fmRecomputeRooms(); }catch(e){ console.warn("misura: ricalcolo non riuscito", e); }
+    fpRedraw(); fmRenderPanel();
   };
   fpImg.src = src;
 }
@@ -2629,6 +2649,9 @@ function fpCanvasPoint(evt){
 function fpPointerDown(evt){
   if(!fpState.tool) return;
   var p = fpCanvasPoint(evt);
+  if(fpState.tool === "m_room"){ var btn = document.getElementById("fmRoomBtn"); btn.textContent = "⏳ Calcolo..."; setTimeout(function(){ try{ fmAddRoom(p); } finally { btn.textContent = "🖱 Aggiungi vano"; } }, 20); return; }
+  if(fpState.tool === "m_scale"){ fmScaleClick(p); return; }
+  if(fpState.tool === "m_line"){ fpState.dragging = true; fpState.dragStart = p; return; }
   if(fpState.tool === "note"){
     var text = prompt("Nota su questo punto (es. differenza tra planimetria catastale e stato dei luoghi):");
     if(text && text.trim()){
@@ -2648,6 +2671,7 @@ function fpPointerMove(evt){
   if(!fpState.dragging) return;
   var p = fpCanvasPoint(evt);
   fpRedraw();
+  if(fpState.tool === "m_line"){ fpCtx.save(); fpCtx.strokeStyle = "#d0021b"; fpCtx.lineWidth = Math.max(4, fpState.naturalW/400); fpCtx.setLineDash([10,6]); fpCtx.beginPath(); fpCtx.moveTo(fpState.dragStart.x, fpState.dragStart.y); fpCtx.lineTo(p.x, p.y); fpCtx.stroke(); fpCtx.restore(); return; }
   fpDrawEllipsePreview(fpState.dragStart, p);
 }
 
@@ -2655,6 +2679,13 @@ function fpPointerUp(evt){
   if(!fpState.dragging) return;
   fpState.dragging = false;
   var p = fpCanvasPoint(evt);
+  if(fpState.tool === "m_line"){
+    if(Math.hypot(p.x-fpState.dragStart.x, p.y-fpState.dragStart.y) > 5){
+      fmState.lines.push({ x1:fpState.dragStart.x, y1:fpState.dragStart.y, x2:p.x, y2:p.y });
+      fmState.rooms.forEach(function(r){ r.idx = null; }); fmRecomputeRooms(); fmRenderPanel();
+    }
+    fpRedraw(); return;
+  }
   var x = Math.min(fpState.dragStart.x, p.x), y = Math.min(fpState.dragStart.y, p.y);
   var w = Math.abs(p.x - fpState.dragStart.x), h = Math.abs(p.y - fpState.dragStart.y);
   if(w > 4 && h > 4) fpState.actions.push({ type:"circle", x:x, y:y, w:w, h:h });
@@ -2706,6 +2737,7 @@ function fpRedraw(){
       fpCtx.restore();
     }
   });
+  try{ fmDrawOverlay(); }catch(e){ console.warn("misura: overlay non disegnabile", e); }
 }
 
 function fpRenderNotesList(){
@@ -2743,6 +2775,8 @@ function fpLoadExisting(imageUrl, annotations){
   if(!imageUrl) return;
   fpState.existingUrl = imageUrl;
   fpState.actions = (annotations && annotations.actions) || [];
+  var ms = annotations && annotations.measure;
+  if(ms){ fmState.ppm = ms.ppm || null; fmState.scaleSource = ms.scaleSource || null; fmState.useGross = ms.useGross !== false; fmState.lines = ms.lines || []; fmState.rooms = (ms.rooms || []).map(function(r){ return { type:r.type, seed:r.seed, net:r.net, gross:r.gross, idx:null }; }); var g = document.getElementById("fmGross"); if(g) g.checked = fmState.useGross; }
   document.getElementById("floorplanToolbar").style.display = "flex";
   document.getElementById("floorplanCanvasWrap").style.display = "block";
   fpLoadImage(imageUrl);
@@ -2762,10 +2796,229 @@ async function fpUploadIfNeeded(id){
 }
 
 function fpGetAnnotations(){
-  return { actions: fpState.actions };
+  return { actions: fpState.actions, measure: { ppm: fmState.ppm, scaleSource: fmState.scaleSource, useGross: fmState.useGross, lines: fmState.lines, rooms: fmState.rooms.map(function(r){ return { type:r.type, seed:r.seed, net:r.net, gross:r.gross }; }) } };
+}
+
+/* ================================ Misura mq da planimetria ================================
+   1) Scala: automatica dalla griglia blu "10 metri" che l'Agenzia delle Entrate stampa sul
+      bordo delle planimetrie catastali; in alternativa "Imposta scala" = due clic su una
+      misura nota (es. larghezza della porta d'ingresso) + valore in metri.
+   2) Muri: riconosciuti dai tratti scuri del disegno (le linee blu AdE sono escluse).
+   3) "Aggiungi vano": un clic dentro l'immobile colora l'area fino ai muri e ne calcola i mq
+      (calpestabili = interno muri; lordi = con i muri perimetrali fino a 50 cm).
+   4) "Chiudi apertura": una linea trascinata su un ingresso/porta aperta impedisce al colore
+      di uscire. Se il colore esce dal disegno, il vano viene rifiutato con un avviso.
+   5) "Usa questi mq": somma per tipo e compila i campi superficie della valutazione. */
+var fmState = { ppm:null, scaleSource:null, rooms:[], lines:[], walls:null, W:0, H:0, roomType:"principale", scalePts:[], useGross:true };
+var FM_TYPES = { principale:{label:"Principale", color:[200,160,60], field:"internalSize"}, accessoria:{label:"Accessoria / deposito", color:[90,140,200], field:"accessorySize"}, garage:{label:"Garage", color:[150,150,150], field:"garageSqm"}, giardino:{label:"Giardino / esterno", color:[90,170,90], field:"gardenSqm"} };
+
+function fmReset(keepScale){
+  fmState.rooms = []; fmState.lines = []; fmState.walls = null; fmState.scalePts = [];
+  if(!keepScale){ fmState.ppm = null; fmState.scaleSource = null; }
+  fmRenderPanel();
+}
+
+function fmImageData(){
+  var c = document.createElement("canvas"); c.width = fpState.naturalW; c.height = fpState.naturalH;
+  var x = c.getContext("2d"); x.drawImage(fpImg, 0, 0, c.width, c.height);
+  return x.getImageData(0, 0, c.width, c.height);
+}
+
+/* Scala automatica: griglia blu AdE (tacche ogni 10 m sul bordo della planimetria). */
+function fmDetectBlueScale(id){
+  var W = id.width, H = id.height, d = id.data;
+  function blue(i){ return d[i+2] > 150 && d[i] < 120 && d[i+1] < 120; }
+  var colCount = new Uint32Array(W);
+  for(var y=0;y<H;y++) for(var x=0;x<W;x++){ if(blue((y*W+x)*4)) colCount[x]++; }
+  var best = -1, bestN = 0;
+  for(var x2=0;x2<W;x2++) if(colCount[x2] > bestN){ bestN = colCount[x2]; best = x2; }
+  if(best < 0 || bestN < H*0.3) return null;
+  var ticks = [], minLen = Math.max(8, Math.round(W/150)), lastY = -1000;
+  for(var y2=0;y2<H;y2++){
+    var len = 0;
+    for(var dx=-minLen*3; dx<=minLen*3; dx++){ var xx = best+dx; if(xx>=0 && xx<W && blue((y2*W+xx)*4)) len++; }
+    if(len >= minLen*1.6 && len <= minLen*6){ if(y2 - lastY > minLen*2){ ticks.push(y2); } lastY = y2; }
+  }
+  if(ticks.length < 3) return null;
+  var diffs = [];
+  for(var i=1;i<ticks.length;i++) diffs.push(ticks[i]-ticks[i-1]);
+  diffs.sort(function(a,b){return a-b;});
+  var med = diffs[Math.floor(diffs.length/2)];
+  var good = diffs.filter(function(v){ return Math.abs(v-med) < med*0.06; });
+  if(good.length < 2) return null;
+  var avg = good.reduce(function(a,b){return a+b;},0)/good.length;
+  return avg/10; // pixel per metro
+}
+
+function fmBoxFilter(src, W, H, r, isMax){
+  // filtro min/max quadrato separabile (r = lato in px)
+  var tmp = new Uint8Array(W*H), out = new Uint8Array(W*H), h = Math.floor(r/2);
+  for(var y=0;y<H;y++){ var row=y*W;
+    for(var x=0;x<W;x++){ var v = isMax?0:1; for(var k=-h;k<=r-h-1;k++){ var xx=x+k; var p = (xx<0||xx>=W)?(isMax?0:1):src[row+xx]; if(isMax){ if(p){v=1;break;} } else { if(!p){v=0;break;} } } tmp[row+x]=v; } }
+  for(var x3=0;x3<W;x3++){
+    for(var y3=0;y3<H;y3++){ var v2 = isMax?0:1; for(var k2=-h;k2<=r-h-1;k2++){ var yy=y3+k2; var p2=(yy<0||yy>=H)?(isMax?0:1):tmp[yy*W+x3]; if(isMax){ if(p2){v2=1;break;} } else { if(!p2){v2=0;break;} } } out[y3*W+x3]=v2; } }
+  return out;
+}
+
+function fmBuildWalls(){
+  var id = fmImageData(), W = id.width, H = id.height, d = id.data;
+  if(!fmState.ppm){
+    var auto = fmDetectBlueScale(id);
+    if(auto){ fmState.ppm = auto; fmState.scaleSource = "griglia catastale 10 m (automatica)"; }
+  }
+  var dark = new Uint8Array(W*H);
+  for(var i=0,p=0;i<W*H;i++,p+=4){
+    var isBlue = d[p+2] > 150 && d[p] < 120 && d[p+1] < 120;
+    var lum = 0.299*d[p] + 0.587*d[p+1] + 0.114*d[p+2];
+    dark[i] = (!isBlue && lum < 90) ? 1 : 0;
+  }
+  var s = fmState.ppm ? fmState.ppm/52.5 : W/3311;
+  var kO = Math.max(2, Math.round(3*s)), kC = Math.max(3, Math.round(7*s));
+  var w = fmBoxFilter(fmBoxFilter(dark, W, H, kO, false), W, H, kO, true);   // apertura: toglie puntini
+  w = fmBoxFilter(fmBoxFilter(w, W, H, kC, true), W, H, kC, false);          // chiusura: unisce tratti spezzati
+  fmState.walls = w; fmState.W = W; fmState.H = H; fmState.lineWidth = kC;
+}
+
+function fmBarrier(){
+  var W = fmState.W, H = fmState.H, b = new Uint8Array(fmState.walls);
+  var c = document.createElement("canvas"); c.width = W; c.height = H; var x = c.getContext("2d");
+  x.strokeStyle = "#000"; x.lineWidth = Math.max(4, fmState.lineWidth); x.lineCap = "round";
+  fmState.lines.forEach(function(l){ x.beginPath(); x.moveTo(l.x1,l.y1); x.lineTo(l.x2,l.y2); x.stroke(); });
+  var dd = x.getImageData(0,0,W,H).data;
+  for(var i=0,p=3;i<W*H;i++,p+=4) if(dd[p] > 0) b[i] = 1;
+  return b;
+}
+
+function fmFill(seedX, seedY){
+  var W = fmState.W, H = fmState.H, bar = fmBarrier();
+  var sx = Math.round(seedX), sy = Math.round(seedY), s0 = sy*W+sx;
+  if(bar[s0]) return { error:"Hai cliccato su un muro: clicca all'interno del vano." };
+  var seen = new Uint8Array(W*H), stack = new Int32Array(W*H), top = 0, n = 0, leak = false;
+  var maxPx = fmState.ppm ? 2500*fmState.ppm*fmState.ppm : W*H*0.5;
+  stack[top++] = s0; seen[s0] = 1;
+  var idx = [];
+  while(top){
+    var i = stack[--top]; idx.push(i); n++;
+    if(n > maxPx){ leak = true; break; }
+    var x = i % W, y = (i - x)/W;
+    if(x===0 || y===0 || x===W-1 || y===H-1){ leak = true; break; }
+    var nb = [i-1, i+1, i-W, i+W];
+    for(var k=0;k<4;k++){ var j = nb[k]; if(!seen[j] && !bar[j]){ seen[j]=1; stack[top++]=j; } }
+  }
+  if(leak) return { error:"Il colore esce dal disegno: c'è un'apertura (ingresso, porta, muro interrotto). Usa \"Chiudi apertura\" tracciando una linea sull'apertura, poi riprova." };
+  var region = new Uint8Array(W*H); idx.forEach(function(q){ region[q]=1; });
+  // lorda: aggiunge i muri entro 50 cm dal vano
+  var r = Math.max(3, Math.round((fmState.ppm||50)*0.5)*2+1);
+  var near = fmBoxFilter(region, W, H, r, true), gross = 0;
+  for(var q=0;q<W*H;q++) if(region[q] || (near[q] && fmState.walls[q])) gross++;
+  return { idx: Int32Array.from(idx), net: n, gross: gross };
+}
+
+function fmAddRoom(p){
+  if(!fmState.walls) fmBuildWalls();
+  if(!fmState.ppm){ alert("Scala non trovata automaticamente: usa \"Imposta scala\" (due clic su una misura nota) e poi riprova."); return; }
+  var res = fmFill(p.x, p.y);
+  if(res.error){ alert(res.error); return; }
+  fmState.rooms.push({ type: fmState.roomType, seed:{x:p.x, y:p.y}, idx: res.idx, net: res.net/(fmState.ppm*fmState.ppm), gross: res.gross/(fmState.ppm*fmState.ppm) });
+  fpRedraw(); fmRenderPanel();
+}
+
+function fmRecomputeRooms(){
+  if(!fmState.rooms.length || !fpState.naturalW) return;
+  if(!fmState.walls) fmBuildWalls();
+  fmState.rooms.forEach(function(r){
+    if(r.idx) return;
+    var res = fmFill(r.seed.x, r.seed.y);
+    if(!res.error){ r.idx = res.idx; r.net = res.net/(fmState.ppm*fmState.ppm); r.gross = res.gross/(fmState.ppm*fmState.ppm); }
+  });
+}
+
+var fmOverlayCache = null;
+function fmDrawOverlay(){
+  if(!fmState.rooms.length && !fmState.lines.length && !fmState.scalePts.length) return;
+  var W = fpState.naturalW, H = fpState.naturalH;
+  if(fmState.rooms.length){
+    var img = fpCtx.getImageData(0,0,W,H), d = img.data;
+    fmState.rooms.forEach(function(r){
+      if(!r.idx) return; var c = FM_TYPES[r.type].color;
+      for(var k=0;k<r.idx.length;k++){ var p = r.idx[k]*4; d[p]=(d[p]+c[0])>>1; d[p+1]=(d[p+1]+c[1])>>1; d[p+2]=(d[p+2]+c[2])>>1; }
+    });
+    fpCtx.putImageData(img,0,0);
+    fmState.rooms.forEach(function(r, i){
+      var fs = Math.max(16, W/70);
+      fpCtx.save(); fpCtx.font = "bold " + Math.round(fs) + "px sans-serif"; fpCtx.textAlign = "center";
+      fpCtx.lineWidth = fs/5; fpCtx.strokeStyle = "#fff"; fpCtx.fillStyle = "#3a2a08";
+      var t = (i+1) + ") " + (fmState.useGross ? r.gross : r.net).toFixed(1).replace(".", ",") + " mq";
+      fpCtx.strokeText(t, r.seed.x, r.seed.y); fpCtx.fillText(t, r.seed.x, r.seed.y); fpCtx.restore();
+    });
+  }
+  fpCtx.save(); fpCtx.strokeStyle = "#d0021b"; fpCtx.lineWidth = Math.max(4, W/400); fpCtx.lineCap = "round";
+  fmState.lines.forEach(function(l){ fpCtx.beginPath(); fpCtx.moveTo(l.x1,l.y1); fpCtx.lineTo(l.x2,l.y2); fpCtx.stroke(); });
+  fpCtx.fillStyle = "#1565c0";
+  fmState.scalePts.forEach(function(s){ fpCtx.beginPath(); fpCtx.arc(s.x, s.y, Math.max(6, W/250), 0, Math.PI*2); fpCtx.fill(); });
+  fpCtx.restore();
+}
+
+function fmScaleClick(p){
+  fmState.scalePts.push(p); fpRedraw();
+  if(fmState.scalePts.length < 2) return;
+  var a = fmState.scalePts[0], b = fmState.scalePts[1];
+  var px = Math.hypot(b.x-a.x, b.y-a.y);
+  var m = parseFloat(String(prompt("Quanto misura in metri il tratto tra i due punti? (es. 2 per una porta di 2 m)") || "").replace(",", "."));
+  fmState.scalePts = [];
+  if(!(m > 0) || px < 5){ fpRedraw(); return; }
+  fmState.ppm = px/m; fmState.scaleSource = "misura nota: " + String(m).replace(".", ",") + " m";
+  fmState.walls = null; fmState.rooms.forEach(function(r){ r.idx = null; });
+  fpSetTool(null); fmRecomputeRooms(); fpRedraw(); fmRenderPanel();
+}
+
+function fmTotals(){
+  var t = { principale:0, accessoria:0, garage:0, giardino:0 };
+  fmState.rooms.forEach(function(r){ t[r.type] += fmState.useGross ? r.gross : r.net; });
+  return t;
+}
+
+function fmRenderPanel(){
+  var el = document.getElementById("fmPanel"); if(!el) return;
+  var t = fmTotals(), html = "";
+  html += '<div style="font-size:13px;margin:8px 0">Scala: <strong>' + (fmState.ppm ? fmState.scaleSource : "non ancora rilevata (verrà cercata al primo vano)") + '</strong></div>';
+  if(fmState.rooms.length){
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left">Vano</th><th style="text-align:left">Tipo</th><th style="text-align:right">Calpestabile</th><th style="text-align:right">Lorda</th><th></th></tr>';
+    fmState.rooms.forEach(function(r, i){
+      html += '<tr><td>' + (i+1) + '</td><td>' + FM_TYPES[r.type].label + '</td><td style="text-align:right">' + r.net.toFixed(1).replace(".", ",") + ' mq</td><td style="text-align:right">' + r.gross.toFixed(1).replace(".", ",") + ' mq</td><td style="text-align:right"><button type="button" class="secondary-btn" style="padding:2px 8px" onclick="fmRemoveRoom(' + i + ')">✕</button></td></tr>';
+    });
+    html += '</table>';
+    html += '<div style="margin-top:8px;font-size:13px">Totali (' + (fmState.useGross ? "lordi" : "calpestabili") + '): ' + Object.keys(t).filter(function(k){ return t[k] > 0; }).map(function(k){ return FM_TYPES[k].label + " <strong>" + t[k].toFixed(1).replace(".", ",") + " mq</strong>"; }).join(" · ") + '</div>';
+  }
+  el.innerHTML = html;
+}
+function fmRemoveRoom(i){ fmState.rooms.splice(i,1); fpRedraw(); fmRenderPanel(); }
+
+function fmApplyToFields(){
+  if(!fmState.rooms.length){ alert("Nessun vano misurato."); return; }
+  var t = fmTotals();
+  Object.keys(t).forEach(function(k){
+    if(!t[k]) return;
+    var f = document.getElementById(FM_TYPES[k].field); if(!f) return;
+    f.value = Math.round(t[k]);
+    f.dispatchEvent(new Event("input", { bubbles:true })); f.dispatchEvent(new Event("change", { bubbles:true }));
+  });
+  alert("Superfici inserite nei campi della valutazione.");
+}
+
+function fmInit(){
+  document.getElementById("fmScaleBtn").addEventListener("click", function(){ fmState.scalePts = []; fpSetTool("m_scale"); });
+  document.getElementById("fmLineBtn").addEventListener("click", function(){ fpSetTool("m_line"); });
+  document.getElementById("fmRoomBtn").addEventListener("click", function(){ fpSetTool("m_room"); });
+  document.getElementById("fmRoomType").addEventListener("change", function(e){ fmState.roomType = e.target.value; });
+  document.getElementById("fmGross").addEventListener("change", function(e){ fmState.useGross = e.target.checked; fpRedraw(); fmRenderPanel(); });
+  document.getElementById("fmUndoLineBtn").addEventListener("click", function(){ fmState.lines.pop(); fmState.rooms.forEach(function(r){ r.idx = null; }); fmRecomputeRooms(); fpRedraw(); fmRenderPanel(); });
+  document.getElementById("fmApplyBtn").addEventListener("click", fmApplyToFields);
+  fmRenderPanel();
 }
 
 fpInit();
+fmInit();
 
 async function loadValuationForEdit(){
   if(!valuationId) return;
