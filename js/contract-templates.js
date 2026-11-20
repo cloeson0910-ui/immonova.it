@@ -63,6 +63,45 @@ segnalatore: {
 <div class="allegato"><h2>ALLEGATO A – Tabella Compensi IMMONOVA</h2>{{ALLEGATO_A}}</div>
 `},
 
+nda_visita: {
+  key: "nda_visita_v1",
+  title: "Accordo di riservatezza (NDA) – visita e documentazione",
+  html: `
+<h1>ACCORDO DI RISERVATEZZA E NON DIVULGAZIONE (NDA)</h1>
+<p class="c">relativo alla visita e/o alla documentazione di un asset immobiliare off-market</p>
+<p class="c"><b>TRA</b></p>
+<p><b>IMMONOVA S.r.l.</b>, con sede legale in Roma, Via Emilio Faà di Bruno n. 43, Codice Fiscale e Partita IVA 18585831003, in persona del legale rappresentante pro tempore (di seguito, la <b>"Società"</b>)</p>
+<p class="c"><b>E</b></p>
+<p>{{CONTROPARTE}} (di seguito, il <b>"Ricevente"</b>)</p>
+<h2>PREMESSO CHE</h2>
+<p>a) la Società opera esclusivamente su asset immobiliari off-market, la cui riservatezza costituisce elemento essenziale del rapporto con i proprietari;</p>
+<p>b) il Ricevente ha manifestato interesse per l'asset di seguito indicato: {{IMMOBILE}} (di seguito, l'<b>"Asset"</b>);</p>
+<p>c) in data {{DATA}} la Società consente al Ricevente {{MODALITA}};</p>
+<p>d) le premesse costituiscono parte integrante e sostanziale del presente accordo.</p>
+<h2>TUTTO CIÒ PREMESSO, LE PARTI CONVENGONO QUANTO SEGUE</h2>
+<h3>Art. 1 – Informazioni riservate</h3>
+<p>1.1 Sono "Informazioni Riservate" tutte le informazioni, in qualsiasi forma acquisite, relative all'Asset e alla sua proprietà, ivi compresi ubicazione, caratteristiche, prezzo, condizioni economiche, identità del proprietario, nonché la documentazione di seguito indicata: {{DOCUMENTI}}.</p>
+<h3>Art. 2 – Obblighi del Ricevente</h3>
+<p>2.1 Il Ricevente si obbliga a: (i) utilizzare le Informazioni Riservate al solo fine di valutare l'eventuale acquisto dell'Asset; (ii) non comunicarle né divulgarle a terzi, salvo ai propri consulenti professionali vincolati da analogo obbligo, dei quali risponde; (iii) non riprodurre la documentazione ricevuta oltre quanto strettamente necessario alla valutazione; (iv) restituire o distruggere la documentazione, e ogni sua copia, a semplice richiesta della Società.</p>
+<p>2.2 L'obbligo di riservatezza vincola il Ricevente senza limiti di tempo.</p>
+<h3>Art. 3 – Divieto di non scavalcamento</h3>
+<p>3.1 Per 24 (ventiquattro) mesi dalla data del presente accordo, il Ricevente si obbliga a non contattare la proprietà dell'Asset né a concludere trattative, proposte o contratti aventi ad oggetto l'Asset, direttamente o per interposta persona, al di fuori dell'assistenza della Società.</p>
+<h3>Art. 4 – Clausola penale</h3>
+<p>4.1 In caso di violazione dell'art. 2, il Ricevente è tenuto a corrispondere alla Società, a titolo di penale, la somma di {{PENALE_NDA}} per ciascuna violazione accertata.</p>
+<p>4.2 In caso di violazione dell'art. 3, il Ricevente è tenuto a corrispondere alla Società, a titolo di penale, una somma pari al compenso che la Società avrebbe percepito in caso di conclusione dell'affare con la propria assistenza, secondo le condizioni economiche ordinariamente applicate dalla Società.</p>
+<p>4.3 Le penali sono dovute salvo il risarcimento del danno ulteriore, ai sensi dell'art. 1382 c.c.</p>
+<h3>Art. 5 – Sottoscrizione elettronica</h3>
+<p>5.1 Il presente accordo è sottoscritto mediante firma elettronica con codice OTP inviato all'indirizzo email del Ricevente; data, ora, indirizzo IP, codice di verifica e impronta digitale (SHA-256) del documento sono registrati dalla piattaforma IMMONOVA.</p>
+<h3>Art. 6 – Legge applicabile e foro competente</h3>
+<p>6.1 Il presente accordo è regolato dalla legge italiana. Per ogni controversia è competente in via esclusiva il Foro di Roma, salvo diversa disposizione inderogabile di legge.</p>
+<p>Roma, {{DATA}}</p>
+<p><b>Letto, confermato e sottoscritto.</b></p>
+<div class="sign-row"><div><b>IMMONOVA S.r.l.</b><br>Il Legale Rappresentante</div><div><b>Il Ricevente</b><br>(firma elettronica OTP)</div></div>
+<div class="clauses" data-clauses="1"><p><b>Approvazione specifica ai sensi degli artt. 1341 e 1342 c.c.</b></p>
+<p>Ai sensi e per gli effetti degli artt. 1341 e 1342 c.c., il Ricevente dichiara di approvare specificamente le seguenti clausole: art. 2 (obblighi di riservatezza senza limiti di tempo), art. 3 (divieto di non scavalcamento), art. 4 (clausola penale), art. 6 (foro competente).</p>
+<p>Il Ricevente (seconda firma elettronica OTP)</p></div>
+`},
+
 partner: {
   key: "partner_v2",
   title: "Accordo di Partnership Commerciale",
