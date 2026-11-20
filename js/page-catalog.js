@@ -90,5 +90,7 @@ var PAGE_CATALOG = [
   {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk", family:"Amministrazione"},
   {section:"Owner", key:"access-logs.html", label:"Log Accessi", i18nKey:null, family:"Amministrazione"},
   {section:"Owner", key:"servizi-esterni.html", label:"Servizi Esterni", i18nKey:null, family:"Amministrazione"},
-  {section:"Owner", key:"contratto-partner.html", label:"Contratto Partner", i18nKey:null, family:"Amministrazione"}
+  {section:"Owner", key:"contratto-partner.html", label:"Contratto Partner", i18nKey:null, family:"Amministrazione"},
+  {section:"Owner", key:"contratti.html", label:"Contratti (firma OTP)", i18nKey:null, family:"Amministrazione"},
+  {section:"Owner", key:"tabella-compensi.html", label:"Tabella compensi", i18nKey:null, family:"Amministrazione"}
 ];

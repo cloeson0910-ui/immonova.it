@@ -29,7 +29,9 @@ var OWNER_ONLY_PAGES = [
   "meta-ads-planner.html",
   "site-settings.html",
   "broadcast-notifications.html",
-  "contratto-partner.html"
+  "contratto-partner.html",
+  "contratti.html",
+  "tabella-compensi.html"
 ];
 
 /* Da chiamare SUBITO DOPO aver verificato la sessione (checkAuth), su ogni
