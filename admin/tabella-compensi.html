@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<link rel="stylesheet" href="../css/immonova-text-theme.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMMONOVA | Tabella compensi</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#46371a;min-height:100vh}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px);background-size:230px 199px;opacity:.3}
+.header{padding:18px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.14);background:rgba(244,236,223,.85);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10;gap:12px;flex-wrap:wrap}
+.brand{font-size:20px;letter-spacing:.16em;color:#5b461d;font-weight:300;text-decoration:none}
+.nav a{padding:9px 14px;border:1px solid rgba(166,127,52,.28);border-radius:8px;color:#46371a;text-decoration:none;font-size:12px;margin-left:6px;background:rgba(255,255,255,.3)}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 24px 80px}
+h1{font-size:26px;font-weight:300;color:#5c4a22}
+h2{font-size:15px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:#6b5a32;margin-bottom:12px}
+.sub{font-size:13px;color:#56492d;margin:4px 0 22px;line-height:1.6}
+.card{background:rgba(255,255,255,.55);border:1px solid rgba(166,127,52,.2);border-radius:12px;padding:20px;margin-bottom:18px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b5a32;padding:8px;border-bottom:1px solid rgba(166,127,52,.3)}
+td{padding:6px 8px;border-bottom:1px solid rgba(166,127,52,.12)}
+input,textarea{width:100%;padding:9px;border:1px solid rgba(166,127,52,.3);border-radius:6px;background:#fff;font-family:inherit;font-size:14px}
+.btn{padding:11px 18px;border-radius:7px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit}
+.btn.sec{background:rgba(255,255,255,.5);color:#46371a}
+.x{background:none;border:0;color:#9c2f2f;font-size:18px;cursor:pointer}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.status{font-size:13px;min-height:18px;margin-top:10px}.status.err{color:#8a1f1f}.status.ok{color:#2b5a26}
+.calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;align-items:end}
+.res{font-size:22px;font-weight:300;color:#5c4a22}
+.lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6b5a32;margin-bottom:6px}
+.hist td{font-size:12px}
+</style>
+</head>
+<body>
+<div class="header">
+  <a class="brand" href="dashboard.html">IMMONOVA</a>
+  <div class="nav"><a href="contratti.html">Contratti</a><a href="dashboard.html">Dashboard</a></div>
+</div>
+<div class="wrap">
+  <h1>Tabella compensi</h1>
+  <div class="sub">Scala di Lehman sul prezzo di vendita (fee IMMONOVA per lato tra partner) e compenso fisso del segnalatore per fascia di prezzo.<br>
+  Ogni salvataggio crea una <b>nuova versione</b>: i contratti già inviati restano legati alla versione in vigore il giorno dell'invio.</div>
+
+  <div class="card">
+    <h2 id="curTitle">Versione in vigore</h2>
+    <table><thead><tr><th>Da € (escluso)</th><th>A € (vuoto = oltre)</th><th>Fee IMMONOVA % per lato</th><th>Compenso fisso segnalatore €</th><th></th></tr></thead>
+    <tbody id="rows"></tbody></table>
+    <div class="row"><button class="btn sec" id="addRow">+ Aggiungi scaglione</button></div>
+    <div style="margin-top:14px"><div class="lbl">Nota sulla modifica (facoltativa)</div><input id="notes" placeholder="es. aggiornati compensi segnalatore"></div>
+    <div class="row"><button class="btn" id="saveBtn">Salva nuova versione</button></div>
+    <div class="status" id="st"></div>
+  </div>
+
+  <div class="card">
+    <h2>Calcolatore</h2>
+    <div class="calc">
+      <div><div class="lbl">Prezzo di vendita €</div><input id="price" type="number" min="0" step="any" placeholder="es. 3500000"></div>
+      <div><div class="lbl">Fee IMMONOVA per lato</div><div class="res" id="rFee">—</div></div>
+      <div><div class="lbl">Fee totale (entrambi i partner)</div><div class="res" id="rFee2">—</div></div>
+      <div><div class="lbl">Compenso segnalatore</div><div class="res" id="rSeg">—</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Storico versioni</h2>
+    <table class="hist"><thead><tr><th>Versione</th><th>In vigore dal</th><th>Nota</th><th>Scaglioni</th></tr></thead><tbody id="hist"></tbody></table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script src="../js/owner-pages-guard.js"></script>
+<script src="../js/contract-templates.js"></script>
+<script>
+const client = window.supabaseClient;
+let current = null, user = null;
+const $ = id => document.getElementById(id);
+const eur = v => "€ " + Number(v || 0).toLocaleString("it-IT", { maximumFractionDigits:2 });
+const setSt = (t, c) => { $("st").textContent = t; $("st").className = "status " + (c || ""); };
+
+async function init(){
+  const { data:{ session } } = await client.auth.getSession();
+  if(!session){ location.href = "login.html"; return; }
+  user = session.user;
+  if(!(await guardOwnerOnlyPage(client, user.id))) return;
+  await load();
+}
+async function load(){
+  const r = await client.from("immonova_compensation_tables").select("*").order("version", { ascending:false });
+  if(r.error){ setSt("Esegui prima lo script SQL contratti-e-compensi.sql (" + r.error.message + ")", "err"); return; }
+  current = r.data[0] || { version:0, rows:[] };
+  $("curTitle").textContent = "Versione in vigore: " + current.version + (current.valid_from ? " (dal " + new Date(current.valid_from).toLocaleString("it-IT") + ")" : "");
+  renderRows(current.rows);
+  $("hist").innerHTML = r.data.map(t => "<tr><td>" + t.version + "</td><td>" + new Date(t.valid_from).toLocaleString("it-IT") + "</td><td>" + (t.notes || "") +
+    "</td><td>" + t.rows.map(x => (x.a == null ? "oltre " + eur(x.da) : "≤ " + eur(x.a)) + ": " + x.fee_pct + "% / " + (x.segnalatore_eur == null ? "—" : eur(x.segnalatore_eur))).join("<br>") + "</td></tr>").join("");
+  calc();
+}
+function renderRows(rows){
+  $("rows").innerHTML = rows.map(r => '<tr><td><input type="number" step="any" min="0" class="da" value="' + (r.da ?? 0) + '"></td>' +
+    '<td><input type="number" step="any" min="0" class="a" value="' + (r.a ?? "") + '"></td>' +
+    '<td><input type="number" step="any" min="0" class="fee" value="' + (r.fee_pct ?? "") + '"></td>' +
+    '<td><input type="number" step="any" min="0" class="seg" value="' + (r.segnalatore_eur ?? "") + '"></td>' +
+    '<td><button class="x" title="Elimina scaglione" onclick="this.closest(\'tr\').remove();calc()">×</button></td></tr>').join("");
+  $("rows").querySelectorAll("input").forEach(i => i.addEventListener("input", calc));
+}
+function readRows(){
+  return [...$("rows").querySelectorAll("tr")].map(tr => {
+    const v = c => tr.querySelector("." + c).value;
+    return { da:Number(v("da") || 0), a:v("a") === "" ? null : Number(v("a")), fee_pct:Number(v("fee")), segnalatore_eur:v("seg") === "" ? null : Number(v("seg")) };
+  }).sort((x, y) => x.da - y.da);
+}
+function validate(rows){
+  if(!rows.length) return "Serve almeno uno scaglione.";
+  if(rows[0].da !== 0) return "Il primo scaglione deve partire da 0.";
+  for(let i = 0; i < rows.length; i++){
+    const r = rows[i];
+    if(isNaN(r.fee_pct) || r.fee_pct < 0) return "Percentuale non valida nello scaglione " + (i + 1) + ".";
+    if(i < rows.length - 1){
+      if(r.a == null) return "Solo l'ultimo scaglione può essere senza limite (\"oltre\").";
+      if(rows[i + 1].da !== r.a) return "Lo scaglione " + (i + 2) + " deve partire da " + eur(r.a) + " (fine del precedente).";
+    }
+    if(r.a != null && r.a <= r.da) return "Nello scaglione " + (i + 1) + " il limite \"A\" deve essere maggiore di \"Da\".";
+  }
+  if(rows[rows.length - 1].a != null) return "L'ultimo scaglione deve essere \"oltre\" (lascia vuoto il campo A).";
+  return null;
+}
+function calc(){
+  const p = Number($("price").value);
+  if(!p){ ["rFee","rFee2","rSeg"].forEach(id => $(id).textContent = "—"); return; }
+  const r = window.immonovaCompute({ rows:readRows() }, p);
+  $("rFee").textContent = eur(r.fee);
+  $("rFee2").textContent = eur(r.fee * 2);
+  $("rSeg").textContent = r.segnalatore == null ? "non impostato" : eur(r.segnalatore);
+}
+$("price").addEventListener("input", calc);
+$("addRow").addEventListener("click", () => {
+  const rows = readRows(); const last = rows[rows.length - 1];
+  if(last && last.a == null){ last.a = last.da + 1000000; }
+  rows.push({ da:last ? last.a : 0, a:null, fee_pct:last ? last.fee_pct : 0, segnalatore_eur:null });
+  renderRows(rows); calc();
+});
+$("saveBtn").addEventListener("click", async () => {
+  const rows = readRows(); const err = validate(rows);
+  if(err){ setSt(err, "err"); return; }
+  if(!confirm("Salvare come versione " + (current.version + 1) + "? Varrà per tutti i contratti inviati da adesso.")) return;
+  const r = await client.from("immonova_compensation_tables").insert({ version:current.version + 1, rows, notes:$("notes").value.trim() || null, created_by:user.id });
+  if(r.error){ setSt("Errore: " + r.error.message, "err"); return; }
+  $("notes").value = ""; setSt("Versione " + (current.version + 1) + " salvata e in vigore.", "ok"); load();
+});
+init();
+</script>
+</body>
+</html>
