@@ -78,6 +78,10 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 .sign-status{font-size:11px;color:var(--c-2b4626);min-height:16px;margin-top:6px}
 .sign-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .clear-btn{padding:8px 14px;border:1px solid rgba(166,127,52,.4);background:transparent;color:var(--c-5b461d);text-transform:uppercase;letter-spacing:.1em;font-size:10px;cursor:pointer}
+.nda-block{margin-top:30px;padding-top:18px;border-top:1px dashed rgba(166,127,52,.4)}
+.nda-help{font-size:13px;line-height:1.6;color:#56492d;margin:-4px 0 12px}
+.nda-block textarea{width:100%;padding:10px;border:1px solid rgba(166,127,52,.3);border-radius:7px;font-family:inherit;font-size:14px}
+.nda-status{font-size:13px}
 .submit-row{margin-top:24px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .sheet-footer{padding:16px 32px;border-top:1px solid rgba(166,127,52,.14);display:flex;justify-content:space-between;align-items:center;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(166,127,52,.6)}
 @media print{
@@ -118,6 +122,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-li
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="../js/config.js"></script>
+<script src="../js/contract-templates.js"></script>
 <script>
 var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 var params = new URLSearchParams(window.location.search);
@@ -285,6 +290,16 @@ function renderSheet(){
         '<div class="submit-row">' +
           '<button class="btn" id="submitVisitBtn" type="button">Genera scheda visita (PDF)</button>' +
         '</div>' +
+        '<div class="nda-block" data-html2canvas-ignore="true">' +
+          '<div class="sheet-section-label">NDA – Riservatezza documentazione (firma OTP)</div>' +
+          '<div class="nda-help">Da usare quando il cliente prende visione della documentazione dell\'immobile o ne riceve una copia. Usa nome, cognome ed email inseriti sopra: il cliente riceve il link, firma con codice OTP e a firma avvenuta arriva la copia via email a lui, a te e all\'amministrazione.</div>' +
+          '<div class="consent-box"><input type="checkbox" id="ndaVisione" checked><label for="ndaVisione" class="txt">Presa visione della documentazione dell\'immobile</label></div>' +
+          '<div class="consent-box"><input type="checkbox" id="ndaCopia"><label for="ndaCopia" class="txt">Consegna di copia della documentazione (presa in possesso)</label></div>' +
+          '<div class="field-grid single"><div class="field"><label for="ndaDocs">Documenti consegnati / visionati</label><textarea id="ndaDocs" rows="3" placeholder="es. visura catastale, planimetria, atto di provenienza, APE, relazione tecnica"></textarea></div></div>' +
+          '<div class="field-grid"><div class="field"><label for="ndaCf">Codice fiscale cliente (facoltativo)</label><input type="text" id="ndaCf" style="text-transform:uppercase"></div>' +
+          '<div class="field"><label for="ndaPenale">Penale violazione riservatezza (€)</label><input type="number" id="ndaPenale" min="0" step="any"></div></div>' +
+          '<div class="submit-row" style="display:flex"><button class="btn" id="ndaSendBtn" type="button">Invia NDA per firma OTP</button><span class="nda-status" id="ndaStatus"></span></div>' +
+        '</div>' +
       '</div>' +
       '<div class="sheet-footer"><span>IMMONOVA</span><span>Documento riservato IMMONOVA</span></div>' +
     '</div>';
@@ -294,6 +309,7 @@ function renderSheet(){
   document.getElementById("clearSignBtn").addEventListener("click", function(){ signaturePad.clear(); });
   document.getElementById("clearClientBtn").addEventListener("click", clearClientFields);
   document.getElementById("submitVisitBtn").addEventListener("click", submitVisit);
+  wireNda();
   wireClientSearch();
 }
 
@@ -506,6 +522,65 @@ function renderLinkRow(url){
     catch(e){ window.prompt("Copia manualmente il link:", url); }
     setTimeout(function(){ if(fb) fb.textContent=""; }, 2500);
   });
+}
+
+
+/* ---- NDA visita / documentazione con firma OTP (sistema contratti immonova-contract) ---- */
+function wireNda(){
+  var pen = document.getElementById("ndaPenale");
+  try{ var last = localStorage.getItem("immonova_nda_penale"); if(last && pen && !pen.value) pen.value = last; }catch(e){}
+  var btn = document.getElementById("ndaSendBtn");
+  if(btn) btn.addEventListener("click", sendNda);
+}
+function ndaStatus(t, err){ var el = document.getElementById("ndaStatus"); if(el){ el.textContent = t || ""; el.style.color = err ? "#8a1f1f" : "#2b5a26"; } }
+function ndaEur(v){
+  return "Euro " + Number(v).toLocaleString("it-IT", { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+async function sendNda(){
+  var first = document.getElementById("clientFirstName").value.trim();
+  var last = document.getElementById("clientLastName").value.trim();
+  var email = document.getElementById("clientEmail").value.trim().toLowerCase();
+  var phone = document.getElementById("clientPhone").value.trim();
+  var cf = (document.getElementById("ndaCf").value || "").trim().toUpperCase();
+  var visione = document.getElementById("ndaVisione").checked;
+  var copia = document.getElementById("ndaCopia").checked;
+  var docs = document.getElementById("ndaDocs").value.trim();
+  var pen = document.getElementById("ndaPenale").value;
+  if(!first || !last){ ndaStatus("Inserisci nome e cognome del cliente qui sopra.", true); return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ ndaStatus("Serve l'email del cliente (riceverà il codice di firma).", true); return; }
+  if(!visione && !copia){ ndaStatus("Seleziona presa visione e/o consegna copia.", true); return; }
+  if(copia && !docs){ ndaStatus("Indica quali documenti vengono consegnati.", true); return; }
+  if(pen === "" || Number(pen) <= 0){ ndaStatus("Indica l'importo della penale.", true); return; }
+  if(!window.IMMONOVA_CONTRACT_TEMPLATES || !window.IMMONOVA_CONTRACT_TEMPLATES.nda_visita){ ndaStatus("Modello NDA non caricato (js/contract-templates.js).", true); return; }
+  var name = first + " " + last;
+  var o = opportunity || {};
+  var immobile = "<b>" + escapeHTML(getTitle()) + "</b>" + (getAddress() ? ", " + escapeHTML(getAddress()) : "") + " (rif. IMMONOVA n. " + escapeHTML(String(o.id || opportunityId || "")) + ")";
+  var modalita = [visione ? "la presa visione della documentazione relativa all'Asset" : "", copia ? "la consegna di copia della documentazione relativa all'Asset" : ""].filter(Boolean).join(" e ");
+  var cp = "il Sig./la Sig.ra <b>" + escapeHTML(name) + "</b>" + (cf ? ", Codice Fiscale " + escapeHTML(cf) : "") + ", email " + escapeHTML(email) + (phone ? ", telefono " + escapeHTML(phone) : "");
+  var today = new Date().toLocaleDateString("it-IT", { day:"numeric", month:"long", year:"numeric" });
+  var html = window.IMMONOVA_CONTRACT_TEMPLATES.nda_visita.html
+    .split("{{CONTROPARTE}}").join(cp)
+    .split("{{IMMOBILE}}").join(immobile)
+    .split("{{MODALITA}}").join(modalita)
+    .split("{{DOCUMENTI}}").join(docs ? escapeHTML(docs) : "ogni documento visionato o ricevuto")
+    .split("{{PENALE_NDA}}").join(ndaEur(pen))
+    .split("{{DATA}}").join(today);
+  if(!confirm("Inviare l'NDA a " + email + " per la firma con OTP?")) return;
+  var btn = document.getElementById("ndaSendBtn"); btn.disabled = true; ndaStatus("Invio in corso…");
+  try{
+    try{ localStorage.setItem("immonova_nda_penale", String(pen)); }catch(e){}
+    var sess = await client.auth.getSession();
+    var token = sess.data.session ? sess.data.session.access_token : "";
+    var r = await fetch(String(SUPABASE_URL||"").replace(/\/+$/,"") + "/functions/v1/immonova-contract", {
+      method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer " + token, apikey:SUPABASE_ANON_KEY },
+      body: JSON.stringify({ action:"send", contract_type:"nda_visita", counterparty:{ nome:first, cognome:last, cf:cf, telefono:phone, visione:visione, copia:copia, documenti:docs },
+        counterparty_email:email, counterparty_name:name, subject:modalita, penalty_nda_eur:Number(pen), opportunity_id:o.id || opportunityId || null, body_html:html })
+    });
+    var out = await r.json().catch(function(){ return {}; });
+    if(!r.ok || !out.ok) throw new Error(out.error || ("HTTP " + r.status));
+    ndaStatus(out.email_sent ? "NDA inviata a " + email + ". Appena firma ricevete la copia via email." : "NDA salvata ma email non partita: manda tu il link " + out.link, !out.email_sent);
+  }catch(e){ ndaStatus("Errore: " + (e.message || e), true); }
+  btn.disabled = false;
 }
 
 async function submitVisit(){
