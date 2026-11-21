@@ -56,13 +56,18 @@ details.day[open]{padding-bottom:6px}
 .counts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .counts span{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600}
 mark{background:#f1d27a}
+.pri{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;margin-left:6px;vertical-align:middle}
+.p-alta{background:#2b2416;color:#f1d27a}.p-media{background:#e9dcc0;color:#5b461d}.p-bassa{background:#f3efe6;color:#8a7a55;border:1px solid #e0d4b8}
+.par{font-size:12px;color:#7a6a45;margin-bottom:3px}.par a{color:#5b461d}
+.prog{display:inline-block;width:80px;height:6px;background:#eadfca;border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}.prog i{display:block;height:100%;background:#3c9a3c}
+.item.child{margin-left:22px}
 @media(max-width:600px){.item{flex-wrap:wrap}.acts{flex-direction:row;width:100%}}
 </style>
 </head>
 <body>
 <div class="header">
   <a class="brand" href="dashboard.html">IMMONOVA</a>
-  <div class="nav"><a href="../collaboratore.html" id="homeAppLink" class="hidden">Home app</a><a href="calendar.html">Calendario</a><a href="dashboard.html">Dashboard</a></div>
+  <div class="nav"><a href="../collaboratore.html" id="homeAppLink" class="hidden">Home app</a><a href="diario-giorno.html">Giornata</a><a href="diario-gantt.html">Gantt</a><a href="dashboard.html">Dashboard</a></div>
 </div>
 <div class="wrap">
   <h1>Diario attività</h1>
@@ -83,7 +88,11 @@ mark{background:#f1d27a}
     <div class="grid">
       <div><label>Data *</label><input id="f_date" type="date"></div>
       <div><label>Ora</label><input id="f_time" type="time"></div>
+      <div><label>Scadenza (fine prevista)</label><input id="f_due" type="date"></div>
     </div>
+    <div style="margin-top:12px"><label>Fa parte di (attività principale / milestone)</label>
+      <select id="f_parent"></select>
+      <p class="sub" style="margin:4px 0 0">Lascia "nessuna" per un'attività principale. Una principale si chiude solo quando tutte le sue sotto-attività sono chiuse.</p></div>
     <div style="margin-top:12px"><label>Attività *</label><input id="f_title" placeholder="Es. Chiamata con proprietario villa Ostuni"></div>
     <div style="margin-top:12px"><label>Note</label><textarea id="f_notes" placeholder="Dettagli, esito, prossimi passi…"></textarea></div>
     <div style="margin-top:12px"><label>Stato</label>
@@ -91,6 +100,13 @@ mark{background:#f1d27a}
         <button type="button" data-v="aperta" class="s-aperta on">🔴 Aperta</button>
         <button type="button" data-v="in_gestione" class="s-in_gestione">🟡 In gestione</button>
         <button type="button" data-v="chiusa" class="s-chiusa">🟢 Chiusa</button>
+      </div>
+    </div>
+    <div style="margin-top:12px"><label>Priorità</label>
+      <div class="seg" id="f_pri">
+        <button type="button" data-v="alta" class="p-alta">▲ Alta</button>
+        <button type="button" data-v="media" class="p-media on">● Media</button>
+        <button type="button" data-v="bassa" class="p-bassa">▽ Bassa</button>
       </div>
     </div>
     <div class="grid" style="margin-top:12px">
@@ -135,7 +151,87 @@ mark{background:#f1d27a}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
-<script src="../js/collab-push.js"></script>
+<script>
+/* IMMONOVA – notifiche push collaboratori (app installata).
+   Collega il dispositivo all'utente loggato (tabella immonova_push_subscriptions, audience
+   "collaborator") tramite la edge function register-collaborator-push.
+   IMPORTANTE: un telefono può avere già il permesso notifiche concesso per l'app pubblica
+   (iscrizione anonima, senza utente): in quel caso va solo ricollegato all'utente, cosa che
+   sync() fa in automatico e in silenzio ad ogni apertura. */
+(function(){
+  function isStandalone(){ return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; }
+  function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
+  function supported(){ return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window); }
+  function b64(b){ var p = "=".repeat((4 - b.length % 4) % 4); var r = atob((b + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(r, function(c){ return c.charCodeAt(0); }); }
+  function timeout(p, ms, what){ return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error(what + ": tempo scaduto, riprova.")); }, ms); })]); }
+  async function errMsg(r){ try{ var j = await r.error.context.json(); return j.error || r.error.message; }catch(e){ return r.error.message; } }
+  async function reg(){
+    var g = await navigator.serviceWorker.getRegistration("/");
+    if(!g) await navigator.serviceWorker.register("/service-worker.js", { scope:"/" });
+    return timeout(navigator.serviceWorker.ready, 15000, "Avvio app");
+  }
+  async function save(client, sub){
+    var r = await client.functions.invoke("register-collaborator-push", { body:{ action:"subscribe", subscription:sub.toJSON(), user_agent:navigator.userAgent } });
+    if(r.error) throw new Error(await errMsg(r));
+    if(!r.data || !r.data.ok) throw new Error((r.data && r.data.error) || "Iscrizione non salvata.");
+  }
+  function unsupportedText(){
+    return isIOS() && !isStandalone()
+      ? "Su iPhone le notifiche funzionano solo dall'app: in Safari tocca Condividi → Aggiungi alla schermata Home e apri IMMONOVA dall'icona."
+      : "Questo browser non supporta le notifiche push.";
+  }
+  /* stato: "unsupported" | "denied" | "off" | "on" */
+  async function state(){
+    if(!supported()) return "unsupported";
+    if(Notification.permission === "denied") return "denied";
+    try{ var g = await navigator.serviceWorker.getRegistration("/"); var s = g ? await g.pushManager.getSubscription() : null;
+      return (s && Notification.permission === "granted") ? "on" : "off"; }catch(e){ return "off"; }
+  }
+  /* collega in silenzio l'iscrizione già esistente all'utente loggato */
+  async function sync(client){
+    try{ if(await state() !== "on") return false; var g = await reg(); var s = await g.pushManager.getSubscription(); if(!s) return false; await save(client, s); return true; }
+    catch(e){ return false; }
+  }
+  async function enable(client){
+    if(!supported()) throw new Error(unsupportedText());
+    var perm = await Notification.requestPermission();
+    if(perm !== "granted") throw new Error("Permesso notifiche negato: abilitalo da Impostazioni del telefono → Notifiche → IMMONOVA.");
+    var k = await client.functions.invoke("register-collaborator-push", { body:{ action:"key" } });
+    if(k.error || !k.data || !k.data.publicKey) throw new Error("Chiave notifiche non disponibile" + (k.error ? ": " + await errMsg(k) : ""));
+    var g = await reg();
+    var s = await g.pushManager.getSubscription();
+    if(!s) s = await timeout(g.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64(k.data.publicKey) }), 15000, "Iscrizione");
+    await save(client, s);
+  }
+  async function test(client){
+    var r = await client.functions.invoke("register-collaborator-push", { body:{ action:"test" } });
+    if(r.error) throw new Error(await errMsg(r));
+    return (r.data && r.data.sent) || 0;
+  }
+  /* widget pronto: pulsante + stato dentro un contenitore */
+  async function mount(client, box){
+    box.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+      '<button type="button" data-a="on" style="padding:11px 16px;border-radius:9px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;font:600 13px inherit;cursor:pointer">🔔 Attiva notifiche</button>' +
+      '<button type="button" data-a="test" style="padding:11px 16px;border-radius:9px;border:1px solid rgba(166,127,52,.35);background:#fff;color:#46371a;font:600 13px inherit;cursor:pointer">Invia prova</button></div>' +
+      '<div data-s style="font-size:13px;margin-top:8px;line-height:1.5"></div>';
+    var st = box.querySelector("[data-s]"), on = box.querySelector('[data-a="on"]'), ts = box.querySelector('[data-a="test"]');
+    function say(t, ok){ st.textContent = t; st.style.color = ok === false ? "#8a1f1f" : ok ? "#2b5a26" : "#56492d"; }
+    async function refresh(){
+      var s = await state();
+      if(s === "unsupported"){ on.style.display = "none"; ts.style.display = "none"; say(unsupportedText(), false); return; }
+      if(s === "denied"){ ts.style.display = "none"; say("Notifiche bloccate: abilitale da Impostazioni del telefono → Notifiche → IMMONOVA, poi tocca Attiva.", false); return; }
+      if(s === "on"){ say("Collegamento del dispositivo…"); var ok = await sync(client);
+        on.textContent = "🔔 Ricollega notifiche"; ts.style.display = "";
+        say(ok ? "Notifiche attive su questo dispositivo per il tuo account." : "Notifiche consentite ma non collegate: tocca Ricollega.", ok); return; }
+      ts.style.display = "none"; say("Notifiche non attive su questo dispositivo.");
+    }
+    on.onclick = async function(){ say("Attivazione in corso…"); try{ await enable(client); say("Notifiche attive su questo dispositivo per il tuo account.", true); ts.style.display = ""; on.textContent = "🔔 Ricollega notifiche"; }catch(e){ say(e.message || String(e), false); } };
+    ts.onclick = async function(){ say("Invio prova…"); try{ var n = await test(client); say(n ? "Prova inviata a " + n + " dispositivo/i: deve arrivare tra pochi secondi." : "Nessun dispositivo collegato: tocca Attiva/Ricollega.", !!n); }catch(e){ say(e.message || String(e), false); } };
+    refresh();
+  }
+  window.ImmonovaPush = { state:state, sync:sync, enable:enable, test:test, mount:mount, isIOS:isIOS, isStandalone:isStandalone };
+})();
+</script>
 <script>
 const client = window.supabaseClient;
 const $ = id => document.getElementById(id);
@@ -145,6 +241,8 @@ const pad = n => String(n).padStart(2, "0");
 const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
 let openDays = null;
+let all = [], fPri = "media";
+const PRI = { alta:"▲ Alta", media:"● Media", bassa:"▽ Bassa" };
 let user = null, rows = [], editId = null, editRow = null, fStatus = "aperta", timer = null;
 
 function setSt(t, c){ $("st").textContent = t || ""; $("st").className = "status " + (c || ""); }
@@ -158,6 +256,7 @@ async function init(){
   user = session.user;
   resetForm();
   document.querySelectorAll("#f_status button").forEach(b => b.onclick = () => setFStatus(b.dataset.v));
+  document.querySelectorAll("#f_pri button").forEach(b => b.onclick = () => setFPri(b.dataset.v));
   $("f_rem").onchange = () => { $("remCustomBox").classList.toggle("hidden", $("f_rem").value !== "custom"); };
   $("saveBtn").onclick = save;
   $("cancelBtn").onclick = () => { resetForm(); $("formCard").classList.add("hidden"); };
@@ -172,12 +271,18 @@ async function init(){
   if(id){ const r = await client.from("immonova_diary").select("*").eq("id", id).maybeSingle(); if(r.data) startEdit(r.data); }
 }
 
+function setFPri(v){ fPri = v; document.querySelectorAll("#f_pri button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
+function fillParents(sel, exclude){
+  const bad = new Set(); if(exclude){ bad.add(exclude); let grow = true; while(grow){ grow = false; all.forEach(a => { if(a.parent_id && bad.has(a.parent_id) && !bad.has(a.id)){ bad.add(a.id); grow = true; } }); } }
+  const opts = all.filter(a => !bad.has(a.id) && (a.status !== "chiusa" || a.id === sel)).sort((a, b) => a.title.localeCompare(b.title, "it"));
+  $("f_parent").innerHTML = '<option value="">— nessuna (attività principale / milestone)</option>' + opts.map(a => '<option value="' + a.id + '"' + (a.id === sel ? " selected" : "") + '>' + (a.parent_id ? "↳ " : "◆ ") + esc(a.title) + (a.due_date ? " (entro " + a.due_date.split("-").reverse().join("/") + ")" : "") + '</option>').join("");
+}
 function setFStatus(v){ fStatus = v; document.querySelectorAll("#f_status button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
 function resetForm(){
   editId = null; editRow = null;
   const n = new Date();
   $("f_date").value = ymd(n); $("f_time").value = hm(n);
-  $("f_title").value = ""; $("f_notes").value = ""; setFStatus("aperta");
+  $("f_title").value = ""; $("f_notes").value = ""; setFStatus("aperta"); setFPri("media"); $("f_due").value = ""; fillParents("", null);
   $("f_rem").value = ""; $("f_rem").querySelector('[value="keep"]').classList.add("hidden");
   $("remCustomBox").classList.add("hidden"); $("remNow").textContent = "";
   $("formTitle").textContent = "Nuova attività"; $("saveBtn").textContent = "Salva attività"; $("cancelBtn").classList.add("hidden");
@@ -186,6 +291,7 @@ function startEdit(r){
   editId = r.id; editRow = r;
   $("f_date").value = r.activity_date; $("f_time").value = r.activity_time ? String(r.activity_time).slice(0, 5) : "";
   $("f_title").value = r.title || ""; $("f_notes").value = r.notes || ""; setFStatus(r.status);
+  setFPri(r.priority || "media"); $("f_due").value = r.due_date || ""; fillParents(r.parent_id || "", r.id);
   const keep = $("f_rem").querySelector('[value="keep"]');
   if(r.remind_at){ keep.classList.remove("hidden"); $("f_rem").value = "keep";
     $("remNow").textContent = "Promemoria attuale: " + fmtDT(r.remind_at) + (r.reminded_at ? " (già notificato)" : ""); }
@@ -193,6 +299,12 @@ function startEdit(r){
   $("remCustomBox").classList.add("hidden");
   $("formTitle").textContent = "Modifica attività"; $("saveBtn").textContent = "Salva modifiche"; $("cancelBtn").classList.remove("hidden");
   $("formCard").classList.remove("hidden"); $("formCard").scrollIntoView({ behavior:"smooth" });
+}
+function addChild(pid){
+  resetForm(); fillParents(pid, null);
+  const p = all.find(a => a.id === pid);
+  $("formTitle").textContent = "Nuova sotto-attività" + (p ? " di: " + p.title : "");
+  $("formCard").classList.remove("hidden"); $("formCard").scrollIntoView({ behavior:"smooth" }); $("f_title").focus();
 }
 function editById(id){ const r = rows.find(x => x.id === id); if(r) startEdit(r); }
 function computeRemind(){
@@ -207,7 +319,9 @@ async function save(){
   const title = $("f_title").value.trim();
   if(!$("f_date").value || !title){ setSt("Data e attività sono obbligatorie.", "err"); return; }
   let remind_at; try{ remind_at = computeRemind(); }catch(e){ setSt(e.message, "err"); return; }
-  const row = { activity_date:$("f_date").value, activity_time:$("f_time").value || null, title, notes:$("f_notes").value.trim() || null, status:fStatus, remind_at };
+  if($("f_due").value && $("f_due").value < $("f_date").value){ setSt("La scadenza non può essere prima della data.", "err"); return; }
+  const row = { activity_date:$("f_date").value, activity_time:$("f_time").value || null, title, notes:$("f_notes").value.trim() || null, status:fStatus, remind_at,
+    due_date:$("f_due").value || null, priority:fPri, parent_id:$("f_parent").value || null };
   $("saveBtn").disabled = true; setSt("Salvataggio…");
   const r = editId ? await client.from("immonova_diary").update(row).eq("id", editId)
                    : await client.from("immonova_diary").insert(Object.assign({ user_id:user.id }, row));
@@ -249,7 +363,8 @@ async function load(){
   if(fs === "nonchiuse") q = q.neq("status", "chiusa"); else if(fs) q = q.eq("status", fs);
   const txt = $("q").value.trim();
   if(txt){ const s = txt.replace(/[%,()]/g, " "); q = q.or("title.ilike.%" + s + "%,notes.ilike.%" + s + "%"); }
-  const r = await q;
+  const [r, a] = await Promise.all([q, client.from("immonova_diary").select("id,title,status,parent_id,due_date,activity_date").eq("user_id", user.id).limit(5000)]);
+  all = a.data || [];
   if(r.error){ $("list").innerHTML = '<div class="card status err">Errore: ' + esc(r.error.message) + ' (hai eseguito diario.sql?)</div>'; return; }
   rows = r.data || []; render(txt);
 }
@@ -257,6 +372,17 @@ function hl(s, txt){
   const e = esc(s); if(!txt) return e;
   const re = new RegExp("(" + esc(txt).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
   return e.replace(re, "<mark>$1</mark>");
+}
+function parentLine(r){
+  if(!r.parent_id) return "";
+  const p = all.find(a => a.id === r.parent_id);
+  return p ? '<div class="par">↳ parte di: <a href="diario-gantt.html?root=' + rootOf(p.id) + '">' + esc(p.title) + '</a></div>' : "";
+}
+function rootOf(id){ let cur = all.find(a => a.id === id), n = 0; while(cur && cur.parent_id && n++ < 50) cur = all.find(a => a.id === cur.parent_id) || null; return cur ? cur.id : id; }
+function childLine(r){
+  const ch = all.filter(a => a.parent_id === r.id); if(!ch.length) return "";
+  const done = ch.filter(a => a.status === "chiusa").length;
+  return '<div class="m"><span class="prog"><i style="width:' + Math.round(done / ch.length * 100) + '%"></i></span>' + done + '/' + ch.length + ' sotto-attività chiuse · <a href="diario-gantt.html?root=' + rootOf(r.id) + '" style="color:#5b461d">vedi Gantt</a></div>';
 }
 function render(txt){
   const c = { aperta:0, in_gestione:0, chiusa:0 }; rows.forEach(r => c[r.status]++);
@@ -273,12 +399,13 @@ function render(txt){
       (k.chiusa ? '<span class="s-chiusa">🟢 ' + k.chiusa + '</span>' : "") + '</span></summary>' + it.map(r => {
       const rem = r.remind_at && r.status !== "chiusa" ? (r.reminded_at ? "🔔 notificato il " + fmtDT(r.remind_at) : "⏰ promemoria " + fmtDT(r.remind_at)) : "";
       const closed = r.status === "chiusa" && r.closed_at ? "chiusa il " + fmtDT(r.closed_at) : "";
-      return '<div class="item ' + r.status + '"><div class="time">' + (r.activity_time ? String(r.activity_time).slice(0, 5) : "—") + '</div>' +
-        '<div class="grow"><div class="t">' + hl(r.title, txt) + '</div>' + (r.notes ? '<div class="n">' + hl(r.notes, txt) + '</div>' : "") +
-        '<div class="m">' + LBL[r.status] + (rem ? " · " + rem : "") + (closed ? " · " + closed : "") + '</div></div>' +
+      return '<div class="item ' + r.status + (r.parent_id ? " child" : "") + '"><div class="time">' + (r.activity_time ? String(r.activity_time).slice(0, 5) : "—") + '</div>' +
+        '<div class="grow">' + parentLine(r) + '<div class="t">' + hl(r.title, txt) + '<span class="pri p-' + (r.priority || "media") + '">' + PRI[r.priority || "media"] + '</span></div>' + (r.notes ? '<div class="n">' + hl(r.notes, txt) + '</div>' : "") +
+        '<div class="m">' + LBL[r.status] + (r.due_date ? " · 🏁 entro " + r.due_date.split("-").reverse().join("/") : "") + (rem ? " · " + rem : "") + (closed ? " · " + closed : "") + '</div>' + childLine(r) + '</div>' +
         '<div class="acts"><select onchange="setStatus(\'' + r.id + '\', this.value)">' +
           ["aperta","in_gestione","chiusa"].map(s => '<option value="' + s + '"' + (s === r.status ? " selected" : "") + '>' + LBL[s] + '</option>').join("") + '</select>' +
         (r.status !== "chiusa" ? '<select onchange="snooze(\'' + r.id + '\', this.value)"><option value="">⏰ Ricordamelo…</option><option value="15">tra 15 min</option><option value="60">tra 1 ora</option><option value="180">tra 3 ore</option><option value="tomorrow">domani 9:00</option></select>' : "") +
+        (r.status !== "chiusa" ? '<button class="btn sec sm" onclick="addChild(\'' + r.id + '\')">+ Sotto-attività</button>' : "") +
         '<button class="btn sec sm" onclick="editById(\'' + r.id + '\')">Modifica</button>' +
         '<button class="btn sec sm" style="color:#8a1f1f" onclick="del(\'' + r.id + '\')">Elimina</button></div></div>';
     }).join("") + '</details>';
