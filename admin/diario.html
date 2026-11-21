@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<link rel="stylesheet" href="../css/immonova-text-theme.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#2b2416">
+<title>IMMONOVA | Diario attività</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;color:#46371a;min-height:100vh}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:repeating-linear-gradient(60deg,transparent 0 86px,rgba(188,149,78,.23) 87px,transparent 90px),repeating-linear-gradient(-60deg,transparent 0 86px,rgba(188,149,78,.22) 87px,transparent 90px);background-size:230px 199px;opacity:.3}
+.header{padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(166,127,52,.14);background:rgba(244,236,223,.9);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10;gap:12px;flex-wrap:wrap}
+.brand{font-size:20px;letter-spacing:.16em;color:#5b461d;font-weight:300;text-decoration:none}
+.nav a{padding:9px 14px;border:1px solid rgba(166,127,52,.28);border-radius:8px;color:#46371a;text-decoration:none;font-size:12px;margin-left:6px;background:rgba(255,255,255,.3)}
+.wrap{max-width:1000px;margin:0 auto;padding:24px 16px 90px}
+h1{font-size:26px;font-weight:300;color:#5c4a22}
+h2{font-size:13px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:#6b5a32;margin-bottom:12px}
+.sub{font-size:13px;color:#56492d;margin:4px 0 18px;line-height:1.6}
+.card{background:rgba(255,255,255,.6);border:1px solid rgba(166,127,52,.2);border-radius:12px;padding:18px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b5a32;margin-bottom:5px}
+input,select,textarea{width:100%;padding:10px;border:1px solid rgba(166,127,52,.3);border-radius:7px;background:#fff;font-family:inherit;font-size:15px;color:#2b2b2b}
+textarea{min-height:70px}
+.btn{padding:11px 16px;border-radius:7px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit}
+.btn.sec{background:rgba(255,255,255,.7);color:#46371a}
+.btn.sm{padding:6px 10px;font-size:11px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.status{font-size:13px;min-height:18px}.status.err{color:#8a1f1f}.status.ok{color:#2b5a26}
+.hidden{display:none!important}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:90px;padding:10px;border-radius:8px;border:2px solid transparent;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;opacity:.45}
+.seg button.on{opacity:1;border-color:#2b2416}
+.s-aperta{background:#f6d4d4;color:#8a1f1f}.s-in_gestione{background:#f7e7b0;color:#6b5114}.s-chiusa{background:#d4ecd0;color:#245a1c}
+.day{margin-top:20px}
+.day-h{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#6b5a32;border-bottom:1px solid rgba(166,127,52,.3);padding-bottom:6px;margin-bottom:8px;display:flex;justify-content:space-between}
+.item{display:flex;gap:12px;align-items:flex-start;background:rgba(255,255,255,.75);border:1px solid rgba(166,127,52,.18);border-left:6px solid #ccc;border-radius:9px;padding:12px;margin-bottom:8px}
+.item.aperta{border-left-color:#c0392b}.item.in_gestione{border-left-color:#e0b020}.item.chiusa{border-left-color:#3c9a3c}
+.item .t{font-size:15px;font-weight:600;color:#2b2416}
+.item .n{font-size:13px;color:#56492d;margin-top:4px;white-space:pre-wrap}
+.item .m{font-size:12px;color:#7a6a45;margin-top:6px}
+.time{font-size:15px;font-weight:600;min-width:48px;color:#5b461d}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.grow{flex:1;min-width:0}
+.acts{display:flex;flex-direction:column;gap:5px}
+.acts select{padding:6px;font-size:12px}
+.counts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.counts span{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600}
+mark{background:#f1d27a}
+@media(max-width:600px){.item{flex-wrap:wrap}.acts{flex-direction:row;width:100%}}
+</style>
+</head>
+<body>
+<div class="header">
+  <a class="brand" href="dashboard.html">IMMONOVA</a>
+  <div class="nav"><a href="calendar.html">Calendario</a><a href="dashboard.html">Dashboard</a></div>
+</div>
+<div class="wrap">
+  <h1>Diario attività</h1>
+  <p class="sub">Registra ogni attività svolta, con data e ora. Stato: <b style="color:#8a1f1f">rosso</b> aperta, <b style="color:#6b5114">giallo</b> in gestione, <b style="color:#245a1c">verde</b> chiusa. Imposta un promemoria e ricevi la notifica sull'app.</p>
+
+  <div class="card" id="pushCard">
+    <h2>Notifiche su questo dispositivo</h2>
+    <div class="row" style="margin-top:0">
+      <button class="btn" id="pushOnBtn" type="button">🔔 Attiva notifiche</button>
+      <button class="btn sec hidden" id="pushTestBtn" type="button">Invia prova</button>
+      <span class="status" id="pushStatus"></span>
+    </div>
+    <p class="sub" id="pushInfo" style="margin:8px 0 0"></p>
+  </div>
+
+  <div class="card" id="formCard">
+    <h2 id="formTitle">Nuova attività</h2>
+    <div class="grid">
+      <div><label>Data *</label><input id="f_date" type="date"></div>
+      <div><label>Ora</label><input id="f_time" type="time"></div>
+    </div>
+    <div style="margin-top:12px"><label>Attività *</label><input id="f_title" placeholder="Es. Chiamata con proprietario villa Ostuni"></div>
+    <div style="margin-top:12px"><label>Note</label><textarea id="f_notes" placeholder="Dettagli, esito, prossimi passi…"></textarea></div>
+    <div style="margin-top:12px"><label>Stato</label>
+      <div class="seg" id="f_status">
+        <button type="button" data-v="aperta" class="s-aperta on">🔴 Aperta</button>
+        <button type="button" data-v="in_gestione" class="s-in_gestione">🟡 In gestione</button>
+        <button type="button" data-v="chiusa" class="s-chiusa">🟢 Chiusa</button>
+      </div>
+    </div>
+    <div class="grid" style="margin-top:12px">
+      <div><label>Promemoria per chiuderla</label>
+        <select id="f_rem">
+          <option value="">Nessuno</option>
+          <option value="15">Tra 15 minuti</option><option value="30">Tra 30 minuti</option>
+          <option value="60">Tra 1 ora</option><option value="120">Tra 2 ore</option><option value="240">Tra 4 ore</option>
+          <option value="tomorrow">Domani alle 9:00</option><option value="custom">Data e ora precise…</option>
+          <option value="keep" class="hidden">Mantieni promemoria attuale</option>
+        </select></div>
+      <div id="remCustomBox" class="hidden"><label>Avvisami il</label><input id="f_remAt" type="datetime-local"></div>
+    </div>
+    <p class="sub" id="remNow" style="margin:6px 0 0"></p>
+    <div class="row">
+      <button class="btn" id="saveBtn" type="button">Salva attività</button>
+      <button class="btn sec hidden" id="cancelBtn" type="button">Annulla modifica</button>
+      <span class="status" id="st"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Cerca</h2>
+    <div class="grid">
+      <div style="grid-column:1/-1"><label>Testo</label><input id="q" placeholder="Cerca in attività e note…"></div>
+      <div><label>Dal</label><input id="from" type="date"></div>
+      <div><label>Al</label><input id="to" type="date"></div>
+      <div><label>Stato</label>
+        <select id="fs"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="in_gestione">🟡 In gestione</option><option value="chiusa">🟢 Chiuse</option><option value="nonchiuse">🔴🟡 Non chiuse</option></select></div>
+    </div>
+    <div class="row">
+      <button class="btn sec sm" type="button" data-q="today">Oggi</button>
+      <button class="btn sec sm" type="button" data-q="week">Ultimi 7 giorni</button>
+      <button class="btn sec sm" type="button" data-q="month">Ultimi 30 giorni</button>
+      <button class="btn sec sm" type="button" data-q="all">Tutto</button>
+    </div>
+    <div class="counts" id="counts"></div>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/config.js"></script>
+<script>
+const client = window.supabaseClient;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const LBL = { aperta:"🔴 Aperta", in_gestione:"🟡 In gestione", chiusa:"🟢 Chiusa" };
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
+let user = null, rows = [], editId = null, editRow = null, fStatus = "aperta", timer = null;
+
+function setSt(t, c){ $("st").textContent = t || ""; $("st").className = "status " + (c || ""); }
+function fmtDay(s){ const d = new Date(s + "T12:00:00"); return d.toLocaleDateString("it-IT", { weekday:"long", day:"numeric", month:"long", year:"numeric" }); }
+function fmtDT(iso){ const d = new Date(iso); return d.toLocaleDateString("it-IT") + " " + hm(d); }
+async function edgeErrorMessage(r){ try{ const j = await r.error.context.json(); return j.error || r.error.message; }catch(e){ return r.error.message; } }
+
+async function init(){
+  const { data:{ session } } = await client.auth.getSession();
+  if(!session){ location.href = "login.html"; return; }
+  user = session.user;
+  resetForm();
+  document.querySelectorAll("#f_status button").forEach(b => b.onclick = () => setFStatus(b.dataset.v));
+  $("f_rem").onchange = () => { $("remCustomBox").classList.toggle("hidden", $("f_rem").value !== "custom"); };
+  $("saveBtn").onclick = save;
+  $("cancelBtn").onclick = resetForm;
+  ["q","from","to","fs"].forEach(id => $(id).addEventListener(id === "q" ? "input" : "change", () => { clearTimeout(timer); timer = setTimeout(load, 250); }));
+  document.querySelectorAll("[data-q]").forEach(b => b.onclick = () => quick(b.dataset.q));
+  $("pushOnBtn").onclick = enablePush; $("pushTestBtn").onclick = testPush;
+  quick("month");
+  refreshPushUi();
+  const id = new URLSearchParams(location.search).get("id");
+  if(id){ const r = await client.from("immonova_diary").select("*").eq("id", id).maybeSingle(); if(r.data) startEdit(r.data); }
+}
+
+function setFStatus(v){ fStatus = v; document.querySelectorAll("#f_status button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
+function resetForm(){
+  editId = null; editRow = null;
+  const n = new Date();
+  $("f_date").value = ymd(n); $("f_time").value = hm(n);
+  $("f_title").value = ""; $("f_notes").value = ""; setFStatus("aperta");
+  $("f_rem").value = ""; $("f_rem").querySelector('[value="keep"]').classList.add("hidden");
+  $("remCustomBox").classList.add("hidden"); $("remNow").textContent = "";
+  $("formTitle").textContent = "Nuova attività"; $("saveBtn").textContent = "Salva attività"; $("cancelBtn").classList.add("hidden");
+}
+function startEdit(r){
+  editId = r.id; editRow = r;
+  $("f_date").value = r.activity_date; $("f_time").value = r.activity_time ? String(r.activity_time).slice(0, 5) : "";
+  $("f_title").value = r.title || ""; $("f_notes").value = r.notes || ""; setFStatus(r.status);
+  const keep = $("f_rem").querySelector('[value="keep"]');
+  if(r.remind_at){ keep.classList.remove("hidden"); $("f_rem").value = "keep";
+    $("remNow").textContent = "Promemoria attuale: " + fmtDT(r.remind_at) + (r.reminded_at ? " (già notificato)" : ""); }
+  else { keep.classList.add("hidden"); $("f_rem").value = ""; $("remNow").textContent = ""; }
+  $("remCustomBox").classList.add("hidden");
+  $("formTitle").textContent = "Modifica attività"; $("saveBtn").textContent = "Salva modifiche"; $("cancelBtn").classList.remove("hidden");
+  $("formCard").scrollIntoView({ behavior:"smooth" });
+}
+function editById(id){ const r = rows.find(x => x.id === id); if(r) startEdit(r); }
+function computeRemind(){
+  const v = $("f_rem").value;
+  if(v === "keep") return editRow ? editRow.remind_at : null;
+  if(!v) return null;
+  if(v === "tomorrow"){ const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.toISOString(); }
+  if(v === "custom"){ const x = $("f_remAt").value; if(!x) throw new Error("Indica data e ora del promemoria."); const d = new Date(x); if(d < new Date()) throw new Error("Il promemoria deve essere nel futuro."); return d.toISOString(); }
+  return new Date(Date.now() + Number(v) * 60000).toISOString();
+}
+async function save(){
+  const title = $("f_title").value.trim();
+  if(!$("f_date").value || !title){ setSt("Data e attività sono obbligatorie.", "err"); return; }
+  let remind_at; try{ remind_at = computeRemind(); }catch(e){ setSt(e.message, "err"); return; }
+  const row = { activity_date:$("f_date").value, activity_time:$("f_time").value || null, title, notes:$("f_notes").value.trim() || null, status:fStatus, remind_at };
+  $("saveBtn").disabled = true; setSt("Salvataggio…");
+  const r = editId ? await client.from("immonova_diary").update(row).eq("id", editId)
+                   : await client.from("immonova_diary").insert(Object.assign({ user_id:user.id }, row));
+  $("saveBtn").disabled = false;
+  if(r.error){ setSt("Errore: " + r.error.message, "err"); return; }
+  setSt(remind_at && fStatus !== "chiusa" ? "Salvato ✓ — promemoria il " + fmtDT(remind_at) : "Salvato ✓", "ok");
+  resetForm(); load();
+}
+async function setStatus(id, v){
+  const r = await client.from("immonova_diary").update({ status:v }).eq("id", id);
+  if(r.error){ alert(r.error.message); return; } load();
+}
+async function snooze(id, v){
+  if(!v) return;
+  const at = v === "tomorrow" ? (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })() : new Date(Date.now() + Number(v) * 60000);
+  const r = await client.from("immonova_diary").update({ remind_at:at.toISOString() }).eq("id", id);
+  if(r.error){ alert(r.error.message); return; } load();
+}
+async function del(id){
+  if(!confirm("Eliminare definitivamente questa attività?")) return;
+  const r = await client.from("immonova_diary").delete().eq("id", id);
+  if(r.error){ alert(r.error.message); return; } load();
+}
+
+function quick(k){
+  const t = new Date(); $("to").value = ymd(t);
+  if(k === "today") $("from").value = ymd(t);
+  else if(k === "week"){ const d = new Date(); d.setDate(d.getDate() - 6); $("from").value = ymd(d); }
+  else if(k === "month"){ const d = new Date(); d.setDate(d.getDate() - 29); $("from").value = ymd(d); }
+  else { $("from").value = ""; $("to").value = ""; }
+  load();
+}
+async function load(){
+  let q = client.from("immonova_diary").select("*").eq("user_id", user.id)
+    .order("activity_date", { ascending:false }).order("activity_time", { ascending:true, nullsFirst:true }).limit(1000);
+  if($("from").value) q = q.gte("activity_date", $("from").value);
+  if($("to").value) q = q.lte("activity_date", $("to").value);
+  const fs = $("fs").value;
+  if(fs === "nonchiuse") q = q.neq("status", "chiusa"); else if(fs) q = q.eq("status", fs);
+  const txt = $("q").value.trim();
+  if(txt){ const s = txt.replace(/[%,()]/g, " "); q = q.or("title.ilike.%" + s + "%,notes.ilike.%" + s + "%"); }
+  const r = await q;
+  if(r.error){ $("list").innerHTML = '<div class="card status err">Errore: ' + esc(r.error.message) + ' (hai eseguito diario.sql?)</div>'; return; }
+  rows = r.data || []; render(txt);
+}
+function hl(s, txt){
+  const e = esc(s); if(!txt) return e;
+  const re = new RegExp("(" + esc(txt).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
+  return e.replace(re, "<mark>$1</mark>");
+}
+function render(txt){
+  const c = { aperta:0, in_gestione:0, chiusa:0 }; rows.forEach(r => c[r.status]++);
+  $("counts").innerHTML = '<span class="s-aperta">🔴 ' + c.aperta + ' aperte</span><span class="s-in_gestione">🟡 ' + c.in_gestione + ' in gestione</span><span class="s-chiusa">🟢 ' + c.chiusa + ' chiuse</span>';
+  if(!rows.length){ $("list").innerHTML = '<div class="card sub">Nessuna attività trovata.</div>'; return; }
+  const days = {}; rows.forEach(r => (days[r.activity_date] = days[r.activity_date] || []).push(r));
+  $("list").innerHTML = Object.keys(days).sort().reverse().map(d => {
+    const it = days[d];
+    return '<div class="day"><div class="day-h"><span>' + esc(fmtDay(d)) + '</span><span>' + it.length + ' attività</span></div>' + it.map(r => {
+      const rem = r.remind_at && r.status !== "chiusa" ? (r.reminded_at ? "🔔 notificato il " + fmtDT(r.remind_at) : "⏰ promemoria " + fmtDT(r.remind_at)) : "";
+      const closed = r.status === "chiusa" && r.closed_at ? "chiusa il " + fmtDT(r.closed_at) : "";
+      return '<div class="item ' + r.status + '"><div class="time">' + (r.activity_time ? String(r.activity_time).slice(0, 5) : "—") + '</div>' +
+        '<div class="grow"><div class="t">' + hl(r.title, txt) + '</div>' + (r.notes ? '<div class="n">' + hl(r.notes, txt) + '</div>' : "") +
+        '<div class="m">' + LBL[r.status] + (rem ? " · " + rem : "") + (closed ? " · " + closed : "") + '</div></div>' +
+        '<div class="acts"><select onchange="setStatus(\'' + r.id + '\', this.value)">' +
+          ["aperta","in_gestione","chiusa"].map(s => '<option value="' + s + '"' + (s === r.status ? " selected" : "") + '>' + LBL[s] + '</option>').join("") + '</select>' +
+        (r.status !== "chiusa" ? '<select onchange="snooze(\'' + r.id + '\', this.value)"><option value="">⏰ Ricordamelo…</option><option value="15">tra 15 min</option><option value="60">tra 1 ora</option><option value="180">tra 3 ore</option><option value="tomorrow">domani 9:00</option></select>' : "") +
+        '<button class="btn sec sm" onclick="editById(\'' + r.id + '\')">Modifica</button>' +
+        '<button class="btn sec sm" style="color:#8a1f1f" onclick="del(\'' + r.id + '\')">Elimina</button></div></div>';
+    }).join("") + '</div>';
+  }).join("");
+}
+
+/* ===== Notifiche push (stesso sistema di Messaggi vocali / Calendario) ===== */
+function pushStatus(msg, kind){ const el = $("pushStatus"); el.textContent = msg || ""; el.className = "status" + (kind ? " " + kind : ""); }
+function isStandalone(){ return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; }
+function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
+function b64ToUint8(b64){ const p = "=".repeat((4 - b64.length % 4) % 4); const raw = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
+function withTimeout(p, ms, what){ return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ": tempo scaduto, riprova.")), ms))]); }
+async function getReg(){
+  let reg = await navigator.serviceWorker.getRegistration("/");
+  if(!reg) reg = await navigator.serviceWorker.register("/service-worker.js", { scope:"/" });
+  return withTimeout(navigator.serviceWorker.ready, 15000, "Avvio app");
+}
+async function refreshPushUi(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    $("pushOnBtn").classList.add("hidden");
+    $("pushInfo").textContent = isIOS() && !isStandalone()
+      ? "Su iPhone le notifiche funzionano solo dall'app: in Safari tocca Condividi → Aggiungi alla schermata Home, apri IMMONOVA dall'icona, fai login e torna qui."
+      : "Questo browser non supporta le notifiche push.";
+    return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.getRegistration("/");
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    const on = !!sub && Notification.permission === "granted";
+    $("pushOnBtn").classList.toggle("hidden", on);
+    $("pushTestBtn").classList.toggle("hidden", !on);
+    if(on){ pushStatus("Notifiche attive su questo dispositivo.", "ok"); $("pushCard").style.opacity = ".75"; }
+  }catch(e){}
+}
+async function enablePush(){
+  pushStatus("Attivazione in corso…");
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm !== "granted") throw new Error("Permesso notifiche negato: abilitalo dalle impostazioni del telefono/browser.");
+    const k = await client.functions.invoke("register-collaborator-push", { body:{ action:"key" } });
+    if(k.error || !k.data || !k.data.publicKey) throw new Error("Chiave notifiche non disponibile" + (k.error ? ": " + await edgeErrorMessage(k) : ""));
+    const reg = await getReg();
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await withTimeout(reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToUint8(k.data.publicKey) }), 15000, "Iscrizione");
+    const r = await client.functions.invoke("register-collaborator-push", { body:{ action:"subscribe", subscription:sub.toJSON(), user_agent:navigator.userAgent } });
+    if(r.error) throw new Error(await edgeErrorMessage(r));
+    if(!r.data || !r.data.ok) throw new Error((r.data && r.data.error) || "Iscrizione non salvata.");
+    pushStatus("Notifiche attive su questo dispositivo.", "ok");
+  }catch(e){ pushStatus(e.message || String(e), "err"); }
+  refreshPushUi();
+}
+async function testPush(){
+  const r = await client.functions.invoke("register-collaborator-push", { body:{ action:"test" } });
+  pushStatus(r.error ? await edgeErrorMessage(r) : "Notifica di prova inviata (" + (r.data && r.data.sent || 0) + " dispositivi).", r.error ? "err" : "ok");
+}
+
+init();
+</script>
+</body>
+</html>
