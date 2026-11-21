@@ -46,8 +46,10 @@
    ============================================================================================ */
 var PAGE_CATALOG = [
   {section:"Attività", key:"calendar.html", label:"Calendario", i18nKey:"nav_calendar", family:"Comunicazioni team"},
+  {section:"Attività", key:"diario.html", label:"Diario attività", i18nKey:null, family:"Comunicazioni team"},
   {section:"Attività", key:"opportunities.html", label:"Immobili", i18nKey:"nav_opportunities", family:"Immobili"},
   {section:"Attività", key:"opportunity-form.html", label:"Nuova Opportunità", i18nKey:null, family:"Immobili"},
+  {section:"Attività", key:"mandati.html", label:"Mandati a vendere", i18nKey:null, family:"Immobili"},
   {section:"Attività", key:"valuations.html", label:"Valutazioni Immobiliari", i18nKey:"nav_valuations", family:"Immobili"},
   {section:"Attività", key:"perimetro-catastale.html", label:"Perimetro catastale", i18nKey:null, family:"Immobili"},
   {section:"Attività", key:"ricerca-soggetti.html", label:"Ricerca soggetti (soci e immobili)", i18nKey:null, family:"Immobili"},
