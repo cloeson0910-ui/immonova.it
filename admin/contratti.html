@@ -106,7 +106,8 @@ table.list td{padding:9px 8px;border-bottom:1px solid rgba(166,127,52,.15);verti
       <button class="btn sec" id="previewBtn">Genera anteprima</button>
       <button class="btn sec hidden" id="editBtn">Modifica questo testo</button>
       <button class="btn sec hidden" id="saveTplBtn">Salva come testo base</button>
-      <button class="btn hidden" id="sendBtn">Invia per la firma</button>
+      <button class="btn sec hidden" id="pdfBtn">Scarica PDF (firma autografa)</button>
+      <button class="btn hidden" id="sendBtn">Invia per la firma OTP</button>
     </div>
     <div class="status" id="st"></div>
     <div class="hint" id="tabInfo"></div>
@@ -130,21 +131,23 @@ table.list td{padding:9px 8px;border-bottom:1px solid rgba(166,127,52,.15);verti
 const client = window.supabaseClient;
 const FN = SUPABASE_URL + "/functions/v1/immonova-contract";
 const SITE = "https://immonova-consulting.it";
-let currentUser = null, compTable = null, savedTemplates = {}, generated = false;
+let currentUser = null, compTables = {}, savedTemplates = {}, generated = false;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const setSt = (t, cls) => { $("st").textContent = t || ""; $("st").className = "status " + (cls || ""); };
 const type = () => $("ctype").value;
+/* tabella in vigore per il tipo di contratto scelto: segnalatori = importi fissi, partner = Lehman */
+const CT = () => compTables[type() === "segnalatore" ? "segnalatore" : "partner"] || null;
 
 async function init(){
   const { data:{ session } } = await client.auth.getSession();
   if(!session){ location.href = "login.html"; return; }
   currentUser = session.user;
   if(!(await guardOwnerOnlyPage(client, currentUser.id))) return;
-  const t = await client.from("immonova_compensation_tables").select("*").order("version", { ascending:false }).limit(1).maybeSingle();
-  if(t.error){ setSt("Tabella compensi non trovata: esegui prima lo script SQL contratti-e-compensi.sql. (" + t.error.message + ")", "err"); }
-  compTable = t.data || null;
+  const t = await client.from("immonova_compensation_tables").select("*").order("version", { ascending:false });
+  if(t.error){ setSt("Tabelle compensi non trovate: esegui prima gli script SQL. (" + t.error.message + ")", "err"); }
+  (t.data || []).forEach(r => { const k = r.kind || "partner"; if(!compTables[k]) compTables[k] = r; });
   const tp = await client.from("immonova_contract_templates").select("template_key,content_html").in("template_key", ["segnalatore_v1","partner_v2"]);
   (tp.data || []).forEach(r => savedTemplates[r.template_key] = r.content_html);
   showTabInfo();
@@ -152,10 +155,10 @@ async function init(){
 }
 
 function showTabInfo(){
-  if(!compTable){ $("tabInfo").textContent = ""; return; }
-  const missing = type() === "segnalatore" && compTable.rows.some(r => r.segnalatore_eur == null || r.segnalatore_eur === "");
-  $("tabInfo").innerHTML = "Allegato A: Tabella Compensi versione " + compTable.version + " del " + new Date(compTable.valid_from).toLocaleDateString("it-IT") +
-    (missing ? ' — <b style="color:#8a1f1f">mancano i compensi fissi del segnalatore: compilali in <a href="tabella-compensi.html">Tabella compensi</a></b>' : "");
+  if(!CT()){ $("tabInfo").textContent = ""; return; }
+  const missing = type() === "segnalatore" && window.immonovaSegPct(CT()) == null;
+  $("tabInfo").innerHTML = (type() === "segnalatore" ? "Allegato A: Tabella Compensi Segnalatori versione " : "Allegato A: Tabella Fee Agenzie Partner versione ") + CT().version + " del " + new Date(CT().valid_from).toLocaleDateString("it-IT") +
+    (missing ? ' — <b style="color:#8a1f1f">manca la percentuale del segnalatore: impostala in <a href="tabella-compensi.html">Tabella compensi</a></b>' : "");
 }
 
 document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
@@ -175,7 +178,7 @@ document.querySelectorAll("#tab-new input, #tab-new textarea").forEach(el => el.
 function resetPreview(){
   generated = false;
   $("previewCard").classList.add("hidden");
-  ["editBtn","saveTplBtn","sendBtn"].forEach(id => $(id).classList.add("hidden"));
+  ["editBtn","saveTplBtn","sendBtn","pdfBtn"].forEach(id => $(id).classList.add("hidden"));
   $("sheet").contentEditable = "false";
 }
 
@@ -187,12 +190,12 @@ function collect(){
   const pen = $("f_penale").value;
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw "Inserisci un'email valida per la firma.";
   if(pen === "" || Number(pen) <= 0) throw "Inserisci l'importo della penale per la riservatezza.";
-  if(!compTable) throw "Tabella compensi non disponibile.";
+  if(!CT()) throw "Tabella compensi non disponibile.";
   if(type() === "segnalatore"){
     const d = { nome:$("s_nome").value.trim(), luogo:$("s_luogo").value.trim(), data:$("s_data").value, citta:$("s_citta").value.trim(),
                 indirizzo:$("s_indirizzo").value.trim(), cf:$("s_cf").value.trim().toUpperCase(), oggetto:$("s_oggetto").value.trim() };
     if(!d.nome || !d.cf || !d.oggetto) throw "Compila nome, codice fiscale e oggetto della segnalazione.";
-    if(compTable.rows.some(r => r.segnalatore_eur == null || r.segnalatore_eur === "")) throw "Prima compila i compensi fissi del segnalatore in Tabella compensi.";
+    if(window.immonovaSegPct(CT()) == null) throw "Prima imposta la percentuale del segnalatore in Tabelle compensi.";
     const cp = "il Sig./la Sig.ra <b>" + esc(d.nome) + "</b>, nato/a a " + esc(d.luogo || "[—]") + " il " + fmtDate(d.data) +
       ", residente in " + esc(d.citta || "[—]") + ", " + esc(d.indirizzo || "[—]") + ", Codice Fiscale " + esc(d.cf) + ", email " + esc(email);
     return { d, name:d.nome, cp, oggetto:esc(d.oggetto), email, pen:Number(pen) };
@@ -215,8 +218,8 @@ function buildHtml(x){
     .split("{{OGGETTO}}").join(x.oggetto)
     .split("{{PENALE_NDA}}").join(eur(x.pen))
     .split("{{DATA}}").join(today)
-    .split("{{VERSIONE_TABELLA}}").join("versione " + compTable.version + " del " + new Date(compTable.valid_from).toLocaleDateString("it-IT"))
-    .split("{{ALLEGATO_A}}").join(window.immonovaRenderCompTable(compTable, type()));
+    .split("{{VERSIONE_TABELLA}}").join("versione " + CT().version + " del " + new Date(CT().valid_from).toLocaleDateString("it-IT"))
+    .split("{{ALLEGATO_A}}").join(window.immonovaRenderCompTable(CT(), type()));
 }
 
 $("previewBtn").addEventListener("click", () => {
@@ -224,7 +227,7 @@ $("previewBtn").addEventListener("click", () => {
     const x = collect();
     $("sheet").innerHTML = buildHtml(x);
     $("previewCard").classList.remove("hidden");
-    ["editBtn","sendBtn","saveTplBtn"].forEach(id => $(id).classList.remove("hidden"));
+    ["editBtn","sendBtn","saveTplBtn","pdfBtn"].forEach(id => $(id).classList.remove("hidden"));
     $("saveTplBtn").classList.add("hidden");
     generated = true;
     setSt("Anteprima pronta: controlla il testo, poi invia per la firma.", "ok");
@@ -247,9 +250,9 @@ $("saveTplBtn").addEventListener("click", async () => {
     const x = collect();
     let html = $("sheet").innerHTML;
     const al = $("sheet").querySelector(".allegato");
-    if(al) html = html.replace(al.outerHTML, '<div class="allegato"><h2>ALLEGATO A – Tabella Compensi IMMONOVA</h2>{{ALLEGATO_A}}</div>');
+    if(al) html = html.replace(al.outerHTML, '<div class="allegato"><h2>ALLEGATO A – ' + (type() === "segnalatore" ? "Tabella Compensi Segnalatori" : "Tabella Fee Agenzie Partner") + ' IMMONOVA</h2>{{ALLEGATO_A}}</div>');
     const tmp = document.createElement("div"); tmp.innerHTML = buildHtml(x);
-    const rep = [[x.cp,"{{CONTROPARTE}}"],[eur(x.pen),"{{PENALE_NDA}}"],["versione " + compTable.version + " del " + new Date(compTable.valid_from).toLocaleDateString("it-IT"),"{{VERSIONE_TABELLA}}"]];
+    const rep = [[x.cp,"{{CONTROPARTE}}"],[eur(x.pen),"{{PENALE_NDA}}"],["versione " + CT().version + " del " + new Date(CT().valid_from).toLocaleDateString("it-IT"),"{{VERSIONE_TABELLA}}"]];
     if(x.oggetto) rep.push([x.oggetto, "{{OGGETTO}}"]);
     rep.push([new Date().toLocaleDateString("it-IT", { day:"numeric", month:"long", year:"numeric" }), "{{DATA}}"]);
     const norm = s => { const d = document.createElement("div"); d.innerHTML = s; return d.innerHTML; };
@@ -271,13 +274,36 @@ $("sendBtn").addEventListener("click", async () => {
     const { data:{ session } } = await client.auth.getSession();
     const r = await fetch(FN, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer " + session.access_token, apikey:SUPABASE_ANON_KEY },
       body: JSON.stringify({ action:"send", contract_type:type(), counterparty:x.d, counterparty_email:x.email, counterparty_name:x.name,
-        subject: type() === "segnalatore" ? x.d.oggetto : null, penalty_nda_eur:x.pen, compensation_table_id:compTable.id, body_html:$("sheet").innerHTML }) });
+        subject: type() === "segnalatore" ? x.d.oggetto : null, penalty_nda_eur:x.pen, compensation_table_id:CT().id, body_html:$("sheet").innerHTML }) });
     const out = await r.json();
     if(!r.ok || !out.ok) throw out.error || ("HTTP " + r.status);
     setSt(out.email_sent ? "Inviato a " + x.email + ". Link di firma: " + out.link : "Contratto salvato ma email NON inviata (" + (out.email_detail || "") + "). Puoi mandare tu il link: " + out.link, out.email_sent ? "ok" : "err");
     resetPreview();
   }catch(e){ setSt("Errore: " + e, "err"); }
   $("sendBtn").disabled = false;
+});
+
+
+/* PDF per firma autografa: stesso testo, ma con righe di firma a penna al posto della firma OTP */
+$("pdfBtn").addEventListener("click", () => {
+  if($("sheet").contentEditable === "true"){ setSt("Premi prima \"Fine modifica\".", "err"); return; }
+  const line = '<br><br>Firma _________________________________';
+  let html = $("sheet").innerHTML
+    .replace(/<h3>(Art\. \d+) – Sottoscrizione elettronica<\/h3>\s*<p>([\d.]+) [^<]*<\/p>/,
+             '<h3>$1 – Sottoscrizione</h3><p>$2 Il presente atto è sottoscritto con firma autografa delle Parti, in duplice originale.</p>')
+    .split("(firma elettronica OTP)").join(line)
+    .split("(seconda firma elettronica OTP)").join("(seconda firma per approvazione specifica)" + line)
+    .replace(/<p><b>Letto, confermato e sottoscritto\.<\/b><\/p>/, '<p><b>Letto, confermato e sottoscritto.</b></p><p>Luogo ____________________________ &nbsp; Data ____________________</p>');
+  html = html.replace('<b>IMMONOVA S.r.l.</b><br>Il Legale Rappresentante', '<b>IMMONOVA S.r.l.</b><br>Il Legale Rappresentante' + line);
+  const css = document.querySelector("style").textContent;
+  const w = window.open("", "_blank");
+  if(!w){ setSt("Il browser ha bloccato la finestra: consenti i pop-up per questo sito.", "err"); return; }
+  w.document.write('<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>' + esc(window.IMMONOVA_CONTRACT_TEMPLATES[type()].title) + '</title><style>' + css +
+    '@page{size:A4;margin:18mm 16mm} body{background:#fff} body::after{display:none} .sheet{border:0;padding:0;max-height:none;overflow:visible}' +
+    '.sheet th{-webkit-print-color-adjust:exact;print-color-adjust:exact} .sheet .sign-row div{width:45%}</style></head><body><div class="sheet">' + html +
+    '</div><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');
+  w.document.close();
+  setSt("Si è aperta la finestra di stampa: scegli \"Salva come PDF\".", "ok");
 });
 
 async function loadList(){
