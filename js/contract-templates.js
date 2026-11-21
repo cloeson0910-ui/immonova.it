@@ -34,7 +34,7 @@ segnalatore: {
 <h3>Art. 4 – Priorità della segnalazione</h3>
 <p>4.1 In caso di pluralità di segnalazioni relative al medesimo asset o al medesimo soggetto, è riconosciuta esclusivamente la segnalazione registrata per prima sulla piattaforma IMMONOVA; la data e l'ora di registrazione certificate dalla piattaforma fanno piena prova tra le Parti.</p>
 <h3>Art. 5 – Compenso</h3>
-<p>5.1 Per la segnalazione la Società riconosce al Segnalatore un compenso lordo in misura fissa, determinato in base al prezzo di vendita dell'asset secondo la Tabella Compensi IMMONOVA in vigore alla data di registrazione della segnalazione ({{VERSIONE_TABELLA}}), allegata al presente atto quale parte integrante e sostanziale (Allegato A).</p>
+<p>5.1 Per la segnalazione la Società riconosce al Segnalatore un compenso lordo pari alla percentuale fissa, calcolata sul prezzo di pubblicazione dell'asset, indicata nella Tabella Compensi Segnalatori IMMONOVA in vigore alla data di registrazione della segnalazione ({{VERSIONE_TABELLA}}), allegata al presente atto quale parte integrante e sostanziale (Allegato A).</p>
 <h3>Art. 6 – Maturazione ed esigibilità del compenso</h3>
 <p>6.1 Il compenso matura ed è esigibile esclusivamente alla conclusione giuridica dell'affare, mediante stipula del contratto preliminare o dell'atto definitivo di compravendita, e comunque solo successivamente all'integrale incasso da parte della Società del proprio compenso professionale.</p>
 <p>6.2 Nulla è dovuto al Segnalatore, a titolo di compenso, rimborso spese o indennizzo, qualora l'affare non si concluda per qualsiasi causa.</p>
@@ -60,7 +60,7 @@ segnalatore: {
 <div class="clauses" data-clauses="1"><p><b>Approvazione specifica ai sensi degli artt. 1341 e 1342 c.c.</b></p>
 <p>Ai sensi e per gli effetti degli artt. 1341 e 1342 c.c., il Segnalatore dichiara di approvare specificamente le seguenti clausole: art. 4 (priorità della segnalazione), art. 6 (maturazione ed esigibilità del compenso), art. 8 (obbligo di riservatezza), art. 9 (divieto di non scavalcamento), art. 10 (clausola penale), art. 12 (foro competente).</p>
 <p>Il Segnalatore (seconda firma elettronica OTP)</p></div>
-<div class="allegato"><h2>ALLEGATO A – Tabella Compensi IMMONOVA</h2>{{ALLEGATO_A}}</div>
+<div class="allegato"><h2>ALLEGATO A – Tabella Compensi Segnalatori IMMONOVA</h2>{{ALLEGATO_A}}</div>
 `},
 
 nda_visita: {
@@ -124,11 +124,10 @@ partner: {
 <h3>Art. 2 – Garanzia off-market</h3>
 <p>2.1 Il Partner dichiara e garantisce che ogni Asset del Partner proposto sulla Piattaforma possiede i requisiti di cui alla premessa b) e si obbliga a non pubblicarlo su alcun altro canale per tutta la durata della sua presenza sulla Piattaforma.</p>
 <p>2.2 In caso di dichiarazione non veritiera o di successiva pubblicazione, IMMONOVA ha facoltà di rimuovere immediatamente l'asset dalla Piattaforma, ferma l'applicazione dell'art. 9.</p>
-<p>2.3 Il Partner fornisce la documentazione dell'asset (visure catastali, planimetrie, titoli di provenienza) ovvero, in mancanza, i recapiti del proprietario per consentirne la raccolta diretta da parte di IMMONOVA.</p>
+<p>2.3 Il Partner fornisce la documentazione dell'asset (visure catastali, planimetrie, titoli di provenienza).</p>
 <h3>Art. 3 – Ripartizione dei compensi</h3>
 <p>3.1 Qualora l'asset o il cliente acquirente siano di IMMONOVA, ciascuna Parte percepisce esclusivamente il compenso pattuito con il proprio cliente sul proprio lato dell'operazione.</p>
-<p>3.2 Qualora un Partner concluda la vendita di un asset presentato sulla Piattaforma da altro Partner, è dovuta a IMMONOVA da <b>ciascuno</b> dei due Partner, per il rispettivo lato, una fee (la <b>"Fee"</b>) calcolata sul prezzo di vendita applicando la scala di Lehman secondo la Tabella Compensi IMMONOVA in vigore alla data di caricamento dell'asset sulla Piattaforma ({{VERSIONE_TABELLA}}), allegata al presente Accordo (Allegato A).</p>
-<p>3.3 Ai fini del calcolo fa fede il prezzo risultante dal contratto preliminare o definitivo; in mancanza di comunicazione, la Fee è calcolata sul prezzo di pubblicazione dell'asset.</p>
+<p>3.2 Qualora un Partner concluda la vendita di un asset presentato sulla Piattaforma da altro Partner, è dovuta a IMMONOVA da <b>ciascuno</b> dei due Partner, per il rispettivo lato, una fee (la <b>"Fee"</b>) calcolata sul prezzo di pubblicazione dell'asset applicando la scala di Lehman secondo la Tabella Fee Agenzie Partner IMMONOVA in vigore alla data di caricamento dell'asset sulla Piattaforma ({{VERSIONE_TABELLA}}), allegata al presente Accordo (Allegato A).</p>
 <h3>Art. 4 – Fatturazione e pagamento</h3>
 <p>4.1 La Fee è fatturata da IMMONOVA ed è esigibile entro 15 (quindici) giorni dal perfezionamento della compravendita. In caso di ritardo decorrono di diritto gli interessi moratori di cui al D.Lgs. 231/2002.</p>
 <p>4.2 Il Partner comunica a IMMONOVA ogni compravendita conclusa entro 5 (cinque) giorni lavorativi, trasmettendo copia degli atti.</p>
@@ -157,35 +156,43 @@ partner: {
 <div class="clauses" data-clauses="1"><p><b>Approvazione specifica ai sensi degli artt. 1341 e 1342 c.c.</b></p>
 <p>Ai sensi e per gli effetti degli artt. 1341 e 1342 c.c., il Partner dichiara di approvare specificamente le seguenti clausole: art. 2 (garanzia off-market), art. 3 (ripartizione dei compensi e Fee), art. 7 (divieto di non scavalcamento), art. 8 (durata, recesso e risoluzione), art. 9 (clausola penale), art. 12 (foro competente).</p>
 <p>Il Partner (seconda firma elettronica OTP)</p></div>
-<div class="allegato"><h2>ALLEGATO A – Tabella Compensi IMMONOVA</h2>{{ALLEGATO_A}}</div>
+<div class="allegato"><h2>ALLEGATO A – Tabella Fee Agenzie Partner IMMONOVA</h2>{{ALLEGATO_A}}</div>
 `}
 };
 
-/* Allegato A dalla versione della tabella compensi */
+/* Allegato A: tabella partner (Lehman %) oppure compenso segnalatore (% fissa unica) */
+window.immonovaSegPct = function(tab){ var r = ((tab && tab.rows) || [])[0]; return r && r.pct != null && r.pct !== "" ? Number(r.pct) : null; };
 window.immonovaRenderCompTable = function(tab, type){
-  var eur = function(v){ return v == null || v === "" ? "—" : "€ " + Number(v).toLocaleString("it-IT", {maximumFractionDigits:0}); };
-  var range = function(r){ return r.a == null ? ("oltre " + eur(r.da)) : ((r.da > 0 ? "da " + eur(r.da + 1) : "fino a") + " " + (r.da > 0 ? "a " : "") + eur(r.a)); };
-  var rows = (tab && tab.rows) || [];
-  var head = type === "segnalatore"
-    ? "<tr><th>Prezzo di vendita dell'asset</th><th>Compenso fisso Segnalatore (lordo)</th></tr>"
-    : "<tr><th>Scaglione del prezzo di vendita</th><th>Fee IMMONOVA (scala di Lehman, % marginale sullo scaglione, per lato)</th></tr>";
-  var body = rows.map(function(r){
-    return "<tr><td>" + range(r) + "</td><td class=\"num\">" + (type === "segnalatore" ? eur(r.segnalatore_eur) : (Number(r.fee_pct).toLocaleString("it-IT",{minimumFractionDigits:2}) + "%")) + "</td></tr>";
+  var eur = function(v){ return "€ " + Number(v).toLocaleString("it-IT", {maximumFractionDigits:0}); };
+  var foot = "<p class=\"small\">" + (type === "segnalatore" ? "Tabella Compensi Segnalatori" : "Tabella Fee Agenzie Partner") + " IMMONOVA – versione " + (tab ? tab.version : "—") +
+    " in vigore dal " + (tab ? new Date(tab.valid_from).toLocaleDateString("it-IT") : "—") + ".</p>";
+  if(type === "segnalatore"){
+    var pct = window.immonovaSegPct(tab);
+    return "<table class=\"comp\"><thead><tr><th>Base di calcolo</th><th>Compenso Segnalatore (lordo)</th></tr></thead><tbody><tr><td>Prezzo di pubblicazione dell'asset</td><td class=\"num\">" +
+      (pct == null ? "—" : pct.toLocaleString("it-IT", {minimumFractionDigits:2, maximumFractionDigits:3}) + "%") + "</td></tr></tbody></table>" +
+      "<p class=\"small\">Percentuale fissa unica, senza scaglioni, applicata all'intero prezzo di pubblicazione dell'asset.</p>" + foot;
+  }
+  var range = function(r){ return r.a == null ? ("oltre " + eur(r.da)) : (r.da > 0 ? "da " + eur(r.da + 1) + " a " + eur(r.a) : "fino a " + eur(r.a)); };
+  var body = ((tab && tab.rows) || []).map(function(r){
+    return "<tr><td>" + range(r) + "</td><td class=\"num\">" + Number(r.fee_pct).toLocaleString("it-IT",{minimumFractionDigits:2}) + "%</td></tr>";
   }).join("");
-  var note = type === "segnalatore"
-    ? "<p class=\"small\">Il compenso è determinato dalla fascia in cui ricade il prezzo di vendita e non è cumulabile tra fasce.</p>"
-    : "<p class=\"small\">Scala di Lehman: ogni percentuale si applica solo alla parte del prezzo compresa nel relativo scaglione; la Fee è la somma dei risultati dei singoli scaglioni.</p>";
-  return "<table class=\"comp\"><thead>" + head + "</thead><tbody>" + body + "</tbody></table>" + note +
-    "<p class=\"small\">Tabella Compensi IMMONOVA – versione " + (tab ? tab.version : "—") + " in vigore dal " + (tab ? new Date(tab.valid_from).toLocaleDateString("it-IT") : "—") + ".</p>";
+  return "<table class=\"comp\"><thead><tr><th>Scaglione del prezzo di pubblicazione</th><th>Fee IMMONOVA (scala di Lehman, % per lato)</th></tr></thead><tbody>" + body + "</tbody></table>" +
+    "<p class=\"small\">Scala di Lehman: si individua lo scaglione in cui ricade il prezzo di pubblicazione dell'asset e la relativa percentuale si applica all'intero prezzo (es. prezzo di pubblicazione di Euro 3.500.000: si applica per intero la percentuale dello scaglione da Euro 2.000.001 a Euro 5.000.000).</p>" + foot;
 };
 
-/* Calcolo fee Lehman (marginale per scaglione) e compenso fisso segnalatore */
-window.immonovaCompute = function(tab, price){
-  var p = Number(price) || 0, fee = 0, seg = null;
-  ((tab && tab.rows) || []).forEach(function(r){
-    var top = r.a == null ? Infinity : r.a;
-    if(p > r.da) fee += (Math.min(p, top) - r.da) * Number(r.fee_pct) / 100;
-    if(p > r.da && p <= top) seg = r.segnalatore_eur;
-  });
-  return { fee: Math.round(fee * 100) / 100, segnalatore: seg };
+/* riga (scaglione/fascia) in cui ricade il prezzo */
+window.immonovaBand = function(tab, price){
+  var p = Number(price) || 0, hit = null;
+  ((tab && tab.rows) || []).forEach(function(r){ var top = r.a == null ? Infinity : r.a; if(p > r.da && p <= top) hit = r; });
+  return hit;
+};
+/* fee agenzie: % dello scaglione applicata all'INTERO prezzo di pubblicazione, per lato */
+window.immonovaFee = function(tab, price){
+  var r = window.immonovaBand(tab, price);
+  return r ? Math.round(Number(price) * Number(r.fee_pct)) / 100 : 0;
+};
+/* segnalatore: % fissa unica sul prezzo di pubblicazione */
+window.immonovaSegnalatore = function(tab, price){
+  var pct = window.immonovaSegPct(tab);
+  return pct == null ? null : Math.round(Number(price) * pct) / 100;
 };
