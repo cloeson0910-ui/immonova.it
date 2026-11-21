@@ -97,6 +97,14 @@
         <span class="quick-label">Diario attività</span>
         <span class="quick-label" id="qtDiaryCount" style="font-size:11px;font-weight:500"></span>
       </button>
+      <button class="quick-tile" id="qtDay" onclick="location.href='admin/diario-giorno.html'">
+        <span class="quick-icon">&#128198;</span>
+        <span class="quick-label">Giornata</span>
+      </button>
+      <button class="quick-tile" id="qtGantt" onclick="location.href='admin/diario-gantt.html'">
+        <span class="quick-icon">&#128202;</span>
+        <span class="quick-label">Gantt milestone</span>
+      </button>
       <button class="quick-tile" id="qtList">
         <span class="quick-icon">&#128203;</span>
         <span class="quick-label">Le mie note</span>
@@ -162,7 +170,87 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
-<script src="js/collab-push.js"></script>
+<script>
+/* IMMONOVA – notifiche push collaboratori (app installata).
+   Collega il dispositivo all'utente loggato (tabella immonova_push_subscriptions, audience
+   "collaborator") tramite la edge function register-collaborator-push.
+   IMPORTANTE: un telefono può avere già il permesso notifiche concesso per l'app pubblica
+   (iscrizione anonima, senza utente): in quel caso va solo ricollegato all'utente, cosa che
+   sync() fa in automatico e in silenzio ad ogni apertura. */
+(function(){
+  function isStandalone(){ return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; }
+  function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
+  function supported(){ return ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window); }
+  function b64(b){ var p = "=".repeat((4 - b.length % 4) % 4); var r = atob((b + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(r, function(c){ return c.charCodeAt(0); }); }
+  function timeout(p, ms, what){ return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error(what + ": tempo scaduto, riprova.")); }, ms); })]); }
+  async function errMsg(r){ try{ var j = await r.error.context.json(); return j.error || r.error.message; }catch(e){ return r.error.message; } }
+  async function reg(){
+    var g = await navigator.serviceWorker.getRegistration("/");
+    if(!g) await navigator.serviceWorker.register("/service-worker.js", { scope:"/" });
+    return timeout(navigator.serviceWorker.ready, 15000, "Avvio app");
+  }
+  async function save(client, sub){
+    var r = await client.functions.invoke("register-collaborator-push", { body:{ action:"subscribe", subscription:sub.toJSON(), user_agent:navigator.userAgent } });
+    if(r.error) throw new Error(await errMsg(r));
+    if(!r.data || !r.data.ok) throw new Error((r.data && r.data.error) || "Iscrizione non salvata.");
+  }
+  function unsupportedText(){
+    return isIOS() && !isStandalone()
+      ? "Su iPhone le notifiche funzionano solo dall'app: in Safari tocca Condividi → Aggiungi alla schermata Home e apri IMMONOVA dall'icona."
+      : "Questo browser non supporta le notifiche push.";
+  }
+  /* stato: "unsupported" | "denied" | "off" | "on" */
+  async function state(){
+    if(!supported()) return "unsupported";
+    if(Notification.permission === "denied") return "denied";
+    try{ var g = await navigator.serviceWorker.getRegistration("/"); var s = g ? await g.pushManager.getSubscription() : null;
+      return (s && Notification.permission === "granted") ? "on" : "off"; }catch(e){ return "off"; }
+  }
+  /* collega in silenzio l'iscrizione già esistente all'utente loggato */
+  async function sync(client){
+    try{ if(await state() !== "on") return false; var g = await reg(); var s = await g.pushManager.getSubscription(); if(!s) return false; await save(client, s); return true; }
+    catch(e){ return false; }
+  }
+  async function enable(client){
+    if(!supported()) throw new Error(unsupportedText());
+    var perm = await Notification.requestPermission();
+    if(perm !== "granted") throw new Error("Permesso notifiche negato: abilitalo da Impostazioni del telefono → Notifiche → IMMONOVA.");
+    var k = await client.functions.invoke("register-collaborator-push", { body:{ action:"key" } });
+    if(k.error || !k.data || !k.data.publicKey) throw new Error("Chiave notifiche non disponibile" + (k.error ? ": " + await errMsg(k) : ""));
+    var g = await reg();
+    var s = await g.pushManager.getSubscription();
+    if(!s) s = await timeout(g.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64(k.data.publicKey) }), 15000, "Iscrizione");
+    await save(client, s);
+  }
+  async function test(client){
+    var r = await client.functions.invoke("register-collaborator-push", { body:{ action:"test" } });
+    if(r.error) throw new Error(await errMsg(r));
+    return (r.data && r.data.sent) || 0;
+  }
+  /* widget pronto: pulsante + stato dentro un contenitore */
+  async function mount(client, box){
+    box.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+      '<button type="button" data-a="on" style="padding:11px 16px;border-radius:9px;border:1px solid rgba(166,127,52,.35);background:#a67f34;color:#fffaf0;font:600 13px inherit;cursor:pointer">🔔 Attiva notifiche</button>' +
+      '<button type="button" data-a="test" style="padding:11px 16px;border-radius:9px;border:1px solid rgba(166,127,52,.35);background:#fff;color:#46371a;font:600 13px inherit;cursor:pointer">Invia prova</button></div>' +
+      '<div data-s style="font-size:13px;margin-top:8px;line-height:1.5"></div>';
+    var st = box.querySelector("[data-s]"), on = box.querySelector('[data-a="on"]'), ts = box.querySelector('[data-a="test"]');
+    function say(t, ok){ st.textContent = t; st.style.color = ok === false ? "#8a1f1f" : ok ? "#2b5a26" : "#56492d"; }
+    async function refresh(){
+      var s = await state();
+      if(s === "unsupported"){ on.style.display = "none"; ts.style.display = "none"; say(unsupportedText(), false); return; }
+      if(s === "denied"){ ts.style.display = "none"; say("Notifiche bloccate: abilitale da Impostazioni del telefono → Notifiche → IMMONOVA, poi tocca Attiva.", false); return; }
+      if(s === "on"){ say("Collegamento del dispositivo…"); var ok = await sync(client);
+        on.textContent = "🔔 Ricollega notifiche"; ts.style.display = "";
+        say(ok ? "Notifiche attive su questo dispositivo per il tuo account." : "Notifiche consentite ma non collegate: tocca Ricollega.", ok); return; }
+      ts.style.display = "none"; say("Notifiche non attive su questo dispositivo.");
+    }
+    on.onclick = async function(){ say("Attivazione in corso…"); try{ await enable(client); say("Notifiche attive su questo dispositivo per il tuo account.", true); ts.style.display = ""; on.textContent = "🔔 Ricollega notifiche"; }catch(e){ say(e.message || String(e), false); } };
+    ts.onclick = async function(){ say("Invio prova…"); try{ var n = await test(client); say(n ? "Prova inviata a " + n + " dispositivo/i: deve arrivare tra pochi secondi." : "Nessun dispositivo collegato: tocca Attiva/Ricollega.", !!n); }catch(e){ say(e.message || String(e), false); } };
+    refresh();
+  }
+  window.ImmonovaPush = { state:state, sync:sync, enable:enable, test:test, mount:mount, isIOS:isIOS, isStandalone:isStandalone };
+})();
+</script>
 <script>
 (function(){
   const FN_BASE = 'https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1';
