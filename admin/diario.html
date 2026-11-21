@@ -34,7 +34,15 @@ textarea{min-height:70px}
 .seg button.on{opacity:1;border-color:#2b2416}
 .s-aperta{background:#f6d4d4;color:#8a1f1f}.s-in_gestione{background:#f7e7b0;color:#6b5114}.s-chiusa{background:#d4ecd0;color:#245a1c}
 .day{margin-top:20px}
-.day-h{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#6b5a32;border-bottom:1px solid rgba(166,127,52,.3);padding-bottom:6px;margin-bottom:8px;display:flex;justify-content:space-between}
+details.day{margin-top:10px;background:rgba(255,255,255,.45);border:1px solid rgba(166,127,52,.22);border-radius:10px;padding:0 10px}
+details.day>summary{list-style:none;cursor:pointer;padding:13px 2px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#5c4a22;font-weight:600}
+details.day>summary::-webkit-details-marker{display:none}
+details.day>summary .chev{transition:transform .2s;display:inline-block;margin-right:6px}
+details.day[open]>summary .chev{transform:rotate(90deg)}
+details.day[open]{padding-bottom:6px}
+.mini{display:flex;gap:4px;font-size:11px;text-transform:none;letter-spacing:0}
+.mini span{padding:2px 7px;border-radius:12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .item{display:flex;gap:12px;align-items:flex-start;background:rgba(255,255,255,.75);border:1px solid rgba(166,127,52,.18);border-left:6px solid #ccc;border-radius:9px;padding:12px;margin-bottom:8px}
 .item.aperta{border-left-color:#c0392b}.item.in_gestione{border-left-color:#e0b020}.item.chiusa{border-left-color:#3c9a3c}
 .item .t{font-size:15px;font-weight:600;color:#2b2416}
@@ -54,7 +62,7 @@ mark{background:#f1d27a}
 <body>
 <div class="header">
   <a class="brand" href="dashboard.html">IMMONOVA</a>
-  <div class="nav"><a href="calendar.html">Calendario</a><a href="dashboard.html">Dashboard</a></div>
+  <div class="nav"><a href="../collaboratore.html">Home app</a><a href="calendar.html">Calendario</a><a href="dashboard.html">Dashboard</a></div>
 </div>
 <div class="wrap">
   <h1>Diario attività</h1>
@@ -70,7 +78,12 @@ mark{background:#f1d27a}
     <p class="sub" id="pushInfo" style="margin:8px 0 0"></p>
   </div>
 
-  <div class="card" id="formCard">
+  <div class="bar">
+    <button class="btn" id="newBtn" type="button">+ Nuova attività</button>
+    <button class="btn sec" id="expandBtn" type="button">Espandi tutto</button>
+    <button class="btn sec" id="collapseBtn" type="button">Comprimi tutto</button>
+  </div>
+  <div class="card hidden" id="formCard">
     <h2 id="formTitle">Nuova attività</h2>
     <div class="grid">
       <div><label>Data *</label><input id="f_date" type="date"></div>
@@ -135,6 +148,7 @@ const LBL = { aperta:"🔴 Aperta", in_gestione:"🟡 In gestione", chiusa:"🟢
 const pad = n => String(n).padStart(2, "0");
 const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
+let openDays = null;
 let user = null, rows = [], editId = null, editRow = null, fStatus = "aperta", timer = null;
 
 function setSt(t, c){ $("st").textContent = t || ""; $("st").className = "status " + (c || ""); }
@@ -150,7 +164,10 @@ async function init(){
   document.querySelectorAll("#f_status button").forEach(b => b.onclick = () => setFStatus(b.dataset.v));
   $("f_rem").onchange = () => { $("remCustomBox").classList.toggle("hidden", $("f_rem").value !== "custom"); };
   $("saveBtn").onclick = save;
-  $("cancelBtn").onclick = resetForm;
+  $("cancelBtn").onclick = () => { resetForm(); $("formCard").classList.add("hidden"); };
+  $("newBtn").onclick = () => { const h = $("formCard").classList.contains("hidden"); resetForm(); $("formCard").classList.toggle("hidden", !h); if(h) $("f_title").focus(); };
+  $("expandBtn").onclick = () => document.querySelectorAll("details.day").forEach(d => { d.open = true; openDays.add(d.dataset.d); });
+  $("collapseBtn").onclick = () => document.querySelectorAll("details.day").forEach(d => { d.open = false; openDays.delete(d.dataset.d); });
   ["q","from","to","fs"].forEach(id => $(id).addEventListener(id === "q" ? "input" : "change", () => { clearTimeout(timer); timer = setTimeout(load, 250); }));
   document.querySelectorAll("[data-q]").forEach(b => b.onclick = () => quick(b.dataset.q));
   $("pushOnBtn").onclick = enablePush; $("pushTestBtn").onclick = testPush;
@@ -180,7 +197,7 @@ function startEdit(r){
   else { keep.classList.add("hidden"); $("f_rem").value = ""; $("remNow").textContent = ""; }
   $("remCustomBox").classList.add("hidden");
   $("formTitle").textContent = "Modifica attività"; $("saveBtn").textContent = "Salva modifiche"; $("cancelBtn").classList.remove("hidden");
-  $("formCard").scrollIntoView({ behavior:"smooth" });
+  $("formCard").classList.remove("hidden"); $("formCard").scrollIntoView({ behavior:"smooth" });
 }
 function editById(id){ const r = rows.find(x => x.id === id); if(r) startEdit(r); }
 function computeRemind(){
@@ -202,7 +219,7 @@ async function save(){
   $("saveBtn").disabled = false;
   if(r.error){ setSt("Errore: " + r.error.message, "err"); return; }
   setSt(remind_at && fStatus !== "chiusa" ? "Salvato ✓ — promemoria il " + fmtDT(remind_at) : "Salvato ✓", "ok");
-  resetForm(); load();
+  resetForm(); $("formCard").classList.add("hidden"); load();
 }
 async function setStatus(id, v){
   const r = await client.from("immonova_diary").update({ status:v }).eq("id", id);
@@ -251,9 +268,14 @@ function render(txt){
   $("counts").innerHTML = '<span class="s-aperta">🔴 ' + c.aperta + ' aperte</span><span class="s-in_gestione">🟡 ' + c.in_gestione + ' in gestione</span><span class="s-chiusa">🟢 ' + c.chiusa + ' chiuse</span>';
   if(!rows.length){ $("list").innerHTML = '<div class="card sub">Nessuna attività trovata.</div>'; return; }
   const days = {}; rows.forEach(r => (days[r.activity_date] = days[r.activity_date] || []).push(r));
+  if(!openDays){ openDays = new Set([ymd(new Date())]); const first = Object.keys(days).sort().reverse()[0]; if(first) openDays.add(first); }
   $("list").innerHTML = Object.keys(days).sort().reverse().map(d => {
     const it = days[d];
-    return '<div class="day"><div class="day-h"><span>' + esc(fmtDay(d)) + '</span><span>' + it.length + ' attività</span></div>' + it.map(r => {
+    const k = { aperta:0, in_gestione:0, chiusa:0 }; it.forEach(r => k[r.status]++);
+    const isOpen = openDays.has(d) || !!txt;
+    return '<details class="day" data-d="' + d + '"' + (isOpen ? " open" : "") + '><summary><span><span class="chev">▸</span>' + esc(fmtDay(d)) + '</span><span class="mini">' +
+      (k.aperta ? '<span class="s-aperta">🔴 ' + k.aperta + '</span>' : "") + (k.in_gestione ? '<span class="s-in_gestione">🟡 ' + k.in_gestione + '</span>' : "") +
+      (k.chiusa ? '<span class="s-chiusa">🟢 ' + k.chiusa + '</span>' : "") + '</span></summary>' + it.map(r => {
       const rem = r.remind_at && r.status !== "chiusa" ? (r.reminded_at ? "🔔 notificato il " + fmtDT(r.remind_at) : "⏰ promemoria " + fmtDT(r.remind_at)) : "";
       const closed = r.status === "chiusa" && r.closed_at ? "chiusa il " + fmtDT(r.closed_at) : "";
       return '<div class="item ' + r.status + '"><div class="time">' + (r.activity_time ? String(r.activity_time).slice(0, 5) : "—") + '</div>' +
@@ -264,8 +286,9 @@ function render(txt){
         (r.status !== "chiusa" ? '<select onchange="snooze(\'' + r.id + '\', this.value)"><option value="">⏰ Ricordamelo…</option><option value="15">tra 15 min</option><option value="60">tra 1 ora</option><option value="180">tra 3 ore</option><option value="tomorrow">domani 9:00</option></select>' : "") +
         '<button class="btn sec sm" onclick="editById(\'' + r.id + '\')">Modifica</button>' +
         '<button class="btn sec sm" style="color:#8a1f1f" onclick="del(\'' + r.id + '\')">Elimina</button></div></div>';
-    }).join("") + '</div>';
+    }).join("") + '</details>';
   }).join("");
+  document.querySelectorAll("details.day").forEach(el => el.addEventListener("toggle", () => { if(el.open) openDays.add(el.dataset.d); else openDays.delete(el.dataset.d); }));
 }
 
 /* ===== Notifiche push (stesso sistema di Messaggi vocali / Calendario) ===== */
