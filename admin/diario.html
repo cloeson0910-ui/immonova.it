@@ -62,7 +62,7 @@ mark{background:#f1d27a}
 <body>
 <div class="header">
   <a class="brand" href="dashboard.html">IMMONOVA</a>
-  <div class="nav"><a href="../collaboratore.html">Home app</a><a href="calendar.html">Calendario</a><a href="dashboard.html">Dashboard</a></div>
+  <div class="nav"><a href="../collaboratore.html" id="homeAppLink" class="hidden">Home app</a><a href="calendar.html">Calendario</a><a href="dashboard.html">Dashboard</a></div>
 </div>
 <div class="wrap">
   <h1>Diario attività</h1>
@@ -70,12 +70,7 @@ mark{background:#f1d27a}
 
   <div class="card" id="pushCard">
     <h2>Notifiche su questo dispositivo</h2>
-    <div class="row" style="margin-top:0">
-      <button class="btn" id="pushOnBtn" type="button">🔔 Attiva notifiche</button>
-      <button class="btn sec hidden" id="pushTestBtn" type="button">Invia prova</button>
-      <span class="status" id="pushStatus"></span>
-    </div>
-    <p class="sub" id="pushInfo" style="margin:8px 0 0"></p>
+    <div id="pushBox"></div>
   </div>
 
   <div class="bar">
@@ -140,6 +135,7 @@ mark{background:#f1d27a}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
+<script src="../js/collab-push.js"></script>
 <script>
 const client = window.supabaseClient;
 const $ = id => document.getElementById(id);
@@ -170,9 +166,8 @@ async function init(){
   $("collapseBtn").onclick = () => document.querySelectorAll("details.day").forEach(d => { d.open = false; openDays.delete(d.dataset.d); });
   ["q","from","to","fs"].forEach(id => $(id).addEventListener(id === "q" ? "input" : "change", () => { clearTimeout(timer); timer = setTimeout(load, 250); }));
   document.querySelectorAll("[data-q]").forEach(b => b.onclick = () => quick(b.dataset.q));
-  $("pushOnBtn").onclick = enablePush; $("pushTestBtn").onclick = testPush;
   quick("month");
-  refreshPushUi();
+  ImmonovaPush.mount(client, $("pushBox"));
   const id = new URLSearchParams(location.search).get("id");
   if(id){ const r = await client.from("immonova_diary").select("*").eq("id", id).maybeSingle(); if(r.data) startEdit(r.data); }
 }
@@ -291,56 +286,10 @@ function render(txt){
   document.querySelectorAll("details.day").forEach(el => el.addEventListener("toggle", () => { if(el.open) openDays.add(el.dataset.d); else openDays.delete(el.dataset.d); }));
 }
 
-/* ===== Notifiche push (stesso sistema di Messaggi vocali / Calendario) ===== */
-function pushStatus(msg, kind){ const el = $("pushStatus"); el.textContent = msg || ""; el.className = "status" + (kind ? " " + kind : ""); }
-function isStandalone(){ return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; }
-function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
-function b64ToUint8(b64){ const p = "=".repeat((4 - b64.length % 4) % 4); const raw = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
-function withTimeout(p, ms, what){ return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ": tempo scaduto, riprova.")), ms))]); }
-async function getReg(){
-  let reg = await navigator.serviceWorker.getRegistration("/");
-  if(!reg) reg = await navigator.serviceWorker.register("/service-worker.js", { scope:"/" });
-  return withTimeout(navigator.serviceWorker.ready, 15000, "Avvio app");
-}
-async function refreshPushUi(){
-  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
-    $("pushOnBtn").classList.add("hidden");
-    $("pushInfo").textContent = isIOS() && !isStandalone()
-      ? "Su iPhone le notifiche funzionano solo dall'app: in Safari tocca Condividi → Aggiungi alla schermata Home, apri IMMONOVA dall'icona, fai login e torna qui."
-      : "Questo browser non supporta le notifiche push.";
-    return;
-  }
-  try{
-    const reg = await navigator.serviceWorker.getRegistration("/");
-    const sub = reg ? await reg.pushManager.getSubscription() : null;
-    const on = !!sub && Notification.permission === "granted";
-    $("pushOnBtn").classList.toggle("hidden", on);
-    $("pushTestBtn").classList.toggle("hidden", !on);
-    if(on){ pushStatus("Notifiche attive su questo dispositivo.", "ok"); $("pushCard").style.opacity = ".75"; }
-  }catch(e){}
-}
-async function enablePush(){
-  pushStatus("Attivazione in corso…");
-  try{
-    const perm = await Notification.requestPermission();
-    if(perm !== "granted") throw new Error("Permesso notifiche negato: abilitalo dalle impostazioni del telefono/browser.");
-    const k = await client.functions.invoke("register-collaborator-push", { body:{ action:"key" } });
-    if(k.error || !k.data || !k.data.publicKey) throw new Error("Chiave notifiche non disponibile" + (k.error ? ": " + await edgeErrorMessage(k) : ""));
-    const reg = await getReg();
-    let sub = await reg.pushManager.getSubscription();
-    if(!sub) sub = await withTimeout(reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToUint8(k.data.publicKey) }), 15000, "Iscrizione");
-    const r = await client.functions.invoke("register-collaborator-push", { body:{ action:"subscribe", subscription:sub.toJSON(), user_agent:navigator.userAgent } });
-    if(r.error) throw new Error(await edgeErrorMessage(r));
-    if(!r.data || !r.data.ok) throw new Error((r.data && r.data.error) || "Iscrizione non salvata.");
-    pushStatus("Notifiche attive su questo dispositivo.", "ok");
-  }catch(e){ pushStatus(e.message || String(e), "err"); }
-  refreshPushUi();
-}
-async function testPush(){
-  const r = await client.functions.invoke("register-collaborator-push", { body:{ action:"test" } });
-  pushStatus(r.error ? await edgeErrorMessage(r) : "Notifica di prova inviata (" + (r.data && r.data.sent || 0) + " dispositivi).", r.error ? "err" : "ok");
-}
 
+/* "Home app" solo nell'app installata o da telefono (stessa regola del login), mai sul computer */
+if((window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true || window.innerWidth < 820)
+  $("homeAppLink").classList.remove("hidden");
 init();
 </script>
 </body>
