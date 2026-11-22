@@ -59,6 +59,9 @@ mark{background:#f1d27a}
 .ppl{border:1px solid rgba(166,127,52,.25);border-radius:10px;padding:10px;margin-top:8px;background:rgba(255,255,255,.55)}
 .prow{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed rgba(166,127,52,.25)}
 .prow:last-child{border-bottom:0}
+.prow .dl{grid-column:1/-1;display:grid;grid-template-columns:220px 1fr;gap:6px 10px;align-items:center;background:#fff7e8;border:1px dashed #e9c27a;border-radius:8px;padding:8px}
+.prow .dl label{margin:0;font-size:10.5px}
+@media(max-width:700px){.prow .dl{grid-template-columns:1fr}}
 .prow input,.prow select{padding:8px;font-size:14px}
 .prow .wt{display:flex;gap:5px;align-items:center;font-size:12px;white-space:nowrap;color:#6b5114}
 .prow .wt input{width:auto}
@@ -140,7 +143,7 @@ mark{background:#f1d27a}
           <select id="addCollab" style="max-width:260px"><option value="">+ Collaboratore…</option></select>
           <button class="btn sec sm" type="button" id="addExt">+ Esterno (segnalatore, proprietario…)</button>
         </div>
-        <p class="sub" style="margin:6px 0 0">Spunta <b>⏳ Da sollecitare</b> per chi ti deve una risposta: la ritrovi col filtro "Da sollecitare".</p>
+        <p class="sub" style="margin:6px 0 0">Per chi ti deve qualcosa imposta <b>⏳ Deve rispondere entro</b>: se a quell'ora non ha risposto, IMMONOVA gli manda il sollecito su WhatsApp da sola e ti avvisa.</p>
       </div>
       <datalist id="knownNames"></datalist>
     </div>
@@ -433,7 +436,8 @@ function peopleLine(r, txt){
   return '<div class="m">' + (r.mode ? "📍 " + esc(r.mode) + (ps.length ? " · " : "") : "") + (ps.length ? "👥 " : "") + ps.map(p => {
     const tel = (p.phone || "").replace(/[^0-9+]/g, ""), wa = tel.replace(/^\+/, "").replace(/^(?!39)(3\d{8,9})$/, "39$1");
     const ask = "Ciao " + (p.name || "") + ", ti scrivo per un aggiornamento su: " + r.title;
-    return '<span class="ptag' + (p.waiting && r.status !== "chiusa" ? " w" : "") + '">' + (p.waiting && r.status !== "chiusa" ? "⏳ " : "") + hl(p.name, txt) + (p.role ? " · " + esc(p.role) : "") +
+    const dlTxt = p.deadline && r.status !== "chiusa" ? (p.replied_at ? " ✅" : p.sollecitato_at ? " 📨 sollecitato" : " ⏳ entro " + fmtDT(p.deadline)) : "";
+    return '<span class="ptag' + (p.waiting && r.status !== "chiusa" ? " w" : "") + '">' + hl(p.name, txt) + (p.role ? " · " + esc(p.role) : "") + dlTxt +
       (tel ? '<a href="tel:' + esc(tel) + '" title="Chiama">📞</a><a href="whatsapp.html?phone=' + encodeURIComponent(tel) + '&name=' + encodeURIComponent(p.name || "") + '&diary=' + r.id + '" title="WhatsApp IMMONOVA">💬</a>' : "") +
       (p.email ? '<a href="mailto:' + esc(p.email) + '?subject=' + encodeURIComponent("Sollecito: " + r.title) + '&body=' + encodeURIComponent(ask) + '" title="Email">✉️</a>' : "") + '</span>';
   }).join("") + '</div>';
@@ -454,18 +458,37 @@ function knownExt(name){
   for(const a of all) for(const p of (Array.isArray(a.people) ? a.people : [])) if(p.kind === "esterno" && p.name && p.name.toLowerCase() === name.toLowerCase()) return p;
   return null;
 }
+function toLocal(iso){ if(!iso) return ""; const d = new Date(iso), z = n => String(n).padStart(2, "0"); return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()) + "T" + z(d.getHours()) + ":" + z(d.getMinutes()); }
+function dlState(p){
+  if(!p.deadline) return "Nessuna scadenza: nessun sollecito automatico.";
+  if(p.replied_at) return "✅ Ha risposto il " + fmtDT(p.replied_at);
+  if(p.sollecitato_at) return "📨 Sollecito inviato il " + fmtDT(p.sollecitato_at) + " — in attesa di risposta";
+  const late = new Date(p.deadline) < new Date();
+  return late ? "⚠️ Scadenza passata: il sollecito parte entro un minuto (WhatsApp" + (p.phone ? "" : " — manca il telefono!") + ")"
+              : "Se non risponde entro il " + fmtDT(p.deadline) + " parte il sollecito automatico" + (p.phone ? " su WhatsApp." : " — ⚠️ manca il telefono, avviso solo te.");
+}
 function renderPeople(focusLast){
   $("pplRows").innerHTML = people.length ? people.map((p, i) => p.kind === "collab"
     ? '<div class="prow"><div class="nm"><b>' + esc(p.name) + '</b> <span class="sub">collaboratore</span></div><div class="sub">' + esc(p.phone || "") + '</div><div class="sub">' + esc(p.email || "") + '</div>' +
-      '<label class="wt"><input type="checkbox" data-i="' + i + '" data-f="waiting"' + (p.waiting ? " checked" : "") + '>⏳ Da sollecitare</label><button class="x" type="button" data-del="' + i + '">×</button></div>'
+      '<button class="x" type="button" data-del="' + i + '">×</button>' + '<div class="dl"><label>⏳ Deve rispondere entro</label><input type="datetime-local" data-i="' + i + '" data-f="deadline" value="' + toLocal(p.deadline) + '">' +
+      '<label>Cosa deve mandarti / risponderti</label><input placeholder="Es. visura catastale aggiornata" data-i="' + i + '" data-f="ask" value="' + esc(p.ask || "") + '">' +
+      '<div class="sub" style="grid-column:1/-1;margin:0">' + dlState(p) + '</div></div>' + '</div>'
     : '<div class="prow"><input class="nm" list="knownNames" placeholder="Nome e cognome" value="' + esc(p.name) + '" data-i="' + i + '" data-f="name">' +
       '<select data-i="' + i + '" data-f="role">' + ROLES.map(r => '<option' + (r === p.role ? " selected" : "") + '>' + r + '</option>').join("") + '</select>' +
       '<input placeholder="Telefono" type="tel" value="' + esc(p.phone) + '" data-i="' + i + '" data-f="phone">' +
       '<input placeholder="Email" type="email" value="' + esc(p.email) + '" data-i="' + i + '" data-f="email">' +
-      '<div style="display:flex;gap:6px;align-items:center"><label class="wt"><input type="checkbox" data-i="' + i + '" data-f="waiting"' + (p.waiting ? " checked" : "") + '>⏳ Da sollecitare</label><button class="x" type="button" data-del="' + i + '">×</button></div></div>'
+      '<button class="x" type="button" data-del="' + i + '">×</button>' + '<div class="dl"><label>⏳ Deve rispondere entro</label><input type="datetime-local" data-i="' + i + '" data-f="deadline" value="' + toLocal(p.deadline) + '">' +
+      '<label>Cosa deve mandarti / risponderti</label><input placeholder="Es. visura catastale aggiornata" data-i="' + i + '" data-f="ask" value="' + esc(p.ask || "") + '">' +
+      '<div class="sub" style="grid-column:1/-1;margin:0">' + dlState(p) + '</div></div>' + '</div>'
   ).join("") : '<p class="sub" style="margin:0">Nessuna persona indicata.</p>';
   $("pplRows").querySelectorAll("[data-f]").forEach(el => el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", () => {
-    const p = people[+el.dataset.i]; p[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value;
+    const p = people[+el.dataset.i];
+    if(el.dataset.f === "deadline"){
+      const iso = el.value ? new Date(el.value).toISOString() : null;
+      if(iso !== (p.deadline || null)){ p.deadline = iso; p.waiting = !!iso; p.sollecitato_at = null; p.replied_at = null; }
+      const st = el.closest(".dl").querySelector(".sub"); if(st) st.innerHTML = dlState(p); return;
+    }
+    p[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value;
     if(el.dataset.f === "name"){ const k = knownExt(el.value); if(k && !p.phone && !p.email){ p.role = k.role; p.phone = k.phone || ""; p.email = k.email || ""; renderPeople(); } }
   }));
   $("pplRows").querySelectorAll("[data-del]").forEach(b => b.onclick = () => { people.splice(+b.dataset.del, 1); renderPeople(); });
