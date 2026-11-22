@@ -60,6 +60,7 @@ mark{background:#f1d27a}
 .prow{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed rgba(166,127,52,.25)}
 .prow:last-child{border-bottom:0}
 .prow .ph{font-size:12.5px;font-style:italic;color:#4a3c1f;margin:4px 0}
+.pq{margin-left:6px;border:1px solid #d9a514;background:#fff8e6;color:#4a3c1f;border-radius:12px;padding:2px 9px;font-size:11.5px;cursor:pointer}
 .prow .pbtn{margin-top:6px;border-color:#d9a514;background:#fff8e6}
 #ppModal{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 #ppModal.hidden{display:none}
@@ -439,14 +440,15 @@ function rootOf(id){ let cur = all.find(a => a.id === id), n = 0; while(cur && c
 function peopleLine(r, txt){
   const ps = Array.isArray(r.people) ? r.people : [];
   if(!ps.length && !r.mode) return "";
-  return '<div class="m">' + (r.mode ? "📍 " + esc(r.mode) + (ps.length ? " · " : "") : "") + (ps.length ? "👥 " : "") + ps.map(p => {
+  return '<div class="m">' + (r.mode ? "📍 " + esc(r.mode) + (ps.length ? " · " : "") : "") + (ps.length ? "👥 " : "") + ps.map((p, pi) => {
     const tel = (p.phone || "").replace(/[^0-9+]/g, ""), wa = tel.replace(/^\+/, "").replace(/^(?!39)(3\d{8,9})$/, "39$1");
     const ask = "Ciao " + (p.name || "") + ", ti scrivo per un aggiornamento su: " + r.title;
     const dlTxt = p.deadline && r.status !== "chiusa" ? (p.replied_at ? " ✅" : p.sollecitato_at ? " 📨 sollecitato" : " ⏳ entro " + fmtDT(p.deadline)) : "";
     const parz = (p.partials || []).length ? ' · ◐ ' + esc((p.partials[p.partials.length - 1] || {}).text || "") : "";
     return '<span class="ptag' + (p.waiting && r.status !== "chiusa" ? " w" : "") + '">' + hl(p.name, txt) + (p.role ? " · " + esc(p.role) : "") + dlTxt + parz +
       (tel ? '<a href="tel:' + esc(tel) + '" title="Chiama">📞</a><a href="whatsapp.html?phone=' + encodeURIComponent(tel) + '&name=' + encodeURIComponent(p.name || "") + '&diary=' + r.id + '" title="WhatsApp IMMONOVA">💬</a>' : "") +
-      (p.email ? '<a href="mailto:' + esc(p.email) + '?subject=' + encodeURIComponent("Sollecito: " + r.title) + '&body=' + encodeURIComponent(ask) + '" title="Email">✉️</a>' : "") + '</span>';
+      (p.email ? '<a href="mailto:' + esc(p.email) + '?subject=' + encodeURIComponent("Sollecito: " + r.title) + '&body=' + encodeURIComponent(ask) + '" title="Email">✉️</a>' : "") +
+      (r.status !== "chiusa" ? '<button type="button" class="pq" title="Registra una risposta parziale" onclick="partialFromList(\'' + r.id + '\',' + pi + ')">◐ Risposta parziale</button>' : "") + '</span>';
   }).join("") + '</div>';
 }
 async function loadCollabs(){
@@ -509,6 +511,7 @@ function partialHtml(p, i){
   return '<div style="grid-column:1/-1">' + hist + '<button type="button" class="btn sec sm pbtn" data-partial="' + i + '">◐ Risposta parziale</button></div>';
 }
 let partialIdx = null;
+function partialFromList(id, i){ editById(id); setTimeout(() => openPartial(i), 50); }
 function openPartial(i){
   partialIdx = i; const p = people[i];
   $("pp_title").textContent = "Risposta parziale di " + (p.name || "");
