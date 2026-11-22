@@ -92,6 +92,9 @@ mark{background:#f1d27a}
 .bar.late{outline:2px dashed #8a1f1f;outline-offset:1px}
 .bar.p-alta{border-left:5px solid #2b2416}
 .pmk{position:absolute;top:-2px;font-size:12px;color:#b8860b;z-index:3;cursor:help}.pmk.w{color:#8a1f1f}
+.gcard{margin-bottom:26px}
+.gtitle{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;align-items:baseline;font-weight:700;color:#2b2416;font-size:16px;margin:0 0 8px}
+.gtitle .sub{font-weight:400;font-size:12.5px}
 .ms{position:absolute;top:7px;width:18px;height:18px;transform:rotate(45deg);border:2px solid #2b2416;cursor:pointer}
 .ms.aperta{background:#c0392b}.ms.in_gestione{background:#d9a514}.ms.chiusa{background:#3c9a3c}
 .todayl{position:absolute;top:0;bottom:0;width:2px;background:#2b6fd6;z-index:2;pointer-events:none}
@@ -154,9 +157,7 @@ function fillRoots(sel){
   $("root").innerHTML = '<option value="">Tutte (' + rs.length + ')</option>' + rs.map(a => '<option value="' + a.id + '"' + (a.id === sel ? " selected" : "") + '>◆ ' + esc(a.title) + (a.due_date ? " — " + itd(a.due_date) : "") + '</option>').join("");
 }
 function endOf(a){ return a.due_date || a.activity_date; }
-function draw(){
-  const sel = $("root").value; const rs = sel ? all.filter(a => a.id === sel) : roots();
-  if(!rs.length){ $("gantt").innerHTML = '<div class="card sub">Nessuna milestone da mostrare. Crea un\'attività principale con una scadenza o con sotto-attività dal Diario.</div>'; return; }
+function chart(rs){
   const rowsOut = [];
   const walk = (a, depth, root) => { rowsOut.push({ a, depth, root }); kids(a.id).forEach(k => walk(k, depth + 1, root)); };
   rs.forEach(r => walk(r, 0, r));
@@ -211,8 +212,19 @@ function draw(){
       (a.priority === "alta" && depth ? ' <b style="color:#2b2416">▲</b>' : "") + ((a.people || []).some(x => x.waiting) && a.status !== "chiusa" ? ' <span title="Da sollecitare">⏳</span>' : "") + '</div><div class="gtrack" style="width:' + W + 'px">' + track + '</div></div>';
   });
   html += '</div>';
-  $("gantt").innerHTML = html;
-  const g = document.querySelector(".gwrap"); if(g) g.scrollLeft = Math.max(0, tl - (g.clientWidth - nw) / 3);
+  return { html, tl, nw };
+}
+/* Un Gantt separato per ogni milestone, ciascuno con la propria scala di date. */
+function draw(){
+  const sel = $("root").value; const rs = sel ? all.filter(a => a.id === sel) : roots();
+  if(!rs.length){ $("gantt").innerHTML = '<div class="card sub">Nessuna milestone da mostrare. Crea un\'attività principale con una scadenza o con sotto-attività dal Diario.</div>'; return; }
+  const parts = rs.map(r => {
+    const c = chart([r]);
+    const nk = kids(r.id), dn = nk.filter(k => k.status === "chiusa").length;
+    return { c, head: '<div class="gtitle"><span>◆ ' + esc(r.title) + '</span><span class="sub">' + (r.due_date ? "chiusura " + itd(r.due_date) : "") + (nk.length ? " · " + dn + "/" + nk.length + " sotto-attività chiuse" : "") + '</span></div>' };
+  });
+  $("gantt").innerHTML = parts.map(p => '<div class="gcard">' + p.head + p.c.html + '</div>').join("");
+  document.querySelectorAll(".gwrap").forEach((g, i) => { const c = parts[i].c; g.scrollLeft = Math.max(0, c.tl - (g.clientWidth - c.nw) / 3); });
 }
 function openA(id){ location.href = "diario.html?id=" + id; }
 init();
