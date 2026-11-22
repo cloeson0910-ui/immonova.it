@@ -60,6 +60,7 @@ mark{background:#f1d27a}
 .prow{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed rgba(166,127,52,.25)}
 .prow:last-child{border-bottom:0}
 .prow .ph{font-size:12.5px;font-style:italic;color:#4a3c1f;margin:4px 0}
+.pqbig{background:#fff8e6;border:1px solid #d9a514;color:#4a3c1f}
 .pq{margin-left:6px;border:1px solid #d9a514;background:#fff8e6;color:#4a3c1f;border-radius:12px;padding:2px 9px;font-size:11.5px;cursor:pointer}
 .prow .pbtn{margin-top:6px;border-color:#d9a514;background:#fff8e6}
 #ppModal{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -511,12 +512,19 @@ function partialHtml(p, i){
   return '<div style="grid-column:1/-1">' + hist + '<button type="button" class="btn sec sm pbtn" data-partial="' + i + '">◐ Risposta parziale</button></div>';
 }
 let partialIdx = null;
-function partialFromList(id, i){ editById(id); setTimeout(() => openPartial(i), 50); }
+function partialFromList(id, i){
+  editById(id);
+  setTimeout(() => { if(i < 0) i = people.length === 1 ? 0 : -1; openPartial(i); }, 50);
+}
 function openPartial(i){
-  partialIdx = i; const p = people[i];
-  $("pp_title").textContent = "Risposta parziale di " + (p.name || "");
+  partialIdx = i; const p = i >= 0 ? people[i] : null;
+  $("pp_title").textContent = "Risposta parziale" + (p ? " di " + (p.name || "") : "");
+  $("pp_whoBox").classList.toggle("hidden", !!p);
+  $("pp_who").innerHTML = people.map((x, k) => '<option value="' + k + '">' + esc(x.name || "") + '</option>').join("") + '<option value="new">+ Altra persona…</option>';
+  $("pp_who").value = people.length ? "0" : "new";
+  $("pp_newName").classList.toggle("hidden", $("pp_who").value !== "new"); $("pp_newName").value = "";
   $("pp_text").value = "";
-  $("pp_next").value = p.deadline && new Date(p.deadline) > new Date() ? toLocal(p.deadline) : "";
+  $("pp_next").value = p && p.deadline && new Date(p.deadline) > new Date() ? toLocal(p.deadline) : "";
   $("pp_due").value = $("f_due").value || "";
   $("pp_st").textContent = "";
   $("ppModal").classList.remove("hidden"); $("pp_text").focus();
@@ -527,6 +535,13 @@ async function applyPartial(){
   if(!text){ $("pp_st").textContent = "Scrivi cosa ti ha risposto."; return; }
   if(!nextV){ $("pp_st").textContent = "Indica entro quando deve completare."; return; }
   const next = new Date(nextV); if(next < new Date()){ $("pp_st").textContent = "La nuova scadenza deve essere nel futuro."; return; }
+  if(partialIdx == null || partialIdx < 0){
+    const w = $("pp_who").value;
+    if(w === "new"){
+      const nm = $("pp_newName").value.trim(); if(!nm){ $("pp_st").textContent = "Scrivi il nome di chi ha risposto."; return; }
+      people.push({ kind:"esterno", name:nm, role:"Altro", phone:"", email:"", waiting:false }); partialIdx = people.length - 1;
+    } else partialIdx = +w;
+  }
   const p = people[partialIdx], now = new Date();
   p.deadline = next.toISOString(); p.waiting = true; p.replied_at = null; p.sollecitato_at = null;
   p.partials = (p.partials || []).concat([{ at:now.toISOString(), text, next_deadline:p.deadline }]);
@@ -567,6 +582,7 @@ function render(txt){
         '<div class="acts"><select onchange="setStatus(\'' + r.id + '\', this.value)">' +
           ["aperta","in_gestione","chiusa"].map(s => '<option value="' + s + '"' + (s === r.status ? " selected" : "") + '>' + LBL[s] + '</option>').join("") + '</select>' +
         (r.status !== "chiusa" ? '<select onchange="snooze(\'' + r.id + '\', this.value)"><option value="">⏰ Ricordamelo…</option><option value="15">tra 15 min</option><option value="60">tra 1 ora</option><option value="180">tra 3 ore</option><option value="tomorrow">domani 9:00</option></select>' : "") +
+        (r.status !== "chiusa" ? '<button class="btn sm pqbig" onclick="partialFromList(\'' + r.id + '\',-1)">◐ Risposta parziale</button>' : "") +
         (r.status !== "chiusa" ? '<button class="btn sec sm" onclick="addChild(\'' + r.id + '\')">+ Sotto-attività</button>' : "") +
         '<button class="btn sec sm" onclick="editById(\'' + r.id + '\')">Modifica</button>' +
         '<button class="btn sec sm" style="color:#8a1f1f" onclick="del(\'' + r.id + '\')">Elimina</button></div></div>';
@@ -587,7 +603,9 @@ init();
 </script>
 <div id="ppModal" class="hidden" onclick="if(event.target===this)closePartial()"><div class="box">
   <h3 id="pp_title" style="margin:0 0 10px">Risposta parziale</h3>
-  <label>Cosa ti ha risposto</label><textarea id="pp_text" placeholder="Es. mi ha mandato la planimetria, la visura arriva lunedì"></textarea>
+  <div id="pp_whoBox"><label>Chi ha risposto</label><select id="pp_who" onchange="$('pp_newName').classList.toggle('hidden', this.value !== 'new')"></select>
+    <input id="pp_newName" class="hidden" placeholder="Nome e cognome" style="margin-top:6px"></div>
+  <label style="margin-top:10px">Cosa ti ha risposto</label><textarea id="pp_text" placeholder="Es. mi ha mandato la planimetria, la visura arriva lunedì"></textarea>
   <label style="margin-top:10px">⏳ Deve completare entro</label><input id="pp_next" type="datetime-local">
   <p class="sub" style="margin:4px 0 0">Riparte l'attesa: se a quella data non ha completato, parte il sollecito automatico.</p>
   <label style="margin-top:10px">Rimanda la chiusura dell'attività (milestone)</label><input id="pp_due" type="date">
