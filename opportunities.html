@@ -853,7 +853,7 @@ function applyCardBackgrounds(categoryImages){
 async function loadCategoryCoverImages(){
   var result = await client
     .from("opportunities")
-    .select("category,cover_image")
+    .select("category,extra_categories,cover_image")
     .eq("published", true);
 
   if(result.error){
@@ -864,8 +864,10 @@ async function loadCategoryCoverImages(){
   var byCategory = {};
   (result.data || []).forEach(function(row){
     if(!row.cover_image) return;
-    if(!byCategory[row.category]) byCategory[row.category] = [];
-    byCategory[row.category].push(row.cover_image);
+    [row.category].concat(row.extra_categories || []).forEach(function(c){
+      if(!byCategory[c]) byCategory[c] = [];
+      byCategory[c].push(row.cover_image);
+    });
   });
 
   applyCardBackgrounds(byCategory);
@@ -892,7 +894,7 @@ function updateTotalCounter(total){
 async function loadPublishedCounts(){
   var result = await client
     .from("opportunities")
-    .select("category")
+    .select("category,extra_categories")
     .eq("published", true);
 
   if(result.error){
@@ -909,10 +911,12 @@ async function loadPublishedCounts(){
   var data = result.data || [];
 
   for(var j = 0; j < data.length; j++){
-    var category = data[j].category;
-    if(counts[category] !== undefined){
-      counts[category]++;
-    }
+    var cats = [data[j].category].concat(data[j].extra_categories || []);
+    cats.filter(function(c, idx){ return cats.indexOf(c) === idx; }).forEach(function(category){
+      if(counts[category] !== undefined){
+        counts[category]++;
+      }
+    });
   }
 
   for(var k = 0; k < categories.length; k++){
