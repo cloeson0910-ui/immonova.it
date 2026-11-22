@@ -57,8 +57,13 @@ body{background:#f4ecdf;font-family:"Avenir Next","Helvetica Neue",Arial,sans-se
 
   <div class="box no-print hidden" id="flow">
     <div class="steps"><span id="s1" class="on">1 · Firma</span><span id="s2">2 · Approvazione clausole</span><span id="s3">3 · Completato</span></div>
+    <div id="chanBox" class="hidden" style="margin:0 0 14px;padding:12px 14px;border:1px solid rgba(166,127,52,.3);border-radius:8px;background:rgba(255,255,255,.6)">
+      <p style="margin:0 0 8px"><b>Come vuoi ricevere i codici di verifica?</b></p>
+      <label class="check" style="margin:4px 0"><input type="radio" name="chan" value="whatsapp"> WhatsApp al <b id="chanPhone"></b></label>
+      <label class="check" style="margin:4px 0"><input type="radio" name="chan" value="email"> Email all'indirizzo <b id="chanEmail"></b></label>
+    </div>
     <div id="step1">
-      <p>Leggi integralmente il documento qui sotto. Per firmarlo riceverai un codice di verifica all'indirizzo <b id="em1"></b>.</p>
+      <p>Leggi integralmente il documento qui sotto. Per firmarlo riceverai un codice di verifica <span id="em1"></span>.</p>
       <label class="check"><input type="checkbox" id="read1"> Dichiaro di aver letto integralmente il documento e di volerlo sottoscrivere con firma elettronica.</label>
       <div class="otp"><button class="btn" id="req1">Invia codice di firma</button><input id="code1" class="hidden" inputmode="numeric" maxlength="6" placeholder="000000"><button class="btn hidden" id="ver1">Firma</button></div>
     </div>
@@ -100,8 +105,15 @@ async function load(){
   $("sheet").innerHTML = out.body_html; $("sheet").classList.remove("hidden");
   if(out.status === "signed"){ showSigned(); return; }
   if(out.status === "cancelled"){ $("intro").innerHTML = "<p>Questo documento è stato annullato da IMMONOVA e non può più essere firmato.</p>"; return; }
-  $("intro").innerHTML = "<h2>" + esc(out.title) + "</h2><p>Documento destinato a <b>" + esc(out.counterparty_name || "") + "</b>. La firma avviene in due passaggi con codici di verifica inviati via email.</p>";
-  $("em1").textContent = out.email_masked;
+  $("intro").innerHTML = "<h2>" + esc(out.title) + "</h2><p>Documento destinato a <b>" + esc(out.counterparty_name || "") + "</b>. La firma avviene in due passaggi con codici di verifica.</p>";
+  const o = out.otp || {};
+  if(o.has_phone){
+    $("chanPhone").textContent = o.phone_masked; $("chanEmail").textContent = out.email_masked;
+    document.querySelector('input[name="chan"][value="' + (o.preferred === "whatsapp" ? "whatsapp" : "email") + '"]').checked = true;
+    $("chanBox").classList.remove("hidden");
+    document.querySelectorAll('input[name="chan"]').forEach(r => r.addEventListener("change", updDest));
+  }
+  updDest();
   $("flow").classList.remove("hidden");
 }
 
@@ -111,20 +123,23 @@ function showSigned(){
   const when = new Date(contract.signed_at).toLocaleString("it-IT", { timeZone:"Europe/Rome" });
   $("cert").innerHTML = "<b>ATTESTAZIONE DI FIRMA ELETTRONICA</b><br>Documento: " + esc(contract.title) + "<br>Sottoscritto da: " + esc(contract.counterparty_name || "") +
     " (" + esc(contract.email_masked) + ")<br>Data e ora: " + when + " (Europe/Rome)" + (contract.sign_ip ? "<br>Indirizzo IP: " + esc(contract.sign_ip) : "") +
-    "<br>Modalità: firma con codice OTP via email + seconda approvazione OTP separata delle clausole ex artt. 1341-1342 c.c." +
+    "<br>Modalità: firma con codice OTP (email o WhatsApp) + seconda approvazione OTP separata delle clausole ex artt. 1341-1342 c.c." +
     "<br>Impronta SHA-256 del documento: " + esc(contract.body_sha256) + "<br>Riferimento: " + esc(contract.id);
   $("cert").classList.remove("hidden"); $("printRow").classList.remove("hidden");
 }
 
+function chan(){ const r = document.querySelector('input[name="chan"]:checked'); return r && !$("chanBox").classList.contains("hidden") ? r.value : "email"; }
+function updDest(){ $("em1").textContent = chan() === "whatsapp" ? "su WhatsApp al " + $("chanPhone").textContent : "all'indirizzo " + contract.email_masked; }
 async function requestOtp(step){
   const btn = step === "sign" ? $("req1") : $("req2");
   btn.disabled = true; setSt("Invio del codice in corso…");
-  const { ok, out } = await call("immonova-contract", Object.assign({ action:"request_otp", token, step: step === "sign" ? "sign" : "clauses" }, devInfo()));
+  const { ok, out } = await call("immonova-contract", Object.assign({ action:"request_otp", token, step: step === "sign" ? "sign" : "clauses", channel: chan() }, devInfo()));
   btn.disabled = false;
   if(!ok || !out.ok){ setSt("Invio non riuscito: " + (out.error || "riprova"), "err"); return; }
   if(step === "sign"){ otp1 = out.otp_id; $("code1").classList.remove("hidden"); $("ver1").classList.remove("hidden"); $("code1").focus(); btn.textContent = "Invia di nuovo"; }
   else { otp2 = out.otp_id; $("code2").classList.remove("hidden"); $("ver2").classList.remove("hidden"); $("code2").focus(); btn.textContent = "Invia di nuovo"; }
-  setSt("Codice inviato a " + out.email_masked + " (valido 10 minuti). Controlla anche lo spam.", "ok");
+  if(out.channel === "whatsapp") setSt("Codice inviato su WhatsApp al " + out.destination_masked + " (valido 10 minuti).", "ok");
+  else setSt((out.fallback ? "WhatsApp non disponibile in questo momento: " : "") + "Codice inviato via email a " + (out.destination_masked || out.email_masked) + " (valido 10 minuti). Controlla anche lo spam.", "ok");
 }
 
 async function verify(step){
