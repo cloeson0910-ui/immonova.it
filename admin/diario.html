@@ -56,18 +56,43 @@ details.day[open]{padding-bottom:6px}
 .counts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .counts span{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600}
 mark{background:#f1d27a}
+.ppl{border:1px solid rgba(166,127,52,.25);border-radius:10px;padding:10px;margin-top:8px;background:rgba(255,255,255,.55)}
+.prow{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed rgba(166,127,52,.25)}
+.prow:last-child{border-bottom:0}
+.prow input,.prow select{padding:8px;font-size:14px}
+.prow .wt{display:flex;gap:5px;align-items:center;font-size:12px;white-space:nowrap;color:#6b5114}
+.prow .wt input{width:auto}
+.x{background:none;border:0;color:#9c2f2f;font-size:22px;line-height:1;cursor:pointer;padding:0 6px;width:auto}
+.ptag{display:inline-block;padding:2px 8px;border-radius:12px;background:#efe5cf;color:#46371a;font-size:12px;margin:2px 4px 2px 0}
+.ptag.w{background:#fde2c4;color:#7a3d00;font-weight:600}
+.ptag a{color:inherit;text-decoration:none;margin-left:4px}
+@media(max-width:700px){.prow{grid-template-columns:1fr 1fr}.prow .nm{grid-column:1/-1}}
 .pri{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;margin-left:6px;vertical-align:middle}
 .p-alta{background:#2b2416;color:#f1d27a}.p-media{background:#e9dcc0;color:#5b461d}.p-bassa{background:#f3efe6;color:#8a7a55;border:1px solid #e0d4b8}
 .par{font-size:12px;color:#7a6a45;margin-bottom:3px}.par a{color:#5b461d}
 .prog{display:inline-block;width:80px;height:6px;background:#eadfca;border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}.prog i{display:block;height:100%;background:#3c9a3c}
 .item.child{margin-left:22px}
-@media(max-width:600px){.item{flex-wrap:wrap}.acts{flex-direction:row;width:100%}}
+@media(max-width:600px){.item{flex-wrap:wrap}.acts{flex-direction:row;flex-wrap:wrap;width:100%}.acts select{flex:1 1 45%}.acts .btn{flex:1 1 auto}}
+
+.hright{display:flex;gap:8px;align-items:center;margin-left:auto}
+.quickbtn{display:none;padding:9px 12px;border-radius:8px;background:#a67f34;color:#fffaf0;text-decoration:none;font-size:13px;white-space:nowrap}
+.navbtn{display:none;background:rgba(255,255,255,.5);border:1px solid rgba(166,127,52,.3);border-radius:8px;font-size:22px;line-height:1;padding:7px 12px;color:#46371a;cursor:pointer}
+@media(max-width:820px){
+  .header{flex-wrap:nowrap;position:sticky}
+  .navbtn{display:block}
+  .quickbtn{display:inline-block}
+  .nav{display:none;position:absolute;top:100%;right:12px;left:12px;background:#fbf7ef;border:1px solid rgba(166,127,52,.3);border-radius:12px;box-shadow:0 12px 30px rgba(60,40,10,.18);padding:8px;flex-direction:column;z-index:50}
+  .nav.open{display:flex}
+  .nav a{margin:0;border:0;border-bottom:1px solid rgba(166,127,52,.15);border-radius:0;padding:14px 12px;font-size:15px;background:none}
+  .nav a:last-child{border-bottom:0}
+}
 </style>
 </head>
 <body>
 <div class="header">
   <a class="brand" href="dashboard.html">IMMONOVA</a>
-  <div class="nav"><a href="../collaboratore.html" id="homeAppLink" class="hidden">Home app</a><a href="diario-giorno.html">Giornata</a><a href="diario-gantt.html">Gantt</a><a href="dashboard.html">Dashboard</a></div>
+  <div class="hright"><a class="quickbtn" href="../collaboratore.html">⚡ Azioni rapide</a><button class="navbtn" id="navBtn" type="button" aria-label="Menu">☰</button></div>
+  <div class="nav"><a href="diario-giorno.html">Giornata</a><a href="diario-gantt.html">Gantt</a><a href="dashboard.html">Dashboard</a></div>
 </div>
 <div class="wrap">
   <h1>Diario attività</h1>
@@ -109,6 +134,20 @@ mark{background:#f1d27a}
         <button type="button" data-v="bassa" class="p-bassa">▽ Bassa</button>
       </div>
     </div>
+    <div style="margin-top:14px"><label>Con chi (collaboratori, segnalatori, proprietari…)</label>
+      <div class="ppl"><div id="pplRows"></div>
+        <div class="row" style="margin-top:8px">
+          <select id="addCollab" style="max-width:260px"><option value="">+ Collaboratore…</option></select>
+          <button class="btn sec sm" type="button" id="addExt">+ Esterno (segnalatore, proprietario…)</button>
+        </div>
+        <p class="sub" style="margin:6px 0 0">Spunta <b>⏳ Da sollecitare</b> per chi ti deve una risposta: la ritrovi col filtro "Da sollecitare".</p>
+      </div>
+      <datalist id="knownNames"></datalist>
+    </div>
+    <div class="grid" style="margin-top:12px">
+      <div><label>Come (modalità)</label>
+        <select id="f_mode"><option value="">—</option><option>Telefono</option><option>WhatsApp</option><option>Email</option><option>Incontro</option><option>Sopralluogo</option><option>Videochiamata</option><option>Altro</option></select></div>
+    </div>
     <div class="grid" style="margin-top:12px">
       <div><label>Promemoria per chiuderla</label>
         <select id="f_rem">
@@ -135,7 +174,8 @@ mark{background:#f1d27a}
       <div><label>Dal</label><input id="from" type="date"></div>
       <div><label>Al</label><input id="to" type="date"></div>
       <div><label>Stato</label>
-        <select id="fs"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="in_gestione">🟡 In gestione</option><option value="chiusa">🟢 Chiuse</option><option value="nonchiuse">🔴🟡 Non chiuse</option></select></div>
+        <select id="fs"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="in_gestione">🟡 In gestione</option><option value="chiusa">🟢 Chiuse</option><option value="nonchiuse">🔴🟡 Non chiuse</option><option value="attesa">⏳ Da sollecitare</option></select></div>
+      <div><label>Persona</label><input id="fp" list="knownNames" placeholder="Nome collaboratore o esterno"></div>
     </div>
     <div class="row">
       <button class="btn sec sm" type="button" data-q="today">Oggi</button>
@@ -241,7 +281,8 @@ const pad = n => String(n).padStart(2, "0");
 const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const hm = d => pad(d.getHours()) + ":" + pad(d.getMinutes());
 let openDays = null;
-let all = [], fPri = "media";
+let all = [], fPri = "media", people = [], collabs = [];
+const ROLES = ["Segnalatore","Proprietario","Cliente / investitore","Agenzia partner","Notaio","Tecnico","Avvocato / commercialista","Altro"];
 const PRI = { alta:"▲ Alta", media:"● Media", bassa:"▽ Bassa" };
 let user = null, rows = [], editId = null, editRow = null, fStatus = "aperta", timer = null;
 
@@ -257,13 +298,17 @@ async function init(){
   resetForm();
   document.querySelectorAll("#f_status button").forEach(b => b.onclick = () => setFStatus(b.dataset.v));
   document.querySelectorAll("#f_pri button").forEach(b => b.onclick = () => setFPri(b.dataset.v));
+  $("addExt").onclick = () => { people.push({ kind:"esterno", name:"", role:"Segnalatore", phone:"", email:"", waiting:false }); renderPeople(true); };
+  $("addCollab").onchange = () => { const c = collabs.find(x => x.id === $("addCollab").value); $("addCollab").value = "";
+    if(c && !people.some(p => p.id === c.id)){ people.push({ kind:"collab", id:c.id, name:c.full_name, role:"Collaboratore", phone:c.phone || "", email:c.email || "", waiting:false }); renderPeople(); } };
+  loadCollabs();
   $("f_rem").onchange = () => { $("remCustomBox").classList.toggle("hidden", $("f_rem").value !== "custom"); };
   $("saveBtn").onclick = save;
   $("cancelBtn").onclick = () => { resetForm(); $("formCard").classList.add("hidden"); };
   $("newBtn").onclick = () => { const h = $("formCard").classList.contains("hidden"); resetForm(); $("formCard").classList.toggle("hidden", !h); if(h) $("f_title").focus(); };
   $("expandBtn").onclick = () => document.querySelectorAll("details.day").forEach(d => { d.open = true; openDays.add(d.dataset.d); });
   $("collapseBtn").onclick = () => document.querySelectorAll("details.day").forEach(d => { d.open = false; openDays.delete(d.dataset.d); });
-  ["q","from","to","fs"].forEach(id => $(id).addEventListener(id === "q" ? "input" : "change", () => { clearTimeout(timer); timer = setTimeout(load, 250); }));
+  ["q","from","to","fs","fp"].forEach(id => $(id).addEventListener((id === "q" || id === "fp") ? "input" : "change", () => { clearTimeout(timer); timer = setTimeout(load, 250); }));
   document.querySelectorAll("[data-q]").forEach(b => b.onclick = () => quick(b.dataset.q));
   quick("month");
   ImmonovaPush.mount(client, $("pushBox"));
@@ -282,7 +327,7 @@ function resetForm(){
   editId = null; editRow = null;
   const n = new Date();
   $("f_date").value = ymd(n); $("f_time").value = hm(n);
-  $("f_title").value = ""; $("f_notes").value = ""; setFStatus("aperta"); setFPri("media"); $("f_due").value = ""; fillParents("", null);
+  $("f_title").value = ""; $("f_notes").value = ""; setFStatus("aperta"); setFPri("media"); $("f_due").value = ""; fillParents("", null); people = []; renderPeople(); $("f_mode").value = "";
   $("f_rem").value = ""; $("f_rem").querySelector('[value="keep"]').classList.add("hidden");
   $("remCustomBox").classList.add("hidden"); $("remNow").textContent = "";
   $("formTitle").textContent = "Nuova attività"; $("saveBtn").textContent = "Salva attività"; $("cancelBtn").classList.add("hidden");
@@ -292,6 +337,7 @@ function startEdit(r){
   $("f_date").value = r.activity_date; $("f_time").value = r.activity_time ? String(r.activity_time).slice(0, 5) : "";
   $("f_title").value = r.title || ""; $("f_notes").value = r.notes || ""; setFStatus(r.status);
   setFPri(r.priority || "media"); $("f_due").value = r.due_date || ""; fillParents(r.parent_id || "", r.id);
+  people = JSON.parse(JSON.stringify(Array.isArray(r.people) ? r.people : [])); renderPeople(); $("f_mode").value = r.mode || "";
   const keep = $("f_rem").querySelector('[value="keep"]');
   if(r.remind_at){ keep.classList.remove("hidden"); $("f_rem").value = "keep";
     $("remNow").textContent = "Promemoria attuale: " + fmtDT(r.remind_at) + (r.reminded_at ? " (già notificato)" : ""); }
@@ -321,7 +367,8 @@ async function save(){
   let remind_at; try{ remind_at = computeRemind(); }catch(e){ setSt(e.message, "err"); return; }
   if($("f_due").value && $("f_due").value < $("f_date").value){ setSt("La scadenza non può essere prima della data.", "err"); return; }
   const row = { activity_date:$("f_date").value, activity_time:$("f_time").value || null, title, notes:$("f_notes").value.trim() || null, status:fStatus, remind_at,
-    due_date:$("f_due").value || null, priority:fPri, parent_id:$("f_parent").value || null };
+    due_date:$("f_due").value || null, priority:fPri, parent_id:$("f_parent").value || null,
+    mode:$("f_mode").value || null, people:people.filter(p => (p.name || "").trim()).map(p => Object.assign({}, p, { name:p.name.trim() })) };
   $("saveBtn").disabled = true; setSt("Salvataggio…");
   const r = editId ? await client.from("immonova_diary").update(row).eq("id", editId)
                    : await client.from("immonova_diary").insert(Object.assign({ user_id:user.id }, row));
@@ -360,11 +407,12 @@ async function load(){
   if($("from").value) q = q.gte("activity_date", $("from").value);
   if($("to").value) q = q.lte("activity_date", $("to").value);
   const fs = $("fs").value;
-  if(fs === "nonchiuse") q = q.neq("status", "chiusa"); else if(fs) q = q.eq("status", fs);
+  if(fs === "nonchiuse") q = q.neq("status", "chiusa"); else if(fs === "attesa") q = q.eq("waiting", true).neq("status", "chiusa"); else if(fs) q = q.eq("status", fs);
+  const fp = $("fp").value.trim().replace(/[%,()]/g, " "); if(fp) q = q.ilike("people_text", "%" + fp + "%");
   const txt = $("q").value.trim();
-  if(txt){ const s = txt.replace(/[%,()]/g, " "); q = q.or("title.ilike.%" + s + "%,notes.ilike.%" + s + "%"); }
-  const [r, a] = await Promise.all([q, client.from("immonova_diary").select("id,title,status,parent_id,due_date,activity_date").eq("user_id", user.id).limit(5000)]);
-  all = a.data || [];
+  if(txt){ const s = txt.replace(/[%,()]/g, " "); q = q.or("title.ilike.%" + s + "%,notes.ilike.%" + s + "%,people_text.ilike.%" + s + "%"); }
+  const [r, a] = await Promise.all([q, client.from("immonova_diary").select("id,title,status,parent_id,due_date,activity_date,people").eq("user_id", user.id).limit(5000)]);
+  all = a.data || []; fillKnown();
   if(r.error){ $("list").innerHTML = '<div class="card status err">Errore: ' + esc(r.error.message) + ' (hai eseguito diario.sql?)</div>'; return; }
   rows = r.data || []; render(txt);
 }
@@ -379,6 +427,50 @@ function parentLine(r){
   return p ? '<div class="par">↳ parte di: <a href="diario-gantt.html?root=' + rootOf(p.id) + '">' + esc(p.title) + '</a></div>' : "";
 }
 function rootOf(id){ let cur = all.find(a => a.id === id), n = 0; while(cur && cur.parent_id && n++ < 50) cur = all.find(a => a.id === cur.parent_id) || null; return cur ? cur.id : id; }
+function peopleLine(r, txt){
+  const ps = Array.isArray(r.people) ? r.people : [];
+  if(!ps.length && !r.mode) return "";
+  return '<div class="m">' + (r.mode ? "📍 " + esc(r.mode) + (ps.length ? " · " : "") : "") + (ps.length ? "👥 " : "") + ps.map(p => {
+    const tel = (p.phone || "").replace(/[^0-9+]/g, ""), wa = tel.replace(/^\+/, "").replace(/^(?!39)(3\d{8,9})$/, "39$1");
+    const ask = "Ciao " + (p.name || "") + ", ti scrivo per un aggiornamento su: " + r.title;
+    return '<span class="ptag' + (p.waiting && r.status !== "chiusa" ? " w" : "") + '">' + (p.waiting && r.status !== "chiusa" ? "⏳ " : "") + hl(p.name, txt) + (p.role ? " · " + esc(p.role) : "") +
+      (tel ? '<a href="tel:' + esc(tel) + '" title="Chiama">📞</a><a href="https://wa.me/' + esc(wa) + '?text=' + encodeURIComponent(ask) + '" target="_blank" title="WhatsApp">💬</a>' : "") +
+      (p.email ? '<a href="mailto:' + esc(p.email) + '?subject=' + encodeURIComponent("Sollecito: " + r.title) + '&body=' + encodeURIComponent(ask) + '" title="Email">✉️</a>' : "") + '</span>';
+  }).join("") + '</div>';
+}
+async function loadCollabs(){
+  const r = await client.rpc("immonova_diary_collaborators");
+  collabs = r.data || [];
+  $("addCollab").innerHTML = '<option value="">+ Collaboratore…</option>' + collabs.map(c => '<option value="' + c.id + '">' + esc(c.full_name) + (c.professional_role ? " — " + esc(c.professional_role) : "") + '</option>').join("");
+  fillKnown();
+}
+function fillKnown(){
+  const m = new Map();
+  collabs.forEach(c => m.set(c.full_name, 1));
+  all.forEach(a => (Array.isArray(a.people) ? a.people : []).forEach(p => p.name && m.set(p.name, 1)));
+  $("knownNames").innerHTML = [...m.keys()].sort((a, b) => a.localeCompare(b, "it")).map(n => '<option value="' + esc(n) + '">').join("");
+}
+function knownExt(name){
+  for(const a of all) for(const p of (Array.isArray(a.people) ? a.people : [])) if(p.kind === "esterno" && p.name && p.name.toLowerCase() === name.toLowerCase()) return p;
+  return null;
+}
+function renderPeople(focusLast){
+  $("pplRows").innerHTML = people.length ? people.map((p, i) => p.kind === "collab"
+    ? '<div class="prow"><div class="nm"><b>' + esc(p.name) + '</b> <span class="sub">collaboratore</span></div><div class="sub">' + esc(p.phone || "") + '</div><div class="sub">' + esc(p.email || "") + '</div>' +
+      '<label class="wt"><input type="checkbox" data-i="' + i + '" data-f="waiting"' + (p.waiting ? " checked" : "") + '>⏳ Da sollecitare</label><button class="x" type="button" data-del="' + i + '">×</button></div>'
+    : '<div class="prow"><input class="nm" list="knownNames" placeholder="Nome e cognome" value="' + esc(p.name) + '" data-i="' + i + '" data-f="name">' +
+      '<select data-i="' + i + '" data-f="role">' + ROLES.map(r => '<option' + (r === p.role ? " selected" : "") + '>' + r + '</option>').join("") + '</select>' +
+      '<input placeholder="Telefono" type="tel" value="' + esc(p.phone) + '" data-i="' + i + '" data-f="phone">' +
+      '<input placeholder="Email" type="email" value="' + esc(p.email) + '" data-i="' + i + '" data-f="email">' +
+      '<div style="display:flex;gap:6px;align-items:center"><label class="wt"><input type="checkbox" data-i="' + i + '" data-f="waiting"' + (p.waiting ? " checked" : "") + '>⏳ Da sollecitare</label><button class="x" type="button" data-del="' + i + '">×</button></div></div>'
+  ).join("") : '<p class="sub" style="margin:0">Nessuna persona indicata.</p>';
+  $("pplRows").querySelectorAll("[data-f]").forEach(el => el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", () => {
+    const p = people[+el.dataset.i]; p[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value;
+    if(el.dataset.f === "name"){ const k = knownExt(el.value); if(k && !p.phone && !p.email){ p.role = k.role; p.phone = k.phone || ""; p.email = k.email || ""; renderPeople(); } }
+  }));
+  $("pplRows").querySelectorAll("[data-del]").forEach(b => b.onclick = () => { people.splice(+b.dataset.del, 1); renderPeople(); });
+  if(focusLast){ const ins = $("pplRows").querySelectorAll('[data-f="name"]'); if(ins.length) ins[ins.length - 1].focus(); }
+}
 function childLine(r){
   const ch = all.filter(a => a.parent_id === r.id); if(!ch.length) return "";
   const done = ch.filter(a => a.status === "chiusa").length;
@@ -401,7 +493,7 @@ function render(txt){
       const closed = r.status === "chiusa" && r.closed_at ? "chiusa il " + fmtDT(r.closed_at) : "";
       return '<div class="item ' + r.status + (r.parent_id ? " child" : "") + '"><div class="time">' + (r.activity_time ? String(r.activity_time).slice(0, 5) : "—") + '</div>' +
         '<div class="grow">' + parentLine(r) + '<div class="t">' + hl(r.title, txt) + '<span class="pri p-' + (r.priority || "media") + '">' + PRI[r.priority || "media"] + '</span></div>' + (r.notes ? '<div class="n">' + hl(r.notes, txt) + '</div>' : "") +
-        '<div class="m">' + LBL[r.status] + (r.due_date ? " · 🏁 entro " + r.due_date.split("-").reverse().join("/") : "") + (rem ? " · " + rem : "") + (closed ? " · " + closed : "") + '</div>' + childLine(r) + '</div>' +
+        '<div class="m">' + LBL[r.status] + (r.due_date ? " · 🏁 entro " + r.due_date.split("-").reverse().join("/") : "") + (rem ? " · " + rem : "") + (closed ? " · " + closed : "") + '</div>' + peopleLine(r, txt) + childLine(r) + '</div>' +
         '<div class="acts"><select onchange="setStatus(\'' + r.id + '\', this.value)">' +
           ["aperta","in_gestione","chiusa"].map(s => '<option value="' + s + '"' + (s === r.status ? " selected" : "") + '>' + LBL[s] + '</option>').join("") + '</select>' +
         (r.status !== "chiusa" ? '<select onchange="snooze(\'' + r.id + '\', this.value)"><option value="">⏰ Ricordamelo…</option><option value="15">tra 15 min</option><option value="60">tra 1 ora</option><option value="180">tra 3 ore</option><option value="tomorrow">domani 9:00</option></select>' : "") +
@@ -415,9 +507,13 @@ function render(txt){
 
 
 /* "Home app" solo nell'app installata o da telefono (stessa regola del login), mai sul computer */
-if((window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true || window.innerWidth < 820)
-  $("homeAppLink").classList.remove("hidden");
 init();
+</script>
+<script>
+(function(){ var b = document.getElementById("navBtn"), n = document.querySelector(".header .nav");
+  b.onclick = function(e){ e.stopPropagation(); n.classList.toggle("open"); b.textContent = n.classList.contains("open") ? "✕" : "☰"; };
+  document.addEventListener("click", function(e){ if(!n.contains(e.target)){ n.classList.remove("open"); b.textContent = "☰"; } });
+})();
 </script>
 </body>
 </html>

@@ -62,12 +62,26 @@ mark{background:#f1d27a}
 .prog{display:inline-block;width:80px;height:6px;background:#eadfca;border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}.prog i{display:block;height:100%;background:#3c9a3c}
 .item.child{margin-left:22px}
 @media(max-width:600px){.item{flex-wrap:wrap}.acts{flex-direction:row;width:100%}}
+
+.hright{display:flex;gap:8px;align-items:center;margin-left:auto}
+.quickbtn{display:none;padding:9px 12px;border-radius:8px;background:#a67f34;color:#fffaf0;text-decoration:none;font-size:13px;white-space:nowrap}
+.navbtn{display:none;background:rgba(255,255,255,.5);border:1px solid rgba(166,127,52,.3);border-radius:8px;font-size:22px;line-height:1;padding:7px 12px;color:#46371a;cursor:pointer}
+@media(max-width:820px){
+  .header{flex-wrap:nowrap;position:sticky}
+  .navbtn{display:block}
+  .quickbtn{display:inline-block}
+  .nav{display:none;position:absolute;top:100%;right:12px;left:12px;background:#fbf7ef;border:1px solid rgba(166,127,52,.3);border-radius:12px;box-shadow:0 12px 30px rgba(60,40,10,.18);padding:8px;flex-direction:column;z-index:50}
+  .nav.open{display:flex}
+  .nav a{margin:0;border:0;border-bottom:1px solid rgba(166,127,52,.15);border-radius:0;padding:14px 12px;font-size:15px;background:none}
+  .nav a:last-child{border-bottom:0}
+}
 </style>
 </head>
 <body>
 <div class="header">
   <a class="brand" href="dashboard.html">IMMONOVA</a>
-  <div class="nav"><a href="../collaboratore.html" id="homeAppLink" class="hidden">Home app</a><a href="diario.html">Diario</a><a href="diario-gantt.html">Gantt</a><a href="dashboard.html">Dashboard</a></div>
+  <div class="hright"><a class="quickbtn" href="../collaboratore.html">⚡ Azioni rapide</a><button class="navbtn" id="navBtn" type="button" aria-label="Menu">☰</button></div>
+  <div class="nav"><a href="diario.html">Diario</a><a href="diario-gantt.html">Gantt</a><a href="dashboard.html">Dashboard</a></div>
 </div>
 <div class="wrap">
   <h1>Giornata</h1>
@@ -141,6 +155,7 @@ function section(title, list, showTime, empty){
       '<div class="t">' + esc(r.title) + '<span class="pri p-' + (r.priority || "media") + '">' + PRI[r.priority || "media"] + '</span></div>' +
       (r.notes ? '<div class="n">' + esc(r.notes) + '</div>' : "") +
       '<div class="m">' + LBL[r.status] + (showTime ? "" : " · iniziata il " + itd(r.activity_date)) + (r.due_date ? " · 🏁 entro " + itd(r.due_date) : "") + '</div>' +
+      ((r.mode || (r.people || []).length) ? '<div class="m">' + (r.mode ? "📍 " + esc(r.mode) + " · " : "") + (r.people || []).map(x => (x.waiting && r.status !== "chiusa" ? "⏳ " : "") + esc(x.name) + (x.role ? " (" + esc(x.role) + ")" : "") + (x.phone ? ' <a href="tel:' + esc(x.phone.replace(/[^0-9+]/g, "")) + '" style="text-decoration:none">📞</a>' : "")).join(", ") + '</div>' : "") +
       (ch.length ? '<div class="m"><span class="prog"><i style="width:' + Math.round(cd / ch.length * 100) + '%"></i></span>' + cd + '/' + ch.length + ' sotto-attività chiuse</div>' : "") +
       '</div><div class="acts"><select onchange="setStatus(\'' + r.id + '\', this.value, this)">' +
       ["aperta","in_gestione","chiusa"].map(s => '<option value="' + s + '"' + (s === r.status ? " selected" : "") + '>' + LBL[s] + '</option>').join("") + '</select>' +
@@ -153,9 +168,13 @@ async function setStatus(id, v, el){
   const r = await client.from("immonova_diary").update({ status:v }).eq("id", id);
   if(r.error){ alert(r.error.message); } load();
 }
-if((window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true || window.innerWidth < 820)
-  $("homeAppLink").classList.remove("hidden");
 init();
+</script>
+<script>
+(function(){ var b = document.getElementById("navBtn"), n = document.querySelector(".header .nav");
+  b.onclick = function(e){ e.stopPropagation(); n.classList.toggle("open"); b.textContent = n.classList.contains("open") ? "✕" : "☰"; };
+  document.addEventListener("click", function(e){ if(!n.contains(e.target)){ n.classList.remove("open"); b.textContent = "☰"; } });
+})();
 </script>
 </body>
 </html>
