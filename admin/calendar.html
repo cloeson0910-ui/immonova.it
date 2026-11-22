@@ -773,10 +773,11 @@ async function loadCalendarData(){
   // Gli slot "occupato" iCloud appartengono al calendario personale di un amministratore
   // (la tabella non distingue tra piu' admin, quindi si mostrano quando si guarda il
   // calendario di un admin, come confermato: "anche gli slot iCloud occupati").
-  var busyResult = viewingAdminCalendar
-    ? await client.from("immonova_calendar_busy_blocks").select("start_at,end_at,title")
-        .gte("start_at", range.start.toISOString()).lt("start_at", range.end.toISOString())
-    : { data: [], error: null };
+  // Occupato: iCloud dell'amministratore (user_id vuoto) + Google Calendar personale di chi si sta guardando.
+  var busyQuery = client.from("immonova_calendar_busy_blocks").select("start_at,end_at,title")
+    .gte("start_at", range.start.toISOString()).lt("start_at", range.end.toISOString());
+  busyQuery = viewingAdminCalendar ? busyQuery.or("user_id.is.null,user_id.eq." + owner) : busyQuery.eq("user_id", owner);
+  var busyResult = await busyQuery;
 
   // La RLS lascia passare solo cio' che l'utente puo' vedere (i propri eventi, quelli di
   // un admin, o quelli dove e' partecipante): qui prendiamo tutto cio' che e' visibile nel

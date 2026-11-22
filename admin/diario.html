@@ -59,6 +59,12 @@ mark{background:#f1d27a}
 .ppl{border:1px solid rgba(166,127,52,.25);border-radius:10px;padding:10px;margin-top:8px;background:rgba(255,255,255,.55)}
 .prow{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed rgba(166,127,52,.25)}
 .prow:last-child{border-bottom:0}
+.prow .ph{font-size:12.5px;font-style:italic;color:#4a3c1f;margin:4px 0}
+.prow .pbtn{margin-top:6px;border-color:#d9a514;background:#fff8e6}
+#ppModal{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+#ppModal.hidden{display:none}
+#ppModal .box{background:#fbf7ef;border-radius:14px;padding:20px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+#ppModal textarea{min-height:90px}
 .prow .dl{grid-column:1/-1;display:grid;grid-template-columns:220px 1fr;gap:6px 10px;align-items:center;background:#fff7e8;border:1px dashed #e9c27a;border-radius:8px;padding:8px}
 .prow .dl label{margin:0;font-size:10.5px}
 @media(max-width:700px){.prow .dl{grid-template-columns:1fr}}
@@ -437,7 +443,8 @@ function peopleLine(r, txt){
     const tel = (p.phone || "").replace(/[^0-9+]/g, ""), wa = tel.replace(/^\+/, "").replace(/^(?!39)(3\d{8,9})$/, "39$1");
     const ask = "Ciao " + (p.name || "") + ", ti scrivo per un aggiornamento su: " + r.title;
     const dlTxt = p.deadline && r.status !== "chiusa" ? (p.replied_at ? " ✅" : p.sollecitato_at ? " 📨 sollecitato" : " ⏳ entro " + fmtDT(p.deadline)) : "";
-    return '<span class="ptag' + (p.waiting && r.status !== "chiusa" ? " w" : "") + '">' + hl(p.name, txt) + (p.role ? " · " + esc(p.role) : "") + dlTxt +
+    const parz = (p.partials || []).length ? ' · ◐ ' + esc((p.partials[p.partials.length - 1] || {}).text || "") : "";
+    return '<span class="ptag' + (p.waiting && r.status !== "chiusa" ? " w" : "") + '">' + hl(p.name, txt) + (p.role ? " · " + esc(p.role) : "") + dlTxt + parz +
       (tel ? '<a href="tel:' + esc(tel) + '" title="Chiama">📞</a><a href="whatsapp.html?phone=' + encodeURIComponent(tel) + '&name=' + encodeURIComponent(p.name || "") + '&diary=' + r.id + '" title="WhatsApp IMMONOVA">💬</a>' : "") +
       (p.email ? '<a href="mailto:' + esc(p.email) + '?subject=' + encodeURIComponent("Sollecito: " + r.title) + '&body=' + encodeURIComponent(ask) + '" title="Email">✉️</a>' : "") + '</span>';
   }).join("") + '</div>';
@@ -472,14 +479,14 @@ function renderPeople(focusLast){
     ? '<div class="prow"><div class="nm"><b>' + esc(p.name) + '</b> <span class="sub">collaboratore</span></div><div class="sub">' + esc(p.phone || "") + '</div><div class="sub">' + esc(p.email || "") + '</div>' +
       '<button class="x" type="button" data-del="' + i + '">×</button>' + '<div class="dl"><label>⏳ Deve rispondere entro</label><input type="datetime-local" data-i="' + i + '" data-f="deadline" value="' + toLocal(p.deadline) + '">' +
       '<label>Cosa deve mandarti / risponderti</label><input placeholder="Es. visura catastale aggiornata" data-i="' + i + '" data-f="ask" value="' + esc(p.ask || "") + '">' +
-      '<div class="sub" style="grid-column:1/-1;margin:0">' + dlState(p) + '</div></div>' + '</div>'
+      '<div class="sub" style="grid-column:1/-1;margin:0">' + dlState(p) + '</div>' + partialHtml(p, i) + '</div>' + '</div>'
     : '<div class="prow"><input class="nm" list="knownNames" placeholder="Nome e cognome" value="' + esc(p.name) + '" data-i="' + i + '" data-f="name">' +
       '<select data-i="' + i + '" data-f="role">' + ROLES.map(r => '<option' + (r === p.role ? " selected" : "") + '>' + r + '</option>').join("") + '</select>' +
       '<input placeholder="Telefono" type="tel" value="' + esc(p.phone) + '" data-i="' + i + '" data-f="phone">' +
       '<input placeholder="Email" type="email" value="' + esc(p.email) + '" data-i="' + i + '" data-f="email">' +
       '<button class="x" type="button" data-del="' + i + '">×</button>' + '<div class="dl"><label>⏳ Deve rispondere entro</label><input type="datetime-local" data-i="' + i + '" data-f="deadline" value="' + toLocal(p.deadline) + '">' +
       '<label>Cosa deve mandarti / risponderti</label><input placeholder="Es. visura catastale aggiornata" data-i="' + i + '" data-f="ask" value="' + esc(p.ask || "") + '">' +
-      '<div class="sub" style="grid-column:1/-1;margin:0">' + dlState(p) + '</div></div>' + '</div>'
+      '<div class="sub" style="grid-column:1/-1;margin:0">' + dlState(p) + '</div>' + partialHtml(p, i) + '</div>' + '</div>'
   ).join("") : '<p class="sub" style="margin:0">Nessuna persona indicata.</p>';
   $("pplRows").querySelectorAll("[data-f]").forEach(el => el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", () => {
     const p = people[+el.dataset.i];
@@ -492,7 +499,44 @@ function renderPeople(focusLast){
     if(el.dataset.f === "name"){ const k = knownExt(el.value); if(k && !p.phone && !p.email){ p.role = k.role; p.phone = k.phone || ""; p.email = k.email || ""; renderPeople(); } }
   }));
   $("pplRows").querySelectorAll("[data-del]").forEach(b => b.onclick = () => { people.splice(+b.dataset.del, 1); renderPeople(); });
+  $("pplRows").querySelectorAll("[data-partial]").forEach(b => b.onclick = () => openPartial(+b.dataset.partial));
   if(focusLast){ const ins = $("pplRows").querySelectorAll('[data-f="name"]'); if(ins.length) ins[ins.length - 1].focus(); }
+}
+/* ---- Risposta parziale: registra cosa ha risposto la persona, la rimette in attesa con una nuova
+   scadenza (riparte il sollecito automatico) e, se serve, sposta la chiusura dell'attività (Gantt). ---- */
+function partialHtml(p, i){
+  const hist = (p.partials || []).map(x => '<div class="ph">◐ ' + esc(new Date(x.at).toLocaleDateString("it-IT", { day:"2-digit", month:"2-digit" })) + ': ' + esc(x.text) + '</div>').join("");
+  return '<div style="grid-column:1/-1">' + hist + '<button type="button" class="btn sec sm pbtn" data-partial="' + i + '">◐ Risposta parziale</button></div>';
+}
+let partialIdx = null;
+function openPartial(i){
+  partialIdx = i; const p = people[i];
+  $("pp_title").textContent = "Risposta parziale di " + (p.name || "");
+  $("pp_text").value = "";
+  $("pp_next").value = p.deadline && new Date(p.deadline) > new Date() ? toLocal(p.deadline) : "";
+  $("pp_due").value = $("f_due").value || "";
+  $("pp_st").textContent = "";
+  $("ppModal").classList.remove("hidden"); $("pp_text").focus();
+}
+function closePartial(){ $("ppModal").classList.add("hidden"); partialIdx = null; }
+async function applyPartial(){
+  const text = $("pp_text").value.trim(), nextV = $("pp_next").value;
+  if(!text){ $("pp_st").textContent = "Scrivi cosa ti ha risposto."; return; }
+  if(!nextV){ $("pp_st").textContent = "Indica entro quando deve completare."; return; }
+  const next = new Date(nextV); if(next < new Date()){ $("pp_st").textContent = "La nuova scadenza deve essere nel futuro."; return; }
+  const p = people[partialIdx], now = new Date();
+  p.deadline = next.toISOString(); p.waiting = true; p.replied_at = null; p.sollecitato_at = null;
+  p.partials = (p.partials || []).concat([{ at:now.toISOString(), text, next_deadline:p.deadline }]);
+  const line = "[" + fmtDT(now.toISOString()) + "] Risposta parziale di " + p.name + ": " + text + " — completa entro " + fmtDT(p.deadline);
+  $("f_notes").value = ($("f_notes").value.trim() ? $("f_notes").value.trim() + "\n" : "") + line;
+  let due = $("pp_due").value || $("f_due").value;
+  const nextDay = ymd(next);
+  if(due && nextDay > due) due = nextDay;
+  $("f_due").value = due || "";
+  if(fStatus === "aperta") setFStatus("in_gestione");
+  if($("f_rem").value === "") { /* nessun promemoria: invariato */ }
+  closePartial(); renderPeople();
+  if(editId) await save(); else setSt("Risposta parziale registrata: premi Salva attività.", "ok");
 }
 function childLine(r){
   const ch = all.filter(a => a.parent_id === r.id); if(!ch.length) return "";
@@ -538,5 +582,14 @@ init();
   document.addEventListener("click", function(e){ if(!n.contains(e.target)){ n.classList.remove("open"); b.textContent = "☰"; } });
 })();
 </script>
+<div id="ppModal" class="hidden" onclick="if(event.target===this)closePartial()"><div class="box">
+  <h3 id="pp_title" style="margin:0 0 10px">Risposta parziale</h3>
+  <label>Cosa ti ha risposto</label><textarea id="pp_text" placeholder="Es. mi ha mandato la planimetria, la visura arriva lunedì"></textarea>
+  <label style="margin-top:10px">⏳ Deve completare entro</label><input id="pp_next" type="datetime-local">
+  <p class="sub" style="margin:4px 0 0">Riparte l'attesa: se a quella data non ha completato, parte il sollecito automatico.</p>
+  <label style="margin-top:10px">Rimanda la chiusura dell'attività (milestone)</label><input id="pp_due" type="date">
+  <p class="sub" style="margin:4px 0 0">Il Gantt si aggiorna con la nuova data di chiusura.</p>
+  <div class="row" style="margin-top:14px"><button class="btn" type="button" onclick="applyPartial()">Registra</button><button class="btn sec" type="button" onclick="closePartial()">Annulla</button><span class="status err" id="pp_st"></span></div>
+</div></div>
 </body>
 </html>

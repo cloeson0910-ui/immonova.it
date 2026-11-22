@@ -91,6 +91,7 @@ mark{background:#f1d27a}
 .bar.aperta{background:#c0392b}.bar.in_gestione{background:#d9a514;color:#2b2416}.bar.chiusa{background:#3c9a3c}
 .bar.late{outline:2px dashed #8a1f1f;outline-offset:1px}
 .bar.p-alta{border-left:5px solid #2b2416}
+.pmk{position:absolute;top:-2px;font-size:12px;color:#b8860b;z-index:3;cursor:help}.pmk.w{color:#8a1f1f}
 .ms{position:absolute;top:7px;width:18px;height:18px;transform:rotate(45deg);border:2px solid #2b2416;cursor:pointer}
 .ms.aperta{background:#c0392b}.ms.in_gestione{background:#d9a514}.ms.chiusa{background:#3c9a3c}
 .todayl{position:absolute;top:0;bottom:0;width:2px;background:#2b6fd6;z-index:2;pointer-events:none}
@@ -161,7 +162,8 @@ function draw(){
   rs.forEach(r => walk(r, 0, r));
   const today = ymd(new Date());
   let min = today, max = today;
-  rowsOut.forEach(({ a }) => { if(a.activity_date < min) min = a.activity_date; if(endOf(a) > max) max = endOf(a); });
+  rowsOut.forEach(({ a }) => { if(a.activity_date < min) min = a.activity_date; if(endOf(a) > max) max = endOf(a);
+    (a.people || []).forEach(p => { if(p.deadline && a.status !== "chiusa"){ const d = ymd(new Date(p.deadline)); if(d > max) max = d; } }); });
   const s = D(min); s.setDate(s.getDate() - 2); min = ymd(s);
   const e = D(max); e.setDate(e.getDate() + 4); max = ymd(e);
   const px = Number($("zoom").value), n = days(min, max) + 1, W = n * px;
@@ -184,6 +186,11 @@ function draw(){
     const nk = kids(a.id), dn = nk.filter(k => k.status === "chiusa").length;
     const tip = esc(a.title) + " — " + LBL[a.status] + " — " + itd(a.activity_date) + (a.due_date ? " → " + itd(a.due_date) : "") + (nk.length ? " — " + dn + "/" + nk.length + " sotto-attività chiuse" : "") + ((a.people || []).length ? " — con: " + esc(a.people.map(x => (x.waiting ? "⏳" : "") + x.name).join(", ")) : "");
     let track = '<div class="todayl" style="left:' + tl + 'px"></div>';
+    // ◐ risposte parziali ricevute, ⏳ attesa del completamento
+    (a.people || []).forEach(p => {
+      (p.partials || []).forEach(x => { const d = ymd(new Date(x.at)); if(d >= min && d <= max) track += '<span class="pmk" style="left:' + (days(min, d) * px + 2) + 'px" title="Risposta parziale di ' + esc(p.name) + ': ' + esc(x.text) + '">◐</span>'; });
+      if(a.status !== "chiusa" && p.waiting && p.deadline && !p.replied_at){ const d = ymd(new Date(p.deadline)); if(d >= min && d <= max) track += '<span class="pmk w" style="left:' + (days(min, d) * px + 2) + 'px" title="In attesa di ' + esc(p.name) + ' entro ' + itd(d) + '">⏳</span>'; }
+    });
     if(depth === 0 && nk.length){
       // milestone: barra sintetica dall'inizio della prima sotto-attività alla fine prevista + rombo
       let ms = a.activity_date, me = endOf(a);
