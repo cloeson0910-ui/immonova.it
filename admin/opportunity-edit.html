@@ -1600,6 +1600,11 @@ button.danger{
           <option value="" data-i18n="opt_loading_categories">Caricamento categorie...</option>
         </select>
       </div>
+      <div class="field full" id="extraCategoriesField">
+        <label>Compare anche in (categorie aggiuntive)</label>
+        <div id="extraCategories" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 0;font-size:14px"></div>
+        <div style="font-size:12px;opacity:.7">L'immobile verrà mostrato anche nelle sezioni spuntate, oltre alla categoria principale.</div>
+      </div>
       <div class="field full" id="shortRentBox" style="display:none">
         <div style="border:1px solid rgba(166,127,52,.45);border-radius:10px;padding:14px 16px;background:rgba(166,127,52,.06)">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0">
@@ -5223,7 +5228,32 @@ async function loadCategories(selectedCategory){
   }
 
   select.innerHTML = html;
+  allCategoryNames = data.map(function(r){ return r.name; });
+  renderExtraCategories(allCategoryNames);
 }
+
+/* Categorie aggiuntive: l'immobile compare in più sezioni del sito/app */
+var extraCategoriesSelected = [];
+function renderExtraCategories(names){
+  var box = document.getElementById("extraCategories");
+  if(!box) return;
+  var main = (document.getElementById("category") || {}).value || "";
+  box.innerHTML = names.filter(function(n){ return n !== main; }).map(function(n){
+    var on = extraCategoriesSelected.indexOf(n) >= 0 ? " checked" : "";
+    return '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;font-weight:400"><input type="checkbox" class="extra-cat" value="' + n.replace(/"/g,"&quot;") + '"' + on + ' style="width:16px;height:16px;margin:0">' + n + '</label>';
+  }).join("");
+}
+function getExtraCategories(){
+  var main = (document.getElementById("category") || {}).value || "";
+  return Array.prototype.map.call(document.querySelectorAll("#extraCategories .extra-cat:checked"), function(c){ return c.value; })
+    .filter(function(v){ return v && v !== main; });
+}
+var allCategoryNames = [];
+document.addEventListener("change", function(e){
+  if(e.target && e.target.classList && e.target.classList.contains("extra-cat")) extraCategoriesSelected = getExtraCategories();
+  if(e.target && e.target.id === "category"){ extraCategoriesSelected = getExtraCategories(); renderExtraCategories(allCategoryNames); }
+});
+
 
 /* =========================================================================
    WATERMARK AUTOMATICO — logo Immonova al 50% di opacità su ogni immagine
@@ -6403,6 +6433,7 @@ async function loadOpportunity(){
     captureTourOpportunityTitle = data.title;
   }
 
+  extraCategoriesSelected = Array.isArray(data.extra_categories) ? data.extra_categories : [];
   await loadCategories(data.category || "");
 
   setValue("title", data.title || "");
@@ -7579,6 +7610,7 @@ form.addEventListener("submit", async function(e){
     var payload = {
       title:title,
       category:textOrNull("category"),
+      extra_categories:getExtraCategories(),
       investment_type:textOrNull("investment_type"),
       location:textOrNull("location"),
       municipality:textOrNull("municipality"),
