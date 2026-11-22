@@ -5181,8 +5181,31 @@ function dossierShareUrlForSending(){
    schermata di scelta del contatto a cui mandarlo. */
 function sendDossierWhatsApp(){
   if(!currentDossierPdfUrl) return;
-  var message = getTitle()+" — Dossier IMMONOVA\n"+dossierShareUrlForSending();
-  window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
+  /* WhatsApp IMMONOVA (numero aziendale): se indichi il numero del cliente il dossier parte dal
+     sistema con copertina, testo e pulsante "Apri il dossier" (modello approvato da Meta) e resta
+     nella chat della pagina WhatsApp. Se lasci vuoto: si apre WhatsApp sul tuo telefono come prima. */
+  var phone = window.prompt("Numero WhatsApp del cliente (es. 333 1234567).\nIl dossier partirà dal numero IMMONOVA con copertina e pulsante.\n\nLascia vuoto per aprire WhatsApp sul tuo telefono e scegliere il contatto a mano.", "");
+  if(phone === null) return;
+  if(!String(phone).replace(/[^0-9]/g, "")){
+    var message = getTitle()+" — Dossier IMMONOVA\n"+dossierShareUrlForSending();
+    window.open("https://wa.me/?text="+encodeURIComponent(message),"_blank");
+    return;
+  }
+  var name = window.prompt("Nome del cliente (compare nel messaggio: \"Gentile …\")", "");
+  if(name === null) return;
+  var url = currentDossierPdfUrl;
+  var sep = url.indexOf("?") === -1 ? "?" : "&";
+  url = url + sep + "by=" + encodeURIComponent((name && name.trim()) || (currentUser && currentUser.email) || "IMMONOVA");
+  setStatus("Invio del dossier su WhatsApp in corso...", "");
+  client.functions.invoke("immonova-wa-send", { body:{
+    kind:"dossier", phone:phone, contact_name:(name||"").trim() || null, dossier_url:url, subject:getTitle() || "immobile IMMONOVA",
+    cover_url:getCoverImage() || null, opportunity_id:opportunityId || null, lang:CURRENT_LANG || "it"
+  }}).then(async function(r){
+    var d = r.data;
+    if(r.error){ try{ d = await r.error.context.json(); }catch(e){ d = { error:r.error.message }; } }
+    if(d && d.ok) setStatus("Dossier inviato su WhatsApp ✓ (lo trovi nella pagina WhatsApp di IMMONOVA)", "success");
+    else setStatus("Invio WhatsApp non riuscito: " + ((d && d.error) || "errore sconosciuto"), "error");
+  });
 }
 async function copyDossierLink(){
   var input = document.getElementById("dossierLinkInput");
