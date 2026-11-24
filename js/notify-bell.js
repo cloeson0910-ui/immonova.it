@@ -89,6 +89,13 @@ if(!window.ImmonovaPush){
   if(window.__immonovaBell) return; window.__immonovaBell = true;
   var client = window.supabaseClient; if(!client) return;
   var user = null, items = [], open = false;
+  /* avvisi "da fare" calcolati dalle pagine (es. dashboard: blog, richieste in attesa, clienti da completare,
+     fatture ricevute): restano nella campanella su tutte le pagine per 12 ore o finché la dashboard li ricalcola */
+  var LK = "immonova_bell_local";
+  function getLocals(){ try{ var o = JSON.parse(localStorage.getItem(LK) || "{}"), n = Date.now(), r = {};
+    Object.keys(o).forEach(function(k){ if(n - (o[k].ts || 0) < 12 * 3600 * 1000) r[k] = o[k]; }); return r; }catch(e){ return {}; } }
+  function setLocal(k, it){ try{ var o = getLocals(); if(it) o[k] = Object.assign({ ts:Date.now() }, it); else delete o[k]; localStorage.setItem(LK, JSON.stringify(o)); }catch(e){} }
+  window.ImmonovaBell = { local:function(k, it){ setLocal(k, it); if(btn) render(); } };
   var css = '#inb{position:fixed;left:16px;bottom:16px;z-index:99990;font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif}' +
     '#inb .b{width:52px;height:52px;border-radius:50%;background:#2b2416;color:#f1d27a;border:0;font-size:24px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25);position:relative}' +
     '#inb .c{position:absolute;top:-4px;right:-4px;min-width:21px;height:21px;padding:0 5px;border-radius:11px;background:#c0392b;color:#fff;font-size:12px;font-weight:700;line-height:21px;text-align:center}' +
@@ -117,20 +124,23 @@ if(!window.ImmonovaPush){
   }
   async function pushState(){ try{ return window.ImmonovaPush ? await window.ImmonovaPush.state() : "unsupported"; }catch(e){ return "off"; } }
   async function render(){
-    var unread = items.filter(function(n){ return !n.read_at; }).length;
+    var locs = getLocals(), lk = Object.keys(locs);
+    var unread = items.filter(function(n){ return !n.read_at; }).length + lk.length;
     cnt.hidden = !unread; cnt.textContent = unread > 99 ? "99+" : unread;
     if(!open) return;
     var ps = await pushState();
     var pu = ps === "on" ? "" : '<div class="pu">' + (ps === "unsupported" ? "Questo dispositivo non riceve le notifiche push: le trovi comunque qui nella campanella." :
       ps === "denied" ? "Notifiche bloccate su questo dispositivo: abilitale dalle impostazioni del browser/telefono." :
       'Le notifiche push non sono attive su questo dispositivo.<br><button type="button" data-on>🔔 Attiva notifiche su questo dispositivo</button>') + '</div>';
-    panel.innerHTML = '<div class="h">Notifiche <a data-all>Segna tutte come lette</a></div>' + pu +
+    var lh = lk.map(function(k){ var n = locs[k]; return '<div class="i u" data-loc="' + esc(k) + '"><b>' + esc(n.title) + '</b>' + (n.body ? esc(n.body) : "") + '<div class="t">da fare</div></div>'; }).join("");
+    panel.innerHTML = '<div class="h">Notifiche <a data-all>Segna tutte come lette</a></div>' + pu + lh +
       (items.length ? items.map(function(n){ return '<div class="i' + (n.read_at ? "" : " u") + '" data-id="' + n.id + '"><b>' + esc(n.title) + '</b>' + (n.body ? esc(n.body) : "") + '<div class="t">' + ago(n.created_at) + '</div></div>'; }).join("")
         : '<div class="e">Nessuna notifica.</div>');
     var on = panel.querySelector("[data-on]");
     if(on) on.onclick = async function(e){ e.stopPropagation(); on.textContent = "Attivazione…"; try{ await window.ImmonovaPush.enable(client); }catch(err){ alert(err.message || err); } paintDot(); render(); };
-    panel.querySelector("[data-all]").onclick = async function(e){ e.stopPropagation(); await client.from("immonova_notifications").update({ read_at:new Date().toISOString() }).eq("user_id", user.id).is("read_at", null); load(); };
-    panel.querySelectorAll(".i").forEach(function(el){ el.onclick = async function(){
+    panel.querySelector("[data-all]").onclick = async function(e){ e.stopPropagation(); try{ localStorage.removeItem(LK); }catch(_){} await client.from("immonova_notifications").update({ read_at:new Date().toISOString() }).eq("user_id", user.id).is("read_at", null); load(); };
+    panel.querySelectorAll("[data-loc]").forEach(function(el){ el.onclick = function(){ var n = locs[el.dataset.loc]; setLocal(el.dataset.loc, null); if(n && n.url) location.href = n.url; else render(); }; });
+    panel.querySelectorAll(".i[data-id]").forEach(function(el){ el.onclick = async function(){
       var n = items.find(function(x){ return String(x.id) === el.dataset.id; }); if(!n) return;
       if(!n.read_at) await client.from("immonova_notifications").update({ read_at:new Date().toISOString() }).eq("id", n.id);
       if(n.url) location.href = n.url; else load(); }; });
@@ -138,7 +148,7 @@ if(!window.ImmonovaPush){
   async function paintDot(){ var s = await pushState(); dot.style.background = s === "on" ? "#3c9a3c" : "#e0b020"; dot.title = s === "on" ? "Notifiche push attive su questo dispositivo" : "Notifiche push non attive su questo dispositivo"; }
   async function load(){
     var r = await client.from("immonova_notifications").select("id,title,body,url,created_at,read_at").eq("user_id", user.id).order("created_at", { ascending:false }).limit(40);
-    if(r.error){ box.style.display = "none"; return; }  // tabella non ancora creata
+    if(r.error){ items = []; render(); return; }  // tabella non ancora creata: restano gli avvisi "da fare"
     var before = items.length ? items[0].id : null;
     items = r.data || [];
     if(before && items.length && items[0].id !== before && !items[0].read_at && btn.animate) btn.animate([{ transform:"scale(1)" }, { transform:"scale(1.18)" }, { transform:"scale(1)" }], { duration:500, iterations:2 });
@@ -150,7 +160,8 @@ if(!window.ImmonovaPush){
     user = se.user;
     var p = await client.from("profiles").select("role").eq("id", user.id).maybeSingle();
     if(!p.data || !p.data.role || p.data.role === "client" || p.data.role === "cliente") return; // solo team
-    build(); paintDot(); load();
+    build(); (window.__bellQ || []).forEach(function(q){ setLocal(q[0], q[1]); }); window.__bellQ = { push:function(q){ setLocal(q[0], q[1]); render(); } };
+    paintDot(); load();
     try{ if(window.ImmonovaPush) window.ImmonovaPush.sync(client); }catch(e){}
     try{ client.channel("inb-" + user.id).on("postgres_changes", { event:"*", schema:"public", table:"immonova_notifications", filter:"user_id=eq." + user.id }, function(){ load(); }).subscribe(); }catch(e){}
     setInterval(load, 60000);
