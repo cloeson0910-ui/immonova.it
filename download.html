@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Download riservato · IMMONOVA</title>
+<style>
+  :root{--bg:#f6f1e6;--card:#fffdf7;--ink:#2b2416;--gold:#a67f34;--line:#e2d6bd;--muted:#7d6f55}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Avenir Next","Helvetica Neue",Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:640px;margin:0 auto;padding:28px 16px 60px}
+  .brand{font-family:Georgia,"Times New Roman",serif;letter-spacing:.32em;font-size:22px;text-align:center;margin:10px 0 22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 10px 30px rgba(43,36,22,.08)}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .nda{background:#fff7e0;border:1px solid #ecd9a8;border-radius:10px;padding:14px 16px;font-size:13.5px;margin:0 0 16px}
+  .nda b{display:block;margin-bottom:6px;font-size:14px}
+  .nda ul{margin:6px 0 0;padding-left:18px}
+  label.chk{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin:12px 0 18px;cursor:pointer}
+  label.chk input{margin-top:3px;width:18px;height:18px}
+  button{background:var(--gold);color:#fffaf0;border:0;border-radius:9px;padding:12px 18px;font-size:15px;cursor:pointer;width:100%}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  input.code{width:100%;font-size:24px;letter-spacing:.4em;text-align:center;padding:12px;border:1px solid var(--line);border-radius:9px;margin:0 0 12px;background:#fff}
+  .msg{margin-top:14px;font-size:14px}.err{color:#b3452f}.ok{color:#2f7a3a}
+  .files a{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:9px;margin:8px 0;color:var(--ink);text-decoration:none;background:#fff;word-break:break-word}
+  .files a:hover{border-color:var(--gold)}
+  .hidden{display:none}
+  .foot{color:var(--muted);font-size:12px;text-align:center;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">IMMONOVA</div>
+  <div class="card">
+    <h1 id="ttl">Download riservato</h1>
+    <p class="sub" id="sub">Caricamento…</p>
+
+    <div id="stepNda" class="hidden">
+      <div class="nda">
+        <b>🔒 Informazioni riservate — impegno di riservatezza (NDA)</b>
+        I documenti che stai per scaricare sono riservati e di proprietà di IMMONOVA e del proprietario dell'immobile. Accettando ti impegni a:
+        <ul>
+          <li>usarli esclusivamente per l'attività svolta per conto di IMMONOVA;</li>
+          <li>non divulgarli, copiarli, inoltrarli o pubblicarli, né in tutto né in parte, a terzi non autorizzati;</li>
+          <li>non contattare direttamente proprietà, venditori o acquirenti scavalcando IMMONOVA;</li>
+          <li>custodirli con cura e cancellarli quando non servono più o su richiesta di IMMONOVA.</li>
+        </ul>
+        <p style="margin:8px 0 0">Sei personalmente responsabile dell'uso dei dati: ogni accesso viene registrato (data, ora, IP, dispositivo, file scaricati) e ogni violazione potrà essere perseguita.</p>
+      </div>
+      <label class="chk"><input type="checkbox" id="agree"> <span>Ho letto e accetto l'impegno di riservatezza e la mia responsabilità sui dati.</span></label>
+      <button id="sendBtn" disabled>Inviami il codice di verifica</button>
+    </div>
+
+    <div id="stepOtp" class="hidden">
+      <p id="otpInfo" style="font-size:14px"></p>
+      <input class="code" id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="verifyBtn">Verifica e scarica</button>
+      <p style="text-align:center;margin:12px 0 0;font-size:13px"><a href="#" id="resend" style="color:var(--gold)">Non è arrivato? Invia di nuovo</a></p>
+    </div>
+
+    <div id="stepFiles" class="hidden">
+      <p style="font-size:14px">Codice verificato. I link sono validi per 1 ora e sono personali.</p>
+      <div class="files" id="files"></div>
+    </div>
+
+    <div class="msg" id="msg"></div>
+  </div>
+  <p class="foot">IMMONOVA · Off Market • Consulting</p>
+</div>
+<script>
+(function(){
+  var FN = "https://bpzzmitmbavcmcasswbu.supabase.co/functions/v1/immonova-internal-download";
+  var t = new URLSearchParams(location.search).get("t") || "";
+  var $ = function(id){ return document.getElementById(id); };
+  function msg(text, cls){ $("msg").className = "msg " + (cls || ""); $("msg").textContent = text || ""; }
+  function show(id){ ["stepNda","stepOtp","stepFiles"].forEach(function(s){ $(s).classList.toggle("hidden", s !== id); }); }
+  async function call(body){
+    var r = await fetch(FN, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(Object.assign({ t:t }, body)) });
+    var j = {}; try{ j = await r.json(); }catch(e){}
+    if(!r.ok || !j.ok) throw new Error(j.error || ("Errore " + r.status));
+    return j;
+  }
+  async function start(){
+    if(!t){ $("sub").textContent = "Link non valido."; return; }
+    try{
+      var i = await call({ action:"info" });
+      $("ttl").textContent = i.kind + " — " + i.title;
+      $("sub").textContent = "Richiesta di " + i.name + " · link valido fino al " + new Date(i.expires_at).toLocaleString("it-IT", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+      show("stepNda");
+    }catch(e){ $("sub").textContent = e.message; }
+  }
+  $("agree").onchange = function(){ $("sendBtn").disabled = !this.checked; };
+  async function sendCode(){
+    $("sendBtn").disabled = true; msg("Invio del codice…");
+    try{
+      var r = await call({ action:"otp", nda_accepted:true });
+      $("otpInfo").textContent = "Ti abbiamo inviato un codice di 6 cifre via " + r.via + ". Inseriscilo qui sotto (valido 10 minuti).";
+      show("stepOtp"); msg(""); $("code").focus();
+    }catch(e){ msg(e.message, "err"); $("sendBtn").disabled = false; }
+  }
+  $("sendBtn").onclick = sendCode;
+  $("resend").onclick = function(e){ e.preventDefault(); sendCode(); };
+  $("verifyBtn").onclick = async function(){
+    var c = $("code").value.replace(/\D/g, "");
+    if(c.length !== 6){ msg("Inserisci le 6 cifre del codice.", "err"); return; }
+    $("verifyBtn").disabled = true; msg("Verifica…");
+    try{
+      var r = await call({ action:"verify", code:c });
+      show("stepFiles"); msg(r.message || "", r.files.length ? "ok" : "");
+      $("files").innerHTML = r.files.map(function(f){
+        return '<a href="' + f.url + '" target="_blank" rel="noopener">⬇️ ' + f.name.replace(/[<>&"]/g, "") + '</a>';
+      }).join("");
+    }catch(e){ msg(e.message, "err"); $("verifyBtn").disabled = false; }
+  };
+  start();
+})();
+</script>
+</body>
+</html>
