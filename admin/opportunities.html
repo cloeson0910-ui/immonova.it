@@ -341,6 +341,12 @@ font-size:13px;
   color:var(--c-5b461d);
 }
 
+.sdot{display:inline-block;width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.7),0 1px 3px rgba(0,0,0,.25);cursor:help}
+.rv-da_verificare{--sc:#c9a23f}.rv-da_revisionare{--sc:#d0782c}.rv-approvato{--sc:#3c9a3c}.rv-rifiutato{--sc:#b23a2e}
+.cm-available{--sc:#3c9a3c}.cm-under_negotiation{--sc:#d0782c}.cm-reserved{--sc:#4f6fa8}.cm-sold{--sc:#8f6f2c}.cm-withdrawn{--sc:#b23a2e}
+.sdot{background:var(--sc)}
+.actions select.stsel{background:var(--sc);color:#fff;border-color:var(--sc);font-weight:700;grid-column:1/-1;width:100%;letter-spacing:.05em;text-align:left}
+.actions select.stsel option{background:#fff;color:#2b2416}
 .commercial-badge.available{
   color:var(--c-2b4626);
   border-color:rgba(79,127,69,.34);
@@ -1190,14 +1196,12 @@ function renderTable(data){
         <td>${escapeHTML(item.location || "")}</td>
         <td>${escapeHTML(formatPrice(item.price))}</td>
 
-        <td>
-          <span class="badge ${escapeHTML(reviewStatus)}">
-            ${statusLabel(reviewStatus)}
-          </span>
+        <td style="text-align:center">
+          <span class="sdot rv-${escapeHTML(reviewStatus)}" title="${escapeHTML(statusLabel(reviewStatus))}"></span>
         </td>
 
-        <td>
-          ${renderCommercialStatus(item)}
+        <td style="text-align:center">
+          <span class="sdot cm-${escapeHTML(commercialStatus)}" title="${escapeHTML(commercialStatusLabel(commercialStatus))}${item.sold_at ? " \u2014 " + escapeHTML(new Date(item.sold_at).toLocaleDateString("it-IT")) : ""}"></span>
         </td>
 
         <td class="${item.published ? "published" : "not-published"}">
@@ -1237,21 +1241,14 @@ function renderTable(data){
             `}
 
             ${isAdmin ? `
-              <select onchange="changeReviewStatus('${item.id}', this.value)">
-                <option value="">${escapeHTML(T.select_change_review)}</option>
-                <option value="da_verificare">${escapeHTML(T.status_da_verificare)}</option>
-                <option value="da_revisionare">${escapeHTML(T.status_da_revisionare)}</option>
-                <option value="approvato">${escapeHTML(T.status_approvato)}</option>
-                <option value="rifiutato">${escapeHTML(T.status_rifiutato)}</option>
+              <select class="stsel rv-${escapeHTML(reviewStatus)}" data-cur="${escapeHTML(reviewStatus)}" title="${escapeHTML(T.select_change_review)}" onchange="onStateSelect(this, 'review', '${item.id}')">
+                ${[["da_verificare",T.status_da_verificare],["da_revisionare",T.status_da_revisionare],["approvato",T.status_approvato],["rifiutato",T.status_rifiutato]]
+                  .map(([v,l]) => `<option value="${v}"${v === reviewStatus ? " selected" : ""}>${escapeHTML(l)}</option>`).join("")}
               </select>
 
-              <select onchange="changeCommercialStatus('${item.id}', this.value)">
-                <option value="">${escapeHTML(T.select_change_commercial)}</option>
-                <option value="available">${escapeHTML(T.commercial_available)}</option>
-                <option value="under_negotiation">${escapeHTML(T.commercial_negotiation)}</option>
-                <option value="reserved">${escapeHTML(T.commercial_reserved)}</option>
-                <option value="sold">${escapeHTML(T.commercial_sold)}</option>
-                <option value="withdrawn">${escapeHTML(T.commercial_withdrawn)}</option>
+              <select class="stsel cm-${escapeHTML(commercialStatus)}" data-cur="${escapeHTML(commercialStatus)}" title="${escapeHTML(T.select_change_commercial)}" onchange="onStateSelect(this, 'commercial', '${item.id}')">
+                ${[["available",T.commercial_available],["under_negotiation",T.commercial_negotiation],["reserved",T.commercial_reserved],["sold",T.commercial_sold],["withdrawn",T.commercial_withdrawn]]
+                  .map(([v,l]) => `<option value="${v}"${v === commercialStatus ? " selected" : ""}>${escapeHTML(l)}</option>`).join("")}
               </select>
 
               <button onclick="togglePublished('${item.id}', ${item.published}, '${reviewStatus}', '${commercialStatus}')" ${!canPublish && !item.published ? "disabled" : ""}>
@@ -1340,26 +1337,23 @@ async function bulkDeleteOpportunities(){
   const ids = Array.from(selectedIds);
   if(ids.length === 0) return;
 
-  const confirmed = confirm(T.confirm_bulk_delete_prefix + ids.length + T.confirm_bulk_delete_suffix);
+  const confirmed = confirm("ELIMINAZIONE DEFINITIVA di " + ids.length + " opportunità.\n\nPer ognuna verranno cancellati anche foto, dossier PDF, render, documenti e pagine pubblicate sul sito. Offerte, appuntamenti e fatture restano in archivio.\n\nL'operazione NON si può annullare. Procedere?");
   if(!confirmed) return;
 
   setStatus(T.msg_bulk_deleting, "");
 
   let successCount = 0;
   let lastError = null;
+  let freed = 0;
 
   for(let i = 0; i < ids.length; i++){
     const id = ids[i];
-    const { error } = await client
-      .from("opportunities")
-      .delete()
-      .eq("id", id);
-
-    if(error){
-      lastError = error;
+    const res = await client.functions.invoke("immonova-opportunity-purge", { body:{ opportunity_id:Number(id) } });
+    if(res.error || !res.data || !res.data.ok){
+      lastError = res.error || new Error((res.data && res.data.error) || "errore");
       continue;
     }
-
+    freed += Number(res.data.mb || 0);
     successCount++;
     selectedIds.delete(id);
   }
@@ -1367,11 +1361,22 @@ async function bulkDeleteOpportunities(){
   if(lastError && successCount < ids.length){
     setStatus(T.msg_bulk_partial_prefix + successCount + T.msg_bulk_partial_mid + ids.length + T.msg_bulk_partial_suffix, "error");
   }else{
-    setStatus(T.msg_bulk_deleted_prefix + successCount + T.msg_bulk_deleted_suffix, "success");
+    setStatus(T.msg_bulk_deleted_prefix + successCount + T.msg_bulk_deleted_suffix + " — liberati " + Math.round(freed * 10) / 10 + " MB.", "success");
   }
 
   selectedIds.clear();
   await loadOpportunities();
+}
+
+/* Menu stato: mostra sempre lo stato attuale (con il suo colore). Se la modifica viene annullata
+   o non va a buon fine, il menu torna allo stato di prima. */
+async function onStateSelect(sel, kind, id){
+  var prev = sel.dataset.cur, v = sel.value;
+  if(v === prev) return;
+  if(kind === "review") await changeReviewStatus(id, v); else await changeCommercialStatus(id, v);
+  var it = allOpportunities.find(function(o){ return String(o.id) === String(id); });
+  var now = it ? (kind === "review" ? (it.review_status || "da_verificare") : (it.commercial_status || "available")) : prev;
+  if(document.body.contains(sel)){ sel.value = now; sel.dataset.cur = now; sel.className = "stsel " + (kind === "review" ? "rv-" : "cm-") + now; }
 }
 
 async function changeReviewStatus(id, newStatus){
@@ -1626,25 +1631,27 @@ async function deleteOpportunity(id){
     return;
   }
 
-  const confirmDelete = confirm(T.confirm_delete);
-
-  if(!confirmDelete){
-    return;
+  // Eliminazione completa: riga, foto, dossier PDF (tutte le versioni), render, tour 360°, documenti e pagine sul sito.
+  setStatus("Calcolo di cosa verrà eliminato...", "");
+  const pre = await client.functions.invoke("immonova-opportunity-purge", { body:{ opportunity_id:Number(id), dry_run:true } });
+  const info = pre.data || {};
+  if(pre.error || !info.ok){
+    let msg = info.error; try{ if(pre.error && pre.error.context){ const j = await pre.error.context.json(); msg = j.error || msg; } }catch(e){}
+    setStatus(msg || "Impossibile preparare l'eliminazione.", "error"); return;
   }
+  setStatus("", "");
+  const ok = confirm("ELIMINAZIONE DEFINITIVA\n\n\"" + (info.title || "") + "\"\n\nVerranno cancellati:\n• l'opportunità e tutti i suoi dati\n• " + info.files + " file (foto, dossier PDF, render, documenti) — " + info.mb + " MB liberati\n• " + info.site_pages + " pagine pubblicate sul sito\n\nOfferte, appuntamenti e fatture restano in archivio.\n\nL'operazione NON si può annullare. Procedere?");
+  if(!ok) return;
 
   setStatus(T.msg_deleting, "");
-
-  const { error } = await client
-    .from("opportunities")
-    .delete()
-    .eq("id", id);
-
-  if(error){
-    setStatus(error.message, "error");
-    return;
+  const res = await client.functions.invoke("immonova-opportunity-purge", { body:{ opportunity_id:Number(id) } });
+  const out = res.data || {};
+  if(res.error || !out.ok){
+    let msg = out.error; try{ if(res.error && res.error.context){ const j = await res.error.context.json(); msg = j.error || msg; } }catch(e){}
+    setStatus(msg || "Eliminazione non riuscita.", "error"); return;
   }
 
-  setStatus(T.msg_deleted, "success");
+  setStatus(T.msg_deleted + " — liberati " + out.mb + " MB (" + out.files + " file, " + out.site_pages + " pagine).", "success");
   await loadOpportunities();
 }
 
