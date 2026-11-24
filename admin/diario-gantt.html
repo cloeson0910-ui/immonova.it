@@ -274,7 +274,33 @@ document.addEventListener("pointerup", async () => {
   }
   draw();
 });
-function openA(id){ location.href = "diario.html?id=" + id; }
+// Tocco su barra o milestone: menu con stato (solo di QUELL'attività) e modifica.
+function openA(id){
+  const a = all.find(x => x.id === id); if(!a) return;
+  let m = document.getElementById("stMenu"); if(m) m.remove();
+  m = document.createElement("div"); m.id = "stMenu";
+  m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;display:flex;align-items:center;justify-content:center";
+  const nk = kids(a.id), open = nk.filter(k => k.status !== "chiusa").length;
+  const btn = (v, t) => '<button type="button" data-v="' + v + '" style="display:block;width:100%;margin:6px 0;padding:11px;border-radius:8px;border:1px solid #d8c9a6;background:' + (a.status === v ? "#f1e3bf" : "#fff") + ';font-size:15px;cursor:pointer">' + t + (a.status === v ? "  ✓" : "") + '</button>';
+  m.innerHTML = '<div style="background:#fffdf7;border-radius:12px;padding:18px;width:min(360px,92vw)" onclick="event.stopPropagation()">' +
+    '<div style="font-size:12px;color:#8b7d63;text-transform:uppercase;letter-spacing:1px">' + (a.parent_id ? "Sotto-attività" : "Milestone") + '</div>' +
+    '<div style="font-weight:600;font-size:16px;margin:4px 0 10px">' + esc(a.title) + '</div>' +
+    btn("aperta", "🔴 Aperta") + btn("in_gestione", "🟡 In gestione") + btn("chiusa", "🟢 Chiusa") +
+    (!a.parent_id && open ? '<div class="status" style="font-size:12px;color:#8b7d63">Per chiudere la milestone chiudi prima le ' + open + ' sotto-attività aperte. Le sotto-attività si chiudono una alla volta, la milestone resta com\'è.</div>' : "") +
+    '<div id="stMsg" class="status"></div>' +
+    '<button type="button" data-edit="1" style="display:block;width:100%;margin-top:10px;padding:11px;border-radius:8px;border:0;background:#2b2416;color:#f1d27a;font-size:15px;cursor:pointer">✎ Modifica attività</button>' +
+    '<button type="button" data-x="1" style="display:block;width:100%;margin-top:6px;padding:9px;border:0;background:none;color:#8b7d63;cursor:pointer">Chiudi</button></div>';
+  m.onclick = () => m.remove();
+  document.body.appendChild(m);
+  m.querySelector("[data-x]").onclick = () => m.remove();
+  m.querySelector("[data-edit]").onclick = () => { location.href = "diario.html?id=" + id; };
+  m.querySelectorAll("[data-v]").forEach(b => b.onclick = async () => {
+    const v = b.dataset.v; if(v === a.status){ m.remove(); return; }
+    const r = await client.from("immonova_diary").update({ status:v }).eq("id", id);
+    if(r.error){ m.querySelector("#stMsg").className = "status err"; m.querySelector("#stMsg").textContent = r.error.message; return; }
+    m.remove(); init();
+  });
+}
 init();
 </script>
 <script>

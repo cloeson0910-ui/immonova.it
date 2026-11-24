@@ -377,6 +377,8 @@ async function save(){
   if(!$("f_date").value || !title){ setSt("Data e attività sono obbligatorie.", "err"); return; }
   let remind_at; try{ remind_at = computeRemind(); }catch(e){ setSt(e.message, "err"); return; }
   if($("f_due").value && $("f_due").value < $("f_date").value){ setSt("La scadenza non può essere prima della data.", "err"); return; }
+  const pastDl = people.find(p => p.deadline && !p.replied_at && !p.sollecitato_at && p.waiting !== false && new Date(p.deadline) <= new Date());
+  if(pastDl){ setSt("⏳ La scadenza di risposta di " + (pastDl.name || "una persona") + " (" + fmtDT(pastDl.deadline) + ") è già passata: il sollecito partirebbe subito. Correggi data e ora.", "err"); return; }
   const row = { activity_date:$("f_date").value, activity_time:$("f_time").value || null, title, notes:$("f_notes").value.trim() || null, status:fStatus, remind_at,
     due_date:$("f_due").value || null, priority:fPri, parent_id:$("f_parent").value || null,
     mode:$("f_mode").value || null, people:people.filter(p => (p.name || "").trim()).map(p => Object.assign({}, p, { name:p.name.trim() })) };
