@@ -1847,31 +1847,14 @@ async function logOpportunityView(opportunityId){
 
 async function loadSafeDossierMetrics(opportunityId){
   try{
-    const { data, error } = await client
-      .from("opportunity_reports")
-      .select("report_json")
-      .eq("opportunity_id", opportunityId)
-      .order("generated_at", { ascending:false })
-      .limit(1)
-      .maybeSingle();
-
-    if(error || !data || !data.report_json || !data.report_json.dossier_data) return null;
-
-    const d = data.report_json.dossier_data;
-    const metricValue = (section, field) => {
-      const bucket = d[section];
-      if(!bucket) return null;
-      const f = bucket[field];
-      if(!f || typeof f !== "object" || !("value" in f)) return null;
-      const n = Number(f.value);
-      return Number.isFinite(n) ? n : null;
-    };
-
+    // solo i numeri "pubblici" del dossier (il dossier completo resta riservato: si ottiene su richiesta)
+    const { data, error } = await client.rpc("immonova_dossier_public_metrics", { p_opportunity_id: String(opportunityId) });
+    if(error || !data) return null;
     return {
-      tourism_arrivals: metricValue("tourism","arrivals"),
-      population: metricValue("demography","population"),
-      hospitality_count: (d.hospitality && Array.isArray(d.hospitality.items)) ? d.hospitality.items.length : null,
-      sources_count: countVerifiedSources(d)
+      tourism_arrivals: data.tourism_arrivals == null ? null : Number(data.tourism_arrivals),
+      population: data.population == null ? null : Number(data.population),
+      hospitality_count: data.hospitality_count == null ? null : Number(data.hospitality_count),
+      sources_count: Number(data.sources_count || 0)
     };
   }catch(e){
     console.warn("Dossier metrics non disponibili (non bloccante):", e);
