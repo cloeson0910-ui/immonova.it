@@ -431,7 +431,8 @@ function renderFeatures(m){
 }
 
 async function loadMandates(){
-  var result = await client.from("immonova_search_mandates").select("*").order("created_at",{ascending:false});
+  // tutto il team vede le richieste; nome/telefono/email del richiedente solo se sono tue (o sei il titolare)
+  var result = await client.rpc("immonova_mandates_list");
 
   if(result.error){
     table.innerHTML = '<tr><td colspan="8" class="empty">' + escapeHTML(T.loading_error) + '</td></tr>';
@@ -460,7 +461,7 @@ function renderTable(data){
   }
 
   table.innerHTML = data.map(function(m){
-    var isOwnEntry = !isSuperUser || (currentUser && m.created_by === currentUser.id);
+    var isOwnEntry = !!m.mine;
     var displayName = isOwnEntry ? (m.client_name || "") : (T.mandante_reserved_label || "Riservato");
     return '<tr>'
       + '<td><strong>' + escapeHTML(displayName) + '</strong>' + (isOwnEntry && m.client_phone ? '<br>' + escapeHTML(m.client_phone) : '') + (isOwnEntry && m.client_email ? '<br>' + escapeHTML(m.client_email) : '') + '</td>'
@@ -472,8 +473,8 @@ function renderTable(data){
       + '<td>' + escapeHTML(formatDateShort(m.created_at)) + '</td>'
       + '<td><div class="actions">'
         + '<button type="button" class="action-btn" onclick="showMatches(' + m.id + ')">' + escapeHTML(T.action_matches) + '</button>'
-        + '<a class="action-btn" href="search-mandate-form.html?id=' + encodeURIComponent(m.id) + '">' + escapeHTML(T.action_edit) + '</a>'
-        + '<button type="button" class="action-btn danger" onclick="deleteMandate(' + m.id + ')">' + escapeHTML(T.action_delete) + '</button>'
+        + (isOwnEntry ? '<a class="action-btn" href="search-mandate-form.html?id=' + encodeURIComponent(m.id) + '">' + escapeHTML(T.action_edit) + '</a>'
+        + '<button type="button" class="action-btn danger" onclick="deleteMandate(' + m.id + ')">' + escapeHTML(T.action_delete) + '</button>' : '')
       + '</div></td>'
       + '</tr>';
   }).join("");
@@ -831,7 +832,7 @@ window.showMatches = async function(mandateId){
   var mandate = allMandates.find(function(m){ return Number(m.id) === Number(mandateId); });
   if(!mandate) return;
 
-  var isOwnMandate = !isSuperUser || (currentUser && mandate.created_by === currentUser.id);
+  var isOwnMandate = !!mandate.mine;
   var mandateDisplayName = isOwnMandate ? mandate.client_name : (T.mandante_reserved_label || "Riservato");
   document.getElementById("matchesTitle").textContent = T.matches_title_prefix + mandateDisplayName;
   document.getElementById("matchesList").innerHTML = '<div class="empty">' + escapeHTML(T.loading) + '</div>';
