@@ -72,6 +72,7 @@ var PAGE_CATALOG = [
   {section:"Attività", key:"event-form.html", label:"Nuovo Evento", i18nKey:null, family:"Eventi e contenuti"},
   {section:"Attività", key:"success-stories.html", label:"Success Stories", i18nKey:"nav_success_stories", family:"Eventi e contenuti"},
   {section:"Attività", key:"notizie.html", label:"Notizie", i18nKey:"nav_news", family:"Eventi e contenuti"},
+  {section:"Attività", key:"segnalatori.html", label:"Segnalatori", i18nKey:null, family:"Contatti"},
   {section:"Dati", key:"data-sources.html", label:"Fonti Dati", i18nKey:"nav_data_sources"},
   {section:"Dati", key:"manual-overrides.html", label:"Dati Verificati", i18nKey:"nav_manual_overrides"},
   {section:"Dati", key:"destination-photos.html", label:"Foto Destinazioni", i18nKey:"nav_destination_photos"},
