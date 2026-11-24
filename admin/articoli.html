@@ -226,6 +226,7 @@ function renderPosts(){
         <div class="row-actions">
           <a data-edit="${esc(p.id)}">Modifica</a>
           ${p.published ? `<a href="../articolo.html?slug=${encodeURIComponent(p.slug)}" target="_blank">Vedi</a>` : ""}
+          <a data-social="${esc(p.id)}" title="Apre Post social con testo, link e hashtag già pronti per Facebook, Instagram e LinkedIn">📣 Crea post social</a>
           <a class="danger" data-del="${esc(p.id)}">Elimina</a>
         </div>
       </td>
@@ -233,6 +234,11 @@ function renderPosts(){
   `).join("");
   tbody.querySelectorAll("[data-edit]").forEach(el => el.addEventListener("click", () => editPost(el.getAttribute("data-edit"))));
   tbody.querySelectorAll("[data-del]").forEach(el => el.addEventListener("click", () => deletePost(el.getAttribute("data-del"))));
+  tbody.querySelectorAll("[data-social]").forEach(el => el.addEventListener("click", () => {
+    const p = allPosts.find(x => String(x.id) === el.getAttribute("data-social"));
+    if(p && !p.published && !confirm("L'articolo è ancora in bozza: il link nel post non funzionerà finché non lo pubblichi. Continuare?")) return;
+    location.href = "social-composer.html?articolo=" + encodeURIComponent(el.getAttribute("data-social"));
+  }));
 }
 
 async function loadPosts(){

@@ -1350,7 +1350,28 @@ async function loadOwnerFlag(){
   if(!(await checkAuth())) return;
   await loadOwnerFlag();
   await loadPosts();
+  await prefillFromArticle();
 })();
+
+/* Dal blog: "📣 Crea post social" apre qui un nuovo post già compilato (testo, link, hashtag, tutti e tre i canali).
+   Resta solo da aggiungere la foto e pubblicare/inviare in approvazione. */
+async function prefillFromArticle(){
+  const id = new URLSearchParams(location.search).get("articolo");
+  if(!id) return;
+  const { data: a, error } = await client.from("blog_posts").select("id,title,slug,excerpt,body").eq("id", id).maybeSingle();
+  if(error || !a){ alert("Articolo non trovato."); return; }
+  const url = "https://immonova-consulting.it/articolo.html?slug=" + encodeURIComponent(a.slug);
+  let intro = (a.excerpt || "").trim();
+  if(!intro){ intro = String(a.body || "").replace(/[#*_>`]/g, "").split(/\n\s*\n/).map(x => x.trim()).find(x => x.length > 40) || ""; if(intro.length > 400) intro = intro.slice(0, 397).replace(/\s+\S*$/, "") + "…"; }
+  openEditModal(null);
+  document.getElementById("fCaption").value = a.title + "\n\n" + intro + "\n\n👉 Leggi l'articolo completo sul blog IMMONOVA: " + url;
+  document.getElementById("fHashtags").value = "#immonova #offmarket #offmarketrealestate #trophyasset #luxuryrealestate #immobilidiprestigio #realestateitaly #italianrealestate #luxuryhomes #investimentiimmobiliari #realestateinvestment";
+  document.getElementById("fLink").value = url;
+  ["fFacebook", "fInstagram", "fLinkedin"].forEach(k => { const el = document.getElementById(k); if(el){ el.checked = true; el.dispatchEvent(new Event("change")); } });
+  try{ renderLiveStoryPreview(); }catch(e){}
+  history.replaceState(null, "", location.pathname);
+  const img = document.getElementById("fImageFile"); if(img){ img.scrollIntoView({ block: "center" }); img.style.outline = "3px solid #a67f34"; img.style.outlineOffset = "4px"; }
+}
 </script>
 <script>
 /* Gruppi di hashtag pronti: un tocco li aggiunge al campo Hashtag (senza doppioni), un secondo tocco li toglie. */
