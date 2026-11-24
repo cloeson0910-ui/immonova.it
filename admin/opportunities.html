@@ -547,6 +547,10 @@ Caricamento area riservata...
 </select>
 </div>
 
+<div id="cleanupBar" style="display:none;margin:0 0 14px;text-align:right">
+<button type="button" id="cleanupBtn" onclick="cleanupArchive()" style="padding:9px 14px;border:1px solid rgba(166,127,52,.4);background:#fff8e6;cursor:pointer;font-size:11px;letter-spacing:.1em;text-transform:uppercase">🧹 Pulizia archivio file</button>
+</div>
+
 <div id="bulkToolbar" class="bulk-toolbar">
 <span class="bulk-count" id="bulkCount"></span>
 <button type="button" class="danger" id="bulkDeleteBtn" onclick="bulkDeleteOpportunities()" data-i18n="btn_bulk_delete">Elimina selezionati</button>
@@ -869,6 +873,7 @@ async function loadProfile(){
 
   currentProfile = result.data;
   isAdmin = currentProfile.role === "admin";
+  var cb = document.getElementById("cleanupBar"); if(cb) cb.style.display = isAdmin ? "block" : "none";
   isSuperUser = !!currentProfile.is_super_user;
 
   await applyLanguage(currentProfile.language || "it");
@@ -1329,6 +1334,28 @@ function updateBulkToolbar(){
     const rowCheckboxes = document.querySelectorAll(".row-checkbox");
     selectAll.checked = rowCheckboxes.length > 0 && count === rowCheckboxes.length;
   }
+}
+
+/* Pulizia archivio: cancella i file (foto, dossier PDF, render, documenti, tour 360°) che nessuna parte del
+   sistema usa più e le pagine del sito di immobili già eliminati. Prima mostra il riepilogo e chiede conferma. */
+async function cleanupArchive(){
+  if(!isAdmin) return;
+  const btn = document.getElementById("cleanupBtn"); btn.disabled = true;
+  setStatus("Analisi dell'archivio in corso (può richiedere fino a un minuto)...", "");
+  const readErr = async (r) => { let m = r.data && r.data.error; try{ if(r.error && r.error.context){ const j = await r.error.context.json(); m = j.error || m; } }catch(e){} return m || (r.error && r.error.message) || "errore"; };
+  const pre = await client.functions.invoke("immonova-storage-cleanup", { body:{ dry_run:true } });
+  if(pre.error || !pre.data || !pre.data.ok){ setStatus(await readErr(pre), "error"); btn.disabled = false; return; }
+  const d = pre.data;
+  if(!d.files && !d.site_pages){ setStatus("Archivio già pulito: nessun file inutilizzato.", "success"); btn.disabled = false; return; }
+  const righe = Object.entries(d.groups || {}).map(([k, g]) => "• " + k + ": " + g.files + " file — " + g.mb + " MB").join("\n");
+  setStatus("", "");
+  const ok = confirm("PULIZIA ARCHIVIO\n\nFile che nessuna parte del sistema usa più:\n" + righe + "\n\nTotale: " + d.files + " file — " + d.mb + " MB liberati\n• " + d.site_pages + " pagine del sito di immobili già eliminati\n\nI file usati da immobili, articoli, eventi, offerte o pagine del sito NON vengono toccati.\nL'operazione NON si può annullare. Procedere?");
+  if(!ok){ btn.disabled = false; return; }
+  setStatus("Pulizia in corso...", "");
+  const res = await client.functions.invoke("immonova-storage-cleanup", { body:{} });
+  btn.disabled = false;
+  if(res.error || !res.data || !res.data.ok){ setStatus(await readErr(res), "error"); return; }
+  setStatus("Pulizia completata: eliminati " + res.data.removed + " file (" + res.data.mb + " MB) e " + res.data.site_pages + " pagine del sito.", "success");
 }
 
 async function bulkDeleteOpportunities(){
