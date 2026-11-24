@@ -209,7 +209,7 @@ document.getElementById("saveBtn").addEventListener("click", async () => {
     ({ error } = await client.from("blog_posts").insert(payload));
   }
   if(error){ setStatus("Errore salvataggio: " + error.message, "error"); return; }
-  setStatus("Articolo salvato.", "ok");
+  setStatus(isOwner ? "Articolo salvato." : "Articolo salvato e inviato al titolare per l'approvazione.", "ok");
   resetForm();
   await loadPosts();
 });
@@ -220,7 +220,7 @@ function renderPosts(){
   tbody.innerHTML = allPosts.map(p => `
     <tr>
       <td>${esc(p.title)}</td>
-      <td><span class="badge ${p.published ? "published" : "draft"}">${p.published ? "Pubblicato" : "Bozza"}</span></td>
+      <td><span class="badge ${p.published ? "published" : "draft"}">${p.published ? "Pubblicato" : (p.pending_approval ? "Da approvare" : "Bozza")}</span></td>
       <td>${fmtDate(p.published_at || p.created_at)}</td>
       <td>
         <div class="row-actions">
@@ -248,13 +248,22 @@ async function loadPosts(){
   renderPosts();
 }
 
+let isOwner = false;
 async function init(){
   const { data:{ session } } = await client.auth.getSession();
   if(!session){ window.location.href = "login.html"; return; }
-  const { data: profile } = await client.from("profiles").select("role").eq("id", session.user.id).single();
-  if(!profile || profile.role !== "admin"){
-    setStatus("Accesso riservato agli admin.", "error");
+  const { data: profile } = await client.from("profiles").select("role,email").eq("id", session.user.id).single();
+  isOwner = !!profile && String(profile.email || "").trim().toLowerCase() === "claudio.romano@bluewin.ch";
+  if(!profile || ["client", "cliente"].includes(profile.role || "")){
+    setStatus("Accesso riservato al team.", "error");
     return;
+  }
+  // i collaboratori scrivono gli articoli, ma li pubblica solo il titolare dopo averli letti
+  if(!isOwner){
+    const lbl = document.getElementById("fPublished").closest(".checkbox-row");
+    document.getElementById("fPublished").checked = false;
+    if(lbl) lbl.style.display = "none";
+    setStatus("Puoi scrivere e salvare articoli: verranno pubblicati solo dopo l'approvazione del titolare.", "ok");
   }
   await loadPosts();
 }

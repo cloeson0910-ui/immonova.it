@@ -644,7 +644,9 @@ var DATA_RESOURCE_CATALOG = [
   {key:"valuations", label:"Valutazioni"},
   {key:"notes", label:"Notizie / Note vocali"},
   {key:"acquisitions", label:"Acquisizioni"},
-  {key:"reports", label:"Dossier Immobili"}
+  {key:"reports", label:"Dossier Immobili"},
+  {key:"search_mandates", label:"Richieste (mandati di ricerca)"},
+  {key:"offers", label:"Offerte"}
 ];
 
 var ACCESS_LEVELS = [
@@ -1427,7 +1429,10 @@ function renderPermissionsPanel(panel, userId, grantedPages, grantedData){
     pagesHTML += '</div></div>';
   });
 
-  var dataHTML = "";
+  // "Seleziona tutti": imposta lo stesso livello su tutte le voci dei dati in un colpo solo
+  var dataHTML = '<div class="perm-data-row" style="border-bottom:1px solid #e2d6bd;padding-bottom:8px;margin-bottom:6px"><label><b>Seleziona tutti</b></label>'
+    + '<select onchange="setAllDataGrants(\'' + userId + '\', this.value)"><option value="">—</option><option value="none">Nessuno</option>'
+    + '<option value="read">Sola lettura</option><option value="both">Lettura e scrittura</option></select></div>';
   DATA_RESOURCE_CATALOG.forEach(function(r){
     var current = grantedData[r.key] || "";
     dataHTML += '<div class="perm-data-row"><label>' + escapeHTML(r.label) + '</label>'
@@ -1464,6 +1469,13 @@ async function togglePageGrant(userId, pageKey, checked){
       return;
     }
   }
+}
+
+async function setAllDataGrants(userId, level){
+  if(!level) return;
+  var access = level === "none" ? "" : level;
+  for(var i = 0; i < DATA_RESOURCE_CATALOG.length; i++) await updateDataGrant(userId, DATA_RESOURCE_CATALOG[i].key, access);
+  togglePermissionsPanel(userId); togglePermissionsPanel(userId); // ridisegna il pannello con i nuovi valori
 }
 
 async function updateDataGrant(userId, resourceKey, access){
