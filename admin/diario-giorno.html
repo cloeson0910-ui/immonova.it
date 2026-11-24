@@ -75,6 +75,7 @@ mark{background:#f1d27a}
   .nav a{margin:0;border:0;border-bottom:1px solid rgba(166,127,52,.15);border-radius:0;padding:14px 12px;font-size:15px;background:none}
   .nav a:last-child{border-bottom:0}
 }
+.rvw{margin-top:8px;padding:9px 11px;background:#fff7e0;border:1px solid #e8cf86;border-radius:8px;font-size:14px;line-height:1.6}.rvw .btn{margin:4px 4px 0 0}
 </style>
 </head>
 <body>
@@ -156,6 +157,10 @@ function section(title, list, showTime, empty){
       (r.notes ? '<div class="n">' + esc(r.notes) + '</div>' : "") +
       '<div class="m">' + LBL[r.status] + (showTime ? "" : " · iniziata il " + itd(r.activity_date)) + (r.due_date ? " · 🏁 entro " + itd(r.due_date) : "") + '</div>' +
       ((r.mode || (r.people || []).length) ? '<div class="m">' + (r.mode ? "📍 " + esc(r.mode) + " · " : "") + (r.people || []).map(x => (x.waiting && r.status !== "chiusa" ? "⏳ " : "") + esc(x.name) + (x.role ? " (" + esc(x.role) + ")" : "") + (x.phone ? ' <a href="tel:' + esc(x.phone.replace(/[^0-9+]/g, "")) + '" style="text-decoration:none">📞</a>' : "")).join(", ") + '</div>' : "") +
+      (r.status !== "chiusa" ? (r.people || []).map((x, pi) => x.review && x.last_reply ? '<div class="rvw">💬 <b>' + esc(x.name) + '</b> ha risposto su WhatsApp il ' + fdt(x.last_reply.at) + ': «' + esc(x.last_reply.text) + '»<br>Com\'è questa risposta? ' +
+        '<button type="button" class="btn sec sm" onclick="markReply(\'' + r.id + '\',' + pi + ',false)">✓ Definitiva</button> ' +
+        '<button type="button" class="btn sec sm" onclick="markReply(\'' + r.id + '\',' + pi + ',true)">✓ Definitiva e chiudi</button> ' +
+        '<a class="btn sec sm" style="text-decoration:none" href="diario.html?id=' + r.id + '&parziale=' + pi + '">◐ Parziale</a></div>' : "").join("") : "") +
       (ch.length ? '<div class="m"><span class="prog"><i style="width:' + Math.round(cd / ch.length * 100) + '%"></i></span>' + cd + '/' + ch.length + ' sotto-attività chiuse</div>' : "") +
       '</div><div class="acts"><select onchange="setStatus(\'' + r.id + '\', this.value, this)">' +
       ["aperta","in_gestione","chiusa"].map(s => '<option value="' + s + '"' + (s === r.status ? " selected" : "") + '>' + LBL[s] + '</option>').join("") + '</select>' +
@@ -163,6 +168,17 @@ function section(title, list, showTime, empty){
       ((ch.length || r.parent_id) ? '<a class="btn sec sm" style="text-decoration:none;text-align:center" href="diario-gantt.html?root=' + rootOf(r.id) + '">Gantt</a>' : "") +
       '</div></div>';
   }).join("") : '<p class="sub">' + empty + '</p>') + '</div>';
+}
+const fdt = iso => new Date(iso).toLocaleString("it-IT", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+/* Risposta arrivata su WhatsApp: definitiva (eventualmente chiudendo) o parziale (si apre nel Diario). */
+async function markReply(id, pi, close){
+  const r = all.find(x => x.id === id); if(!r) return;
+  const ps = (r.people || []).map((p, k) => k === pi ? Object.assign({}, p, { review:false, waiting:false, replied_at:p.replied_at || new Date().toISOString() }) : p);
+  const p = ps[pi];
+  const upd = { people:ps, notes:(r.notes ? r.notes.trim() + "\n" : "") + "[" + fdt(new Date().toISOString()) + "] Risposta definitiva di " + (p.name || "") + (p.last_reply ? ": " + p.last_reply.text : "") };
+  if(close) upd.status = "chiusa";
+  const res = await client.from("immonova_diary").update(upd).eq("id", id);
+  if(res.error){ alert(res.error.message); return; } load();
 }
 async function setStatus(id, v, el){
   const r = await client.from("immonova_diary").update({ status:v }).eq("id", id);

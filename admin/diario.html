@@ -97,6 +97,7 @@ mark{background:#f1d27a}
   .nav a{margin:0;border:0;border-bottom:1px solid rgba(166,127,52,.15);border-radius:0;padding:14px 12px;font-size:15px;background:none}
   .nav a:last-child{border-bottom:0}
 }
+.rvw{display:block;margin-top:6px;padding:8px 10px;background:#fff7e0;border:1px solid #e8cf86;border-radius:8px;font-size:13px;line-height:1.5}.rvw .pq{margin:4px 6px 0 0}
 </style>
 </head>
 <body>
@@ -324,7 +325,8 @@ async function init(){
   quick("month");
   ImmonovaPush.mount(client, $("pushBox"));
   const id = new URLSearchParams(location.search).get("id");
-  if(id){ const r = await client.from("immonova_diary").select("*").eq("id", id).maybeSingle(); if(r.data) startEdit(r.data); }
+  if(id){ const r = await client.from("immonova_diary").select("*").eq("id", id).maybeSingle(); if(r.data){ startEdit(r.data);
+    const pz = new URLSearchParams(location.search).get("parziale"); if(pz !== null && people[+pz]) setTimeout(() => openPartial(+pz), 80); } }
 }
 
 function setFPri(v){ fPri = v; document.querySelectorAll("#f_pri button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
@@ -448,10 +450,15 @@ function peopleLine(r, txt){
     const ask = "Ciao " + (p.name || "") + ", ti scrivo per un aggiornamento su: " + r.title;
     const dlTxt = p.deadline && r.status !== "chiusa" ? (p.replied_at ? " ✅" : p.sollecitato_at ? " 📨 sollecitato" : " ⏳ entro " + fmtDT(p.deadline)) : "";
     const parz = (p.partials || []).length ? ' · ◐ ' + esc((p.partials[p.partials.length - 1] || {}).text || "") : "";
+    const rev = p.review && p.last_reply && r.status !== "chiusa"
+      ? '<span class="rvw">💬 Ha risposto su WhatsApp il ' + fmtDT(p.last_reply.at) + ': «' + esc(p.last_reply.text) + '» — com\'è questa risposta? ' +
+        '<button type="button" class="pq" onclick="markReply(\'' + r.id + '\',' + pi + ',false)">✓ Definitiva</button>' +
+        '<button type="button" class="pq" onclick="markReply(\'' + r.id + '\',' + pi + ',true)">✓ Definitiva e chiudi</button>' +
+        '<button type="button" class="pq" onclick="partialFromList(\'' + r.id + '\',' + pi + ')">◐ Parziale</button></span>' : "";
     return '<span class="ptag' + (p.waiting && r.status !== "chiusa" ? " w" : "") + '">' + hl(p.name, txt) + (p.role ? " · " + esc(p.role) : "") + dlTxt + parz +
       (tel ? '<a href="tel:' + esc(tel) + '" title="Chiama">📞</a><a href="whatsapp.html?phone=' + encodeURIComponent(tel) + '&name=' + encodeURIComponent(p.name || "") + '&diary=' + r.id + '" title="WhatsApp IMMONOVA">💬</a>' : "") +
       (p.email ? '<a href="mailto:' + esc(p.email) + '?subject=' + encodeURIComponent("Sollecito: " + r.title) + '&body=' + encodeURIComponent(ask) + '" title="Email">✉️</a>' : "") +
-      (r.status !== "chiusa" ? '<button type="button" class="pq" title="Registra una risposta parziale" onclick="partialFromList(\'' + r.id + '\',' + pi + ')">◐ Risposta parziale</button>' : "") + '</span>';
+      (r.status !== "chiusa" && !rev ? '<button type="button" class="pq" title="Registra una risposta parziale" onclick="partialFromList(\'' + r.id + '\',' + pi + ')">◐ Risposta parziale</button>' : "") + rev + '</span>';
   }).join("") + '</div>';
 }
 async function loadCollabs(){
@@ -473,7 +480,8 @@ function knownExt(name){
 function toLocal(iso){ if(!iso) return ""; const d = new Date(iso), z = n => String(n).padStart(2, "0"); return d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()) + "T" + z(d.getHours()) + ":" + z(d.getMinutes()); }
 function dlState(p){
   if(!p.deadline) return "Nessuna scadenza: nessun sollecito automatico.";
-  if(p.replied_at) return "✅ Ha risposto il " + fmtDT(p.replied_at);
+  if(p.review && p.last_reply) return "💬 Ha risposto su WhatsApp il " + fmtDT(p.last_reply.at) + ": «" + esc(p.last_reply.text) + "» — da classificare: definitiva (dall'elenco) o ◐ Risposta parziale qui sotto.";
+  if(p.replied_at) return "✅ Ha risposto il " + fmtDT(p.replied_at) + (p.last_reply ? ": «" + esc(p.last_reply.text) + "»" : "");
   if(p.sollecitato_at) return "📨 Sollecito inviato il " + fmtDT(p.sollecitato_at) + " — in attesa di risposta";
   const late = new Date(p.deadline) < new Date();
   return late ? "⚠️ Scadenza passata: il sollecito parte entro un minuto (WhatsApp" + (p.phone ? "" : " — manca il telefono!") + ")"
@@ -514,6 +522,20 @@ function partialHtml(p, i){
   return '<div style="grid-column:1/-1">' + hist + '<button type="button" class="btn sec sm pbtn" data-partial="' + i + '">◐ Risposta parziale</button></div>';
 }
 let partialIdx = null;
+/* Risposta arrivata su WhatsApp: la classifichi come definitiva (eventualmente chiudendo l'attività) o parziale. */
+async function markReply(id, pi, close){
+  const r = (typeof rows !== "undefined" ? rows : []).find(x => x.id === id) || all.find(x => x.id === id); if(!r) return;
+  const ps = (Array.isArray(r.people) ? r.people : []).map((p, k) => k === pi ? Object.assign({}, p, { review:false, waiting:false, replied_at:p.replied_at || new Date().toISOString() }) : p);
+  const p = ps[pi];
+  const line = "[" + fmtDT(new Date().toISOString()) + "] Risposta definitiva di " + (p.name || "") + (p.last_reply ? ": " + p.last_reply.text : "");
+  const full = await client.from("immonova_diary").select("notes").eq("id", id).maybeSingle();
+  const notes = ((full.data && full.data.notes) ? full.data.notes.trim() + "\n" : "") + line;
+  const upd = { people:ps, notes };
+  if(close) upd.status = "chiusa";
+  const res = await client.from("immonova_diary").update(upd).eq("id", id);
+  if(res.error){ alert(res.error.message); return; }
+  load();
+}
 function partialFromList(id, i){
   editById(id);
   setTimeout(() => { if(i < 0) i = people.length === 1 ? 0 : -1; openPartial(i); }, 50);
@@ -525,7 +547,7 @@ function openPartial(i){
   $("pp_who").innerHTML = people.map((x, k) => '<option value="' + k + '">' + esc(x.name || "") + '</option>').join("") + '<option value="new">+ Altra persona…</option>';
   $("pp_who").value = people.length ? "0" : "new";
   $("pp_newName").classList.toggle("hidden", $("pp_who").value !== "new"); $("pp_newName").value = "";
-  $("pp_text").value = "";
+  $("pp_text").value = p && p.review && p.last_reply ? p.last_reply.text : "";
   $("pp_next").value = p && p.deadline && new Date(p.deadline) > new Date() ? toLocal(p.deadline) : "";
   $("pp_due").value = $("f_due").value || "";
   $("pp_st").textContent = "";
@@ -545,7 +567,7 @@ async function applyPartial(){
     } else partialIdx = +w;
   }
   const p = people[partialIdx], now = new Date();
-  p.deadline = next.toISOString(); p.waiting = true; p.replied_at = null; p.sollecitato_at = null;
+  p.deadline = next.toISOString(); p.waiting = true; p.replied_at = null; p.sollecitato_at = null; p.review = false;
   p.partials = (p.partials || []).concat([{ at:now.toISOString(), text, next_deadline:p.deadline }]);
   const line = "[" + fmtDT(now.toISOString()) + "] Risposta parziale di " + p.name + ": " + text + " — completa entro " + fmtDT(p.deadline);
   $("f_notes").value = ($("f_notes").value.trim() ? $("f_notes").value.trim() + "\n" : "") + line;
