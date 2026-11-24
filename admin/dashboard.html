@@ -1131,12 +1131,17 @@ function canEditInvestorForPopup(inv){
 }
 
 var incompleteListenersBound = false;
+/* Tutti gli avvisi della dashboard vanno nella campanella (js/notify-bell.js), niente più banner/popup. */
+function bellLocal(key,item){ (window.__bellQ=window.__bellQ||[]).push([key,item]); if(window.ImmonovaBell) window.ImmonovaBell.local(key,item); }
 async function loadIncompleteInvestorsPopup(){
   try{
     await loadMyContactsGrantsForPopup();
     const {data:rawData,error}=await client.from("investors").select("id,first_name,last_name,profile_incomplete_reason,created_by").eq("profile_incomplete",true).order("created_at",{ascending:false});
     const data=(rawData||[]).filter(canEditInvestorForPopup);
     if(error||!data||!data.length){ await loadPendingRequestsPopup(); return; }
+    const names=data.map(function(inv){ return ((inv.first_name||"")+" "+(inv.last_name||"")).trim()||"(senza nome)"; });
+    bellLocal("clienti-incompleti",{ title:"👤 "+data.length+(data.length===1?" cliente da completare":" clienti da completare"), body:names.slice(0,4).join(", ")+(names.length>4?"…":"")+" — creati da una proposta d'acquisto: completa la scheda.", url:"investor-form.html?id="+encodeURIComponent(data[0].id) });
+    await loadPendingRequestsPopup(); return;
     const overlay=document.getElementById("incompleteOverlay");
     const list=document.getElementById("incompleteList");
     if(overlay && !incompleteListenersBound){
@@ -1178,6 +1183,9 @@ async function loadPendingRequestsPopup(){
       .order("created_at",{ascending:false});
     if(error||!data||!data.length) return;
     pendingRequestsPopupShown = true;
+    var pn=data.map(function(r){ return (r.full_name||((r.first_name||"")+" "+(r.last_name||"")).trim())||"Cliente"; });
+    bellLocal("richieste-attesa",{ title:"📨 "+data.length+(data.length===1?" richiesta dossier in attesa":" richieste dossier in attesa"), body:pn.slice(0,4).join(", ")+(pn.length>4?"…":"")+" — dossier non ancora inviato.", url:"inquiries.html" });
+    return;
     const overlay=document.getElementById("pendingRequestsOverlay");
     const list=document.getElementById("pendingRequestsList");
     if(!overlay||!list) return;
@@ -1293,6 +1301,8 @@ async function checkNewReceivedInvoicesSilently(){
    listener dentro la funzione che mostra il toast, la prima volta che viene chiamata. */
 var newReceivedInvoicesToastBound = false;
 function showNewReceivedInvoicesToast(count){
+  bellLocal("fatture-ricevute",{ title:"🧾 "+count+(count===1?" nuova fattura ricevuta":" nuove fatture ricevute")+" via SDI", body:"Importate in Contabilità › Fatture ricevute.", url:"contabilita.html" });
+  return;
   var toast=document.getElementById("newReceivedInvoicesToast");
   if(!toast) return;
   if(!newReceivedInvoicesToastBound){
@@ -1329,20 +1339,18 @@ async function checkBlogReminderSilently(){
 
     var banner=document.getElementById("blogReminderBanner");
     var textEl=document.getElementById("blogReminderText");
-    if(!banner||!textEl) return;
+    if(banner) banner.style.display="none";
 
     var REMINDER_DAYS=7;
     if(!data || !data.length){
-      textEl.textContent="Non risulta ancora nessun articolo pubblicato sul blog. È un buon momento per scriverne uno!";
-      banner.style.display="flex";
+      bellLocal("blog",{ title:"✍️ Blog: nessun articolo pubblicato", body:"È un buon momento per scriverne uno.", url:"articoli.html" });
       return;
     }
 
     var lastDate=new Date(data[0].created_at);
     var daysSince=Math.floor((Date.now()-lastDate.getTime())/(24*60*60*1000));
     if(daysSince>=REMINDER_DAYS){
-      textEl.textContent="Sono passati "+daysSince+" giorni dall'ultimo articolo pubblicato sul blog: è ora di scriverne uno nuovo!";
-      banner.style.display="flex";
+      bellLocal("blog",{ title:"✍️ Blog: "+daysSince+" giorni dall'ultimo articolo", body:"È ora di scriverne uno nuovo.", url:"articoli.html" });
     }
   }catch(e){ console.warn("[dashboard] controllo promemoria blog non riuscito (silenzioso)",e); }
 }
