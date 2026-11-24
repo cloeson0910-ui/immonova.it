@@ -8170,5 +8170,51 @@ document.addEventListener("DOMContentLoaded", srRefresh);
 ["change","input","click"].forEach(function(ev){ document.addEventListener(ev, function(e){ if(e.target && (e.target.id==="category"||e.target.id==="short_rent_income")) setTimeout(srRefresh,0); }, true); });
 setInterval(srRefresh, 600); /* anche quando la categoria viene impostata via codice (caricamento scheda, import Word) */
 </script>
+<script>
+/* ---- Data Room / Dossier IA per i collaboratori: se l'opportunità non è tua (e non sei il titolare)
+   il download non parte qui. Parte una richiesta: ti arriva un link personale (campanella + email)
+   protetto da impegno di riservatezza + codice OTP, e il titolare viene avvisato. ---- */
+(function(){
+  var OWNER = "claudio.romano@bluewin.ch", direct = null;
+  async function canDirect(){
+    if(direct !== null) return direct;
+    try{
+      var s = await client.auth.getSession(); var u = s && s.data && s.data.session && s.data.session.user;
+      if(!u){ direct = false; return direct; }
+      if(String(u.email || "").toLowerCase() === OWNER){ direct = true; return direct; }
+      var o = await client.from("opportunities").select("user_id").eq("id", id).maybeSingle();
+      direct = !!(o.data && o.data.user_id === u.id);
+    }catch(e){ direct = false; }
+    return direct;
+  }
+  function banner(html, err){
+    var b = document.getElementById("dlReqBanner");
+    if(!b){ b = document.createElement("div"); b.id = "dlReqBanner";
+      b.style.cssText = "position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:99999;max-width:min(560px,calc(100vw - 32px));padding:16px 44px 16px 18px;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.25);font-size:14px;line-height:1.5;font-family:inherit";
+      document.body.appendChild(b); }
+    b.style.background = err ? "#fbe9e5" : "#fff7e0"; b.style.border = "1px solid " + (err ? "#e3a99b" : "#ecd9a8"); b.style.color = "#2b2416";
+    b.innerHTML = html + '<button type="button" style="position:absolute;right:10px;top:8px;border:0;background:none;font-size:20px;cursor:pointer;color:#7d6f55" aria-label="Chiudi">×</button>';
+    b.querySelector("button").onclick = function(){ b.remove(); };
+  }
+  var MAP = { reportBtn:"dossier", reportLink:"dossier", syntheticDossierBtn:"dossier", exportDataRoomBtn:"dataroom" };
+  document.addEventListener("click", async function(e){
+    var el = e.target.closest && e.target.closest("#reportBtn,#reportLink,#syntheticDossierBtn,#exportDataRoomBtn");
+    if(!el || el.dataset.dlOk === "1") return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if(await canDirect()){ el.dataset.dlOk = "1"; el.click(); setTimeout(function(){ el.dataset.dlOk = ""; }, 500); return; }
+    var kind = MAP[el.id];
+    banner("Invio della richiesta…");
+    try{
+      var r = await client.functions.invoke("immonova-internal-download", { body:{ action:"request", opportunity_id:id, kind:kind } });
+      var out = r.data || {};
+      if(r.error || !out.ok) throw new Error(out.error || (r.error && r.error.message) || "errore");
+      if(out.direct){ direct = true; el.dataset.dlOk = "1"; el.click(); setTimeout(function(){ el.dataset.dlOk = ""; }, 500); return; }
+      banner("<b>📨 Richiesta inviata.</b><br>A breve riceverai il link personale per scaricare " + (kind === "dataroom" ? "la Data Room" : "il Dossier IA") +
+        " (nella 🔔 campanella e via email). Per aprirlo dovrai accettare l'<b>impegno di riservatezza (NDA)</b> e inserire il codice di verifica.<br>" +
+        "<span style='font-size:12.5px;color:#7d6f55'>Le informazioni sono riservate: ne sei personalmente responsabile e ogni accesso viene registrato.</span>");
+    }catch(err){ banner("⚠️ Richiesta non inviata: " + (err.message || err), true); }
+  }, true);
+})();
+</script>
 </body>
 </html>

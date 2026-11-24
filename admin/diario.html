@@ -523,13 +523,14 @@ function renderPeople(focusLast){
 function waBtn(p, i){
   if(!p.phone && p.kind !== "collab") return "";
   return '<div style="grid-column:1/-1;margin:4px 0 0"><button type="button" class="btn sm" data-wa="' + i + '">📲 ' +
-    (p.notified_at ? "Avvisato su WhatsApp il " + fmtDT(p.notified_at) + " · Invia di nuovo" : "Avvisa su WhatsApp") + '</button></div>';
+    (p.notified_at ? "Avvisato il " + fmtDT(p.notified_at) + " · Invia di nuovo" : "Avvisa su WhatsApp") + '</button></div>';
 }
 async function notifyWa(i){
   const p = people[i]; if(!p) return;
   if(!(p.name || "").trim()){ setSt("Indica il nome della persona.", "err"); return; }
   if(!p.ask && !p.deadline && !confirm("Non hai indicato cosa gli chiedi né entro quando. Invio comunque l'avviso della nuova attività?")) return;
-  setSt("Salvo l'attività e invio l'avviso WhatsApp…");
+  if(notifyWa.busy) return; notifyWa.busy = true; setTimeout(() => { notifyWa.busy = false; }, 4000);
+  setSt("Salvo l'attività e invio l'avviso…");
   const id = await save({ keep:true }); if(!id) return;
   const list = people.filter(x => (x.name || "").trim());
   const body = { diary_id:id, person_id:p.kind === "collab" ? p.id : null, index:list.indexOf(p) };
@@ -537,10 +538,12 @@ async function notifyWa(i){
   const out = r.data || {};
   if(r.error || !out.ok){
     let msg = out.error; if(!msg && r.error && r.error.context){ try{ msg = (await r.error.context.json()).error; }catch(e){} }
-    setSt("⚠️ Avviso non inviato: " + (msg || (r.error && r.error.message) || "errore"), "err"); return;
+    const em = "⚠️ Avviso non inviato: " + (msg || (r.error && r.error.message) || "errore");
+    setSt(em, "err"); alert(em); return;
   }
   p.notified_at = out.notified_at; if(p.deadline) p.waiting = true; renderPeople();
-  setSt("📲 " + p.name + " è stato avvisato su WhatsApp" + (p.deadline ? ": se non risponde entro il " + fmtDT(p.deadline) + " parte il sollecito automatico." : "."), "ok"); load();
+  const okm = "📲 " + p.name + " è stato avvisato" + (out.via ? " (" + out.via + ")" : "") + (p.deadline ? ": se non risponde entro il " + fmtDT(p.deadline) + " parte il sollecito automatico." : ".") + (out.warning ? "\n" + out.warning : "");
+  setSt(okm, "ok"); alert(okm); load();
 }
 /* ---- Risposta parziale: registra cosa ha risposto la persona, la rimette in attesa con una nuova
    scadenza (riparte il sollecito automatico) e, se serve, sposta la chiusura dell'attività (Gantt). ---- */
