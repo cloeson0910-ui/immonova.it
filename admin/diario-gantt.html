@@ -95,6 +95,11 @@ mark{background:#f1d27a}
 .gcard{margin-bottom:26px}
 .gtitle{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;align-items:baseline;font-weight:700;color:#2b2416;font-size:16px;margin:0 0 8px}
 .gtitle .sub{font-weight:400;font-size:12.5px}
+.drag{touch-action:none;user-select:none}
+.bar.drag{cursor:grab}.bar.drag:active{cursor:grabbing}
+.bar .rh{position:absolute;right:0;top:0;width:9px;height:100%;cursor:ew-resize;background:rgba(255,255,255,.35);border-left:1px solid rgba(0,0,0,.15)}
+.ms.drag{cursor:ew-resize}
+#dragTip{position:fixed;z-index:999;display:none;background:#2b2416;color:#f1d27a;font-size:12px;padding:4px 8px;border-radius:6px;pointer-events:none}
 .ms{position:absolute;top:7px;width:18px;height:18px;transform:rotate(45deg);border:2px solid #2b2416;cursor:pointer}
 .ms.aperta{background:#c0392b}.ms.in_gestione{background:#d9a514}.ms.chiusa{background:#3c9a3c}
 .todayl{position:absolute;top:0;bottom:0;width:2px;background:#2b6fd6;z-index:2;pointer-events:none}
@@ -119,7 +124,7 @@ mark{background:#f1d27a}
       <span><i style="background:#fff;outline:2px dashed #8a1f1f"></i>In ritardo</span><span><i style="background:#fff;border-left:5px solid #2b2416"></i>Priorità alta</span><span>◆ Milestone</span><span><i style="background:#2b6fd6;width:3px"></i>Oggi</span></div>
   </div>
   <div id="gantt"></div>
-  <p class="sub" style="margin-top:10px">Tocca una barra per aprire l'attività. Le date sono: inizio = data dell'attività, fine = scadenza (se manca, un solo giorno).</p>
+  <p class="sub" style="margin-top:10px">Tocca una barra per aprire l'attività · trascinala per spostarla · tira il bordo destro per allungarla o accorciarla · trascina il ◆ per spostare la chiusura. Le date sono: inizio = data dell'attività, fine = scadenza (se manca, un solo giorno).</p>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/config.js"></script>
@@ -180,7 +185,7 @@ function chart(rs){
     if(lab || wd === 0 || wd === 6) head += '<div class="' + ((wd === 0 || wd === 6) && px >= 12 ? "we " : "") + (first ? "mon" : "") + '" style="left:' + i * px + 'px;width:' + px + 'px">' + lab + '</div>';
   }
   const tl = (days(min, today) + 0.5) * px;
-  let html = '<div class="gwrap" style="--nw:' + nw + 'px"><div class="grow2 ghead" style="position:sticky;top:0;z-index:4;background:#fbf7ef"><div class="gname" style="font-weight:600;cursor:default">Attività</div><div class="gtrack" style="width:' + W + 'px;height:24px">' + head + '</div></div>';
+  let html = '<div class="gwrap" data-min="' + min + '" data-px="' + px + '" style="--nw:' + nw + 'px"><div class="grow2 ghead" style="position:sticky;top:0;z-index:4;background:#fbf7ef"><div class="gname" style="font-weight:600;cursor:default">Attività</div><div class="gtrack" style="width:' + W + 'px;height:24px">' + head + '</div></div>';
   rowsOut.forEach(({ a, depth }) => {
     const st = days(min, a.activity_date), len = days(a.activity_date, endOf(a)) + 1;
     const late = a.status !== "chiusa" && endOf(a) < today;
@@ -200,11 +205,11 @@ function chart(rs){
       const pct = nk.length ? Math.round(dn / nk.length * 100) : 0;
       track += '<div class="bar ' + a.status + (late ? " late" : "") + '" style="opacity:.35;left:' + days(min, ms) * px + 'px;width:' + (days(ms, me) + 1) * px + 'px" title="' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
       track += '<div style="position:absolute;top:28px;left:' + days(min, ms) * px + 'px;height:3px;width:' + ((days(ms, me) + 1) * px * pct / 100) + 'px;background:#3c9a3c"></div>';
-      track += '<div class="ms ' + a.status + '" style="left:' + ((days(min, me) + 1) * px - 9) + 'px" title="Milestone: ' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
+      track += '<div class="ms drag ' + a.status + '" data-id="' + a.id + '" data-kind="ms" style="left:' + ((days(min, me) + 1) * px - 9) + 'px" title="Milestone: ' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
     } else if(depth === 0){
-      track += '<div class="ms ' + a.status + '" style="left:' + ((days(min, endOf(a)) + 1) * px - 9) + 'px" title="Milestone: ' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
+      track += '<div class="ms drag ' + a.status + '" data-id="' + a.id + '" data-kind="ms" style="left:' + ((days(min, endOf(a)) + 1) * px - 9) + 'px" title="Milestone: ' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
     } else {
-      track += '<div class="bar ' + a.status + ' p-' + (a.priority || "media") + (late ? " late" : "") + '" style="left:' + st * px + 'px;width:' + Math.max(len * px, 8) + 'px" title="' + tip + '" onclick="openA(\'' + a.id + '\')">' + (len * px > 60 ? esc(a.title) : "") + '</div>';
+      track += '<div class="bar drag ' + a.status + ' p-' + (a.priority || "media") + (late ? " late" : "") + '" data-id="' + a.id + '" data-kind="bar" style="left:' + st * px + 'px;width:' + Math.max(len * px, 8) + 'px" title="' + tip + ' — trascina per spostare, tira il bordo destro per allungare/accorciare">' + (len * px > 60 ? esc(a.title) : "") + '<i class="rh"></i></div>';
     }
     const dot = a.status === "chiusa" ? "🟢" : a.status === "in_gestione" ? "🟡" : "🔴";
     html += '<div class="grow2"><div class="gname' + (depth === 0 ? " root" : "") + '" style="padding-left:' + (8 + depth * 14) + 'px" title="' + tip + '" onclick="openA(\'' + a.id + '\')">' +
@@ -226,6 +231,49 @@ function draw(){
   $("gantt").innerHTML = parts.map(p => '<div class="gcard">' + p.head + p.c.html + '</div>').join("");
   document.querySelectorAll(".gwrap").forEach((g, i) => { const c = parts[i].c; g.scrollLeft = Math.max(0, c.tl - (g.clientWidth - c.nw) / 3); });
 }
+
+/* ---- Trascinamento: sposta la barra (inizio e fine insieme), tira il bordo destro per cambiare
+   la fine, trascina il rombo ◆ per spostare la chiusura della milestone. Un tocco senza
+   trascinare apre l'attività. Si salva subito e il Gantt si ridisegna. ---- */
+let drag = null;
+const addD = (d, n) => { const x = D(d); x.setDate(x.getDate() + n); return ymd(x); };
+document.addEventListener("pointerdown", e => {
+  const el = e.target.closest(".drag"); if(!el) return;
+  const wrap = el.closest(".gwrap"), a = all.find(x => x.id === el.dataset.id); if(!a) return;
+  e.preventDefault(); el.setPointerCapture(e.pointerId);
+  drag = { el, a, x0:e.clientX, px:Number(wrap.dataset.px), mode: el.dataset.kind === "ms" ? "end" : (e.target.classList.contains("rh") ? "end" : "move"),
+    left:parseFloat(el.style.left), width:el.offsetWidth, moved:false, delta:0 };
+  if(!$("dragTip")){ const t = document.createElement("div"); t.id = "dragTip"; document.body.appendChild(t); }
+});
+document.addEventListener("pointermove", e => {
+  if(!drag) return;
+  const dx = e.clientX - drag.x0; if(Math.abs(dx) > 4) drag.moved = true; if(!drag.moved) return;
+  const n = Math.round(dx / drag.px); drag.delta = n; const a = drag.a, el = drag.el;
+  let s0 = a.activity_date, e0 = endOf(a), ns = s0, ne = e0;
+  if(drag.mode === "move" && el.dataset.kind === "bar"){ ns = addD(s0, n); ne = addD(e0, n); el.style.left = (drag.left + n * drag.px) + "px"; }
+  else if(el.dataset.kind === "bar"){ ne = addD(e0, n); if(ne < s0) ne = s0; el.style.width = Math.max((days(s0, ne) + 1) * drag.px, 8) + "px"; }
+  else { ne = addD(e0, n); if(ne < s0) ne = s0; el.style.left = (drag.left + days(e0, ne) * drag.px) + "px"; }
+  drag.ns = ns; drag.ne = ne;
+  const t = $("dragTip"); t.style.display = "block"; t.style.left = (e.clientX + 14) + "px"; t.style.top = (e.clientY + 14) + "px";
+  t.textContent = (el.dataset.kind === "ms" ? "Chiusura: " : itd(ns) + " → ") + itd(ne);
+});
+document.addEventListener("pointerup", async () => {
+  if(!drag) return; const d = drag; drag = null;
+  const t = $("dragTip"); if(t) t.style.display = "none";
+  if(!d.moved || !d.delta){ if(!d.moved) openA(d.a.id); else draw(); return; }
+  const upd = d.el.dataset.kind === "bar" && d.mode === "move" ? { activity_date:d.ns, due_date:d.a.due_date ? d.ne : (d.ne !== d.ns ? d.ne : null) } : { due_date:d.ne };
+  if(upd.activity_date && d.a.activity_date === upd.activity_date) delete upd.activity_date;
+  const r = await client.from("immonova_diary").update(upd).eq("id", d.a.id);
+  if(r.error){ alert("Non salvato: " + r.error.message); draw(); return; }
+  Object.assign(d.a, upd);
+  // la milestone non può chiudere prima delle sue sotto-attività: se serve slitta anche lei
+  const root = d.a.parent_id ? all.find(x => x.id === d.a.parent_id) : null;
+  if(root && root.due_date && endOf(d.a) > root.due_date){
+    const rr = await client.from("immonova_diary").update({ due_date:endOf(d.a) }).eq("id", root.id);
+    if(!rr.error) root.due_date = endOf(d.a);
+  }
+  draw();
+});
 function openA(id){ location.href = "diario.html?id=" + id; }
 init();
 </script>
