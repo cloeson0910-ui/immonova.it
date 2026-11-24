@@ -167,6 +167,10 @@ button:disabled{opacity:.45; cursor:not-allowed}
   width:20px; height:20px; border-radius:50%; background:#b3452f; color:var(--c-ffffff); font-size:12px;
   line-height:20px; text-align:center; cursor:pointer; flex-shrink:0;
 }
+.htg{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+.htg button{padding:7px 11px;border-radius:16px;border:1px solid rgba(166,127,52,.35);background:#fff;color:#46371a;font:600 12px inherit;cursor:pointer}
+.htg button.on{background:#2b2416;color:#f1d27a;border-color:#2b2416}
+.htg-note{font-size:12px;color:#7a6a45;margin-top:2px}
 </style>
 </head>
 <body>
@@ -213,7 +217,9 @@ button:disabled{opacity:.45; cursor:not-allowed}
     </div>
     <div class="field">
       <label>Hashtag (aggiunti automaticamente in fondo al testo — solo per i post nel feed, non per le Storie)</label>
+      <div class="htg" id="htgGroups"></div>
       <textarea id="fHashtags" placeholder="#immobililusso #realestate #salento #investimenti" style="min-height:50px"></textarea>
+      <div class="htg-note">Tocca un gruppo per aggiungere i suoi hashtag (senza doppioni); toccalo di nuovo per toglierli. Puoi sempre modificare il testo a mano.</div>
     </div>
     <div class="field">
       <label>Formato</label>
@@ -1344,6 +1350,49 @@ async function loadOwnerFlag(){
   if(!(await checkAuth())) return;
   await loadOwnerFlag();
   await loadPosts();
+})();
+</script>
+<script>
+/* Gruppi di hashtag pronti: un tocco li aggiunge al campo Hashtag (senza doppioni), un secondo tocco li toglie. */
+(function(){
+  var G = [
+    ["⭐ IMMONOVA base", "#immonova #offmarket #offmarketrealestate #trophyasset #luxuryrealestate #immobilidiprestigio"],
+    ["📸 Instagram completo", "#immonova #offmarket #offmarketrealestate #trophyasset #luxuryrealestate #realestateitaly #italianrealestate #luxuryhomes #seasidevilla #casaalmare #villedilusso #immobilidiprestigio #investimentiimmobiliari #realestateinvestment #italianvilla #dolcevitaliving"],
+    ["💼 LinkedIn", "#OffMarket #TrophyAssets #RealEstateInvestment #LuxuryRealEstate #ItalianRealEstate"],
+    ["👍 Facebook", "#IMMONOVA #ImmobiliDiPrestigio #CasaAlMare #OffMarket #InvestimentiImmobiliari"],
+    ["🌊 Mare", "#casaalmare #vistamare #seasidevilla #seafront #villaconpiscina #mareitalia"],
+    ["🏛 Dimore storiche", "#palazzostorico #dimorastorica #castello #historicvilla #italianheritage #trophyasset"],
+    ["🌾 Masserie", "#masseria #masseriapugliese #trulli #countryhouse #pugliastyle"],
+    ["🏨 Hospitality", "#boutiquehotel #resort #hotelforsale #hospitalityinvestment #turismo"],
+    ["📍 Puglia / Salento", "#puglia #salento #ostuni #valleditria #monopoli #otranto #santamariadileuca #lecce"],
+    ["📍 Toscana", "#toscana #tuscany #fortedeimarmi #chianti #firenze #tuscanvilla"],
+    ["📍 Laghi", "#lagomaggiore #lagodicomo #lakeview #lakevilla"],
+    ["📍 Costiere top", "#costieraamalfitana #costasmeralda #portofino #capri #positano"],
+    ["🌍 Acquirenti esteri", "#italyproperty #propertyinitaly #buyinginitaly #luxuryvilla #investinitaly"],
+    ["❄️ Inverno / mercato", "#mareinverno #winterseaside #mercatoimmobiliare #realestatemarket"]
+  ];
+  var box = document.getElementById("htgGroups"), ta = document.getElementById("fHashtags");
+  if(!box || !ta) return;
+  var norm = function(t){ return t.toLowerCase(); };
+  function tags(){ return ta.value.split(/\s+/).filter(Boolean); }
+  function has(g){ var cur = tags().map(norm); return g.split(" ").every(function(t){ return cur.indexOf(norm(t)) >= 0; }); }
+  function paint(){ box.querySelectorAll("button").forEach(function(b){ b.classList.toggle("on", has(G[+b.dataset.i][1])); }); }
+  box.innerHTML = G.map(function(g, i){ return '<button type="button" data-i="' + i + '">' + g[0] + '</button>'; }).join("");
+  box.querySelectorAll("button").forEach(function(b){ b.onclick = function(){
+    var g = G[+b.dataset.i][1].split(" "), cur = tags();
+    if(has(G[+b.dataset.i][1])){
+      // togli solo quelli del gruppo che non appartengono ad altri gruppi attivi
+      var keep = {}; G.forEach(function(o, j){ if(j !== +b.dataset.i && has(o[1])) o[1].split(" ").forEach(function(t){ keep[norm(t)] = 1; }); });
+      cur = cur.filter(function(t){ return g.map(norm).indexOf(norm(t)) < 0 || keep[norm(t)]; });
+    } else {
+      var low = cur.map(norm); g.forEach(function(t){ if(low.indexOf(norm(t)) < 0){ cur.push(t); low.push(norm(t)); } });
+    }
+    ta.value = cur.join(" "); paint();
+  }; });
+  ta.addEventListener("input", paint);
+  new MutationObserver(paint).observe(ta, { attributes:true });
+  setInterval(paint, 1500); // il campo viene riempito anche quando apri un post esistente
+  paint();
 })();
 </script>
 </body>
