@@ -217,7 +217,7 @@ async function loadMembers(){
 }
 
 /* ---------- navigazione ---------- */
-const NAV = [["feed","🏠","Bacheca"],["members","👥","Membri"],["msg","✉️","Messaggi"],["profile","👤","Profilo"]];
+const NAV = [["feed","🏠","Bacheca"],["news","📰","Notizie"],["members","👥","Membri"],["msg","✉️","Messaggi"],["profile","👤","Profilo"]];
 function buildNav(){
   const items = NAV.concat(isOwner ? [["mod","🛡","Moderazione"]] : []);
   $("#tabs").innerHTML = items.map(n => '<button data-t="' + n[0] + '">' + n[2] + (n[0] === "msg" ? '<span class="dot" hidden></span>' : "") + '</button>').join("");
@@ -227,7 +227,7 @@ function buildNav(){
 function go(t, arg){
   tab = t; document.querySelectorAll("[data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === t));
   window.scrollTo(0, 0);
-  ({ feed:showFeed, members:showMembers, msg:showMessages, profile:showProfile, mod:showMod })[t](arg);
+  ({ feed:showFeed, news:showNews, members:showMembers, msg:showMessages, profile:showProfile, mod:showMod })[t](arg);
 }
 async function refreshUnread(){
   const r = await sb.from("social_messages").select("id", { count:"exact", head:true }).eq("to_id", me.id).is("read_at", null);
@@ -296,7 +296,7 @@ async function renderPosts(batch, reset){
   const oppMap = {}; (opps.data || []).forEach(o => oppMap[o.id] = o);
   batch.forEach(p => {
     const L = (likes.data || []).filter(l => l.post_id === p.id), C = (cmts.data || []).filter(c => c.post_id === p.id);
-    const liked = L.some(l => l.user_id === me.id); const imgs = (p.images || []).map(x => avatarUrls[x]).filter(Boolean);
+    const liked = L.some(l => l.user_id === me.id); const imgs = (p.images || []).map(x => avatarUrls[x]).filter(Boolean).concat(p.image_urls || []).slice(0, 4);
     const o = p.opportunity_id ? oppMap[p.opportunity_id] : null;
     const el = document.createElement("article"); el.className = "card post" + (p.hidden ? " hiddenpost" : ""); el.id = "post-" + p.id;
     el.innerHTML = '<div class="row sp"><div class="row">' + av(p.author_id) + '<div><a href="#u-' + p.author_id + '" data-u="' + p.author_id + '" class="nm" style="text-decoration:none">' + nameOf(p.author_id) + '</a>' + badge(p.author_id) +
@@ -305,6 +305,7 @@ async function renderPosts(batch, reset){
       (isOwner ? '<button class="btn ghost sm" data-hide="' + p.id + '">' + (p.hidden ? "Mostra" : "Nascondi") + '</button>' : "") + '</div></div>' +
       (p.body ? '<div class="body">' + linkify(p.body) + '</div>' : "") +
       (imgs.length ? '<div class="gal n' + Math.min(imgs.length, 4) + '">' + imgs.map(u => '<img src="' + u + '" loading="lazy" data-zoom>').join("") + '</div>' : "") +
+      (p.link_url ? '<p style="margin:6px 0"><a href="' + esc(p.link_url) + '" target="_blank" rel="noopener" class="btn ghost sm">Leggi di più ›</a></p>' : "") +
       (o ? '<a class="opp" href="opportunity.html?id=' + o.id + '" target="_blank">' + (o.cover_image ? '<img src="' + esc(o.cover_image) + '" loading="lazy">' : "") +
         '<div class="t"><span class="badge team" style="margin:0 0 4px">Opportunità IMMONOVA</span><b>' + esc(o.title) + '</b><span class="sub">' + esc([o.category, o.location].filter(Boolean).join(" · ")) + '</span>' +
         '<div style="margin-top:6px"><span class="btn sm" data-dossier="' + o.id + '">Richiedi il dossier riservato</span></div></div></a>' : "") +
@@ -347,6 +348,19 @@ function bindPostActions(box){
   box.querySelectorAll("[data-u]:not([data-b])").forEach(a => { a.dataset.b = 1; a.onclick = e => { e.preventDefault(); go("members", a.dataset.u); }; });
   box.querySelectorAll("[data-dossier]:not([data-b])").forEach(s => { s.dataset.b = 1; s.onclick = e => { e.preventDefault(); e.stopPropagation(); location.href = "request-dossier.html?id=" + s.dataset.dossier; }; });
   box.querySelectorAll("[data-zoom]:not([data-b])").forEach(img => { img.dataset.b = 1; img.onclick = () => { const l = document.createElement("div"); l.className = "lightbox"; l.innerHTML = '<img src="' + img.src + '">'; l.onclick = () => l.remove(); document.body.appendChild(l); }; });
+}
+
+/* ---------- notizie / blog IMMONOVA ---------- */
+async function showNews(){
+  const r = await sb.from("blog_posts").select("id,slug,title,excerpt,published_at,created_at").eq("published", true).order("published_at", { ascending:false }).limit(50);
+  page('<div class="wrap">' + sideCard() + '<main class="main"><div class="card"><h2 style="font-family:Georgia,serif;font-weight:400">Notizie e articoli IMMONOVA</h2>' +
+    '<p class="sub" style="margin-top:4px">Analisi di mercato, off-market e trophy asset dal blog IMMONOVA.</p></div>' +
+    ((r.data || []).map(a => '<a class="card post" style="display:block;text-decoration:none" href="articolo.html?slug=' + encodeURIComponent(a.slug) + '" target="_blank">' +
+      '<span class="sub">' + new Date(a.published_at || a.created_at).toLocaleDateString("it-IT", { day:"numeric", month:"long", year:"numeric" }) + '</span>' +
+      '<h3 style="font-family:Georgia,serif;font-weight:400;font-size:22px;margin:4px 0 6px">' + esc(a.title) + '</h3>' +
+      (a.excerpt ? '<p class="muted">' + esc(a.excerpt) + '</p>' : "") + '<p style="margin-top:8px;color:var(--gold)">Leggi l\'articolo ›</p></a>').join("") || '<div class="card post empty">Nessun articolo pubblicato.</div>') +
+    '</main></div>');
+  bindSide();
 }
 
 /* ---------- proposta riservata di un immobile ---------- */
