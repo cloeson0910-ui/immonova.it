@@ -133,7 +133,10 @@ const ago = iso => { const d = (Date.now() - new Date(iso)) / 1000; if(d < 60) r
 const initials = n => String(n || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
 function toast(t){ const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 3200); }
 const params = new URLSearchParams(location.search);
-const invite = (params.get("invito") || "").trim();
+/* il codice di invito viene ricordato su questo dispositivo: se la persona crea l'account, accede
+   o torna più tardi (anche senza il link), il Circle le chiede solo di completare l'ingresso */
+let invite = (params.get("invito") || "").trim().toUpperCase();
+try{ if(invite) localStorage.setItem("immonova_circle_invite", invite); else invite = localStorage.getItem("immonova_circle_invite") || ""; }catch(e){}
 
 let me = null, meMember = null, isOwner = false, members = {}, avatarUrls = {}, tab = "feed";
 let posts = [], postOffset = 0, PAGE = 20, unreadMsgs = 0, chatWith = null, msgChannel = null;
@@ -160,6 +163,7 @@ async function start(){
   try{ await sb.rpc("social_join_team"); }catch(e){}
   let r = await sb.from("social_members").select("*").eq("user_id", me.id).maybeSingle();
   meMember = r.data;
+  if(meMember){ try{ localStorage.removeItem("immonova_circle_invite"); }catch(e){} }
   if(!meMember && invite) return joinForm();
   if(!meMember) return notMember();
   if(meMember.status !== "active") return page('<div class="hero"><h1>Accesso sospeso</h1><p>Il tuo accesso a IMMONOVA Circle è sospeso. Per informazioni scrivi a IMMONOVA.</p></div>');
@@ -190,12 +194,19 @@ async function landing(){
     '<div class="row" style="justify-content:center"><a class="btn" href="signup.html?redirect=' + back + '">Crea il tuo account</a> <a class="btn ghost" href="signin.html?redirect=' + back + '">Accedi</a></div></div>');
 }
 function notMember(){
-  page('<div class="hero"><h1>IMMONOVA Circle</h1><p>Il club riservato di IMMONOVA è accessibile solo su invito. Se hai ricevuto un link di invito, aprilo da questo dispositivo dopo aver effettuato l\'accesso.</p><a class="btn ghost" href="index.html">Torna al sito</a></div>');
+  page('<div class="hero card"><h1>IMMONOVA Circle</h1><p>Il club riservato di IMMONOVA è accessibile solo su invito. Se hai ricevuto un invito, incolla qui il link o il codice.</p>' +
+    '<div class="row" style="justify-content:center"><input class="f" id="icode" placeholder="Link o codice di invito" style="flex:1 1 220px;margin:0;max-width:360px"><button class="btn" id="igo">Continua</button></div>' +
+    '<p class="sub" id="ierr" style="margin-top:10px"></p><a class="btn ghost" href="index.html" style="margin-top:8px">Torna al sito</a></div>');
+  $("#igo").onclick = () => {
+    const c = $("#icode").value.trim().replace(/.*invito=/i, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    if(c.length < 6){ $("#ierr").textContent = "Codice non valido."; return; }
+    invite = c; try{ localStorage.setItem("immonova_circle_invite", c); }catch(e){} joinForm();
+  };
 }
 function joinForm(){
   page('<div class="hero card" style="text-align:left"><h1 style="text-align:center">Benvenuto in IMMONOVA Circle</h1>' +
     '<div class="notice" style="margin:14px 0">🔒 <b>Riservatezza.</b> Tutto ciò che leggi nel Circle (post, profili, messaggi, opportunità) è riservato ai membri. Entrando ti impegni a non divulgarlo all\'esterno e a non contattare direttamente proprietari o controparti scavalcando IMMONOVA.</div>' +
-    '<label class="l">Nome e cognome (come ti vedranno gli altri)</label><input class="f" id="jn">' +
+    '<label class="l">Nome e cognome (come ti vedranno gli altri)</label><input class="f" id="jn" value="' + esc((me.user_metadata && me.user_metadata.full_name) || "") + '">' +
     '<label class="l">Chi sei</label><select class="f" id="jt">' + Object.keys(TYPES).filter(k => k !== "team").map(k => '<option value="' + k + '">' + TYPES[k] + '</option>').join("") + '</select>' +
     '<label class="row" style="font-size:14px;margin:4px 0 16px"><input type="checkbox" id="jok"> Accetto l\'impegno di riservatezza</label>' +
     '<button class="btn" id="jgo" style="width:100%">Entra nel Circle</button><p class="sub" id="jerr" style="margin-top:10px"></p></div>');
@@ -204,7 +215,11 @@ function joinForm(){
     if(!$("#jok").checked){ $("#jerr").textContent = "Devi accettare l'impegno di riservatezza."; return; }
     $("#jgo").disabled = true;
     const r = await sb.rpc("social_redeem_invite", { p_code:invite, p_name:n, p_type:$("#jt").value });
-    if(r.error || !r.data || !r.data.ok){ $("#jerr").textContent = (r.data && r.data.error) || (r.error && r.error.message) || "Errore"; $("#jgo").disabled = false; return; }
+    if(r.error || !r.data || !r.data.ok){ const er = (r.data && r.data.error) || (r.error && r.error.message) || "Errore";
+      $("#jerr").textContent = er; $("#jgo").disabled = false;
+      if(/non valido|usato|scadut/i.test(er)){ try{ localStorage.removeItem("immonova_circle_invite"); }catch(e){} }
+      return; }
+    try{ localStorage.removeItem("immonova_circle_invite"); }catch(e){}
     history.replaceState(null, "", "social.html"); start();
   };
 }
