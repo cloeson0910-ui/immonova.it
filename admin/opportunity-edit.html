@@ -7582,6 +7582,11 @@ form.addEventListener("submit", async function(e){
     }
 
     var galleryFiles = Array.prototype.slice.call(document.getElementById("galleryFiles").files).concat(folderImportGalleryOverrideBlobs);
+    // controllo foto doppie: non si ricaricano foto già presenti nella gallery o ripetute nella selezione
+    if(galleryFiles.length > 0 && typeof photoDupFilter === "function"){
+      updateWorkProgress("save", "Controllo foto doppie...", 36);
+      galleryFiles = await photoDupFilter(galleryFiles, true);
+    }
 
     if(galleryFiles.length > 0){
       setStatus("Caricamento nuove immagini gallery...", "");
@@ -8217,6 +8222,84 @@ setInterval(srRefresh, 600); /* anche quando la categoria viene impostata via co
 })();
 </script>
 
+
+<!-- Controllo foto doppie nella gallery -->
+<script>
+var photoDupHashCache = {};
+async function photoHashBlob(blob){
+  var buf = await blob.arrayBuffer();
+  var h = await crypto.subtle.digest("SHA-256", buf);
+  return Array.prototype.map.call(new Uint8Array(h), function(b){ return ("0" + b.toString(16)).slice(-2); }).join("");
+}
+async function photoHashUrl(url){
+  if(!url) return null;
+  if(photoDupHashCache[url]) return photoDupHashCache[url];
+  try{ var r = await fetch(url, { cache:"force-cache" }); if(!r.ok) return null; var h = await photoHashBlob(await r.blob()); photoDupHashCache[url] = h; return h; }
+  catch(e){ return null; }
+}
+function photoBaseName(n){ return String(n || "").split("/").pop().split("?")[0].replace(/^\d+-/, "").toLowerCase(); }
+/* hash di tutte le foto già presenti (versione originale senza logo se disponibile, altrimenti quella salvata) */
+async function photoExistingHashes(){
+  var set = {}, urls = [];
+  (galleryImages || []).forEach(function(u, i){ urls.push(u); if(galleryImagesClean && galleryImagesClean[i]) urls.push(galleryImagesClean[i]); });
+  for(var i = 0; i < urls.length; i++){ var h = await photoHashUrl(urls[i]); if(h) set[h] = true; }
+  return set;
+}
+/* toglie dall'elenco le foto già presenti o ripetute; ritorna l'elenco pulito e avvisa */
+async function photoDupFilter(files, silent){
+  var existing = await photoExistingHashes(), seen = {}, keep = [], dups = [];
+  for(var i = 0; i < files.length; i++){
+    var f = files[i], h = await photoHashBlob(f);
+    if(existing[h] || seen[h]){ dups.push(f.name || ("foto " + (i + 1))); continue; }
+    seen[h] = true; keep.push(f);
+  }
+  if(dups.length){
+    var msg = dups.length + (dups.length === 1 ? " foto doppia non verrà caricata" : " foto doppie non verranno caricate") + " (già presenti nella gallery o selezionate due volte):\n\n" + dups.slice(0, 15).join("\n") + (dups.length > 15 ? "\n…e altre " + (dups.length - 15) : "");
+    if(silent){ if(typeof setStatus === "function") setStatus(msg.split("\n")[0], ""); }
+    else alert(msg);
+  }
+  return keep;
+}
+/* appena scegli le foto: controllo subito e tolgo le doppie dalla selezione */
+(function(){
+  var input = document.getElementById("galleryFiles");
+  if(!input) return;
+  input.addEventListener("change", async function(){
+    if(!input.files || !input.files.length || input._dupChecking) return;
+    input._dupChecking = true;
+    var all = Array.prototype.slice.call(input.files);
+    var keep = await photoDupFilter(all, false);
+    if(keep.length !== all.length){
+      try{ var dt = new DataTransfer(); keep.forEach(function(f){ dt.items.add(f); }); input.files = dt.files; input.dispatchEvent(new Event("change", { bubbles:true })); }catch(e){}
+    }
+    input._dupChecking = false;
+  });
+  /* pulsante per togliere le foto doppie già caricate in passato */
+  var field = input.closest(".field");
+  if(!field) return;
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "secondary"; b.style.marginTop = "10px";
+  b.textContent = "Trova e rimuovi foto doppie già nella gallery";
+  field.appendChild(b);
+  b.onclick = async function(){
+    if(!galleryImages || !galleryImages.length){ alert("La gallery è vuota."); return; }
+    b.disabled = true; var old = b.textContent; b.textContent = "Controllo in corso…";
+    var seen = {}, remove = [];
+    if(typeof currentCoverUrl !== "undefined" && currentCoverUrl){ var hc = await photoHashUrl(currentCoverUrl); if(hc) seen[hc] = "copertina"; }
+    for(var i = 0; i < galleryImages.length; i++){
+      var h = await photoHashUrl((galleryImagesClean && galleryImagesClean[i]) || galleryImages[i]);
+      var h2 = (galleryImagesClean && galleryImagesClean[i]) ? await photoHashUrl(galleryImages[i]) : null;
+      if((h && seen[h] !== undefined && seen[h] !== "copertina") || (h2 && seen[h2] !== undefined && seen[h2] !== "copertina")){ remove.push(i); continue; }
+      if(h) seen[h] = i; if(h2) seen[h2] = i;
+    }
+    b.disabled = false; b.textContent = old;
+    if(!remove.length){ alert("Nessuna foto doppia nella gallery."); return; }
+    if(!confirm("Trovate " + remove.length + " foto doppie nella gallery (foto n. " + remove.map(function(x){ return x + 1; }).join(", ") + ").\nRimuoverle? Poi premi \"Salva Modifiche\" per confermare.")) return;
+    for(var k = remove.length - 1; k >= 0; k--) removeGalleryImage(remove[k]);
+    if(typeof setStatus === "function") setStatus("Rimosse " + remove.length + " foto doppie: premi Salva Modifiche per confermare.", "");
+  };
+})();
+</script>
 <!-- Pubblica su Investments Puglia (solo titolare) -->
 <script>
 (function(){
