@@ -8216,5 +8216,51 @@ setInterval(srRefresh, 600); /* anche quando la categoria viene impostata via co
   }, true);
 })();
 </script>
+
+<!-- Pubblica su Investments Puglia (solo titolare) -->
+<script>
+(function(){
+  var OWNER = "claudio.romano@bluewin.ch";
+  var c = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  var oppId = new URLSearchParams(location.search).get("id");
+  if(!oppId) return;
+  c.auth.getSession().then(function(r){
+    var s = r.data && r.data.session;
+    if(!s || String(s.user.email || "").toLowerCase() !== OWNER) return;
+    var bar = document.querySelector(".actions"); if(!bar) return;
+    var btn = document.createElement("button");
+    btn.type = "button"; btn.className = "secondary"; btn.id = "ipPublishBtn";
+    btn.textContent = "Carica su Investments Puglia";
+    bar.insertBefore(btn, document.getElementById("deleteBtn"));
+    var imp = document.createElement("a");
+    imp.className = "secondary"; imp.href = "investments-puglia.html"; imp.textContent = "Importa da Investments Puglia";
+    bar.insertBefore(imp, document.getElementById("deleteBtn"));
+    fetch(String(SUPABASE_URL).replace(/\/+$/,"") + "/functions/v1/immonova-cross-publish", { method:"POST",
+      headers:{ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY, Authorization:"Bearer " + s.access_token }, body: JSON.stringify({ action:"links" }) })
+      .then(function(x){ return x.json(); }).then(function(d){
+        var l = (d.links || []).find(function(k){ return k.source_system === "immonova" && String(k.source_id) === String(oppId); });
+        if(l) btn.textContent = "Aggiorna su Investments Puglia";
+      }).catch(function(){});
+    btn.onclick = async function(){
+      var pub = confirm("Copiare questo immobile su Investments Puglia (scheda + foto)?\n\nOK = copia e PUBBLICA subito sul sito Investments Puglia\nAnnulla = scegli se copiarlo come bozza");
+      if(!pub && !confirm("Copiarlo su Investments Puglia come BOZZA (non visibile al pubblico)?")) return;
+      var old = btn.textContent; btn.disabled = true; btn.textContent = "Copia in corso (foto comprese)…";
+      try{
+        var x = await fetch(String(SUPABASE_URL).replace(/\/+$/,"") + "/functions/v1/immonova-cross-publish", { method:"POST",
+          headers:{ "Content-Type":"application/json", apikey:SUPABASE_ANON_KEY, Authorization:"Bearer " + s.access_token },
+          body: JSON.stringify({ action:"to_ip", opportunity_id: Number(oppId), publish: pub }) });
+        var d = await x.json();
+        if(!d.ok) throw new Error(d.error || "Errore");
+        btn.textContent = "Aggiorna su Investments Puglia";
+        var msg = (d.updated ? "Immobile AGGIORNATO" : "Immobile COPIATO") + " su Investments Puglia" + (d.published ? " e pubblicato." : " come bozza.") +
+          "\nFoto copiate: " + d.photos.copied + " di " + d.photos.found + (d.photos.failed ? " (" + d.photos.failed + " non riuscite)" : "") +
+          "\n\nAprire la scheda su Investments Puglia?";
+        if(confirm(msg)) window.open(d.edit_url, "_blank");
+      }catch(e){ alert("Copia non riuscita: " + (e.message || e)); btn.textContent = old; }
+      btn.disabled = false;
+    };
+  });
+})();
+</script>
 </body>
 </html>
