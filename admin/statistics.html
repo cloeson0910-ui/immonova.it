@@ -518,6 +518,16 @@ function copyInvite(link, btn){
 
 function yes(v, txt){ return '<span class="ctag">' + escapeHTML(txt || "Sì") + '</span>'; }
 function no(){ return '<span style="color:var(--c-4f4125)">—</span>'; }
+async function addToCircle(uid, btn){
+  var t = prompt("Aggiungere questa persona a IMMONOVA Circle?\nTipo: investitore, family_office, partner, segnalatore, professionista", "investitore");
+  if(t === null) return;
+  btn.disabled = true;
+  var r = await client.rpc("social_admin_add_member", { p_user: uid, p_type: String(t).trim().toLowerCase() });
+  if(r.error || !r.data || !r.data.ok){ setStatus("Errore: " + ((r.data && r.data.error) || (r.error && r.error.message) || "sconosciuto"), "error"); btn.disabled = false; return; }
+  setStatus("Aggiunto al Circle: al prossimo accesso vedrà la bacheca.", "");
+  loadUsers(); loadCircle();
+}
+
 async function loadUsers(){
   var body = document.getElementById("usersBody");
   var res = await client.rpc("immonova_users_overview");
@@ -546,7 +556,8 @@ async function loadUsers(){
   var ps = d.people || [];
   body.innerHTML = ps.length ? ps.map(function(p){
     var app = p.app_platforms ? '<span class="ctag">' + escapeHTML(p.app_platforms.replace("android","Android").replace("ios","iPhone")) + '</span><div class="sub-note">dal ' + escapeHTML(fmtDate(p.app_first)) + ' · ultima apertura ' + escapeHTML(fmtDateTime(p.app_last)) + (p.app_version ? ' · v' + escapeHTML(p.app_version) : '') + '</div>' : no();
-    var circle = p.circle ? '<span class="ctag' + (p.circle === "active" ? "" : " off") + '">' + (p.circle === "active" ? "Membro" : "Sospeso") + '</span><div class="sub-note">dal ' + escapeHTML(fmtDate(p.circle_since)) + '</div>' : no();
+    var circle = p.circle ? '<span class="ctag' + (p.circle === "active" ? "" : " off") + '">' + (p.circle === "active" ? "Membro" : "Sospeso") + '</span><div class="sub-note">dal ' + escapeHTML(fmtDate(p.circle_since)) + '</div>'
+      : '<button type="button" class="cbtn" onclick="addToCircle(&quot;' + p.id + '&quot;, this)">Aggiungi al Circle</button>';
     return '<tr><td>' + escapeHTML(p.name || "-") + '</td><td>' + escapeHTML(p.email || "-") + '</td>' +
       '<td>' + (p.team ? "Team IMMONOVA" : "Cliente / esterno") + '</td>' +
       '<td>' + (p.site_account ? yes(1, "Sì") + '<div class="sub-note">dal ' + escapeHTML(fmtDate(p.site_account)) + '</div>' : no()) + '</td>' +
