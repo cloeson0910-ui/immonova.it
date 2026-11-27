@@ -91,6 +91,7 @@ var PAGE_CATALOG = [
   {section:"Owner", key:"ads-manager.html", label:"Pubblicità", i18nKey:"nav_ads", family:"Marketing"},
   {section:"Owner", key:"settings.html", label:"Social", i18nKey:"nav_social", family:"Marketing"},
   {section:"Owner", key:"statistics.html", label:"Statistiche", i18nKey:"nav_statistics", family:"Amministrazione"},
+  {section:"Owner", key:"investments-puglia.html", label:"Importa da Investments Puglia", i18nKey:"nav_ip_import", family:"Immobili"},
   {section:"Owner", key:"meta-ads-planner.html", label:"Test A/B Meta Ads", i18nKey:"nav_ads_ab", family:"Marketing"},
   {section:"Owner", key:"watermark-retroattivo.html", label:"Watermark Retroattivo", i18nKey:"nav_watermark_retro", family:"Sito"},
   {section:"Owner", key:"data-sources-bulk-import.html", label:"Import Fonti Estero", i18nKey:"nav_data_sources_bulk", family:"Amministrazione"},
