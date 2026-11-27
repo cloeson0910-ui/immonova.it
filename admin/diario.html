@@ -160,6 +160,22 @@ mark{background:#f1d27a}
       <div><label>Come (modalità)</label>
         <select id="f_mode"><option value="">—</option><option>Telefono</option><option>WhatsApp</option><option>Email</option><option>Incontro</option><option>Sopralluogo</option><option>Videochiamata</option><option>Altro</option></select></div>
     </div>
+    <div style="margin-top:14px;border:1px solid rgba(165,129,57,.35);border-radius:10px;padding:12px 14px;background:rgba(255,250,240,.6)">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0"><input type="checkbox" id="ap_on" style="width:auto"> 📅 Questa attività prevede un appuntamento</label>
+      <div id="ap_box" class="hidden" style="margin-top:10px">
+        <div class="grid">
+          <div><label>Tipo</label><select id="ap_type"><option value="riunione">Riunione / incontro</option><option value="visita_posto">Visita sul posto / sopralluogo</option><option value="telefonata">Telefonata</option></select></div>
+          <div><label>Data e ora appuntamento</label><input id="ap_start" type="datetime-local"></div>
+          <div><label>Durata (minuti)</label><input id="ap_dur" type="number" min="15" step="15" value="60"></div>
+        </div>
+        <div class="grid" style="margin-top:10px">
+          <div><label>Luogo / indirizzo</label><input id="ap_addr" placeholder="Es. Via Roma 12, Ostuni"></div>
+          <div><label>Immobile collegato</label><select id="ap_opp"><option value="">— nessuno</option></select></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:12px 0 0"><input type="checkbox" id="ap_conf" style="width:auto"> ✅ Appuntamento confermato — inseriscilo in agenda</label>
+        <p class="sub" id="ap_info" style="margin:6px 0 0">Va in agenda SOLO quando spunti «Appuntamento confermato». Se manca data e ora si apre il modulo dell'agenda già compilato.</p>
+      </div>
+    </div>
     <div class="grid" style="margin-top:12px">
       <div><label>Promemoria per chiuderla</label>
         <select id="f_rem">
@@ -316,6 +332,7 @@ async function init(){
   loadCollabs();
   $("f_rem").onchange = () => { $("remCustomBox").classList.toggle("hidden", $("f_rem").value !== "custom"); };
   $("saveBtn").onclick = save;
+  $("ap_on").onchange = () => { $("ap_box").classList.toggle("hidden", !$("ap_on").checked); };
   $("cancelBtn").onclick = () => { resetForm(); $("formCard").classList.add("hidden"); };
   $("newBtn").onclick = () => { const h = $("formCard").classList.contains("hidden"); resetForm(); $("formCard").classList.toggle("hidden", !h); if(h) $("f_title").focus(); };
   $("expandBtn").onclick = () => document.querySelectorAll("details.day").forEach(d => { d.open = true; openDays.add(d.dataset.d); });
@@ -344,6 +361,7 @@ function resetForm(){
   $("f_rem").value = ""; $("f_rem").querySelector('[value="keep"]').classList.add("hidden");
   $("remCustomBox").classList.add("hidden"); $("remNow").textContent = "";
   $("formTitle").textContent = "Nuova attività"; $("saveBtn").textContent = "Salva attività"; $("cancelBtn").classList.add("hidden");
+  apFill(null);
 }
 function startEdit(r){
   editId = r.id; editRow = r;
@@ -357,6 +375,7 @@ function startEdit(r){
   else { keep.classList.add("hidden"); $("f_rem").value = ""; $("remNow").textContent = ""; }
   $("remCustomBox").classList.add("hidden");
   $("formTitle").textContent = "Modifica attività"; $("saveBtn").textContent = "Salva modifiche"; $("cancelBtn").classList.remove("hidden");
+  apFill(r.appointment || null);
   $("formCard").classList.remove("hidden"); $("formCard").scrollIntoView({ behavior:"smooth" });
 }
 function addChild(pid){
@@ -385,18 +404,123 @@ async function save(opts){
   const row = { activity_date:$("f_date").value, activity_time:$("f_time").value || null, title, notes:$("f_notes").value.trim() || null, status:fStatus, remind_at,
     due_date:$("f_due").value || null, priority:fPri, parent_id:$("f_parent").value || null,
     mode:$("f_mode").value || null, people:people.filter(p => (p.name || "").trim()).map(p => Object.assign({}, p, { name:p.name.trim() })) };
+  const ap = apRead(); row.appointment = ap;
+  if(fStatus === "chiusa" && (!editRow || editRow.status !== "chiusa")){
+    const ans = apAskOnClose(ap);
+    if(ans === null){ setSt("Attività non chiusa.", ""); return; }
+    if(ans === "yes"){ ap.confirmed = true; $("ap_conf").checked = true; }
+  }
   $("saveBtn").disabled = true; setSt("Salvataggio…");
   const r = editId ? await client.from("immonova_diary").update(row).eq("id", editId).select("id").single()
                    : await client.from("immonova_diary").insert(Object.assign({ user_id:user.id }, row)).select("id").single();
   $("saveBtn").disabled = false;
   if(r.error){ setSt("Errore: " + r.error.message, "err"); return; }
+  const apRes = await apSync(Object.assign({}, row, { id:r.data.id }));
+  if(apRes === "form") return;
   if(keep){ editId = r.data.id; editRow = Object.assign({}, editRow || {}, row, { id:r.data.id }); return r.data.id; }
-  setSt(remind_at && fStatus !== "chiusa" ? "Salvato ✓ — promemoria il " + fmtDT(remind_at) : "Salvato ✓", "ok");
+  setSt((remind_at && fStatus !== "chiusa" ? "Salvato ✓ — promemoria il " + fmtDT(remind_at) : "Salvato ✓") + (apRes ? " · " + apRes : ""), "ok");
   resetForm(); $("formCard").classList.add("hidden"); load();
 }
+
+/* ===== Appuntamento collegato all'attività =====
+   Dati salvati in immonova_diary.appointment = { on, type, start, dur, address, opportunity_id, confirmed, event_id }.
+   Appuntamento confermato (o attività chiusa) -> va in agenda da solo; se manca data/ora si apre l'agenda precompilata. */
+let apOpps = null;
+async function apLoadOpps(sel){
+  if(!apOpps){ const r = await client.from("opportunities").select("id,title,address,formatted_address,location,municipality").order("title"); apOpps = r.data || []; }
+  $("ap_opp").innerHTML = '<option value="">— nessuno</option>' + apOpps.map(o => '<option value="' + o.id + '"' + (String(o.id) === String(sel || "") ? " selected" : "") + '>' + esc(o.title) + '</option>').join("");
+}
+function apToLocal(iso){ if(!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : ymd(d) + "T" + hm(d); }
+function apFill(a){
+  a = a || {};
+  $("ap_on").checked = !!a.on; $("ap_box").classList.toggle("hidden", !a.on);
+  $("ap_type").value = a.type || ($("f_mode").value === "Telefono" ? "telefonata" : ($("f_mode").value === "Sopralluogo" ? "visita_posto" : "riunione"));
+  $("ap_start").value = apToLocal(a.start); $("ap_dur").value = a.dur || 60; $("ap_addr").value = a.address || "";
+  $("ap_conf").checked = !!a.confirmed;
+  $("ap_info").textContent = a.event_id ? "📅 Già in agenda: le modifiche qui aggiornano anche l'appuntamento." : "Va in agenda SOLO quando spunti «Appuntamento confermato». Se manca data e ora si apre il modulo dell'agenda già compilato.";
+  $("ap_box").dataset.eventId = a.event_id || "";
+  apLoadOpps(a.opportunity_id);
+}
+function apRead(){
+  if(!$("ap_on").checked) return (editRow && editRow.appointment && editRow.appointment.event_id) ? Object.assign({}, editRow.appointment, { on:false }) : null;
+  const st = $("ap_start").value;
+  return { on:true, type:$("ap_type").value, start:st ? new Date(st).toISOString() : null, dur:Math.max(15, Number($("ap_dur").value) || 60),
+    address:$("ap_addr").value.trim() || null, opportunity_id:$("ap_opp").value ? Number($("ap_opp").value) : null,
+    confirmed:$("ap_conf").checked, event_id:$("ap_box").dataset.eventId || null };
+}
+function apNotes(r){
+  const who = (Array.isArray(r.people) ? r.people : []).map(p => p.name).filter(Boolean).join(", ");
+  return ["Dal Diario: " + r.title, who ? "Con: " + who : "", r.notes || ""].filter(Boolean).join("\n");
+}
+/* ritorna: "" (niente da fare) | testo esito | "form" (aperta l'agenda) */
+async function apSync(r){
+  const a = r.appointment;
+  if(!a || !a.on) return "";
+  if(!a.confirmed) return "";  /* in agenda SOLO se l'appuntamento è confermato */
+  if(!apOpps) await apLoadOpps(a.opportunity_id);
+  const opp = a.opportunity_id ? (apOpps || []).find(o => String(o.id) === String(a.opportunity_id)) : null;
+  const address = a.address || (opp && (opp.formatted_address || opp.address || [opp.location, opp.municipality].filter(Boolean).join(", "))) || "";
+  let start = a.start;
+  if(!start){
+    /* manca data/ora: apro l'agenda con tutto precompilato */
+    const base = r.activity_date ? new Date(r.activity_date + "T10:00") : new Date(Date.now() + 86400000);
+    const q = new URLSearchParams({ date:ymd(base) + "T" + hm(base), type:a.type || "riunione", dur:String(a.dur || 60), notes:apNotes(r), diary:r.id });
+    if(address) q.set("address", address); if(a.opportunity_id) q.set("opp", String(a.opportunity_id));
+    setSt("📅 Manca data e ora dell'appuntamento: completa il modulo dell'agenda…", "ok");
+    location.href = "calendar.html?" + q.toString();
+    return "form";
+  }
+  const end = new Date(new Date(start).getTime() + (a.dur || 60) * 60000).toISOString();
+  const prof = await client.from("profiles").select("full_name,email").eq("id", user.id).maybeSingle();
+  const title = ((prof.data && (prof.data.full_name || prof.data.email)) || "Collaboratore") + " — " + (opp ? opp.title : r.title);
+  const ev = { event_type:a.type || "riunione", title, start_at:start, end_at:end, notes:apNotes(r), address:address || null, opportunity_id:a.opportunity_id || null };
+  let eventId = a.event_id, prev = null;
+  if(eventId){
+    prev = (await client.from("immonova_calendar_events").select("icloud_href,icloud_uid,google_event_id").eq("id", eventId).maybeSingle()).data;
+    if(!prev) eventId = null;
+  }
+  if(eventId){
+    const u = await client.from("immonova_calendar_events").update(ev).eq("id", eventId);
+    if(u.error) return "⚠️ Appuntamento non aggiornato: " + u.error.message;
+  }else{
+    const ins = await client.from("immonova_calendar_events").insert(Object.assign({ created_by:user.id }, ev)).select("id").single();
+    if(ins.error) return "⚠️ Appuntamento non inserito in agenda: " + ins.error.message;
+    eventId = ins.data.id;
+    /* collaboratori coinvolti nell'attività = partecipanti all'appuntamento */
+    const parts = (Array.isArray(r.people) ? r.people : []).filter(p => p.kind === "collab" && p.id && p.id !== user.id).map(p => ({ event_id:eventId, user_id:p.id }));
+    if(parts.length) await client.from("immonova_calendar_event_participants").insert(parts);
+  }
+  const body = Object.assign({ action:prev ? "update" : "create", event_id:eventId }, ev);
+  client.functions.invoke("icloud-calendar-push", { body:Object.assign({}, body, { icloud_href:prev && prev.icloud_href, icloud_uid:prev && prev.icloud_uid }) }).catch(() => {});
+  client.functions.invoke("immonova-google-calendar-push", { body:Object.assign({}, body, { google_event_id:prev && prev.google_event_id }) }).catch(() => {});
+  await client.from("immonova_diary").update({ appointment:Object.assign({}, a, { start, address:address || null, confirmed:true, event_id:eventId }) }).eq("id", r.id);
+  return (prev ? "📅 Appuntamento aggiornato in agenda" : "📅 Appuntamento inserito in agenda") + " (" + fmtDT(start) + ")";
+}
+
+/* chiusura di un'attività con appuntamento non ancora confermato: lo chiede sempre.
+   ritorna "yes" (confermato), "no" (chiudi senza agenda) oppure null (non chiudere) */
+function apAskOnClose(a){
+  if(!a || !a.on || a.confirmed || a.event_id) return "skip";
+  if(confirm("📅 Questa attività prevede un appuntamento NON ancora confermato.\n\nL'appuntamento è confermato?\n\nOK = sì, è confermato: lo inserisco in agenda\nAnnulla = no, non è confermato")) return "yes";
+  return confirm("L'appuntamento NON è confermato: non verrà inserito in agenda.\n\nChiudere comunque l'attività?") ? "no" : null;
+}
+
 async function setStatus(id, v){
+  let apConfirmed = false;
+  if(v === "chiusa"){
+    const cur = (rows || []).find(x => x.id === id) || (await client.from("immonova_diary").select("*").eq("id", id).maybeSingle()).data;
+    const ans = cur ? apAskOnClose(cur.appointment) : "skip";
+    if(ans === null){ load(); return; }
+    if(ans === "yes") apConfirmed = true;
+  }
   const r = await client.from("immonova_diary").update({ status:v }).eq("id", id);
-  if(r.error){ alert(r.error.message); return; } load();
+  if(r.error){ alert(r.error.message); return; }
+  if(apConfirmed){
+    const x = await client.from("immonova_diary").select("*").eq("id", id).maybeSingle();
+    if(x.data){ x.data.appointment = Object.assign({}, x.data.appointment, { confirmed:true });
+      const res = await apSync(x.data); if(res === "form") return; if(res) setSt(res, "ok"); }
+  }
+  load();
 }
 async function snooze(id, v){
   if(!v) return;

@@ -1342,6 +1342,17 @@ confirmBookBtn.addEventListener("click", async function(){
       eventId = insertResult.data.id;
     }
 
+    /* appuntamento nato da un'attività del Diario: lo colleghiamo all'attività */
+    if(window.diaryLinkId){
+      try{
+        var dl = await client.from("immonova_diary").select("appointment").eq("id", window.diaryLinkId).maybeSingle();
+        var apx = Object.assign({}, (dl.data && dl.data.appointment) || {}, { on:true, confirmed:true, event_id:eventId, type:eventType,
+          start:startDate.toISOString(), dur:Math.round((endDate - startDate) / 60000), address:address || null, opportunity_id:opportunityId ? Number(opportunityId) : null });
+        await client.from("immonova_diary").update({ appointment:apx }).eq("id", window.diaryLinkId);
+      }catch(e){ console.warn("Collegamento al Diario non riuscito:", e); }
+      window.diaryLinkId = null;
+    }
+
     // La sincronizzazione con il calendario personale (iCloud e/o Google) avviene per
     // CHIUNQUE l'abbia collegato, non solo per l'admin: le due edge function guardano da
     // sole la connessione del proprietario dell'evento e non fanno nulla (senza errore)
@@ -1636,6 +1647,13 @@ async function handleNewsDeepLink(){
   openBookingModal(dateStr);
   if(address) document.getElementById("eventAddress").value = address;
   if(notes) document.getElementById("eventNotes").value = notes;
+  /* arrivo dal Diario: tipo, durata, immobile e collegamento all'attività */
+  var pType = params.get("type"), pDur = params.get("dur"), pOpp = params.get("opp");
+  if(pType && document.querySelector('#eventType option[value="' + pType + '"]')) document.getElementById("eventType").value = pType;
+  if(pDur) document.getElementById("eventDuration").value = pDur;
+  if(pOpp) document.getElementById("eventOpportunity").value = pOpp;
+  window.diaryLinkId = params.get("diary") || null;
+  ["type","dur","opp","diary"].forEach(function(k){ params.delete(k); });
 
   params.delete("date");
   params.delete("address");
