@@ -169,3 +169,6 @@ if(!window.ImmonovaPush){
   }
   if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
+
+/* mai in stampa / PDF */
+(function(){ try{ var st = document.createElement("style"); st.textContent = "@media print{#inb{display:none!important}}"; (document.head || document.documentElement).appendChild(st); }catch(e){} })();
