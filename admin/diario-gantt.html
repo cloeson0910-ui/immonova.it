@@ -100,6 +100,9 @@ mark{background:#f1d27a}
 .bar .rh{position:absolute;right:0;top:0;width:9px;height:100%;cursor:ew-resize;background:rgba(255,255,255,.35);border-left:1px solid rgba(0,0,0,.15)}
 .ms.drag{cursor:ew-resize}
 #dragTip{position:fixed;z-index:999;display:none;background:#2b2416;color:#f1d27a;font-size:12px;padding:4px 8px;border-radius:6px;pointer-events:none}
+.bar.nb{opacity:.75;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 4px,transparent 4px 8px);border:1px dashed rgba(0,0,0,.35);box-shadow:none}
+.bar.out{outline:2px solid #8a1f1f;outline-offset:1px}
+.ms.mid{width:14px;height:14px;top:9px}
 .ms{position:absolute;top:7px;width:18px;height:18px;transform:rotate(45deg);border:2px solid #2b2416;cursor:pointer}
 .ms.aperta{background:#c0392b}.ms.in_gestione{background:#d9a514}.ms.chiusa{background:#3c9a3c}
 .todayl{position:absolute;top:0;bottom:0;width:2px;background:#2b6fd6;z-index:2;pointer-events:none}
@@ -113,15 +116,15 @@ mark{background:#f1d27a}
 </div>
 <div class="wrap" style="max-width:1400px">
   <h1>Gantt attività</h1>
-  <p class="sub">Ogni attività principale è una <b>milestone</b> (◆): ci arrivi chiudendo le sotto-attività necessarie. La milestone si chiude solo quando tutte le sue sotto-attività sono chiuse.</p>
+  <p class="sub">Ogni attività principale è il <b>target</b> (◎). Lungo il percorso ci sono le <b>milestone intermedie</b> (◆) e le <b>attività necessarie</b> (barre piene): vanno chiuse prima di poter chiudere il livello superiore. Le <b>attività di controllo</b> (○, barre tratteggiate) non bloccano nulla, ma vanno chiuse entro l'obiettivo: se sforano la scadenza del target sono bordate di rosso.</p>
   <div class="card">
     <div class="grid">
-      <div><label>Milestone</label><select id="root"></select></div>
+      <div><label>Target</label><select id="root"></select></div>
       <div><label>Mostra</label><select id="show"><option value="open">Milestone non chiuse</option><option value="all">Tutte</option></select></div>
       <div><label>Scala</label><select id="zoom"><option value="34">Giorni</option><option value="14">Settimane</option><option value="5">Mesi</option></select></div>
     </div>
     <div class="legend"><span><i style="background:#c0392b"></i>Aperta</span><span><i style="background:#d9a514"></i>In gestione</span><span><i style="background:#3c9a3c"></i>Chiusa</span>
-      <span><i style="background:#fff;outline:2px dashed #8a1f1f"></i>In ritardo</span><span><i style="background:#fff;border-left:5px solid #2b2416"></i>Priorità alta</span><span>◆ Milestone</span><span><i style="background:#2b6fd6;width:3px"></i>Oggi</span></div>
+      <span><i style="background:#fff;outline:2px dashed #8a1f1f"></i>In ritardo</span><span><i style="background:#fff;border-left:5px solid #2b2416"></i>Priorità alta</span><span>◎ Target</span><span>◆ Milestone intermedia</span><span><i style="background:#c0392b;opacity:.6;border:1px dashed #333"></i>○ Controllo (non blocca)</span><span><i style="background:#fff;outline:2px solid #8a1f1f"></i>Oltre il target</span><span><i style="background:#2b6fd6;width:3px"></i>Oggi</span></div>
   </div>
   <div id="gantt"></div>
   <p class="sub" style="margin-top:10px">Tocca una barra per aprire l'attività · trascinala per spostarla · tira il bordo destro per allungarla o accorciarla · trascina il ◆ per spostare la chiusura. Le date sono: inizio = data dell'attività, fine = scadenza (se manca, un solo giorno).</p>
@@ -144,7 +147,7 @@ async function init(){
   const { data:{ session } } = await client.auth.getSession();
   if(!session){ location.href = "login.html"; return; }
   user = session.user;
-  const r = await client.from("immonova_diary").select("id,title,status,priority,parent_id,activity_date,due_date,people,mode").eq("user_id", user.id).limit(5000);
+  const r = await client.from("immonova_diary").select("id,title,status,priority,parent_id,activity_date,due_date,people,mode,is_milestone,blocking").eq("user_id", user.id).limit(5000);
   if(r.error){ $("gantt").innerHTML = '<div class="card status err">Errore: ' + esc(r.error.message) + ' (hai eseguito diario-v2.sql?)</div>'; return; }
   all = r.data || [];
   const want = new URLSearchParams(location.search).get("root") || "";
@@ -152,6 +155,7 @@ async function init(){
   ["show","zoom","root"].forEach(id => $(id).onchange = () => { if(id === "show") fillRoots(""); draw(); });
   fillRoots(want); draw();
 }
+const blk = id => kids(id).filter(k => k.blocking !== false);
 const kids = id => all.filter(a => a.parent_id === id).sort((a, b) => (a.activity_date + (a.due_date || "")).localeCompare(b.activity_date + (b.due_date || "")));
 function roots(){
   return all.filter(a => !a.parent_id && (kids(a.id).length || a.due_date) && ($("show").value === "all" || a.status !== "chiusa"))
@@ -189,31 +193,33 @@ function chart(rs){
   rowsOut.forEach(({ a, depth }) => {
     const st = days(min, a.activity_date), len = days(a.activity_date, endOf(a)) + 1;
     const late = a.status !== "chiusa" && endOf(a) < today;
-    const nk = kids(a.id), dn = nk.filter(k => k.status === "chiusa").length;
-    const tip = esc(a.title) + " — " + LBL[a.status] + " — " + itd(a.activity_date) + (a.due_date ? " → " + itd(a.due_date) : "") + (nk.length ? " — " + dn + "/" + nk.length + " sotto-attività chiuse" : "") + ((a.people || []).length ? " — con: " + esc(a.people.map(x => (x.waiting ? "⏳" : "") + x.name).join(", ")) : "");
+    const nk = blk(a.id), dn = nk.filter(k => k.status === "chiusa").length;
+    const rootDue = (rowsOut[0] && rowsOut[0].a.due_date) || null;
+    const outOfTarget = depth > 0 && a.blocking === false && a.status !== "chiusa" && rootDue && endOf(a) > rootDue;
+    const tip = esc(a.title) + " — " + LBL[a.status] + " — " + itd(a.activity_date) + (a.due_date ? " → " + itd(a.due_date) : "") + (nk.length ? " — " + dn + "/" + nk.length + " bloccanti chiuse" : "") + (a.is_milestone ? " — MILESTONE INTERMEDIA" : "") + (a.blocking === false ? " — attività di controllo (non blocca)" : "") + (outOfTarget ? " — ATTENZIONE: oltre la scadenza del target" : "") + ((a.people || []).length ? " — con: " + esc(a.people.map(x => (x.waiting ? "⏳" : "") + x.name).join(", ")) : "");
     let track = '<div class="todayl" style="left:' + tl + 'px"></div>';
     // ◐ risposte parziali ricevute, ⏳ attesa del completamento
     (a.people || []).forEach(p => {
       (p.partials || []).forEach(x => { const d = ymd(new Date(x.at)); if(d >= min && d <= max) track += '<span class="pmk" style="left:' + (days(min, d) * px + 2) + 'px" title="Risposta parziale di ' + esc(p.name) + ': ' + esc(x.text) + '">◐</span>'; });
       if(a.status !== "chiusa" && p.waiting && p.deadline && !p.replied_at){ const d = ymd(new Date(p.deadline)); if(d >= min && d <= max) track += '<span class="pmk w" style="left:' + (days(min, d) * px + 2) + 'px" title="In attesa di ' + esc(p.name) + ' entro ' + itd(d) + '">⏳</span>'; }
     });
-    if(depth === 0 && nk.length){
+    if((depth === 0 || a.is_milestone) && kids(a.id).length){
       // milestone: barra sintetica dall'inizio della prima sotto-attività alla fine prevista + rombo
       let ms = a.activity_date, me = endOf(a);
-      const sub = []; const col = x => { kids(x).forEach(k => { sub.push(k); col(k.id); }); }; col(a.id);
+      const sub = []; const col = x => { blk(x).forEach(k => { sub.push(k); col(k.id); }); }; col(a.id);
       sub.forEach(k => { if(k.activity_date < ms) ms = k.activity_date; if(endOf(k) > me) me = endOf(k); });
       const pct = nk.length ? Math.round(dn / nk.length * 100) : 0;
       track += '<div class="bar ' + a.status + (late ? " late" : "") + '" style="opacity:.35;left:' + days(min, ms) * px + 'px;width:' + (days(ms, me) + 1) * px + 'px" title="' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
       track += '<div style="position:absolute;top:28px;left:' + days(min, ms) * px + 'px;height:3px;width:' + ((days(ms, me) + 1) * px * pct / 100) + 'px;background:#3c9a3c"></div>';
-      track += '<div class="ms drag ' + a.status + '" data-id="' + a.id + '" data-kind="ms" style="left:' + ((days(min, me) + 1) * px - 9) + 'px" title="Milestone: ' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
-    } else if(depth === 0){
-      track += '<div class="ms drag ' + a.status + '" data-id="' + a.id + '" data-kind="ms" style="left:' + ((days(min, endOf(a)) + 1) * px - 9) + 'px" title="Milestone: ' + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
+      track += '<div class="ms drag ' + (depth ? "mid " : "") + a.status + '" data-id="' + a.id + '" data-kind="ms" style="left:' + ((days(min, me) + 1) * px - (depth ? 7 : 9)) + 'px" title="' + (depth ? "Milestone intermedia: " : "Target: ") + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
+    } else if(depth === 0 || a.is_milestone){
+      track += '<div class="ms drag ' + (depth ? "mid " : "") + a.status + '" data-id="' + a.id + '" data-kind="ms" style="left:' + ((days(min, endOf(a)) + 1) * px - (depth ? 7 : 9)) + 'px" title="' + (depth ? "Milestone intermedia: " : "Target: ") + tip + '" onclick="openA(\'' + a.id + '\')"></div>';
     } else {
-      track += '<div class="bar drag ' + a.status + ' p-' + (a.priority || "media") + (late ? " late" : "") + '" data-id="' + a.id + '" data-kind="bar" style="left:' + st * px + 'px;width:' + Math.max(len * px, 8) + 'px" title="' + tip + ' — trascina per spostare, tira il bordo destro per allungare/accorciare">' + (len * px > 60 ? esc(a.title) : "") + '<i class="rh"></i></div>';
+      track += '<div class="bar drag ' + a.status + ' p-' + (a.priority || "media") + (late ? " late" : "") + (a.blocking === false ? " nb" : "") + (outOfTarget ? " out" : "") + '" data-id="' + a.id + '" data-kind="bar" style="left:' + st * px + 'px;width:' + Math.max(len * px, 8) + 'px" title="' + tip + ' — trascina per spostare, tira il bordo destro per allungare/accorciare">' + (len * px > 60 ? esc(a.title) : "") + '<i class="rh"></i></div>';
     }
     const dot = a.status === "chiusa" ? "🟢" : a.status === "in_gestione" ? "🟡" : "🔴";
     html += '<div class="grow2"><div class="gname' + (depth === 0 ? " root" : "") + '" style="padding-left:' + (8 + depth * 14) + 'px" title="' + tip + '" onclick="openA(\'' + a.id + '\')">' +
-      (depth === 0 ? "◆ " : "↳ ") + dot + " " + esc(a.title) + (depth === 0 && nk.length ? ' <span style="font-weight:400;color:#7a6a45">(' + dn + '/' + nk.length + ')</span>' : "") +
+      (depth === 0 ? "◎ " : a.is_milestone ? "↳ ◆ " : a.blocking === false ? "↳ ○ " : "↳ ") + dot + " " + esc(a.title) + ((depth === 0 || a.is_milestone) && nk.length ? ' <span style="font-weight:400;color:#7a6a45">(' + dn + '/' + nk.length + ')</span>' : "") +
       (a.priority === "alta" && depth ? ' <b style="color:#2b2416">▲</b>' : "") + ((a.people || []).some(x => x.waiting) && a.status !== "chiusa" ? ' <span title="Da sollecitare">⏳</span>' : "") + '</div><div class="gtrack" style="width:' + W + 'px">' + track + '</div></div>';
   });
   html += '</div>';
@@ -225,8 +231,8 @@ function draw(){
   if(!rs.length){ $("gantt").innerHTML = '<div class="card sub">Nessuna milestone da mostrare. Crea un\'attività principale con una scadenza o con sotto-attività dal Diario.</div>'; return; }
   const parts = rs.map(r => {
     const c = chart([r]);
-    const nk = kids(r.id), dn = nk.filter(k => k.status === "chiusa").length;
-    return { c, head: '<div class="gtitle"><span>◆ ' + esc(r.title) + '</span><span class="sub">' + (r.due_date ? "chiusura " + itd(r.due_date) : "") + (nk.length ? " · " + dn + "/" + nk.length + " sotto-attività chiuse" : "") + '</span></div>' };
+    const nk = blk(r.id), dn = nk.filter(k => k.status === "chiusa").length;
+    return { c, head: '<div class="gtitle"><span>◎ ' + esc(r.title) + '</span><span class="sub">' + (r.due_date ? "chiusura " + itd(r.due_date) : "") + (nk.length ? " · " + dn + "/" + nk.length + " milestone/attività bloccanti chiuse" : "") + '</span></div>' };
   });
   $("gantt").innerHTML = parts.map(p => '<div class="gcard">' + p.head + p.c.html + '</div>').join("");
   document.querySelectorAll(".gwrap").forEach((g, i) => { const c = parts[i].c; g.scrollLeft = Math.max(0, c.tl - (g.clientWidth - c.nw) / 3); });
@@ -280,13 +286,13 @@ function openA(id){
   let m = document.getElementById("stMenu"); if(m) m.remove();
   m = document.createElement("div"); m.id = "stMenu";
   m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;display:flex;align-items:center;justify-content:center";
-  const nk = kids(a.id), open = nk.filter(k => k.status !== "chiusa").length;
+  const nk = blk(a.id), open = nk.filter(k => k.status !== "chiusa").length;
   const btn = (v, t) => '<button type="button" data-v="' + v + '" style="display:block;width:100%;margin:6px 0;padding:11px;border-radius:8px;border:1px solid #d8c9a6;background:' + (a.status === v ? "#f1e3bf" : "#fff") + ';font-size:15px;cursor:pointer">' + t + (a.status === v ? "  ✓" : "") + '</button>';
   m.innerHTML = '<div style="background:#fffdf7;border-radius:12px;padding:18px;width:min(360px,92vw)" onclick="event.stopPropagation()">' +
-    '<div style="font-size:12px;color:#8b7d63;text-transform:uppercase;letter-spacing:1px">' + (a.parent_id ? "Sotto-attività" : "Milestone") + '</div>' +
+    '<div style="font-size:12px;color:#8b7d63;text-transform:uppercase;letter-spacing:1px">' + (!a.parent_id ? "Target" : a.is_milestone ? "Milestone intermedia" : a.blocking === false ? "Attività di controllo (non blocca)" : "Attività necessaria") + '</div>' +
     '<div style="font-weight:600;font-size:16px;margin:4px 0 10px">' + esc(a.title) + '</div>' +
     btn("aperta", "🔴 Aperta") + btn("in_gestione", "🟡 In gestione") + btn("chiusa", "🟢 Chiusa") +
-    (!a.parent_id && open ? '<div class="status" style="font-size:12px;color:#8b7d63">Per chiudere la milestone chiudi prima le ' + open + ' sotto-attività aperte. Le sotto-attività si chiudono una alla volta, la milestone resta com\'è.</div>' : "") +
+    (open ? '<div class="status" style="font-size:12px;color:#8b7d63">Per chiuderla chiudi prima le ' + open + ' milestone/attività bloccanti ancora aperte. Le attività di controllo non contano.</div>' : "") +
     '<div id="stMsg" class="status"></div>' +
     '<button type="button" data-edit="1" style="display:block;width:100%;margin-top:10px;padding:11px;border-radius:8px;border:0;background:#2b2416;color:#f1d27a;font-size:15px;cursor:pointer">✎ Modifica attività</button>' +
     '<button type="button" data-x="1" style="display:block;width:100%;margin-top:6px;padding:9px;border:0;background:none;color:#8b7d63;cursor:pointer">Chiudi</button></div>';

@@ -129,7 +129,14 @@ mark{background:#f1d27a}
     </div>
     <div style="margin-top:12px"><label>Fa parte di (attività principale / milestone)</label>
       <select id="f_parent"></select>
-      <p class="sub" style="margin:4px 0 0">Lascia "nessuna" per un'attività principale. Una principale si chiude solo quando tutte le sue sotto-attività sono chiuse.</p></div>
+      <p class="sub" style="margin:4px 0 0">Lascia "nessuna" per un'attività principale (il <b>target</b>). Si chiude solo quando sono chiuse tutte le sue milestone e attività bloccanti.</p></div>
+    <div id="roleBox" class="hidden" style="margin-top:12px"><label>Ruolo nel percorso</label>
+      <select id="f_role">
+        <option value="block">● Attività necessaria — va chiusa per poter chiudere il livello superiore</option>
+        <option value="ms">◆ Milestone intermedia — tappa obbligata verso il target (ha a sua volta le sue attività)</option>
+        <option value="ctrl">○ Attività di controllo — si registra e si cadenza, ma non blocca né milestone né target</option>
+      </select>
+      <p class="sub" id="roleHint" style="margin:4px 0 0"></p></div>
     <div style="margin-top:12px"><label>Attività *</label><input id="f_title" placeholder="Es. Chiamata con proprietario villa Ostuni"></div>
     <div style="margin-top:12px"><label>Note</label><textarea id="f_notes" placeholder="Dettagli, esito, prossimi passi…"></textarea></div>
     <div style="margin-top:12px"><label>Stato</label>
@@ -332,6 +339,7 @@ async function init(){
   loadCollabs();
   $("f_rem").onchange = () => { $("remCustomBox").classList.toggle("hidden", $("f_rem").value !== "custom"); };
   $("saveBtn").onclick = save;
+  $("f_parent").addEventListener("change", roleUi); $("f_role").onchange = roleUi;
   $("ap_on").onchange = () => { $("ap_box").classList.toggle("hidden", !$("ap_on").checked); };
   $("cancelBtn").onclick = () => { resetForm(); $("formCard").classList.add("hidden"); };
   $("newBtn").onclick = () => { const h = $("formCard").classList.contains("hidden"); resetForm(); $("formCard").classList.toggle("hidden", !h); if(h) $("f_title").focus(); };
@@ -350,7 +358,7 @@ function setFPri(v){ fPri = v; document.querySelectorAll("#f_pri button").forEac
 function fillParents(sel, exclude){
   const bad = new Set(); if(exclude){ bad.add(exclude); let grow = true; while(grow){ grow = false; all.forEach(a => { if(a.parent_id && bad.has(a.parent_id) && !bad.has(a.id)){ bad.add(a.id); grow = true; } }); } }
   const opts = all.filter(a => !bad.has(a.id) && (a.status !== "chiusa" || a.id === sel)).sort((a, b) => a.title.localeCompare(b.title, "it"));
-  $("f_parent").innerHTML = '<option value="">— nessuna (attività principale / milestone)</option>' + opts.map(a => '<option value="' + a.id + '"' + (a.id === sel ? " selected" : "") + '>' + (a.parent_id ? "↳ " : "◆ ") + esc(a.title) + (a.due_date ? " (entro " + a.due_date.split("-").reverse().join("/") + ")" : "") + '</option>').join("");
+  $("f_parent").innerHTML = '<option value="">— nessuna (attività principale / milestone)</option>' + opts.map(a => '<option value="' + a.id + '"' + (a.id === sel ? " selected" : "") + '>' + (a.parent_id ? (a.is_milestone ? "↳ ◆ " : (a.blocking === false ? "↳ ○ " : "↳ ")) : "◎ ") + esc(a.title) + (a.due_date ? " (entro " + a.due_date.split("-").reverse().join("/") + ")" : "") + '</option>').join("");
 }
 function setFStatus(v){ fStatus = v; document.querySelectorAll("#f_status button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
 function resetForm(){
@@ -361,7 +369,7 @@ function resetForm(){
   $("f_rem").value = ""; $("f_rem").querySelector('[value="keep"]').classList.add("hidden");
   $("remCustomBox").classList.add("hidden"); $("remNow").textContent = "";
   $("formTitle").textContent = "Nuova attività"; $("saveBtn").textContent = "Salva attività"; $("cancelBtn").classList.add("hidden");
-  apFill(null);
+  apFill(null); roleSet(null);
 }
 function startEdit(r){
   editId = r.id; editRow = r;
@@ -376,12 +384,13 @@ function startEdit(r){
   $("remCustomBox").classList.add("hidden");
   $("formTitle").textContent = "Modifica attività"; $("saveBtn").textContent = "Salva modifiche"; $("cancelBtn").classList.remove("hidden");
   apFill(r.appointment || null);
+  roleSet(r);
   $("formCard").classList.remove("hidden"); $("formCard").scrollIntoView({ behavior:"smooth" });
 }
 function addChild(pid){
   resetForm(); fillParents(pid, null);
   const p = all.find(a => a.id === pid);
-  $("formTitle").textContent = "Nuova sotto-attività" + (p ? " di: " + p.title : "");
+  $("formTitle").textContent = "Nuova sotto-attività" + (p ? " di: " + p.title : ""); roleSet(null);
   $("formCard").classList.remove("hidden"); $("formCard").scrollIntoView({ behavior:"smooth" }); $("f_title").focus();
 }
 function editById(id){ const r = rows.find(x => x.id === id); if(r) startEdit(r); }
@@ -404,6 +413,8 @@ async function save(opts){
   const row = { activity_date:$("f_date").value, activity_time:$("f_time").value || null, title, notes:$("f_notes").value.trim() || null, status:fStatus, remind_at,
     due_date:$("f_due").value || null, priority:fPri, parent_id:$("f_parent").value || null,
     mode:$("f_mode").value || null, people:people.filter(p => (p.name || "").trim()).map(p => Object.assign({}, p, { name:p.name.trim() })) };
+  const role = row.parent_id ? $("f_role").value : "block";
+  row.is_milestone = role === "ms"; row.blocking = role !== "ctrl";
   const ap = apRead(); row.appointment = ap;
   if(fStatus === "chiusa" && (!editRow || editRow.status !== "chiusa")){
     const ans = apAskOnClose(ap);
@@ -505,6 +516,16 @@ function apAskOnClose(a){
   return confirm("L'appuntamento NON è confermato: non verrà inserito in agenda.\n\nChiudere comunque l'attività?") ? "no" : null;
 }
 
+/* ===== Ruolo nel percorso (milestone intermedia / attività bloccante / attività di controllo) ===== */
+const ROLE_HINT = { block:"Blocca: finché è aperta non si può chiudere l'attività o la milestone a cui appartiene.",
+  ms:"Milestone intermedia: le attività che metti sotto di lei vanno chiuse prima di chiuderla, e lei va chiusa prima del target.",
+  ctrl:"Non blocca nulla: serve a registrare e cadenzare i controlli. Va comunque chiusa entro la scadenza dell'obiettivo (nel Gantt è segnalata se in ritardo)." };
+function roleSet(r){
+  const v = r ? (r.is_milestone ? "ms" : (r.blocking === false ? "ctrl" : "block")) : "block";
+  $("f_role").value = v; roleUi();
+}
+function roleUi(){ $("roleBox").classList.toggle("hidden", !$("f_parent").value); $("roleHint").textContent = ROLE_HINT[$("f_role").value] || ""; }
+
 async function setStatus(id, v){
   let apConfirmed = false;
   if(v === "chiusa"){
@@ -552,7 +573,7 @@ async function load(){
   const fp = $("fp").value.trim().replace(/[%,()]/g, " "); if(fp) q = q.ilike("people_text", "%" + fp + "%");
   const txt = $("q").value.trim();
   if(txt){ const s = txt.replace(/[%,()]/g, " "); q = q.or("title.ilike.%" + s + "%,notes.ilike.%" + s + "%,people_text.ilike.%" + s + "%"); }
-  const [r, a] = await Promise.all([q, client.from("immonova_diary").select("id,title,status,parent_id,due_date,activity_date,people").eq("user_id", user.id).limit(5000)]);
+  const [r, a] = await Promise.all([q, client.from("immonova_diary").select("id,title,status,parent_id,due_date,activity_date,people,is_milestone,blocking").eq("user_id", user.id).limit(5000)]);
   all = a.data || []; fillKnown();
   if(r.error){ $("list").innerHTML = '<div class="card status err">Errore: ' + esc(r.error.message) + ' (hai eseguito diario.sql?)</div>'; return; }
   rows = r.data || []; render(txt);
@@ -565,7 +586,8 @@ function hl(s, txt){
 function parentLine(r){
   if(!r.parent_id) return "";
   const p = all.find(a => a.id === r.parent_id);
-  return p ? '<div class="par">↳ parte di: <a href="diario-gantt.html?root=' + rootOf(p.id) + '">' + esc(p.title) + '</a></div>' : "";
+  const role = r.is_milestone ? '<b>◆ Milestone intermedia</b> · ' : (r.blocking === false ? '<span style="color:#8b7d63">○ Controllo (non blocca)</span> · ' : '');
+  return p ? '<div class="par">' + role + '↳ parte di: <a href="diario-gantt.html?root=' + rootOf(p.id) + '">' + esc(p.title) + '</a></div>' : "";
 }
 function rootOf(id){ let cur = all.find(a => a.id === id), n = 0; while(cur && cur.parent_id && n++ < 50) cur = all.find(a => a.id === cur.parent_id) || null; return cur ? cur.id : id; }
 function peopleLine(r, txt){
